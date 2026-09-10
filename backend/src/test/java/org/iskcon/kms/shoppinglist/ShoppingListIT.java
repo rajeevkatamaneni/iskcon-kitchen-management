@@ -134,6 +134,63 @@ class ShoppingListIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[1].neededBy").exists());
 	}
 
+	/**
+	 * The order-by date on a line (T-090): the earliest meal that wants the ingredient, minus the
+	 * lead time recorded against the vendor the order would go to.
+	 *
+	 * <p>Three readings off one row, in the order a temple actually arrives at them.
+	 *
+	 * <ol>
+	 *   <li><strong>Nothing recorded.</strong> The two-day assumption stands in, and the line says so
+	 *       — {@code leadTimeDays} comes back absent rather than as a 2, so the screen can print
+	 *       "assumed" and somebody can go and record the real answer. This is the case that must not
+	 *       be confused with a lead time of zero: the meal is two days out, so a zero would say the
+	 *       order can wait until the morning it is cooked.</li>
+	 *   <li><strong>Five days recorded.</strong> The date moves three days into the past and the line
+	 *       reads "too late" — the state whose sentence has to be different, because there is no
+	 *       longer an order that arrives in time.</li>
+	 *   <li><strong>Zero recorded.</strong> Cash-and-carry: the date is the meal's own day, and the
+	 *       line has slack again. Note it is a different answer from case 1, which is the whole point
+	 *       of the column being nullable.</li>
+	 * </ol>
+	 *
+	 * <p>Garlic is on this list through the threshold stream alone — no meal demanded it — so it has
+	 * no demand date to count back from and gets no order-by date. An em dash on the screen, and
+	 * deliberately not today: nobody is late for a top-up nothing has asked for by a date.
+	 */
+	@Test
+	@DisplayName("the order-by date counts back from the meal by the vendor's lead time, and says when it was assumed")
+	void orderByCountsBackFromTheDemand() throws Exception {
+		LocalDate today = LocalDate.now(IST);
+
+		mvc.perform(regenerate()).andExpect(status().isOk());
+		mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(jsonPath("$[1].ingredientName").value("Rice"))
+				.andExpect(jsonPath("$[1].orderBy").value(today.toString()))
+				.andExpect(jsonPath("$[1].orderUrgency").value("ORDER_TODAY"))
+				.andExpect(jsonPath("$[1].leadTimeDays").doesNotExist())
+				// The delivery date on the purchase order is a different question and is untouched.
+				.andExpect(jsonPath("$[1].neededBy").value(today.toString()))
+				// Nothing demanded the garlic by a date, so there is no deadline to invent.
+				.andExpect(jsonPath("$[0].ingredientName").value("Garlic"))
+				.andExpect(jsonPath("$[0].orderBy").doesNotExist())
+				.andExpect(jsonPath("$[0].orderUrgency").doesNotExist());
+
+		admin.update("UPDATE vendor_supplies SET lead_time_days = 5 WHERE ingredient_id = ?", rice);
+		mvc.perform(regenerate()).andExpect(status().isOk());
+		mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(jsonPath("$[1].orderBy").value(today.minusDays(3).toString()))
+				.andExpect(jsonPath("$[1].orderUrgency").value("TOO_LATE"))
+				.andExpect(jsonPath("$[1].leadTimeDays").value(5));
+
+		admin.update("UPDATE vendor_supplies SET lead_time_days = 0 WHERE ingredient_id = ?", rice);
+		mvc.perform(regenerate()).andExpect(status().isOk());
+		mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(jsonPath("$[1].orderBy").value(today.plusDays(2).toString()))
+				.andExpect(jsonPath("$[1].orderUrgency").value("IN_TIME"))
+				.andExpect(jsonPath("$[1].leadTimeDays").value(0));
+	}
+
 	@Test
 	@DisplayName("what used to be a sattvic-prohibited ingredient now enters via the threshold stream")
 	void garlicNoLongerExcluded() throws Exception {

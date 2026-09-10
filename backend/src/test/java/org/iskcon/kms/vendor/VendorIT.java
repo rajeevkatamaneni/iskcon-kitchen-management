@@ -93,6 +93,82 @@ class VendorIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.supplies[0].preferred").value(true));
 	}
 
+	/**
+	 * Lead time is a fact about <em>this vendor supplying this ingredient</em> (T-090), which is why
+	 * it sits on the supply row beside the price and the preference rather than on either the vendor
+	 * or the ingredient. The same merchant can be next-day on rice and a week on jaggery he has to
+	 * fetch, and this test is the one that would fail if the column were ever moved up to the vendor.
+	 *
+	 * <p>The second half is the part that matters more than the first: <strong>an unrecorded lead
+	 * time comes back null and not zero.</strong> Null means nobody has said; zero would mean the
+	 * goods arrive the same day. Reading it with {@code getInt} anywhere on the path turns the first
+	 * into the second silently, and every screen downstream would then tell a cook there was time
+	 * when there was none.
+	 */
+	@Test
+	@DisplayName("lead time is recorded per vendor and ingredient, and an unrecorded one is null, not zero")
+	void leadTimeIsPerSupplyAndUnknownIsNotZero() throws Exception {
+		UUID jaggery = admin.queryForObject("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, 'Jaggery', 'Sweeteners', 'KG') RETURNING id
+				""", UUID.class, tenant);
+		UUID id = create("{\"name\":\"Govind Wholesale\",\"phone\":\"+919812345678\"}");
+
+		mvc.perform(setSupply(id, "{\"ingredientId\":\"" + rice
+						+ "\",\"leadTimeDays\":1,\"preferred\":true}"))
+				.andExpect(status().isNoContent());
+		mvc.perform(setSupply(id, "{\"ingredientId\":\"" + jaggery
+						+ "\",\"preferred\":true}"))
+				.andExpect(status().isNoContent());
+
+		// Supplies come back ordered by ingredient name: Jaggery, then Rice.
+		mvc.perform(authed(get("/api/v1/vendors/{id}", id)))
+				.andExpect(jsonPath("$.supplies[0].ingredientName").value("Jaggery"))
+				.andExpect(jsonPath("$.supplies[0].leadTimeDays").doesNotExist())
+				.andExpect(jsonPath("$.supplies[1].ingredientName").value("Rice"))
+				.andExpect(jsonPath("$.supplies[1].leadTimeDays").value(1));
+
+		// Cleared back to unknown — the row remembers that nobody has said, rather than keeping the
+		// last number somebody happened to type.
+		mvc.perform(setSupply(id, "{\"ingredientId\":\"" + rice
+						+ "\",\"leadTimeDays\":null,\"preferred\":true}"))
+				.andExpect(status().isNoContent());
+		mvc.perform(authed(get("/api/v1/vendors/{id}", id)))
+				.andExpect(jsonPath("$.supplies[1].leadTimeDays").doesNotExist());
+	}
+
+	/**
+	 * Zero is a real answer and a different one: the hardware shop somebody walks into, where the
+	 * goods come back in the same van as the person. It must survive the round trip as zero and not
+	 * be folded into "unknown" by a well-meaning blank check.
+	 *
+	 * <p>The upper bound exists for the reason V119 gives — this number is subtracted from a date, so
+	 * a mistyped 3650 would put the order-by date ten years back and turn every screen red at once,
+	 * which reads as a system fault rather than as a slip in one field.
+	 */
+	@Test
+	@DisplayName("a lead time of zero is kept, and an absurd one is refused")
+	void leadTimeBounds() throws Exception {
+		UUID id = create("{\"name\":\"Corner Hardware\",\"phone\":\"+919812345670\"}");
+
+		mvc.perform(setSupply(id, "{\"ingredientId\":\"" + rice
+						+ "\",\"leadTimeDays\":0,\"preferred\":true}"))
+				.andExpect(status().isNoContent());
+		mvc.perform(authed(get("/api/v1/vendors/{id}", id)))
+				.andExpect(jsonPath("$.supplies[0].leadTimeDays").value(0));
+
+		mvc.perform(setSupply(id, "{\"ingredientId\":\"" + rice
+						+ "\",\"leadTimeDays\":3650,\"preferred\":true}"))
+				.andExpect(status().isBadRequest());
+		mvc.perform(setSupply(id, "{\"ingredientId\":\"" + rice
+						+ "\",\"leadTimeDays\":-1,\"preferred\":true}"))
+				.andExpect(status().isBadRequest());
+
+		// Neither refusal changed what was stored.
+		mvc.perform(authed(get("/api/v1/vendors/{id}", id)))
+				.andExpect(jsonPath("$.supplies[0].leadTimeDays").value(0));
+	}
+
 	@Test
 	@DisplayName("an invalid phone is rejected at entry")
 	void invalidPhoneRejected() throws Exception {

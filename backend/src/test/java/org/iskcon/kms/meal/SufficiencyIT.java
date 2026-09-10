@@ -103,6 +103,10 @@ class SufficiencyIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM audit_events");
+		// Before the ingredients: vendor_supplies references them ON DELETE RESTRICT, so a lead-time
+		// row left behind would hold the whole teardown up.
+		admin.execute("DELETE FROM vendor_supplies");
+		admin.execute("DELETE FROM vendors");
 		// Anything that moved through the stock ledger is tracked now, so the item rows exist
 		// even where the test never asked for them, and they hold the ingredient down.
 		admin.execute("DELETE FROM inventory_items");
@@ -287,6 +291,107 @@ class SufficiencyIT extends AbstractIntegrationTest {
 		day(d2).andExpect(jsonPath("$[0].status").value("SUFFICIENT"));
 	}
 
+	/**
+	 * Rajeev's escalation, all three states in one temple (T-090): <em>"amber while there is still
+	 * slack; red the day you hit the order-by date; and past that it is not a warning any more but a
+	 * fact."</em>
+	 *
+	 * <p>Three days of Khichdi against seven kilos of rice, so every one of them is short. Nobody has
+	 * recorded a lead time for rice, so the two-day assumption stands in — which is what makes the
+	 * three meals land on three different sides of today:
+	 *
+	 * <ul>
+	 *   <li>tomorrow's meal had to be ordered yesterday — {@code TOO_LATE}</li>
+	 *   <li>the day after's has to be ordered today — {@code ORDER_TODAY}</li>
+	 *   <li>the one after that still has a day in hand — {@code IN_TIME}</li>
+	 * </ul>
+	 *
+	 * <p>Nothing here refuses anything. All three are still planned meals, still saveable, still
+	 * orderable; the badge says what is true and stops there.
+	 */
+	@Test
+	@DisplayName("a short meal carries its order-by date, and it escalates as the date arrives")
+	void theOrderByDateEscalates() throws Exception {
+		LocalDate today = LocalDate.now(IST);
+		plan(today.plusDays(1), "200"); // 10 KG each against the 7 KG in the store: all three short
+		plan(today.plusDays(2), "200");
+		plan(today.plusDays(3), "200");
+
+		day(today.plusDays(1))
+				.andExpect(jsonPath("$[0].status").value("SHORT"))
+				.andExpect(jsonPath("$[0].orderBy").value(today.minusDays(1).toString()))
+				.andExpect(jsonPath("$[0].orderUrgency").value("TOO_LATE"));
+		day(today.plusDays(2))
+				.andExpect(jsonPath("$[0].orderBy").value(today.toString()))
+				.andExpect(jsonPath("$[0].orderUrgency").value("ORDER_TODAY"));
+		day(today.plusDays(3))
+				.andExpect(jsonPath("$[0].orderBy").value(today.plusDays(1).toString()))
+				.andExpect(jsonPath("$[0].orderUrgency").value("IN_TIME"));
+	}
+
+	/**
+	 * The recorded lead time supersedes the assumption, and the two ends of the range are chosen so
+	 * that a reader can see it is not the assumption in disguise.
+	 *
+	 * <p>Tomorrow's meal, short of rice:
+	 *
+	 * <ul>
+	 *   <li>with nothing recorded, the two-day assumption puts the order-by date <em>yesterday</em>
+	 *       — too late;</li>
+	 *   <li>with the vendor recorded as same-day (0, cash-and-carry), it moves to <em>tomorrow</em>
+	 *       — there is still time.</li>
+	 * </ul>
+	 *
+	 * <p><strong>That difference is the whole of "null is not zero".</strong> The two cases produce
+	 * opposite answers on the same day, so a reader that treated an unrecorded lead time as zero
+	 * would report "there is still time" for a meal whose rice can no longer be got. A test that
+	 * compared, say, 0 against 2 on a meal a week out would pass under either reading.
+	 */
+	@Test
+	@DisplayName("a recorded lead time supersedes the assumption, and unknown is not the same as zero")
+	void aRecordedLeadTimeSupersedesTheAssumption() throws Exception {
+		LocalDate today = LocalDate.now(IST);
+		plan(today.plusDays(1), "200"); // 10 KG against 7 KG: short
+
+		day(today.plusDays(1))
+				.andExpect(jsonPath("$[0].orderUrgency").value("TOO_LATE"))
+				.andExpect(jsonPath("$[0].orderBy").value(today.minusDays(1).toString()));
+
+		preferredVendorForRice(0);
+		day(today.plusDays(1))
+				.andExpect(jsonPath("$[0].orderUrgency").value("IN_TIME"))
+				.andExpect(jsonPath("$[0].orderBy").value(today.plusDays(1).toString()));
+
+		// And a long one pushes it the other way, from the same row.
+		admin.update("UPDATE vendor_supplies SET lead_time_days = 6 WHERE ingredient_id = ?", rice);
+		day(today.plusDays(1))
+				.andExpect(jsonPath("$[0].orderUrgency").value("TOO_LATE"))
+				.andExpect(jsonPath("$[0].orderBy").value(today.minusDays(5).toString()));
+	}
+
+	/**
+	 * Only a meal that is actually short gets a deadline. A covered meal has nothing to order, and a
+	 * meal outside the buying window is making no claim about stock at all — an order-by date on
+	 * either would be a deadline for a purchase nobody is going to make, and a red badge somebody
+	 * would go looking for a cause of.
+	 */
+	@Test
+	@DisplayName("a covered meal and a meal beyond the window carry no order-by date at all")
+	void onlyAShortMealHasADeadline() throws Exception {
+		seedReceipt("43"); // 50 KG: plenty
+		plan(d1);
+		plan(LocalDate.now(IST).plusDays(90), "200");
+
+		day(d1)
+				.andExpect(jsonPath("$[0].status").value("SUFFICIENT"))
+				.andExpect(jsonPath("$[0].orderBy").doesNotExist())
+				.andExpect(jsonPath("$[0].orderUrgency").doesNotExist());
+		day(LocalDate.now(IST).plusDays(90))
+				.andExpect(jsonPath("$[0].status").value("PLANNING"))
+				.andExpect(jsonPath("$[0].orderBy").doesNotExist())
+				.andExpect(jsonPath("$[0].orderUrgency").doesNotExist());
+	}
+
 	@Test
 	@DisplayName("a volunteer cannot read sufficiency")
 	void volunteerForbidden() throws Exception {
@@ -323,6 +428,22 @@ class SufficiencyIT extends AbstractIntegrationTest {
 						.param("from", date.toString()).param("to", date.toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk());
+	}
+
+	/**
+	 * A preferred vendor for rice with a lead time on the supply row — written straight through the
+	 * admin connection because what is under test is what the badge reads, not how the row got there
+	 * (VendorIT covers the write path).
+	 */
+	private void preferredVendorForRice(Integer leadTimeDays) {
+		UUID vendorId = admin.queryForObject("""
+				INSERT INTO vendors (tenant_id, name, phone)
+				VALUES (?, 'Govind Wholesale', '+919812345678') RETURNING id
+				""", UUID.class, tenant);
+		admin.update("""
+				INSERT INTO vendor_supplies (tenant_id, vendor_id, ingredient_id, lead_time_days, preferred)
+				VALUES (?, ?, ?, ?, true)
+				""", tenant, vendorId, rice, leadTimeDays);
 	}
 
 	private void seedReceipt(String qtyKg) {

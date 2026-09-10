@@ -10,6 +10,9 @@ import java.util.UUID;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.CommittedStockService;
 import org.iskcon.kms.inventory.InventoryUnits;
+import org.iskcon.kms.tenancy.TempleClock;
+import org.iskcon.kms.vendor.LeadTimes;
+import org.iskcon.kms.vendor.OrderUrgency;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,6 +79,14 @@ import org.springframework.transaction.annotation.Transactional;
  * ledger, the planner badges it "Cooked" from the dish's own status, and a second opinion here would
  * be one that subtracted the same rice twice.
  *
+ * <h2>The order-by date, and the escalation on top of the badge</h2>
+ *
+ * <p>A short meal also comes back with the last day its shortage could be ordered for and where
+ * today stands against it (T-090) — see {@link #orderByFor}. That is a second dimension on the badge
+ * this service already produced rather than a second badge: <em>short</em> says there is a hole,
+ * <em>order by / order today / too late</em> says how much of the chance to fill it is left. Neither
+ * refuses anything.
+ *
  * <h2>Where the window is defined</h2>
  *
  * <p>In one place: {@code CommittedStockService}. This service used to carry its own copy of the
@@ -88,10 +99,15 @@ public class SufficiencyService {
 
 	private final JdbcTemplate jdbc;
 	private final CommittedStockService committedStock;
+	private final LeadTimes leadTimes;
+	private final TempleClock clock;
 
-	public SufficiencyService(JdbcTemplate jdbc, CommittedStockService committedStock) {
+	public SufficiencyService(JdbcTemplate jdbc, CommittedStockService committedStock,
+			LeadTimes leadTimes, TempleClock clock) {
 		this.jdbc = jdbc;
 		this.committedStock = committedStock;
+		this.leadTimes = leadTimes;
+		this.clock = clock;
 	}
 
 	/**
@@ -103,6 +119,8 @@ public class SufficiencyService {
 	@Transactional(readOnly = true)
 	public List<MealSufficiency> sufficiency(LocalDate from, LocalDate to) {
 		Map<UUID, List<IngredientShortfall>> allocated = allocateAcrossWindow();
+		Map<UUID, Integer> recordedLeadTimes = leadTimes.recordedByIngredient();
+		LocalDate today = LocalDate.now(clock.zone());
 
 		List<MealSufficiency> out = new ArrayList<>();
 		for (MealRow meal : loadPlannedMeals(from, to)) {
@@ -117,10 +135,43 @@ public class SufficiencyService {
 			} else {
 				status = shortfalls.isEmpty() ? SufficiencyStatus.SUFFICIENT : SufficiencyStatus.SHORT;
 			}
+			LocalDate orderBy = orderByFor(meal, shortfalls, recordedLeadTimes);
 			out.add(new MealSufficiency(meal.id(), meal.planDate(), meal.mealKind(), meal.readyBy(),
-					meal.recipeName(), status, shortfalls));
+					meal.recipeName(), status, shortfalls, orderBy,
+					orderBy == null ? null : OrderUrgency.on(today, orderBy)));
 		}
 		return out;
+	}
+
+	/**
+	 * The last day this meal's shortage could still be ordered for (T-090), or null where the badge
+	 * has nothing to say about ordering.
+	 *
+	 * <p><strong>Only a short meal gets a date.</strong> A covered meal has nothing to order, and a
+	 * meal outside the buying window is not making a claim about stock at all — putting an order-by
+	 * date on either would invent a deadline for a purchase nobody is going to make. That is the same
+	 * reasoning {@link SufficiencyStatus#PLANNING} already carries, applied to a second field.
+	 *
+	 * <p><strong>The earliest of the short ingredients wins.</strong> A dish short of both rice and
+	 * jaggery has two deadlines, and the badge shows one date. It shows the nearer one, because that
+	 * is the one that stops being achievable first — and because a badge that showed the later date
+	 * would go on saying "there is time" after the rice could no longer be got.
+	 *
+	 * <p>The lead time is the one recorded against each ingredient's preferred vendor, and where none
+	 * is recorded {@link LeadTimes} falls back to its assumption. <strong>An unknown lead time is
+	 * never treated as zero</strong>: scoring it that way would put the order-by date on the day of
+	 * the meal and tell a cook there was time when there was none.
+	 */
+	private LocalDate orderByFor(MealRow meal, List<IngredientShortfall> shortfalls,
+			Map<UUID, Integer> recordedLeadTimes) {
+		LocalDate earliest = null;
+		for (IngredientShortfall s : shortfalls) {
+			LocalDate orderBy = LeadTimes.orderBy(meal.planDate(), recordedLeadTimes.get(s.ingredientId()));
+			if (earliest == null || orderBy.isBefore(earliest)) {
+				earliest = orderBy;
+			}
+		}
+		return earliest;
 	}
 
 	/**

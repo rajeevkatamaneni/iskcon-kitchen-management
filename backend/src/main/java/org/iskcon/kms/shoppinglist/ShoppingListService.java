@@ -22,6 +22,9 @@ import org.iskcon.kms.inventory.InventoryUnits;
 import org.iskcon.kms.inventory.StockItemView;
 import org.iskcon.kms.meal.ShortfallItem;
 import org.iskcon.kms.meal.SufficiencyService;
+import org.iskcon.kms.tenancy.TempleClock;
+import org.iskcon.kms.vendor.LeadTimes;
+import org.iskcon.kms.vendor.OrderUrgency;
 import org.iskcon.kms.vendor.VendorService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -33,7 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Regeneration merges two demand streams per ingredient — the meal-plan shortfall (E4-S5) and
  * below-threshold stock topped up to its reorder level × a safety factor (E3-S3) — suggests the
- * preferred vendor and a need-by date, and rounds up to whole purchase units. It is
+ * preferred vendor, a need-by date and, since T-090, the last day the line could be ordered and
+ * still arrive, and rounds up to whole purchase units. It is
  * <strong>edit-preserving</strong>: a line the staff has touched survives regeneration unchanged,
  * while unedited lines refresh and lines no longer needed drop off.
  *
@@ -47,6 +51,22 @@ import org.springframework.transaction.annotation.Transactional;
 public class ShoppingListService {
 
 	private static final BigDecimal SAFETY_FACTOR = new BigDecimal("1.2");
+
+	/**
+	 * How much earlier than the meal the temple wants the goods on the shelf — a <strong>delivery
+	 * buffer</strong>, and not a lead time, whatever its name suggests.
+	 *
+	 * <p>It is subtracted from the earliest meal that demands an ingredient to produce
+	 * {@code needed_by}, which {@code PurchaseOrderService.generate} copies onto the purchase order
+	 * as the date the vendor is asked to deliver by. It therefore answers <em>"what date do we write
+	 * on the order?"</em>.
+	 *
+	 * <p>{@link LeadTimes} answers the different question — <em>"when is the last day we can ask?"</em>
+	 * — from a figure recorded per vendor and ingredient (T-090), and its answer is {@code order_by}
+	 * below. The two are both two days today, which is exactly why they were easy to conflate; a
+	 * recorded lead time supersedes the assumption in {@code LeadTimes} and leaves this one alone,
+	 * because changing this one changes what every generated order asks a supplier for.
+	 */
 	private static final int LEAD_BUFFER_DAYS = 2;
 
 	/**
@@ -55,7 +75,8 @@ public class ShoppingListService {
 	 */
 	private static final String LINE_SELECT = """
 			SELECT o.ingredient_id, i.name AS ingredient_name, o.current_stock, o.unit,
-				   o.suggested_qty, o.needed_by, o.suggested_vendor_id, v.name AS vendor_name,
+				   o.suggested_qty, o.needed_by, o.order_by, o.lead_time_days,
+				   o.suggested_vendor_id, v.name AS vendor_name,
 				   o.provenance, o.included, o.edited
 			FROM shopping_list_lines o
 			JOIN ingredients i ON i.id = o.ingredient_id
@@ -68,17 +89,21 @@ public class ShoppingListService {
 	private final InventoryItemService inventoryItemService;
 	private final VendorService vendorService;
 	private final IngredientUnits ingredientUnits;
+	private final LeadTimes leadTimes;
+	private final TempleClock clock;
 
 	public ShoppingListService(
 			JdbcTemplate jdbc, ObjectMapper objectMapper, SufficiencyService sufficiencyService,
 			InventoryItemService inventoryItemService, VendorService vendorService,
-			IngredientUnits ingredientUnits) {
+			IngredientUnits ingredientUnits, LeadTimes leadTimes, TempleClock clock) {
 		this.jdbc = jdbc;
 		this.objectMapper = objectMapper;
 		this.sufficiencyService = sufficiencyService;
 		this.vendorService = vendorService;
 		this.inventoryItemService = inventoryItemService;
 		this.ingredientUnits = ingredientUnits;
+		this.leadTimes = leadTimes;
+		this.clock = clock;
 	}
 
 	@Transactional(readOnly = true)
@@ -112,9 +137,12 @@ public class ShoppingListService {
 	 * conflict — an insert barred by row-level security raises rather than silently affecting
 	 * nothing.
 	 *
-	 * <p>{@code needed_by} is left null on purpose. Every other line's date is derived from the
-	 * meal plan that demanded it, minus the lead buffer; nothing demanded this one, so there is no
-	 * such date to compute and the screen prints an em dash rather than a guess.
+	 * <p>{@code needed_by}, {@code order_by} and {@code lead_time_days} are all left null on purpose.
+	 * Every other line's dates are derived from the meal plan that demanded it; nothing demanded this
+	 * one, so there is no such date to compute and the screen prints an em dash rather than a guess.
+	 * That is deliberately not the same as an order-by date of today — a cook who typed in a bale of
+	 * leaf plates has said nothing at all about when they are wanted, and inventing a deadline for
+	 * them would put a red badge on a line nobody is late for.
 	 */
 	@Transactional
 	public ShoppingListLineView addLine(AddShoppingListLineRequest request) {
@@ -216,6 +244,10 @@ public class ShoppingListService {
 			merged.computeIfAbsent(ingredientId, k -> new Contribution());
 		}
 
+		// One read for the whole catalogue rather than one per line: every ingredient about to be
+		// written wants the lead time of the vendor its order will go to (T-090).
+		Map<UUID, Integer> recordedLeadTimes = leadTimes.recordedByIngredient();
+
 		Set<UUID> fresh = merged.keySet();
 		for (Map.Entry<UUID, Contribution> e : merged.entrySet()) {
 			UUID ingredientId = e.getKey();
@@ -236,11 +268,16 @@ public class ShoppingListService {
 			}
 			BigDecimal currentStock = InventoryUnits.fromBase(
 					onHandBase.getOrDefault(ingredientId, BigDecimal.ZERO), ref.unit());
-			LocalDate neededBy = earliestDemand.containsKey(ingredientId)
-					? earliestDemand.get(ingredientId).minusDays(LEAD_BUFFER_DAYS) : null;
+			LocalDate demandedOn = earliestDemand.get(ingredientId);
+			LocalDate neededBy = demandedOn == null ? null : demandedOn.minusDays(LEAD_BUFFER_DAYS);
+			// The recorded lead time, or null where nobody has recorded one — kept null rather than
+			// defaulted here so the row remembers that its order-by date was our assumption and not
+			// the vendor's word. LeadTimes.orderBy applies the fallback; nothing multiplies a null.
+			Integer leadTimeDays = recordedLeadTimes.get(ingredientId);
+			LocalDate orderBy = demandedOn == null ? null : LeadTimes.orderBy(demandedOn, leadTimeDays);
 			UUID vendorId = vendorService.preferredVendorId(ingredientId).orElse(null);
-			upsertLine(ingredientId, qty, ref.unit().name(), currentStock, neededBy, vendorId,
-					provenanceJson(c));
+			upsertLine(ingredientId, qty, ref.unit().name(), currentStock, neededBy, orderBy,
+					leadTimeDays, vendorId, provenanceJson(c));
 		}
 
 		// Drop unedited lines that are no longer suggested.
@@ -256,15 +293,26 @@ public class ShoppingListService {
 
 	// ---------------------------------------------------------------------
 
+	/**
+	 * Writes one suggested line, preserving whatever a person has already changed about it.
+	 *
+	 * <p>{@code order_by} and {@code lead_time_days} refresh unconditionally, like {@code needed_by}
+	 * and {@code current_stock} beside them and unlike the quantity, the vendor and the tick. The
+	 * distinction is not arbitrary: the edit-guarded columns are <em>choices</em> somebody made, and
+	 * overwriting a choice loses work. These are <em>computed facts</em> about the plan and the
+	 * catalogue as they stand this morning — a stale order-by date is not a preserved decision, it is
+	 * a wrong date, and it is wrong in the direction that says there is still time.
+	 */
 	private void upsertLine(UUID ingredientId, BigDecimal qty, String unit, BigDecimal currentStock,
-			LocalDate neededBy, UUID vendorId, String provenance) {
+			LocalDate neededBy, LocalDate orderBy, Integer leadTimeDays, UUID vendorId,
+			String provenance) {
 		jdbc.update(connection -> {
 			var ps = connection.prepareStatement("""
 					INSERT INTO shopping_list_lines (
 						id, tenant_id, ingredient_id, suggested_qty, unit, current_stock, needed_by,
-						suggested_vendor_id, provenance, included, edited)
+						order_by, lead_time_days, suggested_vendor_id, provenance, included, edited)
 					VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, ?::jsonb, true, false)
+						?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, true, false)
 					ON CONFLICT (tenant_id, ingredient_id) DO UPDATE SET
 						suggested_qty = CASE WHEN shopping_list_lines.edited
 							THEN shopping_list_lines.suggested_qty ELSE EXCLUDED.suggested_qty END,
@@ -273,15 +321,19 @@ public class ShoppingListService {
 						included = CASE WHEN shopping_list_lines.edited
 							THEN shopping_list_lines.included ELSE EXCLUDED.included END,
 						unit = EXCLUDED.unit, current_stock = EXCLUDED.current_stock,
-						needed_by = EXCLUDED.needed_by, provenance = EXCLUDED.provenance, updated_at = now()
+						needed_by = EXCLUDED.needed_by, order_by = EXCLUDED.order_by,
+						lead_time_days = EXCLUDED.lead_time_days,
+						provenance = EXCLUDED.provenance, updated_at = now()
 					""");
 			ps.setObject(1, ingredientId);
 			ps.setBigDecimal(2, qty);
 			ps.setString(3, unit);
 			ps.setBigDecimal(4, currentStock);
 			ps.setObject(5, neededBy);
-			ps.setObject(6, vendorId);
-			ps.setString(7, provenance);
+			ps.setObject(6, orderBy);
+			ps.setObject(7, leadTimeDays, java.sql.Types.INTEGER);
+			ps.setObject(8, vendorId);
+			ps.setString(9, provenance);
 			return ps;
 		});
 	}
@@ -424,10 +476,19 @@ public class ShoppingListService {
 		return map;
 	}
 
+	/**
+	 * A stored line as the screen renders it.
+	 *
+	 * <p>Today is read once per call rather than per row, and in the temple's own zone — the same
+	 * clock every date in this application is judged by. A shopping list read from London must not
+	 * say a line is overdue a day before the kitchen would.
+	 */
 	private RowMapper<ShoppingListLineView> viewMapper() {
+		LocalDate today = LocalDate.now(clock.zone());
 		return (rs, n) -> {
 			String provenance = rs.getString("provenance");
 			Map<String, BigDecimal> prov = parseProvenance(provenance);
+			LocalDate orderBy = rs.getObject("order_by", LocalDate.class);
 			return new ShoppingListLineView(
 					rs.getObject("ingredient_id", UUID.class),
 					rs.getString("ingredient_name"),
@@ -435,6 +496,11 @@ public class ShoppingListService {
 					rs.getString("unit"),
 					rs.getBigDecimal("suggested_qty"),
 					rs.getObject("needed_by", LocalDate.class),
+					orderBy,
+					// getObject, never getInt: getInt answers 0 for a SQL null, and 0 would say the
+					// vendor delivers the same day rather than that nobody has recorded an answer.
+					rs.getObject("lead_time_days", Integer.class),
+					orderBy == null ? null : OrderUrgency.on(today, orderBy),
 					rs.getObject("suggested_vendor_id", UUID.class),
 					rs.getString("vendor_name"),
 					prov.getOrDefault("shortfall", BigDecimal.ZERO),

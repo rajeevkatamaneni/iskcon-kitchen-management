@@ -39,6 +39,9 @@ function line(o: Partial<ShoppingListLineView>): ShoppingListLineView {
     unit: "KG",
     suggestedQty: 9,
     neededBy: "2026-08-20",
+    orderBy: "2026-08-20",
+    leadTimeDays: 2,
+    orderUrgency: "IN_TIME",
     suggestedVendorId: "v1",
     suggestedVendorName: "Govind Wholesale",
     shortfall: 7,
@@ -86,5 +89,65 @@ describe("shopping list", () => {
     queryRef.current = { data: [], error: null, loading: false };
     render(<ShoppingListPage />);
     expect(screen.getByText(/nothing to order/i)).toBeInTheDocument();
+  });
+
+  // T-090. The column that used to say "Needed by" now answers the question somebody reading this
+  // list is actually asking: when does this have to go out? The old column showed the delivery date
+  // written on the purchase order, which is a question for the order screen.
+  describe("the order-by date", () => {
+    it("shows the date while there is still slack", () => {
+      queryRef.current = {
+        data: [line({ orderBy: "2026-08-20", orderUrgency: "IN_TIME", leadTimeDays: 3 })],
+        error: null, loading: false,
+      };
+      render(<ShoppingListPage />);
+      expect(screen.getByText(/^Order by 20 Aug 2026$/)).toBeInTheDocument();
+      expect(screen.queryByText("assumed")).not.toBeInTheDocument();
+    });
+
+    it("says the date was our assumption when no lead time is recorded", () => {
+      queryRef.current = {
+        data: [line({ orderBy: "2026-08-20", orderUrgency: "IN_TIME", leadTimeDays: null })],
+        error: null, loading: false,
+      };
+      render(<ShoppingListPage />);
+      expect(screen.getByText("assumed")).toBeInTheDocument();
+    });
+
+    it("asks for the order on the day itself", () => {
+      queryRef.current = {
+        data: [line({ orderBy: "2026-08-20", orderUrgency: "ORDER_TODAY", leadTimeDays: 2 })],
+        error: null, loading: false,
+      };
+      render(<ShoppingListPage />);
+      expect(screen.getByText("Order today")).toBeInTheDocument();
+    });
+
+    // The state that must not be built as a darker red: past the date, advice is useless, so the
+    // cell states what is now true instead of repeating the instruction.
+    it("stops advising once the date has gone", () => {
+      queryRef.current = {
+        data: [line({ orderBy: "2026-08-01", orderUrgency: "TOO_LATE", leadTimeDays: 2 })],
+        error: null, loading: false,
+      };
+      render(<ShoppingListPage />);
+      expect(screen.getByText("Won’t arrive in time")).toBeInTheDocument();
+      // `/^Order by \d/` and not `/^Order by/`: the column's own header reads "Order by", so the
+      // looser pattern matches the table heading and fails for a reason that has nothing to do with
+      // the badge under test.
+      expect(screen.queryByText(/^Order by \d/)).not.toBeInTheDocument();
+      expect(screen.queryByText("Order today")).not.toBeInTheDocument();
+    });
+
+    // A hand-added line: nothing demanded it by a date, so no deadline is invented for it. An em
+    // dash — deliberately not today, which would put a red badge on a line nobody is late for.
+    it("prints an em dash for a line no meal demanded", () => {
+      queryRef.current = {
+        data: [line({ orderBy: null, orderUrgency: null, leadTimeDays: null, edited: true })],
+        error: null, loading: false,
+      };
+      render(<ShoppingListPage />);
+      expect(screen.getByText("—")).toBeInTheDocument();
+    });
   });
 });

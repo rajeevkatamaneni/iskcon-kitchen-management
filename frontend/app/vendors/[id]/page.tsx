@@ -93,6 +93,10 @@ function VendorDetailView() {
     const form = event.currentTarget;
     const f = new FormData(form);
     const price = String(f.get("lastPrice") ?? "").trim();
+    // Blank stays null, and that is the whole care needed here: null means nobody has recorded how
+    // long this vendor takes, while 0 means cash-and-carry. Coercing an empty box through Number()
+    // would turn the first into the second and quietly tell the planner the goods arrive same-day.
+    const lead = String(f.get("leadTimeDays") ?? "").trim();
     const ok = await run(
       (token) =>
         api.setVendorSupply(
@@ -100,6 +104,7 @@ function VendorDetailView() {
           {
             ingredientId: String(f.get("ingredientId") ?? ""),
             lastPrice: price === "" ? null : Number(price),
+            leadTimeDays: lead === "" ? null : Number(lead),
             preferred: f.get("preferred") === "on",
           },
           token
@@ -199,7 +204,8 @@ function VendorDetailView() {
               <section className="card px-6 py-5">
                 <h2 className="text-lg">Supplies</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
-                  A preferred supply is what the shopping list suggests.
+                  A preferred supply is what the shopping list suggests, and its lead time is what
+                  the planner counts back from to work out the last day something can be ordered.
                 </p>
 
                 {supplies.length > 0 && (
@@ -208,6 +214,7 @@ function VendorDetailView() {
                       <tr>
                         <th className={`${TH_TEXT} ${WRAP}`}>Ingredient</th>
                         <th className={TH_NUM}>Last price</th>
+                        <th className={TH_NUM}>Lead time</th>
                         <th className={TH_TEXT}>Preferred</th>
                         <th className={TH_ACTIONS}>Remove</th>
                       </tr>
@@ -217,6 +224,14 @@ function VendorDetailView() {
                         <tr key={s.ingredientId} className={TR}>
                           <td className={`${TD_TEXT} ${WRAP}`}>{s.ingredientName}</td>
                           <td className={TD_NUM}>{money(s.lastPrice, "INR")}</td>
+                          {/* An em dash, never a nought. Nobody having said how long this vendor
+                              takes and this vendor delivering the same day are different facts, and
+                              a "0 days" here would read as the second. */}
+                          <td className={TD_NUM}>
+                            {s.leadTimeDays === null
+                              ? <span className="text-ink-muted">—</span>
+                              : `${s.leadTimeDays} ${s.leadTimeDays === 1 ? "day" : "days"}`}
+                          </td>
                           <td className={TD_TEXT}>{s.preferred ? <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Preferred</span> : "—"}</td>
                           <td className={TD_ACTIONS}>
                             <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.removeVendorSupply(id, s.ingredientId, t), "We couldn’t remove that supply.")}>
@@ -241,6 +256,25 @@ function VendorDetailView() {
                     <span className="pl-field-inset font-medium text-ink">Last price (₹)</span>
                     <input name="lastPrice" type="number" min="0" step="any" className="min-h-touch w-32 rounded-control border border-hairline px-3" />
                   </label>
+                  {/* Left blank until somebody knows the answer. The hint says so rather than the
+                      field guessing on their behalf — an invented lead time is worse than none,
+                      because the planner would count back from it and say there was time. */}
+                  <HintedField
+                    label="Lead time (days)"
+                    hint="How long this vendor takes to deliver this item once you ask. Leave it blank if you don’t know — we’ll assume two days until somebody records it. Put 0 for a shop you walk into and carry it back from."
+                  >
+                    {(fieldId) => (
+                      <input
+                        id={fieldId}
+                        name="leadTimeDays"
+                        type="number"
+                        min="0"
+                        max="365"
+                        step="1"
+                        className="min-h-touch w-32 rounded-control border border-hairline px-3"
+                      />
+                    )}
+                  </HintedField>
                   <label className="flex items-center gap-2 text-sm text-ink-secondary">
                     <input name="preferred" type="checkbox" 
                 className="accent-accent"

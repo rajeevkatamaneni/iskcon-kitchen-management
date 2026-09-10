@@ -59,7 +59,8 @@ public class VendorService {
 	public VendorDetailView get(UUID id) {
 		VendorView vendor = findById(id).orElseThrow(() -> notFound(id));
 		List<VendorSupplyView> supplies = jdbc.query("""
-				SELECT vs.ingredient_id, i.name AS ingredient_name, vs.last_price, vs.preferred
+				SELECT vs.ingredient_id, i.name AS ingredient_name, vs.last_price,
+					   vs.lead_time_days, vs.preferred
 				FROM vendor_supplies vs
 				JOIN ingredients i ON i.id = vs.ingredient_id
 				WHERE vs.vendor_id = ?
@@ -209,12 +210,18 @@ public class VendorService {
 			jdbc.update("UPDATE vendor_supplies SET preferred = false, updated_at = now() "
 					+ "WHERE ingredient_id = ? AND preferred", request.ingredientId());
 		}
+		// lead_time_days is written exactly as it arrives, null included (T-090). A supply row whose
+		// lead time is cleared goes back to "nobody has said", which is a true statement and the one
+		// the readers fall back from; coalescing it to a number here would fabricate an answer.
 		jdbc.update("""
-				INSERT INTO vendor_supplies (id, tenant_id, vendor_id, ingredient_id, last_price, preferred)
-				VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?)
+				INSERT INTO vendor_supplies (
+					id, tenant_id, vendor_id, ingredient_id, last_price, lead_time_days, preferred)
+				VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
 				ON CONFLICT (vendor_id, ingredient_id) DO UPDATE
-				SET last_price = EXCLUDED.last_price, preferred = EXCLUDED.preferred, updated_at = now()
-				""", vendorId, request.ingredientId(), request.lastPrice(), request.preferred());
+				SET last_price = EXCLUDED.last_price, lead_time_days = EXCLUDED.lead_time_days,
+					preferred = EXCLUDED.preferred, updated_at = now()
+				""", vendorId, request.ingredientId(), request.lastPrice(), request.leadTimeDays(),
+				request.preferred());
 	}
 
 	@Transactional
@@ -341,5 +348,8 @@ public class VendorService {
 			rs.getObject("ingredient_id", UUID.class),
 			rs.getString("ingredient_name"),
 			(BigDecimal) rs.getObject("last_price"),
+			// getObject, never getInt: getInt answers 0 for a SQL null, and 0 here would mean the
+			// vendor delivers the same day. The one value this column must never be mistaken for.
+			rs.getObject("lead_time_days", Integer.class),
 			rs.getBoolean("preferred"));
 }

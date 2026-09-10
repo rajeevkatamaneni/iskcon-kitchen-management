@@ -26,7 +26,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { generateAndDownload } from "@/lib/document-download";
-import { cooksQuantity, hhmm, templeDay, unitLabel } from "@/lib/format";
+import { cooksQuantity, hhmm, shortDate, templeDay, unitLabel } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 
 /**
@@ -240,6 +240,45 @@ function isFor(shift: ShiftView, meal: MealServiceView): boolean {
  */
 function shortBy(meal: MealServiceView, crew: MealCrewView | null): number {
   return Math.max(1, (meal.crewRequired ?? 0) - (crew?.rostered ?? 0));
+}
+
+/**
+ * The badge on a dish the store cannot cover, escalated by how much of the chance to fix it is left
+ * (T-090).
+ *
+ * <p>Rajeev's rule, in his own shape: <em>"order-by date = the date it is needed minus the lead
+ * time. Amber while there is still slack; red the day you hit the order-by date; and past that it is
+ * not a warning any more but a fact, and should say something different."</em>
+ *
+ * <p><strong>The third state is a different sentence, not a darker red.</strong> Once the order-by
+ * date has gone there is no longer an action that produces the outcome the warning was about, so
+ * telling somebody to order in time is useless; the badge says what is now true instead. It keeps
+ * the same red as "order today" deliberately — a meal tomorrow that is short of rice is not less
+ * serious for the deadline having passed, and a shade cannot tell a cook which of two quite
+ * different problems they have. The words do that: get the order out today, or find another way to
+ * feed people.
+ *
+ * <p>It warns and never refuses, like everything else in this area. Nothing here stops a temple
+ * ordering a sack of rice for tomorrow.
+ *
+ * <p>The server decides which of the three this is, from the temple's own clock and the lead time
+ * recorded against the vendor the order would go to; this decides only the words. That way the
+ * planner and the shopping list cannot come to disagree about whether there is still time.
+ */
+function shortBadge(sufficiency: MealSufficiency) {
+  // Only a short meal reaches here, and the server sends an order-by date with every short meal —
+  // but a null is rendered rather than assumed away, because the honest thing to say when we do not
+  // have the date is the sentence the badge has always said.
+  if (sufficiency.orderBy === null || sufficiency.orderUrgency === null) {
+    return <Badge tone="danger">Short of ingredients</Badge>;
+  }
+  if (sufficiency.orderUrgency === "IN_TIME") {
+    return <Badge tone="warning">Short · order by {shortDate(sufficiency.orderBy)}</Badge>;
+  }
+  if (sufficiency.orderUrgency === "ORDER_TODAY") {
+    return <Badge tone="danger">Short · order today</Badge>;
+  }
+  return <Badge tone="danger">Short · won’t arrive in time</Badge>;
 }
 
 /** One meal: its dishes, its job card, and the record of what went out. */
@@ -510,7 +549,7 @@ function MealBlock({
                 ) : dish.status === "COOKED" ? (
                   <Badge tone="success">Cooked</Badge>
                 ) : sufficiency.get(dish.id)?.status === "SHORT" ? (
-                  <Badge tone="danger">Short of ingredients</Badge>
+                  shortBadge(sufficiency.get(dish.id)!)
                 ) : sufficiency.get(dish.id)?.status === "SUFFICIENT" ? (
                   <Badge tone="success">Ingredients ready</Badge>
                 ) : (

@@ -1,0 +1,1889 @@
+=== anchors counted before any edit (condition 2) ===
+  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/vendor/LeadTimes.java: [return recorded == null ? ASSUMED_LEAD_TIME_DAYS : recorded;] x1 (expected 1)
+  /Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx: [return <Badge tone="danger">Short · won’t arrive in time</Badge>;] x1 (expected 1)
+  /Users/Rajeev/Workspace/kitchen-management-system/frontend/app/shopping-list/page.tsx: [<Badge tone="danger">Won’t arrive in time</Badge>] x1 (expected 1)
+
+=== A: an unrecorded lead time is scored as zero ===
+=== B: the third state says what the second one says ===
+
+=== the tree actually changed: verified copy vs patched file (condition 3) ===
+--- /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T//control-T-090.7iFY4a/LeadTimes.java	2026-09-10 01:53:28
++++ /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/vendor/LeadTimes.java	2026-09-10 01:53:28
+@@ -111,7 +111,7 @@
+ 	 * whole point of the method, and unboxing it at the call site is the mistake this exists to stop.
+ 	 */
+ 	public static int effectiveDays(Integer recorded) {
+-		return recorded == null ? ASSUMED_LEAD_TIME_DAYS : recorded;
++		return recorded == null ? 0 : recorded;
+ 	}
+ 
+ 	/**
+--- /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T//control-T-090.7iFY4a/MealServices.tsx	2026-09-10 01:53:28
++++ /Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx	2026-09-10 01:53:28
+@@ -278,7 +278,7 @@
+   if (sufficiency.orderUrgency === "ORDER_TODAY") {
+     return <Badge tone="danger">Short · order today</Badge>;
+   }
+-  return <Badge tone="danger">Short · won’t arrive in time</Badge>;
++  return <Badge tone="danger">Short · order today</Badge>;
+ }
+ 
+ /** One meal: its dishes, its job card, and the record of what went out. */
+--- /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T//control-T-090.7iFY4a/shopping-list-page.tsx	2026-09-10 01:53:28
++++ /Users/Rajeev/Workspace/kitchen-management-system/frontend/app/shopping-list/page.tsx	2026-09-10 01:53:28
+@@ -280,7 +280,7 @@
+   }
+   return (
+     <>
+-      <Badge tone="danger">Won’t arrive in time</Badge>
++      <Badge tone="danger">Order today</Badge>
+       {assumed}
+     </>
+   );
+control-T-090: 3 of 3 files differ from the verified copy
+
+=== the backend suite, with the tests exactly as written (condition 4) ===
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+SufficiencyIT > the same recipe planned on two days excludes only itself PASSED
+
+SufficiencyIT > two meals can't both claim one sack; stock arriving clears the shortfall PASSED
+
+SufficiencyIT > the shortfall feed aggregates the exact quantity the ordering pipeline needs PASSED
+
+SufficiencyIT > the badge stops speaking for a meal once it is recorded, and its claim is released PASSED
+
+SufficiencyIT > a meal is not reported short because of its own claim PASSED
+
+SufficiencyIT > a short meal carries its order-by date, and it escalates as the date arrives FAILED
+    java.lang.AssertionError: JSON path "$[0].orderBy" expected:<2026-09-09> but was:<2026-09-11>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.meal.SufficiencyIT.theOrderByDateEscalates(SufficiencyIT.java:322)
+
+SufficiencyIT > a covered meal and a meal beyond the window carry no order-by date at all PASSED
+
+SufficiencyIT > a meal beyond the buying window is not judged, and does not claim today's stock PASSED
+
+SufficiencyIT > a recorded lead time supersedes the assumption, and unknown is not the same as zero FAILED
+    java.lang.AssertionError: JSON path "$[0].orderUrgency" expected:<TOO_LATE> but was:<IN_TIME>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.meal.SufficiencyIT.aRecordedLeadTimeSupersedesTheAssumption(SufficiencyIT.java:357)
+
+SufficiencyIT > a volunteer cannot read sufficiency PASSED
+
+SufficiencyIT > six days of 10 KG against a 50 KG sack: the sixth is short, whichever day you open PASSED
+
+ShoppingListIT > the order-by date counts back from the meal by the vendor's lead time, and says when it was assumed FAILED
+    java.lang.AssertionError: JSON path "$[1].orderBy" expected:<2026-09-10> but was:<2026-09-12>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.shoppinglist.ShoppingListIT.orderByCountsBackFromTheDemand(ShoppingListIT.java:169)
+
+ShoppingListIT > what used to be a sattvic-prohibited ingredient now enters via the threshold stream PASSED
+
+ShoppingListIT > a partial edit that omits the vendor leaves the suggested vendor alone PASSED
+
+ShoppingListIT > regeneration preserves human edits to quantity and inclusion PASSED
+
+ShoppingListIT > regeneration merges shortfall + threshold with provenance, suggests the preferred vendor PASSED
+
+ShoppingListIT > a volunteer cannot see the shopping list PASSED
+
+01:53:45.217 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+01:53:45.221 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+01:53:45.222 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+01:53:45.226 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+01:53:45.228 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+01:53:45.229 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    17
+  Passed:   14
+  Failed:   3
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+17 tests completed, 3 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 16s
+5 actionable tasks: 5 executed
+control-T-090: backend exit=1
+
+=== the frontend suite, with the tests exactly as written ===
+[33mThe CJS build of Vite's Node API is deprecated. See https://vitejs.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.2 /Users/Rajeev/Workspace/kitchen-management-system/frontend
+
+ ❯ __tests__/shopping-list.test.tsx  (8 tests | 1 failed) 91ms
+   × shopping list > the order-by date > stops advising once the date has gone
+     → Unable to find an element with the text: Won’t arrive in time. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33maria-current[39m=[32m"page"[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out bg-accent-bg font-semibold text-accent-text"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+         ...
+stderr | __tests__/planner-day-routes.test.tsx > an event on the day > repeats an event forward as copies, and says what it declined to copy
+Warning: An update to RepeatForward inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at RepeatForward (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx:1425:3)
+    at section
+    at Card (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Card.tsx:7:3)
+    at MealBlock (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx:197:3)
+    at div
+    at MealServices (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx:41:3)
+    at div
+    at DayView (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/DayView.tsx:32:20)
+    at div
+    at Screen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Screen.tsx:4:19)
+    at main
+    at div
+    at PlannerDayScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/page.tsx:56:51)
+    at Suspense
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at PlannerDayPage
+Warning: An update to MealServices inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at MealServices (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx:41:3)
+    at div
+    at DayView (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/DayView.tsx:32:20)
+    at div
+    at Screen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Screen.tsx:4:19)
+    at main
+    at div
+    at PlannerDayScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/page.tsx:56:51)
+    at Suspense
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at PlannerDayPage
+Warning: An update to DayView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at DayView (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/DayView.tsx:32:20)
+    at div
+    at Screen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Screen.tsx:4:19)
+    at main
+    at div
+    at PlannerDayScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/page.tsx:56:51)
+    at Suspense
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at PlannerDayPage
+Warning: An update to RepeatForward inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at RepeatForward (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx:1425:3)
+    at section
+    at Card (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Card.tsx:7:3)
+    at MealBlock (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx:197:3)
+    at div
+    at MealServices (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx:41:3)
+    at div
+    at DayView (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/DayView.tsx:32:20)
+    at div
+    at Screen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Screen.tsx:4:19)
+    at main
+    at div
+    at PlannerDayScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/page.tsx:56:51)
+    at Suspense
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at PlannerDayPage
+Warning: An update to MealServices inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at MealServices (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx:41:3)
+    at div
+    at DayView (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/DayView.tsx:32:20)
+    at div
+    at Screen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Screen.tsx:4:19)
+    at main
+    at div
+    at PlannerDayScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/page.tsx:56:51)
+    at Suspense
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at PlannerDayPage
+Warning: An update to DayView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at DayView (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/DayView.tsx:32:20)
+    at div
+    at Screen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Screen.tsx:4:19)
+    at main
+    at div
+    at PlannerDayScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/page.tsx:56:51)
+    at Suspense
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at PlannerDayPage
+Warning: An update to DayView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at DayView (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/DayView.tsx:32:20)
+    at div
+    at Screen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Screen.tsx:4:19)
+    at main
+    at div
+    at PlannerDayScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/page.tsx:56:51)
+    at Suspense
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at PlannerDayPage
+Warning: An update to MealServices inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at MealServices (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx:41:3)
+    at div
+    at DayView (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/DayView.tsx:32:20)
+    at div
+    at Screen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Screen.tsx:4:19)
+    at main
+    at div
+    at PlannerDayScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/page.tsx:56:51)
+    at Suspense
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at PlannerDayPage
+Warning: An update to MealServices inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at MealServices (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx:41:3)
+    at div
+    at DayView (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/DayView.tsx:32:20)
+    at div
+    at Screen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/Screen.tsx:4:19)
+    at main
+    at div
+    at PlannerDayScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/page.tsx:56:51)
+    at Suspense
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at PlannerDayPage
+
+stderr | __tests__/planner-day-routes.test.tsx > editing one meal > saves the whole meal and returns to the day with the confirmation waiting
+Warning: An update to MealComposer inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at MealComposer (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealComposer.tsx:37:3)
+    at div
+    at main
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to EditMealScreen inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at div
+    at div
+    at nav
+    at Sidebar (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/Sidebar.tsx:179:20)
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+Warning: An update to ForwardRef(LinkComponent) inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at LinkComponent (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/next/dist/client/link.js:121:19)
+    at ButtonLink (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/ButtonLink.tsx:9:3)
+    at div
+    at div
+    at header
+    at main
+    at div
+    at FocusScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/ds/FocusScreen.tsx:7:3)
+    at EditMealScreen (/Users/Rajeev/Workspace/kitchen-management-system/frontend/app/planner/[date]/[kind]/page.tsx:50:27)
+    at RequireRole (/Users/Rajeev/Workspace/kitchen-management-system/frontend/components/RequireRole.tsx:117:3)
+    at EditMealPage
+
+ ❯ __tests__/planner-day-routes.test.tsx  (17 tests | 1 failed) 1339ms
+   × the ingredient badge says how much time is left to order > stops advising and states the fact once the date has gone
+     → Unable to find an element with the text: Short · won’t arrive in time. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mISKCON Bengaluru[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33maria-current[39m=[32m"page"[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out bg-accent-bg font-semibold text-accent-text"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+    ...
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mISKCON Bengaluru[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33maria-current[39m=[32m"page"[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out bg-accent-bg font-semibold text-accent-text"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+    ...
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/planner-day-routes.test.tsx > the ingredient badge says how much time is left to order > stops advising and states the fact once the date has gone
+TestingLibraryElementError: Unable to find an element with the text: Short · won’t arrive in time. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mISKCON Bengaluru[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33maria-current[39m=[32m"page"[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out bg-accent-bg font-semibold text-accent-text"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+    ...
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mISKCON Bengaluru[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33maria-current[39m=[32m"page"[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out bg-accent-bg font-semibold text-accent-text"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+    ...
+ ❯ waitForWrapper node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ __tests__/planner-day-routes.test.tsx:415:25
+    413|     api.mealSufficiency.mockResolvedValue(short(isoIn(-3), "TOO_LATE")…
+    414|     render(<PlannerDayPage />);
+    415|     expect(await screen.findByText("Short · won’t arrive in time")).to…
+       |                         ^
+    416|     expect(screen.queryByText(/order today/i)).not.toBeInTheDocument();
+    417|     expect(screen.queryByText(/order by/i)).not.toBeInTheDocument();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  __tests__/shopping-list.test.tsx > shopping list > the order-by date > stops advising once the date has gone
+TestingLibraryElementError: Unable to find an element with the text: Won’t arrive in time. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33maria-current[39m=[32m"page"[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out bg-accent-bg font-semibold text-accent-text"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+         ...
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ __tests__/shopping-list.test.tsx:134:21
+    132|       };
+    133|       render(<ShoppingListPage />);
+    134|       expect(screen.getByText("Won’t arrive in time")).toBeInTheDocume…
+       |                     ^
+    135|       // `/^Order by \d/` and not `/^Order by/`: the column's own head…
+    136|       // looser pattern matches the table heading and fails for a reas…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 23 passed (25)
+   Start at  01:53:45
+   Duration  1.94s (transform 173ms, setup 111ms, collect 315ms, tests 1.43s, environment 431ms, prepare 63ms)
+
+control-T-090: frontend exit=1
+
+control-T-090: the defects reproduced on demand (backend=1, frontend=1)
+control-T-090: restored /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/vendor/LeadTimes.java byte-for-byte from /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T//control-T-090.7iFY4a/LeadTimes.java
+control-T-090: restored /Users/Rajeev/Workspace/kitchen-management-system/frontend/components/planner/MealServices.tsx byte-for-byte from /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T//control-T-090.7iFY4a/MealServices.tsx
+control-T-090: restored /Users/Rajeev/Workspace/kitchen-management-system/frontend/app/shopping-list/page.tsx byte-for-byte from /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T//control-T-090.7iFY4a/shopping-list-page.tsx
+work-lock: 'verify' released; command exited 0

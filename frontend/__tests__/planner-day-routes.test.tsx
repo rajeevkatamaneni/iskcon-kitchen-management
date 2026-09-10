@@ -369,6 +369,63 @@ describe("editing one meal", () => {
   });
 });
 
+/**
+ * The escalation on the ingredient badge (T-090).
+ *
+ * <p>Rajeev's rule: amber while there is still slack, red the day you hit the order-by date, and
+ * past that a statement of fact rather than a warning. The wording is what carries the third state —
+ * these assertions are deliberately on the sentences and not on the colours, because "a darker red"
+ * is exactly the way this gets built wrong.
+ */
+describe("the ingredient badge says how much time is left to order", () => {
+  beforeEach(() => {
+    routeRef.current = { date: TOMORROW };
+    api.mealServices.mockResolvedValue([lunch({ dishes: [preparation("p1", "r1", "Bisi Bele Bath")] })]);
+    api.calendarRange.mockResolvedValue([]);
+    api.listRecipes.mockResolvedValue(RECIPES);
+    api.listMealKinds.mockResolvedValue(KINDS);
+  });
+
+  function short(orderBy: string | null, orderUrgency: string | null) {
+    return [{
+      mealPlanId: "p1", planDate: TOMORROW, mealKind: "Lunch", readyBy: "12:00:00",
+      recipeName: "Bisi Bele Bath", status: "SHORT", shortfalls: [], orderBy, orderUrgency,
+    }];
+  }
+
+  it("names the date while there is still slack", async () => {
+    api.mealSufficiency.mockResolvedValue(short(isoIn(4), "IN_TIME"));
+    render(<PlannerDayPage />);
+    expect(await screen.findByText(/^Short · order by /)).toBeInTheDocument();
+  });
+
+  it("asks for the order on the day itself", async () => {
+    api.mealSufficiency.mockResolvedValue(short(isoIn(0), "ORDER_TODAY"));
+    render(<PlannerDayPage />);
+    expect(await screen.findByText("Short · order today")).toBeInTheDocument();
+  });
+
+  // The state most likely to be built as one more step up a colour ramp. Once the date has gone,
+  // asking somebody to order in time is asking for something that no longer exists, so the badge
+  // says what is now true — and this assertion fails if it merely repeats "order today" in a
+  // deeper red.
+  it("stops advising and states the fact once the date has gone", async () => {
+    api.mealSufficiency.mockResolvedValue(short(isoIn(-3), "TOO_LATE"));
+    render(<PlannerDayPage />);
+    expect(await screen.findByText("Short · won’t arrive in time")).toBeInTheDocument();
+    expect(screen.queryByText(/order today/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/order by/i)).not.toBeInTheDocument();
+  });
+
+  // Nothing about the escalation may swallow the plain statement that the store cannot cover the
+  // dish: a meal with no order-by date still reads short.
+  it("falls back to the plain sentence when there is no date to show", async () => {
+    api.mealSufficiency.mockResolvedValue(short(null, null));
+    render(<PlannerDayPage />);
+    expect(await screen.findByText("Short of ingredients")).toBeInTheDocument();
+  });
+});
+
 /** A date `days` from now, as the API writes them. Tomorrow, so nothing is read-only. */
 function isoIn(days: number): string {
   const d = new Date();

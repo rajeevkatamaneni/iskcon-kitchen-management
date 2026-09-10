@@ -1673,6 +1673,16 @@ export interface IngredientShortfall {
   unit: string;
 }
 
+/**
+ * Where today stands against the last day something could be ordered and still arrive (T-090).
+ *
+ * <p>Rajeev's rule: amber while there is still slack, red the day you hit the order-by date, and
+ * past that it is not a warning any more but a fact. `TOO_LATE` is a different sentence rather than
+ * a darker red — once the date has gone, telling somebody to order in time is useless, so the screen
+ * says what is now true instead.
+ */
+export type OrderUrgency = "IN_TIME" | "ORDER_TODAY" | "TOO_LATE";
+
 export interface MealSufficiency {
   mealPlanId: string;
   planDate: string;
@@ -1681,6 +1691,15 @@ export interface MealSufficiency {
   recipeName: string;
   status: "SUFFICIENT" | "SHORT" | "PLANNING";
   shortfalls: IngredientShortfall[];
+  /**
+   * The last day this meal's shortage could be ordered for — its own date minus the lead time.
+   * Null unless `status` is `"SHORT"`: a covered meal has nothing to order and a meal outside the
+   * buying window is making no claim about stock at all. Required-and-nullable rather than optional,
+   * so a caller that forgets it is a type error rather than a silent `undefined`.
+   */
+  orderBy: string | null;
+  /** Null exactly when `orderBy` is. */
+  orderUrgency: OrderUrgency | null;
 }
 
 /** What cooking a recipe draws from stock, previewed or committed (E3-S6). */
@@ -1856,6 +1875,13 @@ export interface VendorSupplyView {
   ingredientId: string;
   ingredientName: string;
   lastPrice: number | null;
+  /**
+   * Days between asking this vendor for this ingredient and it arriving (T-090), or null where
+   * nobody has recorded it. **Null is unknown, not same-day** — the screen prints an em dash, never
+   * a nought, and the ordering screens fall back to the two-day assumption rather than planning as
+   * though the goods are already in the van. Zero is a real and different answer: cash-and-carry.
+   */
+  leadTimeDays: number | null;
   preferred: boolean;
 }
 
@@ -1991,7 +2017,23 @@ export interface ShoppingListLineView {
   currentStock: number;
   unit: string;
   suggestedQty: number;
+  /**
+   * The delivery date written on the purchase order — when the temple wants the goods on the shelf.
+   * Not the day the food is cooked, and not an order-by date.
+   */
   neededBy: string | null;
+  /**
+   * The last day this line can be ordered and still arrive (T-090). Null on a hand-added line, which
+   * no meal demanded and which therefore has no such date.
+   */
+  orderBy: string | null;
+  /**
+   * The recorded lead time behind `orderBy`, or null where none was recorded and the two-day
+   * assumption stood in — so the screen can say whether the date came from the vendor or from us.
+   */
+  leadTimeDays: number | null;
+  /** Null exactly when `orderBy` is. */
+  orderUrgency: OrderUrgency | null;
   suggestedVendorId: string | null;
   suggestedVendorName: string | null;
   shortfall: number;
@@ -4810,7 +4852,13 @@ export const api = {
 
   setVendorSupply: (
     id: string,
-    input: { ingredientId: string; lastPrice?: number | null; preferred: boolean },
+    input: {
+      ingredientId: string;
+      lastPrice?: number | null;
+      /** Null clears it back to "nobody has said"; omitting it does the same. Never send 0 for unknown. */
+      leadTimeDays?: number | null;
+      preferred: boolean;
+    },
     token?: string
   ) =>
     request<void>(`/api/v1/vendors/${id}/supplies`, {

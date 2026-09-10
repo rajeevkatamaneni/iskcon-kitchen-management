@@ -9,6 +9,7 @@ import { api, toApiError, type ApiError, type IngredientView, type ShoppingListL
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { cooksQuantity, dateWithYear, unitLabel } from "@/lib/format";
+import { Badge } from "@/components/ds/Badge";
 import { Loading } from "@/components/Loading";
 import { HintedField } from "@/components/ds/InfoHint";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, TD_DATE, WRAP } from "@/components/ds/table";
@@ -138,7 +139,10 @@ function ShoppingListView() {
                         take the width the others give up. */}
                     <th className={`${TH_TEXT} ${WRAP}`}>Why</th>
                     <th className={`${TH_TEXT} ${WRAP}`}>Vendor</th>
-                    <th className={TH_TEXT}>Needed by</th>
+                    {/* "Order by", not "Needed by" — see OrderByCell. The date this column used to
+                        show was the delivery date written on the purchase order, which is a
+                        different question from the one somebody reading this list is asking. */}
+                    <th className={`${TH_TEXT} ${WRAP}`}>Order by</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -188,7 +192,7 @@ function ShoppingListView() {
                       {/* Written the way the rest of the application writes a date, and kept whole:
                           "2026-09-" on one line and "01" on the next is not a date. */}
                       <td className={`${TD_DATE} text-ink-secondary`}>
-                        {l.neededBy ? dateWithYear(l.neededBy) : "—"}
+                        <OrderByCell line={l} />
                       </td>
                     </tr>
                   ))}
@@ -217,6 +221,68 @@ function ShoppingListView() {
         </div>
       </main>
     </div>
+  );
+}
+
+/**
+ * When this line has to be ordered, and how much of the chance to do it is left (T-090).
+ *
+ * <p>Rajeev's rule: <em>"order-by date = the date it is needed minus the lead time. Amber while
+ * there is still slack; red the day you hit the order-by date; and past that it is not a warning any
+ * more but a fact, and should say something different."</em> The server decides which of the three
+ * states this is, from the temple's own clock and the lead time recorded against the vendor the
+ * order would go to; this decides only the words, so the shopping list and the planner badge cannot
+ * come to disagree about whether there is still time.
+ *
+ * <p><strong>The third state is a different sentence, not a darker red.</strong> Once the date has
+ * gone, asking somebody to order in time is asking for something that no longer exists, so the cell
+ * says what is now true. It keeps the same red as "order today" on purpose — the words carry the
+ * difference between the two problems, and a shade cannot.
+ *
+ * <p><strong>This column replaced "Needed by", and the replacement is the point.</strong> That
+ * column showed <code>neededBy</code>, which is the delivery date written on the purchase order —
+ * the earliest meal that wants the ingredient, less a two-day delivery buffer. It answers "what date
+ * do we put on the order?", which is a question for the order screen. The question somebody reading
+ * a shopping list is actually asking is "when does this have to go out?", and until now nothing on
+ * this screen answered it. Showing both would have put two columns side by side displaying the same
+ * date whenever no lead time is recorded, under two names, which is worse than either alone.
+ * <code>neededBy</code> is still in the payload and still on every purchase order.
+ *
+ * <p>"assumed" appears where no lead time is recorded against the preferred vendor. It is the one
+ * place a person can see that the date in front of them came from us rather than from their
+ * supplier, and it is the nudge towards recording the real one on the vendor's page.
+ */
+function OrderByCell({ line }: { line: ShoppingListLineView }) {
+  // A hand-added line: no meal demanded it, so there is no date to compute and none is invented.
+  // An em dash, deliberately, and never today — nobody is late for a bale of leaf plates somebody
+  // typed in without saying when they are wanted.
+  if (line.orderBy === null || line.orderUrgency === null) {
+    return <>—</>;
+  }
+  const assumed = line.leadTimeDays === null && (
+    <span className="ml-2 text-xs text-ink-muted">assumed</span>
+  );
+  if (line.orderUrgency === "IN_TIME") {
+    return (
+      <>
+        <Badge tone="warning">Order by {dateWithYear(line.orderBy)}</Badge>
+        {assumed}
+      </>
+    );
+  }
+  if (line.orderUrgency === "ORDER_TODAY") {
+    return (
+      <>
+        <Badge tone="danger">Order today</Badge>
+        {assumed}
+      </>
+    );
+  }
+  return (
+    <>
+      <Badge tone="danger">Won’t arrive in time</Badge>
+      {assumed}
+    </>
   );
 }
 
