@@ -90,6 +90,17 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * statement</em>. Neither substitutes for the other, and only the second one fails if somebody
  * deletes the predicate.
  *
+ * <p>T-104 answers the one thing that paragraph admits and cannot fix from in here. The
+ * statement-level test below runs its <em>own copy</em> of {@code recordSend}'s UPDATE, so it proves
+ * the clause refuses a second transition and <b>not that the service still contains the clause</b> —
+ * delete the predicate from {@code CommunicationService}, leave {@code lockCommunication} in place,
+ * and all fourteen tests in this class stay green. Nothing driving the endpoint can do better, because
+ * the lock means no request ever reaches that UPDATE holding a stale DRAFT.
+ * {@link CommunicationSendGuardSourceTest} closes it the only way left — by asserting that the clause
+ * proved here is the clause the service ships — and it is a <b>deliberate, argued exception</b> to the
+ * rule against asserting on the text of SQL, not a licence to do it elsewhere. Its class comment
+ * carries the argument; read that before copying its shape.
+ *
  * <p>It imports {@link CommunicationIT.StubVerifierConfiguration} rather than declaring a stub of
  * its own on purpose: {@code @Import} is part of Spring's test-context cache key, so a second,
  * identical configuration class here would build and cache a whole second application context for

@@ -1,0 +1,277 @@
+=== anchor counts, BEFORE patching ====================================
+the naive anchor "AND status = 'DRAFT'" — two of these are javadoc, which is the trap:
+3
+the anchor actually patched (the whole indented line in the UPDATE) — must be exactly 1:
+1
+
+=== patch: delete the predicate, leave lockCommunication alone =========
+diff --git a/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java b/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
+index 0bba122..322b25e 100644
+--- a/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
++++ b/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
+@@ -265,7 +265,7 @@ public class CommunicationService {
+ 		int rows = jdbc.update("""
+ 				UPDATE communications SET status = 'SENT', sent_at = now(), audience_count = ?,
+ 					updated_at = now()
+-				WHERE id = ? AND status = 'DRAFT'
++				WHERE id = ?
+ 				""", audience.size(), id);
+ 		if (rows != 1) {
+ 			// Matching no row means the status moved under us, which is the same fact requireDraft names
+
+=== the suite under the patch =========================================
+> Task :compileJava
+> Task :processResources UP-TO-DATE
+> Task :classes
+> Task :compileTestJava UP-TO-DATE
+> Task :processTestResources UP-TO-DATE
+> Task :testClasses UP-TO-DATE
+
+> Task :test FAILED
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+CommunicationSendGuardSourceTest > SOURCE ASSERTION, not behaviour: only one statement in the service moves a letter to SENT PASSED
+
+CommunicationSendGuardSourceTest > SOURCE ASSERTION, not behaviour: recordSend's UPDATE still carries the clause that was proved against two connections FAILED
+    org.opentest4j.AssertionFailedError: [recordSend's UPDATE no longer carries the WHERE clause that CommunicationRetryIT.theSendStatementItselfRefusesASecondTransition proves refuses a second transition. That test runs its own copy of this statement, so it stays green either way — this assertion is the only thing in the suite that notices. If the change was deliberate, change both, and read the statement-level test's proof again before you believe the new clause.] 
+    expected: "id = ? AND status = 'DRAFT'"
+     but was: "id = ?"
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.communication.CommunicationSendGuardSourceTest.theShippedStatementCarriesTheClauseThatWasProved(CommunicationSendGuardSourceTest.java:133)
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    2
+  Passed:   1
+  Failed:   1
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+2 tests completed, 1 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 2s
+5 actionable tasks: 2 executed, 3 up-to-date
+gradle exit: 1
+
+=== restore (EXIT trap) ===============================================
+diff is silent: the file is byte-for-byte what it was.
+e12bacf327b0793d533af191325580224af4c387  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/CommunicationService.java.orig
+e12bacf327b0793d533af191325580224af4c387  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
+--- git status for the patched file (expected: unmodified) ---
+--- git status for the whole tree (T-104 owns only the two test files) ---
+ M backend/src/test/java/org/iskcon/kms/communication/CommunicationRetryIT.java
+?? backend/src/test/java/org/iskcon/kms/communication/CommunicationSendGuardSourceTest.java
+?? docs/work/proof/control-T-104.log
+work-lock: 'verify' released; command exited 0
+
+
+############ LEG 2 — the behavioural suite is blind to the deletion ############
+
+=== anchor count, BEFORE patching =====================================
+naive anchor (two are javadoc — the trap):
+3
+the line actually patched — must be exactly 1:
+1
+
+=== patch: predicate deleted, lock left in place ======================
+diff --git a/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java b/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
+index 0bba122..322b25e 100644
+--- a/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
++++ b/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
+@@ -265,7 +265,7 @@ public class CommunicationService {
+ 		int rows = jdbc.update("""
+ 				UPDATE communications SET status = 'SENT', sent_at = now(), audience_count = ?,
+ 					updated_at = now()
+-				WHERE id = ? AND status = 'DRAFT'
++				WHERE id = ?
+ 				""", audience.size(), id);
+ 		if (rows != 1) {
+ 			// Matching no row means the status moved under us, which is the same fact requireDraft names
+
+=== WITH THE PREDICATE DELETED ========================================
+expected: every CommunicationRetryIT test PASSES (that is the blind spot),
+and only CommunicationSendGuardSourceTest notices.
+> Task :compileJava UP-TO-DATE
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :compileTestJava UP-TO-DATE
+> Task :processTestResources UP-TO-DATE
+> Task :testClasses UP-TO-DATE
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+CommunicationSendGuardSourceTest > SOURCE ASSERTION, not behaviour: only one statement in the service moves a letter to SENT PASSED
+
+CommunicationSendGuardSourceTest > SOURCE ASSERTION, not behaviour: recordSend's UPDATE still carries the clause that was proved against two connections FAILED
+    org.opentest4j.AssertionFailedError: [recordSend's UPDATE no longer carries the WHERE clause that CommunicationRetryIT.theSendStatementItselfRefusesASecondTransition proves refuses a second transition. That test runs its own copy of this statement, so it stays green either way — this assertion is the only thing in the suite that notices. If the change was deliberate, change both, and read the statement-level test's proof again before you believe the new clause.] 
+    expected: "id = ? AND status = 'DRAFT'"
+     but was: "id = ?"
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.communication.CommunicationSendGuardSourceTest.theShippedStatementCarriesTheClauseThatWasProved(CommunicationSendGuardSourceTest.java:133)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+CommunicationRetryIT > retrying a draft says it has not been sent, rather than that every copy arrived PASSED
+
+CommunicationRetryIT > retrying a message that reached everybody is refused rather than reported as a send PASSED
+
+CommunicationRetryIT > a send the relay refuses entirely is still recorded, and every copy is retryable PASSED
+
+CommunicationRetryIT > a sent message with no recipients says it reached nobody, not that it was never sent PASSED
+
+CommunicationRetryIT > two admins pressing Send at once send one copy each, not two PASSED
+
+CommunicationRetryIT > a retry the relay refuses is told in words, not handed over as an incident PASSED
+
+CommunicationRetryIT > a second retry, with the first still on its way, is refused rather than sent twice PASSED
+
+CommunicationRetryIT > two admins retrying at once send one copy each, not two PASSED
+
+CommunicationRetryIT > a retry is written to the audit log under its own action PASSED
+
+CommunicationRetryIT > a devotee the relay threw on is recorded, shown as failed, and reached by a retry PASSED
+
+CommunicationRetryIT > a retry cannot change a word of the letter it is resending PASSED
+
+CommunicationRetryIT > retrying a message still on its way says so, rather than claiming it was delivered PASSED
+
+CommunicationRetryIT > a retry reaches the ones it failed for, and leaves everybody else alone PASSED
+
+CommunicationRetryIT > a retry refused part-way takes back the copies the relay had already accepted PASSED
+
+CommunicationRetryIT > the statement that records a send refuses a second transition on its own PASSED
+
+CommunicationRetryIT > kitchen staff cannot retry a message either PASSED
+
+22:09:53.865 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+22:09:53.869 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+22:09:53.870 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    18
+  Passed:   17
+  Failed:   1
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+18 tests completed, 1 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 21s
+5 actionable tasks: 1 executed, 4 up-to-date
+gradle exit under the patch: 1
+
+=== restoring before the baseline run =================================
+restore: diff is silent, the file is byte-for-byte what it was.
+e12bacf327b0793d533af191325580224af4c387  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/CommunicationService.java.leg2.orig
+e12bacf327b0793d533af191325580224af4c387  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
+
+=== WITH THE PREDICATE BACK (baseline for this task's javadoc edit) ===
+> Task :compileJava
+> Task :processResources UP-TO-DATE
+> Task :classes
+> Task :compileTestJava UP-TO-DATE
+> Task :processTestResources UP-TO-DATE
+> Task :testClasses UP-TO-DATE
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+CommunicationSendGuardSourceTest > SOURCE ASSERTION, not behaviour: only one statement in the service moves a letter to SENT PASSED
+
+CommunicationSendGuardSourceTest > SOURCE ASSERTION, not behaviour: recordSend's UPDATE still carries the clause that was proved against two connections PASSED
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+CommunicationRetryIT > retrying a draft says it has not been sent, rather than that every copy arrived PASSED
+
+CommunicationRetryIT > retrying a message that reached everybody is refused rather than reported as a send PASSED
+
+CommunicationRetryIT > a send the relay refuses entirely is still recorded, and every copy is retryable PASSED
+
+CommunicationRetryIT > a sent message with no recipients says it reached nobody, not that it was never sent PASSED
+
+CommunicationRetryIT > two admins pressing Send at once send one copy each, not two PASSED
+
+CommunicationRetryIT > a retry the relay refuses is told in words, not handed over as an incident PASSED
+
+CommunicationRetryIT > a second retry, with the first still on its way, is refused rather than sent twice PASSED
+
+CommunicationRetryIT > two admins retrying at once send one copy each, not two PASSED
+
+CommunicationRetryIT > a retry is written to the audit log under its own action PASSED
+
+CommunicationRetryIT > a devotee the relay threw on is recorded, shown as failed, and reached by a retry PASSED
+
+CommunicationRetryIT > a retry cannot change a word of the letter it is resending PASSED
+
+CommunicationRetryIT > retrying a message still on its way says so, rather than claiming it was delivered PASSED
+
+CommunicationRetryIT > a retry reaches the ones it failed for, and leaves everybody else alone PASSED
+
+CommunicationRetryIT > a retry refused part-way takes back the copies the relay had already accepted PASSED
+
+CommunicationRetryIT > the statement that records a send refuses a second transition on its own PASSED
+
+CommunicationRetryIT > kitchen staff cannot retry a message either PASSED
+
+22:10:13.676 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+22:10:13.680 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+22:10:13.682 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    18
+  Passed:   18
+  Failed:   0
+  Skipped:  0
+  Result:   SUCCESS
+────────────────────────────────────────────────────────
+
+BUILD SUCCESSFUL in 19s
+5 actionable tasks: 2 executed, 3 up-to-date
+gradle exit restored: 0
+
+=== restore (EXIT trap) ===============================================
+restore: diff is silent, the file is byte-for-byte what it was.
+e12bacf327b0793d533af191325580224af4c387  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/CommunicationService.java.leg2.orig
+e12bacf327b0793d533af191325580224af4c387  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/communication/CommunicationService.java
+ M backend/src/test/java/org/iskcon/kms/communication/CommunicationRetryIT.java
+?? backend/src/main/resources/db/migration/V116__on_hand_stops_at_zero.sql
+?? backend/src/test/java/org/iskcon/kms/communication/CommunicationSendGuardSourceTest.java
+?? docs/work/proof/control-T-104.log
+work-lock: 'verify' released; command exited 0
