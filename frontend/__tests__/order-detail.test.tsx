@@ -50,6 +50,7 @@ const DETAIL: PurchaseOrderDetailView = {
     deliveryLocation: "Main store",
     notes: null,
     cancelReason: null,
+    vendorAbandoned: false,
     sentAt: "2026-08-01T10:00:00Z",
     cancelledAt: null,
     createdAt: "2026-08-01T09:00:00Z",
@@ -81,6 +82,28 @@ function withDetail(detail: PurchaseOrderDetailView) {
 }
 
 const DRAFT: PurchaseOrderDetailView = { ...DETAIL, order: { ...DETAIL.order, status: "DRAFT" } };
+
+// The two kinds of cancelled order, which is the whole of T-126: the same status and the same
+// reason, differing only in whether the temple is holding the vendor responsible for it.
+const CANCELLED: PurchaseOrderDetailView = {
+  ...DETAIL,
+  order: {
+    ...DETAIL.order,
+    status: "CANCELLED",
+    cancelReason: "festival moved to next month",
+    cancelledAt: "2026-08-05T09:00:00Z",
+  },
+};
+const ABANDONED: PurchaseOrderDetailView = {
+  ...DETAIL,
+  order: {
+    ...DETAIL.order,
+    status: "CANCELLED",
+    cancelReason: "never answered the phone",
+    vendorAbandoned: true,
+    cancelledAt: "2026-08-05T09:00:00Z",
+  },
+};
 
 describe("purchase order detail", () => {
   beforeEach(() => {
@@ -179,6 +202,94 @@ describe("purchase order detail", () => {
     // would be written back as the vendor's price and quietly wreck every costing figure.
     expect(receive).toHaveBeenCalledTimes(1);
     expect(receive.mock.calls[0][1].lines[0].unitPrice).toBeNull();
+  });
+
+  /**
+   * The cancel dialog's tick box (T-124).
+   *
+   * <p>What these guard is not the wording but the default. Ticking it is a permanent statement
+   * about somebody else's business — it scores the order 0% on the vendor's record and names them
+   * as a no-show — and two defects this week came from boxes that were already ticked. So the tests
+   * that matter are that it starts unticked, that an untouched form sends `false`, and that a
+   * ticked one sends `true`.
+   */
+  it("offers the never-delivered box unticked, with the line saying what ticking it does", () => {
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    // Rajeev's own wording, 2026-09-09, and not to be improved.
+    const box = screen.getByLabelText(/Vendor Never Delivered this Order/) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(
+      screen.getByText(/This counts against the vendor’s delivery record/)
+    ).toBeInTheDocument();
+    // And the reason is still required either way: the box carries the fact, the sentence the story.
+    expect(screen.getByLabelText("Reason")).toBeRequired();
+  });
+
+  it("sends false when nobody touched the box, and true when somebody ticked it", async () => {
+    const cancel = vi.spyOn(api, "cancelPurchaseOrder").mockResolvedValue(undefined);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "festival moved" } });
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("button", { name: /cancel order/i }).closest("form")!);
+    });
+
+    // The third argument, and it is deliberately not optional in `api.cancelPurchaseOrder`: every
+    // caller has to say which of the two kinds of cancellation this is.
+    expect(cancel.mock.calls[0][2]).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    fireEvent.click(screen.getByLabelText(/Vendor Never Delivered this Order/));
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "never answered the phone" } });
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("button", { name: /cancel order/i }).closest("form")!);
+    });
+
+    expect(cancel.mock.calls[1][2]).toBe(true);
+  });
+
+  it("does not carry a tick from one cancellation into the next", async () => {
+    // Closing the panel and reopening it must not leave a claim about a supplier sitting there
+    // ticked, waiting for somebody to press a button meaning something else.
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    fireEvent.click(screen.getByLabelText(/Vendor Never Delivered this Order/));
+    expect((screen.getByLabelText(/Vendor Never Delivered this Order/) as HTMLInputElement).checked)
+      .toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    expect((screen.getByLabelText(/Vendor Never Delivered this Order/) as HTMLInputElement).checked)
+      .toBe(false);
+  });
+
+  it("says on a cancelled order's face that the vendor never delivered it", () => {
+    // T-124 recorded the tick and scored the vendor 0% for it, and put it on no screen except the
+    // activity trail. This is the screen where somebody asks why an order was cancelled, so this
+    // is where the answer belongs.
+    withDetail(ABANDONED);
+    render(<PurchaseOrderDetailPage />);
+
+    // The operator's own sentence survives verbatim beside it — the box carries the fact and the
+    // sentence carries the story, and neither one replaces the other.
+    expect(screen.getByText("Cancelled: never answered the phone")).toBeInTheDocument();
+    expect(screen.getByText(/The vendor never delivered this order/)).toBeInTheDocument();
+    // And it says what ticking it did, in the same words the tick's own hint used on the way in.
+    expect(screen.getByText(/counts against their delivery record/)).toBeInTheDocument();
+  });
+
+  it("says nothing about the vendor on a cancellation nobody marked against them", () => {
+    // Silence blames nobody, and that is the point of the default. A cancellation for our own
+    // reasons must read as exactly that, with no marker and no sentence anywhere near it.
+    withDetail(CANCELLED);
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.getByText("Cancelled: festival moved to next month")).toBeInTheDocument();
+    expect(screen.queryByText(/never delivered/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/delivery record/i)).not.toBeInTheDocument();
   });
 
   it("shows a sent order's needed-by date as a readout, with why it can no longer be moved", () => {

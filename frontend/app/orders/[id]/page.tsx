@@ -16,6 +16,7 @@ import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
+import { Badge } from "@/components/ds/Badge";
 import { HintedField } from "@/components/ds/InfoHint";
 
 const REJECT_REASONS = ["DAMAGED", "SPOILED", "WRONG_ITEM", "OTHER"];
@@ -129,6 +130,9 @@ function PurchaseOrderDetailView() {
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [showReceive, setShowReceive] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
+  // "Vendor Never Delivered this Order" (T-124). Unticked to begin with and reset whenever the form
+  // closes, so a tick can never survive from one cancellation into the next.
+  const [vendorAbandoned, setVendorAbandoned] = useState(false);
   // Null while nobody is returning anything. Non-null names the one receipt line the form is open
   // against: a return is about the sack somebody opened, so one line at a time is the whole
   // interaction and the server takes one line per request for the same reason.
@@ -431,6 +435,32 @@ function PurchaseOrderDetailView() {
                   </p>
                   {po.sentAt && <p className="text-sm text-ink-muted">Fixed when the order was sent</p>}
                   {po.cancelReason && <p className="mt-1 text-sm text-ink-muted">Cancelled: {po.cancelReason}</p>}
+                  {/*
+                    The other half of the cancellation, and until T-126 it was on no screen at all.
+                    T-124 recorded the "Vendor Never Delivered this Order" tick in the row, the
+                    activity trail and the audit record, and scored the vendor 0% for it — but a
+                    person opening the cancelled order saw only the reason, so the one screen where
+                    somebody asks "why was this cancelled?" could not answer the question the tick
+                    exists to answer.
+
+                    Said in a sentence rather than left as a badge on its own. "Never delivered"
+                    beside a line that already says Cancelled is ambiguous — it could as easily mean
+                    the goods never came because we called it off. The sentence names who we are
+                    holding responsible, which is the whole difference between the two kinds of
+                    cancellation, and the second half is the same promise the tick's own hint made
+                    on the way in: it counts against their record.
+
+                    The badge is the screen's existing marker for a state, in the same warning tone
+                    the vendor scorecard already uses for "1 order never delivered". No new style.
+                  */}
+                  {po.vendorAbandoned && (
+                    <p className="mt-2 flex flex-wrap items-baseline gap-2 text-sm text-ink-secondary">
+                      <Badge tone="warning">Never delivered</Badge>
+                      <span className="max-w-prose">
+                        The vendor never delivered this order. It counts against their delivery record.
+                      </span>
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <select
@@ -448,7 +478,7 @@ function PurchaseOrderDetailView() {
                   {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn’t send that order.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Mark sent</button>}
                   {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn’t send it on WhatsApp.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Send on WhatsApp</button>}
                   {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
-                  {canCancel && <button type="button" disabled={busy} onClick={() => setShowCancel((s) => !s)} className="min-h-touch rounded border border-hairline px-4 text-danger transition-colors duration-state hover:bg-sunken disabled:opacity-60">Cancel</button>}
+                  {canCancel && <button type="button" disabled={busy} onClick={() => { setVendorAbandoned(false); setShowCancel((s) => !s); }} className="min-h-touch rounded border border-hairline px-4 text-danger transition-colors duration-state hover:bg-sunken disabled:opacity-60">Cancel</button>}
                 </div>
               </header>
 
@@ -473,17 +503,53 @@ function PurchaseOrderDetailView() {
               {showCancel && (
                 <section className="card mb-6 px-6 py-5">
                   <h2 className="text-lg">Cancel this purchase order</h2>
-                  <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={async (e) => {
+                  <form className="mt-3" onSubmit={async (e) => {
                     e.preventDefault();
                     const reason = String(new FormData(e.currentTarget).get("reason") ?? "").trim();
-                    const ok = await run((t) => api.cancelPurchaseOrder(id, reason, t), "We couldn’t cancel that order.");
-                    if (ok) setShowCancel(false);
+                    const ok = await run(
+                      (t) => api.cancelPurchaseOrder(id, reason, vendorAbandoned, t),
+                      "We couldn’t cancel that order."
+                    );
+                    if (ok) {
+                      setShowCancel(false);
+                      setVendorAbandoned(false);
+                    }
                   }}>
-                    <label className="flex flex-1 flex-col gap-1 text-sm text-ink-secondary">
-                      <span className="pl-field-inset font-medium text-ink">Reason</span>
-                      <input name="reason" required className="min-h-touch rounded-control border border-hairline px-3" />
+                    <div className="flex flex-wrap items-end gap-3">
+                      <label className="flex flex-1 flex-col gap-1 text-sm text-ink-secondary">
+                        <span className="pl-field-inset font-medium text-ink">Reason</span>
+                        <input name="reason" required className="min-h-touch rounded-control border border-hairline px-3" />
+                      </label>
+                      <button type="submit" disabled={busy} className="min-h-touch rounded bg-danger px-5 text-ink-inverse disabled:opacity-60">Cancel order</button>
+                    </div>
+
+                    {/*
+                      The one new fact anybody enters for the whole of T-124, and Rajeev's own
+                      wording of it (2026-09-09). Ticking it is a permanent statement about somebody
+                      else's business — it scores this order 0% on the vendor's record and names them
+                      as a no-show — so it starts unticked and stays that way unless a person means
+                      it. Two defects this week came from boxes that were already ticked, both
+                      recording things nobody meant to say.
+
+                      The reason field above stays required either way: the box carries the fact and
+                      the sentence carries the story.
+                    */}
+                    <label className="mt-4 flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        name="vendorAbandoned"
+                        checked={vendorAbandoned}
+                        onChange={(e) => setVendorAbandoned(e.target.checked)}
+                        className="mt-1 h-4 w-4 shrink-0 accent-accent"
+                      />
+                      <span>
+                        <span className="text-ink">Vendor Never Delivered this Order</span>
+                        <span className="mt-1 block max-w-prose text-ink-secondary">
+                          This counts against the vendor’s delivery record. Leave it alone if we are
+                          cancelling for our own reasons.
+                        </span>
+                      </span>
                     </label>
-                    <button type="submit" disabled={busy} className="min-h-touch rounded bg-danger px-5 text-ink-inverse disabled:opacity-60">Cancel order</button>
                   </form>
                 </section>
               )}

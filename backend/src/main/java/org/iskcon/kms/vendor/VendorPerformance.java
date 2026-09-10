@@ -11,6 +11,13 @@ import java.util.List;
  * receipts booked against it, the quantities on those receipt lines and the reasons anything was
  * refused. Nothing new is captured to produce this, and nothing here is an estimate.
  *
+ * <p><strong>On-time is scored per item</strong> (T-124, from Rajeev's five delivery scenarios of
+ * 2026-09-09). Each item on an order contributes the fraction of it that was there on or before the
+ * needed-by day, capped at one; an order is the mean of its items and a vendor the mean of their
+ * orders. A cancellation somebody has marked "Vendor Never Delivered this Order" scores nothing and
+ * is counted again in {@code abandonedOrders}; a cancellation nobody has marked is counted nowhere
+ * at all.
+ *
  * <p><strong>Two clocks, deliberately.</strong> Everything counted over the period is selected by
  * the date the order was <em>placed</em> — one rule, so a reader never has to ask which date put a
  * row where it is. The open-order and aging columns are present tense and unfiltered: an order is
@@ -26,7 +33,10 @@ public record VendorPerformance(
 		int ordersPlaced,
 		int ordersJudged,
 		int onTimeOrders,
+		int abandonedOrders,
 		int ordersWithoutNeededBy,
+		int itemsScored,
+		int itemsOnTime,
 		BigDecimal onTimePercent,
 		int linesJudged,
 		BigDecimal fillRatePercent,

@@ -1,0 +1,122 @@
+=== 1. the fix is present, exactly once per site ===
+  PurchaseOrderView.java: 'boolean vendorAbandoned,' x1 (expected 1)
+  PurchaseOrderService.java: 'po.vendor_abandoned' x1 (expected 1)
+  PurchaseOrderService.java: 'rs.getBoolean("vendor_abandoned")' x1 (expected 1)
+  page.tsx: 'po.vendorAbandoned && (' x1 (expected 1)
+  api.ts: 'vendorAbandoned: boolean;' x1 (expected 1)
+  invoice-order-picker.test.tsx: 'vendorAbandoned: false,' x1 (expected 1)
+
+=== 2. patching the fix out (product code only; the tests stay exactly as written) ===
+
+=== 3. the tree really changed: every product anchor is now gone ===
+  PurchaseOrderView.java: 'boolean vendorAbandoned,' x0 (expected 0)
+  PurchaseOrderService.java: 'po.vendor_abandoned' x0 (expected 0)
+  PurchaseOrderService.java: 'rs.getBoolean("vendor_abandoned")' x0 (expected 0)
+  page.tsx: 'po.vendorAbandoned && (' x0 (expected 0)
+  (git diff --stat, to show it is not an illusion)
+ .../kms/purchaseorder/PurchaseOrderService.java    | 39 ++++++++++++---
+ frontend/app/orders/[id]/page.tsx                  | 56 ++++++++++++++++++----
+ 2 files changed, 80 insertions(+), 15 deletions(-)
+
+=== 4. backend, --rerun-tasks so nothing can answer UP-TO-DATE ===
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.purchaseorder.PurchaseOrderIT.theOrderViewCarriesTheNeverDeliveredFlag(PurchaseOrderIT.java:296)
+
+        Caused by:
+        com.jayway.jsonpath.PathNotFoundException: No results for path: $['order']['vendorAbandoned']
+
+PurchaseOrderIT > a different unit of the same family is fine, and is stored as it was given PASSED
+
+PurchaseOrderIT > pieces convert to nothing: a weight against a counted ingredient is refused PASSED
+
+PurchaseOrderIT > the never-delivered flag cannot be set on an order that is not cancelled PASSED
+
+PurchaseOrderIT > cancelling records a reason and an event on the trail PASSED
+
+PurchaseOrderIT > a volunteer cannot manage purchase orders PASSED
+
+23:45:07.172 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+23:45:07.176 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+23:45:07.177 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    21
+  Passed:   20
+  Failed:   1
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+21 tests completed, 1 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 12s
+5 actionable tasks: 5 executed
+gradle exit: 1
+
+=== 5. frontend, the screen's own tests, unedited ===
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+         ...
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ __tests__/order-detail.test.tsx:279:19
+    277|     // sentence carries the story, and neither one replaces the other.
+    278|     expect(screen.getByText("Cancelled: never answered the phone")).to…
+    279|     expect(screen.getByText(/The vendor never delivered this order/)).…
+       |                   ^
+    280|     // And it says what ticking it did, in the same words the tick's o…
+    281|     expect(screen.getByText(/counts against their delivery record/)).t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 passed (17)
+   Start at  23:45:07
+   Duration  841ms (transform 97ms, setup 52ms, collect 153ms, tests 268ms, environment 209ms, prepare 42ms)
+
+
+=== 6. the *explanation* control: is 'required, never optional' load-bearing? ===
+The comment on api.ts claims an optional field would let a construction site drop it silently.
+Making it optional and deleting it from one fixture tests that claim rather than the fix.
+  api.ts: 'vendorAbandoned?: boolean;' x1 (expected 1)
+  invoice-order-picker.test.tsx: 'vendorAbandoned: false,' x0 (expected 0)
+tsc mentions of vendorAbandoned above (none = the optional field hid the omission)
+
+=== done; the EXIT trap restores below ===
+
+=== restoring, and proving the restore was byte-for-byte ===
+identical: /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderView.java
+identical: /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderService.java
+identical: /Users/Rajeev/Workspace/kitchen-management-system/frontend/app/orders/[id]/page.tsx
+identical: /Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/api.ts
+identical: /Users/Rajeev/Workspace/kitchen-management-system/frontend/__tests__/invoice-order-picker.test.tsx
+work-lock: 'verify' released; command exited 0
+control exit=0

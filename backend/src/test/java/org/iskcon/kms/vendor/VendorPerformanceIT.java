@@ -29,14 +29,20 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * The vendor performance report (E5-S9), against real purchase orders and real receipts.
  *
  * <p>What these guard is every judgement the report makes about what may be held against a
- * supplier: that a draft or a cancellation never can, that a part-delivery on the day counts as
- * on-time and is caught by the fill rate instead, that an order still inside its needed-by date is
- * not yet judged, that an order due and never delivered is, that too few orders are marked rather
- * than ranked, and that a dropped vendor keeps their history.
+ * supplier: that a draft never can, that an order still inside its needed-by date is not yet judged,
+ * that an order due and never delivered is, that too few orders are marked rather than ranked, and
+ * that a dropped vendor keeps their history.
  *
  * <p>And, since T-103, what happens to the fill rate when goods are sent back after they were taken
- * into stock: the vendor's own failures come off it, the temple's own change of mind does not, a
- * partial return takes off exactly what went back, and on-time is left alone either way.
+ * into stock: the vendor's own failures come off it, the temple's own change of mind does not, and a
+ * partial return takes off exactly what went back.
+ *
+ * <p><strong>And, since T-124, the whole of how on-time is scored.</strong> The five tests named
+ * {@code rajeevsCase*} are Rajeev's own delivery scenarios of 2026-09-09, in his order, each
+ * asserting the figure he gave for it. They are the specification and they are meant to be read as
+ * one block: all-on-time is 100%, split across days inside the window is 100%, eight of ten items
+ * with two late is 80%, nothing inside the window is 0%, and nothing ever delivered is 0% and named
+ * as a no-show. Four of the five scored wrongly before this task.
  */
 @AutoConfigureMockMvc
 @Import(VendorPerformanceIT.StubVerifierConfiguration.class)
@@ -119,8 +125,18 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a part-delivery on the day is on time, and the fill rate is what says it was short")
-	void punctualButShortIsVisibleAsBoth() throws Exception {
+	@DisplayName("a quarter of the order on the day is a quarter on time, not a punctual delivery")
+	void aPartDeliveryScoresThePartThatCame() throws Exception {
+		// CHANGED ON PURPOSE AT T-124, and this is the test that says what changed.
+		//
+		// This used to assert 100% on-time beside 25% fill, and the class comment argued for it at
+		// length: on-time asked whether the lorry turned up and fill was what caught a short load.
+		// The pair does not work, because fill is silent about WHEN. Ten kilos of forty on the day
+		// and the rest whenever scored a hundred per cent punctual, and nothing on the screen said
+		// the kitchen had cooked without thirty kilos of rice.
+		//
+		// The fill rate is deliberately still 25% and deliberately still a different figure: it
+		// counts what the temple kept, whenever it arrived, and here nothing else ever did.
 		UUID vendor = vendor("Half Load Traders");
 		for (int i = 0; i < 5; i++) {
 			UUID po = order(vendor, days(-20), days(-10), "PARTIALLY_RECEIVED");
@@ -130,9 +146,15 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 		}
 
 		mvc.perform(report())
-				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(100))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(25))
 				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(25))
-				.andExpect(jsonPath("$.vendors[0].linesJudged").value(5));
+				.andExpect(jsonPath("$.vendors[0].linesJudged").value(5))
+				// Five items scored, none of them fully there — which is the sentence the screen
+				// prints beside the percentage, and the one that separates "a fifth of everything"
+				// from "four of five things".
+				.andExpect(jsonPath("$.vendors[0].itemsScored").value(5))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(0))
+				.andExpect(jsonPath("$.vendors[0].onTimeOrders").value(0));
 	}
 
 	@Test
@@ -153,8 +175,8 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("drafts and cancellations are never held against a vendor")
-	void draftsAndCancellationsAreOut() throws Exception {
+	@DisplayName("a draft, and a cancellation nobody blamed the vendor for, are never held against them")
+	void draftsAndOrdinaryCancellationsAreOut() throws Exception {
 		UUID vendor = vendor("Govind Wholesale");
 		UUID received = order(vendor, days(-20), days(-10), "RECEIVED");
 		fullyReceived(received, days(-11));
@@ -164,6 +186,7 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 		mvc.perform(report())
 				.andExpect(jsonPath("$.vendors[0].ordersPlaced").value(1))
 				.andExpect(jsonPath("$.vendors[0].ordersJudged").value(1))
+				.andExpect(jsonPath("$.vendors[0].abandonedOrders").value(0))
 				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(100))
 				.andExpect(jsonPath("$.vendors[0].openOrders").value(0));
 	}
@@ -306,15 +329,23 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 
 		// Counting the stools would make it 0.75 over two lines — 38% — and no delivery of rice
 		// would ever bring it back, because a described line's accepted quantity is zero for ever.
+		//
+		// The row ORDER changed at T-124 and the fill rates did not, which is the thing to notice.
+		// Stool Traders now leads because the report sorts worst on-time first and the stools nobody
+		// has acknowledged score them nothing on that column — 38% on-time against Amba's 75%. Their
+		// FILL rates are still identical, because nothing about how either of them delivered rice
+		// differs. That is the ruling this test was written for and it is untouched.
 		mvc.perform(report())
-				.andExpect(jsonPath("$.vendors[0].vendorName").value("Amba Traders"))
-				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(75))
-				.andExpect(jsonPath("$.vendors[0].linesJudged").value(1))
-				.andExpect(jsonPath("$.vendors[1].vendorName").value("Stool Traders"))
+				.andExpect(jsonPath("$.vendors[0].vendorName").value("Stool Traders"))
 				// The fill rate first, deliberately: it is the figure the vendor is judged on, so it
 				// should be the figure that fails first if this ever regresses.
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(75))
+				.andExpect(jsonPath("$.vendors[0].linesJudged").value(1))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(38))
+				.andExpect(jsonPath("$.vendors[1].vendorName").value("Amba Traders"))
 				.andExpect(jsonPath("$.vendors[1].fillRatePercent").value(75))
 				.andExpect(jsonPath("$.vendors[1].linesJudged").value(1))
+				.andExpect(jsonPath("$.vendors[1].onTimePercent").value(75))
 				// And the same again in the totals row, which averages over judged lines.
 				.andExpect(jsonPath("$.fillRatePercent").value(75))
 				.andExpect(jsonPath("$.linesJudged").value(2));
@@ -390,12 +421,16 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a goods receipt still wins the on-time clock when it beats the acknowledgement")
-	void theEarlierOfTheTwoArrivalsIsWhatCounts() throws Exception {
-		// A mixed order: the rice lorry made the day, the stools were confirmed a week late. On-time
-		// is measured at the FIRST arrival — the same generosity the report already extends to a
-		// part-delivery — so this vendor is on time, and the pair of figures beside it is what says
-		// the rest was slow.
+	@DisplayName("a mixed order counts the rice and the stools once each, and the late half halves it")
+	void aDescribedLineCountsAsOneItemBesideTheRice() throws Exception {
+		// CHANGED ON PURPOSE AT T-124. This asserted 100% and was named for the rule it proved —
+		// on-time read the EARLIER of a goods receipt and an acknowledgement, so the rice lorry
+		// making the day covered stools confirmed a week later.
+		//
+		// Now each item is counted once. The rice was all there in time and scores one; the stools
+		// were not and score nothing; the order is the mean of the two. A described line has no
+		// quantity anybody can weigh — nobody records that two of the four stools came — so it is
+		// yes or no off arrived_on, and it is a full item on the order either way.
 		UUID vendor = vendor("Govind Wholesale");
 		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
 		receiptLine(receipt(po, days(-10)), line(po, "40"), "40", "0", null);
@@ -403,8 +438,14 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 
 		mvc.perform(report())
 				.andExpect(jsonPath("$.vendors[0].ordersJudged").value(1))
-				.andExpect(jsonPath("$.vendors[0].onTimeOrders").value(1))
-				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(100));
+				.andExpect(jsonPath("$.vendors[0].onTimeOrders").value(0))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(50))
+				.andExpect(jsonPath("$.vendors[0].itemsScored").value(2))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(1))
+				// And the fill rate is untouched by the stools, exactly as T-024 ruled: one judged
+				// line, fully delivered. The two figures now disagree, which is the whole point.
+				.andExpect(jsonPath("$.vendors[0].linesJudged").value(1))
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(100));
 	}
 
 	@Test
@@ -496,6 +537,246 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.vendors[0].linesJudged").value(1));
 	}
 
+	// ---------------------------------------------------------------------
+	// Rajeev's five delivery scenarios, 2026-09-09 (T-124). Each asserts the figure he gave for it.
+	// Four of the five scored wrongly before this task; the fifth was not counted at all.
+	// ---------------------------------------------------------------------
+
+	@Test
+	@DisplayName("Rajeev's case A — all ten items inside the three days is 100%")
+	void rajeevsCaseA_everythingInsideTheWindow() throws Exception {
+		UUID vendor = vendor("Govind Wholesale");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		UUID receipt = receipt(po, days(-12));
+		for (int i = 0; i < 10; i++) {
+			receiptLine(receipt, line(po, "40"), "40", "0", null);
+		}
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(100))
+				.andExpect(jsonPath("$.vendors[0].itemsScored").value(10))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(10))
+				.andExpect(jsonPath("$.vendors[0].onTimeOrders").value(1));
+	}
+
+	@Test
+	@DisplayName("Rajeev's case B — some on day 2 and the rest on day 3, all inside the window, is 100%")
+	void rajeevsCaseB_splitAcrossDaysInsideTheWindow() throws Exception {
+		// The case the old rule got right for the wrong reason: it read the FIRST arrival and
+		// stopped. This scores the sum of what was there in time, so two lorries inside the window
+		// are the same answer as one — which is what makes case C's answer different.
+		UUID vendor = vendor("Govind Wholesale");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		UUID line = line(po, "40");
+		receiptLine(receipt(po, days(-12)), line, "25", "0", null);
+		receiptLine(receipt(po, days(-11)), line, "15", "0", null);
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(100))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(1))
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(100));
+	}
+
+	@Test
+	@DisplayName("Rajeev's case C — eight items inside the window and two on day 5 is 80%")
+	void rajeevsCaseC_eightOfTenItemsInTheWindow() throws Exception {
+		// The scenario the whole task exists for. Under the old rule this scored 100% on-time AND
+		// 100% fill: everything arrived in the end, and one sack on the day made the order punctual.
+		// Nothing on the screen said the kitchen had cooked without two of its ten ingredients.
+		UUID vendor = vendor("Govind Wholesale");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		UUID inTime = receipt(po, days(-12));
+		for (int i = 0; i < 8; i++) {
+			receiptLine(inTime, line(po, "40"), "40", "0", null);
+		}
+		UUID late = receipt(po, days(-5));
+		for (int i = 0; i < 2; i++) {
+			receiptLine(late, line(po, "40"), "40", "0", null);
+		}
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(80))
+				.andExpect(jsonPath("$.vendors[0].itemsScored").value(10))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(8))
+				// Not a fully on-time order, so it does not count towards that figure — while it
+				// does move the percentage. The two are different questions and both are on screen.
+				.andExpect(jsonPath("$.vendors[0].onTimeOrders").value(0))
+				// And the fill rate is 100%, unchanged and correct: everything did turn up in the
+				// end, and everything was kept. That is exactly why it could not catch this.
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(100));
+	}
+
+	@Test
+	@DisplayName("Rajeev's case D — nothing inside the window and everything after it is 0%")
+	void rajeevsCaseD_nothingInsideTheWindow() throws Exception {
+		UUID vendor = vendor("Govind Wholesale");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		UUID late = receipt(po, days(-5));
+		for (int i = 0; i < 10; i++) {
+			receiptLine(late, line(po, "40"), "40", "0", null);
+		}
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(0))
+				.andExpect(jsonPath("$.vendors[0].itemsScored").value(10))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(0))
+				// Everything arrived, a week late. The fill rate says so and says nothing about the
+				// week, which is the division of labour between the two figures.
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(100));
+	}
+
+	@Test
+	@DisplayName("Rajeev's case E — nothing ever came, we cancelled and went elsewhere: 0%, and named")
+	void rajeevsCaseE_neverDeliveredIsNamedAsANoShow() throws Exception {
+		// The case that was invisible. Every cancellation was excluded from this report on the
+		// perfectly good ground that a cancellation is usually the temple's own decision — with the
+		// result that the vendor who never turned up scored nothing at all while the one who was
+		// merely late scored badly.
+		//
+		// Needed-by is deliberately in the FUTURE. Ticking the box is itself the claim that the
+		// vendor is not coming, so the order is judged the moment it is cancelled and does not wait
+		// for a date nobody is going to meet.
+		UUID vendor = vendor("Silent Supplies");
+		line(abandoned(vendor, days(-20), days(5)), "40");
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].vendorName").value("Silent Supplies"))
+				.andExpect(jsonPath("$.vendors[0].ordersPlaced").value(1))
+				.andExpect(jsonPath("$.vendors[0].ordersJudged").value(1))
+				.andExpect(jsonPath("$.vendors[0].abandonedOrders").value(1))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(0))
+				.andExpect(jsonPath("$.vendors[0].onTimeOrders").value(0))
+				// The item is counted so that the line beside the percentage still adds up: one
+				// item ordered, none of it there.
+				.andExpect(jsonPath("$.vendors[0].itemsScored").value(1))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(0))
+				// And the fill rate does not move. An abandoned order entering it would drag it to
+				// zero and quietly change what an existing figure on an existing screen means.
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").doesNotExist())
+				.andExpect(jsonPath("$.vendors[0].linesJudged").value(0));
+	}
+
+	// ---------------------------------------------------------------------
+
+	@Test
+	@DisplayName("a cancellation without the tick is counted nowhere at all, in either direction")
+	void anUntickedCancellationScoresNothingEitherWay() throws Exception {
+		// The other half of case E, and the reason the box starts unticked. A temple that cancels
+		// for its own reasons — the festival moved, a cheaper source turned up — makes no statement
+		// about the supplier, and the report must not manufacture one in either direction. Not a
+		// zero, which would blame them; not a hundred, which would credit them; nothing.
+		UUID blamed = vendor("Silent Supplies");
+		line(abandoned(blamed, days(-20), days(-10)), "40");
+
+		UUID ourOwnDoing = vendor("Amba Traders");
+		line(cancelled(ourOwnDoing, days(-20), days(-10)), "40");
+
+		mvc.perform(report())
+				// One row, not two. Amba has no orders the report can see and no open orders, so
+				// they are absent altogether rather than present as a line of dashes.
+				.andExpect(jsonPath("$.vendors.length()").value(1))
+				.andExpect(jsonPath("$.vendors[0].vendorName").value("Silent Supplies"))
+				.andExpect(jsonPath("$.ordersJudged").value(1))
+				.andExpect(jsonPath("$.abandonedOrders").value(1));
+	}
+
+	@Test
+	@DisplayName("bringing more than was ordered is not a bonus: a line is capped at fully delivered")
+	void overDeliveryIsClampedAtAHundred() throws Exception {
+		// Twelve sacks where ten were ordered, and one line that never came. If over-delivery paid
+		// for a shortfall elsewhere this order would score 100%; it scores half, because each item
+		// answers only for itself.
+		UUID vendor = vendor("Govind Wholesale");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		receiptLine(receipt(po, days(-12)), line(po, "40"), "48", "0", null);
+		line(po, "40");
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(50))
+				.andExpect(jsonPath("$.vendors[0].itemsScored").value(2))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(1));
+	}
+
+	@Test
+	@DisplayName("a described line is judged yes or no against the day it was recorded as arriving")
+	void aDescribedLineIsScoredYesOrNo() throws Exception {
+		// Two vendors, the same four stools, one difference: the day somebody said they turned up.
+		// There is no quantity to weigh here and no half answer to give — arrived_on is a single
+		// date for the whole line by construction — so the scores are one and nothing.
+		UUID punctual = vendor("Amba Traders");
+		arrived(describedLine(order(punctual, days(-20), days(-10), "RECEIVED"), "4", "Plastic stool"),
+				days(-11));
+
+		UUID late = vendor("Stool Traders");
+		arrived(describedLine(order(late, days(-20), days(-10), "RECEIVED"), "4", "Plastic stool"),
+				days(-9));
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].vendorName").value("Stool Traders"))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(0))
+				.andExpect(jsonPath("$.vendors[0].itemsScored").value(1))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(0))
+				.andExpect(jsonPath("$.vendors[1].vendorName").value("Amba Traders"))
+				.andExpect(jsonPath("$.vendors[1].onTimePercent").value(100))
+				.andExpect(jsonPath("$.vendors[1].itemsOnTime").value(1));
+	}
+
+	@Test
+	@DisplayName("a NOT_DELIVERED return takes its quantity back out of the on-time count")
+	void aNeverDeliveredReturnComesOffTheOnTimeCount() throws Exception {
+		// This is T-109, dissolved rather than answered (T-124). A NOT_DELIVERED return says the
+		// receipt line was a keying error and the goods never existed — fifty keyed where five
+		// arrived — so the quantity has to leave the on-time count the same way it leaves the fill
+		// rate. No new rule for the partial case: it is the same sum with a wrong number removed.
+		//
+		// Two lines. One was keyed correctly. The other's fifty kilos never came, and the correction
+		// takes all fifty back, so the order scores half rather than a hundred per cent.
+		UUID vendor = vendor("Govind Wholesale");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		UUID receipt = receipt(po, days(-12));
+		receiptLine(receipt, line(po, "50"), "50", "0", null);
+		returned(receiptLine(receipt, line(po, "50"), "50", "0", null), "50", "NOT_DELIVERED");
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(50))
+				.andExpect(jsonPath("$.vendors[0].itemsScored").value(2))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(1));
+	}
+
+	@Test
+	@DisplayName("a return for weevils leaves on-time alone: the goods were there on the day")
+	void aVendorFaultReturnThatIsNotAKeyingErrorLeavesOnTimeAlone() throws Exception {
+		// The control for the test above, and the line T-103's ruling drew. Weevils found the next
+		// morning are a fact about what the temple could keep, not about whether the lorry came —
+		// and a return can be booked six weeks later, so letting it reverse on-time would silently
+		// change a figure somebody had already read off the screen.
+		UUID vendor = vendor("Weevil Traders");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		returned(receiptLine(receipt(po, days(-12)), line(po, "50"), "50", "0", null), "50", "SPOILED");
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(100))
+				.andExpect(jsonPath("$.vendors[0].itemsOnTime").value(1))
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(0));
+	}
+
+	@Test
+	@DisplayName("a sack refused at the gate still arrived: on-time counts it, the fill rate does not")
+	void rejectedQuantityCountsAsHavingArrived() throws Exception {
+		// Kept from the rule this task replaced, and kept deliberately. On-time asks whether the
+		// goods were at the gate on the day; a sack refused there was. What became of it afterwards
+		// is the fill rate's question and the rejection column's, and folding it in here would
+		// collapse two figures into one.
+		UUID vendor = vendor("Govind Wholesale");
+		UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+		receiptLine(receipt(po, days(-12)), line(po, "40"), "30", "10", "SPOILED");
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(100))
+				.andExpect(jsonPath("$.vendors[0].fillRatePercent").value(75))
+				.andExpect(jsonPath("$.vendors[0].rejectedLines").value(1));
+	}
+
 	@Test
 	@DisplayName("a period whose end falls before its start is refused with KMS-400122")
 	void aBackwardsPeriodIsRefused() throws Exception {
@@ -540,6 +821,20 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 
 	private UUID cancelled(UUID vendorId, LocalDate orderDate, LocalDate neededBy) {
 		return order(vendorId, orderDate, neededBy, "CANCELLED");
+	}
+
+	/**
+	 * A cancellation somebody ticked "Vendor Never Delivered this Order" on (T-124).
+	 *
+	 * <p>Written straight to the column, like every other fixture in this file, because the report
+	 * is being tested against stored facts rather than against the lifecycle that produced them. The
+	 * end-to-end path — the request field, the audit after-state and the order's own trail — is
+	 * PurchaseOrderIT.
+	 */
+	private UUID abandoned(UUID vendorId, LocalDate orderDate, LocalDate neededBy) {
+		UUID po = order(vendorId, orderDate, neededBy, "CANCELLED");
+		admin.update("UPDATE purchase_orders SET vendor_abandoned = true WHERE id = ?", po);
+		return po;
 	}
 
 	private UUID line(UUID poId, String quantity) {

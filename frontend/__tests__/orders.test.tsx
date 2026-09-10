@@ -43,6 +43,8 @@ function po(o: Partial<PurchaseOrderView>): PurchaseOrderView {
     deliveryLocation: null,
     notes: null,
     cancelReason: null,
+    // Required, so every fixture says it (T-126). This one is a SENT order, not a cancellation.
+    vendorAbandoned: false,
     // 20:30 UTC on the 1st is 02:00 on the 2nd in Bengaluru — chosen so the UTC day and the
     // temple's day differ, which is the only way this fixture can prove the zone is honoured.
     sentAt: "2026-08-01T20:30:00Z",

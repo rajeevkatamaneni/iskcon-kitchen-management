@@ -40,7 +40,10 @@ function vendor(overrides: Partial<VendorPerformanceRow> = {}): VendorPerformanc
     ordersPlaced: 11,
     ordersJudged: 11,
     onTimeOrders: 9,
+    abandonedOrders: 0,
     ordersWithoutNeededBy: 0,
+    itemsScored: 24,
+    itemsOnTime: 20,
     onTimePercent: 82,
     linesJudged: 24,
     fillRatePercent: 96,
@@ -62,7 +65,10 @@ function report(overrides: Partial<VendorPerformance> = {}): VendorPerformance {
     ordersPlaced: 11,
     ordersJudged: 11,
     onTimeOrders: 9,
+    abandonedOrders: 0,
     ordersWithoutNeededBy: 0,
+    itemsScored: 24,
+    itemsOnTime: 20,
     onTimePercent: 82,
     linesJudged: 24,
     fillRatePercent: 96,
@@ -95,19 +101,53 @@ describe("Vendor performance", () => {
 
     const row = rowFor("Govind Wholesale");
     expect(within(row).getByText("82%")).toBeInTheDocument();
-    expect(within(row).getByText("9 of 11")).toBeInTheDocument();
+    // Items and then orders (T-124). The percentage is made at item grain now, so a note counting
+    // orders would send a reader looking for a fraction that is not on the screen.
+    expect(within(row).getByText("20 of 24 items across 11 orders")).toBeInTheDocument();
   });
 
-  it("says the fill rate is what tells you a punctual lorry came half empty", () => {
+  it("shows on time and fill rate as two different figures about the same supplier", () => {
+    // Before T-124 this fixture was 100% on time beside 25% fill, and the test was named for that
+    // pairing. A quarter of the order on the day is now a quarter on time, so the two figures no
+    // longer have to disagree to be useful — but they are still separate populations, and the fill
+    // rate's own denominator is still printed under it.
     queryRef.current.data = report({
-      vendors: [vendor({ vendorName: "Half Load Traders", onTimePercent: 100, fillRatePercent: 25 })],
+      vendors: [vendor({ vendorName: "Half Load Traders", onTimePercent: 25, fillRatePercent: 25 })],
     });
     render(<VendorPerformancePage />);
 
     const row = rowFor("Half Load Traders");
-    expect(within(row).getByText("100%")).toBeInTheDocument();
-    expect(within(row).getByText("25%")).toBeInTheDocument();
+    expect(within(row).getAllByText("25%")).toHaveLength(2);
     expect(within(row).getByText("across 24 lines")).toBeInTheDocument();
+  });
+
+  it("names the supplier who never turned up, separately from the one who turned up late", () => {
+    // Rajeev's fifth delivery scenario. A zero from a vendor who abandoned two orders is a
+    // different fact from a zero from one who came a fortnight late, and folding them into one
+    // percentage would lose it — so the count gets its own line and its own words.
+    queryRef.current.data = report({
+      abandonedOrders: 2,
+      vendors: [
+        vendor({ vendorName: "Silent Supplies", onTimePercent: 0, abandonedOrders: 2 }),
+      ],
+    });
+    render(<VendorPerformancePage />);
+
+    const row = rowFor("Silent Supplies");
+    expect(within(row).getByText("2 orders never delivered")).toBeInTheDocument();
+  });
+
+  it("says nothing about a no-show when there has not been one", () => {
+    // The absence is asserted deliberately: a pill that appears on every vendor would say a supplier
+    // abandoned an order when nobody has ticked anything at all.
+    queryRef.current.data = report();
+    render(<VendorPerformancePage />);
+
+    // Scoped to the vendor's own row: the standing caveat above the table explains what a
+    // never-delivered cancellation does, and it says so whether or not there has been one.
+    expect(
+      within(rowFor("Govind Wholesale")).queryByText(/never delivered/)
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the order the server sent, worst on time first", () => {
@@ -135,6 +175,8 @@ describe("Vendor performance", () => {
           ordersJudged: 2,
           onTimeOrders: 1,
           onTimePercent: 50,
+          itemsScored: 4,
+          itemsOnTime: 2,
           enoughToRank: false,
         }),
       ],
@@ -144,7 +186,7 @@ describe("Vendor performance", () => {
     const row = rowFor("Amba Traders");
     expect(within(row).getByText("Too few orders to rank")).toBeInTheDocument();
     expect(within(row).getByText("50%")).toBeInTheDocument();
-    expect(within(row).getByText("1 of 2")).toBeInTheDocument();
+    expect(within(row).getByText("2 of 4 items across 2 orders")).toBeInTheDocument();
   });
 
   it("keeps a dropped vendor on the report, marked — it is what you read before taking them back", () => {
@@ -161,6 +203,8 @@ describe("Vendor performance", () => {
       ordersJudged: 0,
       onTimeOrders: 0,
       onTimePercent: null,
+      itemsScored: 0,
+      itemsOnTime: 0,
       linesJudged: 0,
       fillRatePercent: null,
       openOrders: 1,
@@ -171,6 +215,8 @@ describe("Vendor performance", () => {
           ordersJudged: 0,
           onTimeOrders: 0,
           onTimePercent: null,
+          itemsScored: 0,
+          itemsOnTime: 0,
           linesJudged: 0,
           fillRatePercent: null,
           openOrders: 1,
@@ -192,7 +238,9 @@ describe("Vendor performance", () => {
     });
     render(<VendorPerformancePage />);
 
-    expect(within(rowFor("Govind Wholesale")).getByText("9 of 11 · 2 with no date")).toBeInTheDocument();
+    expect(
+      within(rowFor("Govind Wholesale")).getByText("20 of 24 items across 11 orders · 2 with no date")
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/2 orders have no needed-by date, so there is nothing to be late against/)
     ).toBeInTheDocument();
@@ -235,10 +283,14 @@ describe("Vendor performance", () => {
     queryRef.current.data = report();
     render(<VendorPerformancePage />);
 
-    expect(screen.getByText(/this counts whole orders/)).toBeInTheDocument();
-    expect(screen.getByText(/measured at the first delivery, so it says the lorry turned up/))
+    expect(screen.getByText(/On time is scored item by item/)).toBeInTheDocument();
+    expect(screen.getByText(/eight of ten items in time is 80%/)).toBeInTheDocument();
+    expect(screen.getByText(/An order split across two days is still fully on time/))
       .toBeInTheDocument();
-    expect(screen.getByText(/Drafts and cancelled orders are left out/)).toBeInTheDocument();
+    // And what a cancellation does and does not say, which is the new thing on this screen.
+    expect(
+      screen.getByText(/a cancellation nobody has marked against the vendor/)
+    ).toBeInTheDocument();
   });
 
   it("says there were no orders rather than showing a table of dashes", () => {

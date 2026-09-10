@@ -228,6 +228,110 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a cancellation says nothing about the vendor unless somebody ticks the box")
+	void anUntickedCancellationBlamesNobody() throws Exception {
+		// The default, and it is the whole safety of the feature. A request that does not mention
+		// the field at all — an older client, a script, every test written before T-124 — gets the
+		// reading that blames nobody. Two defects this week came from boxes that were already
+		// ticked, both recording things nobody meant to say.
+		String id = createManual(vendorA, rice, "5");
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/cancel", id))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"festival moved\"}"))
+				.andExpect(status().isNoContent());
+
+		assert !abandonedFlag(id) : "an unticked cancellation must not be held against the vendor";
+		// And the trail is the operator's own sentence, with nothing added to it.
+		assert "festival moved".equals(cancelEventDetail(id)) : cancelEventDetail(id);
+	}
+
+	@Test
+	@DisplayName("ticking the never-delivered box is recorded on the order, the trail and the audit")
+	void tickingTheBoxNamesTheVendor() throws Exception {
+		// Rajeev's fifth delivery scenario, 2026-09-09: "nothing ever came; we cancelled and went
+		// elsewhere". The tick is the one new fact anybody enters for the whole of T-124, and it is
+		// a permanent statement about somebody else's business — so it has to land in all three
+		// places a person might later read it back from.
+		String id = createManual(vendorA, rice, "5");
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/cancel", id))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"never answered the phone\",\"vendorAbandoned\":true}"))
+				.andExpect(status().isNoContent());
+
+		assert abandonedFlag(id) : "the tick must reach purchase_orders.vendor_abandoned";
+
+		// The reason survives verbatim, because the box carries the fact and the sentence carries
+		// the story. The trail says both.
+		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", id)))
+				.andExpect(jsonPath("$.order.cancelReason").value("never answered the phone"));
+		assert cancelEventDetail(id).contains("never answered the phone") : cancelEventDetail(id);
+		assert cancelEventDetail(id).contains("never delivered by the vendor") : cancelEventDetail(id);
+
+		// And the audit record's after-state, which is where a claim about a third party belongs:
+		// who ticked it and when are already the audit actor and cancelled_at beside it.
+		String after = admin.queryForObject(
+				"SELECT after_state::text FROM audit_events WHERE entity_id = ?::uuid"
+						+ " AND action = 'PO_CANCELLED'",
+				String.class, id);
+		assert after.contains("\"vendorAbandoned\": true") || after.contains("\"vendorAbandoned\":true")
+				: after;
+	}
+
+	@Test
+	@DisplayName("a cancelled order's own screen can read back whether the vendor was blamed")
+	void theOrderViewCarriesTheNeverDeliveredFlag() throws Exception {
+		// T-126. T-124 wrote the tick into the row, the trail and the audit record and scored the
+		// vendor 0% for it — but not into the view the order screen renders, so the one screen where
+		// somebody asks "why was this cancelled?" could not answer it without reading the trail.
+		//
+		// Both readings are asserted from the same endpoint, because a flag that is only ever
+		// checked when true proves nothing about the far commoner case: a cancellation for our own
+		// reasons must come back saying so, not saying nothing.
+		String blamed = createManual(vendorA, rice, "5");
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/cancel", blamed))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"never answered the phone\",\"vendorAbandoned\":true}"))
+				.andExpect(status().isNoContent());
+		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", blamed)))
+				.andExpect(jsonPath("$.order.vendorAbandoned").value(true))
+				.andExpect(jsonPath("$.order.cancelReason").value("never answered the phone"));
+
+		String ours = createManual(vendorA, rice, "5");
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/cancel", ours))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"festival moved\"}"))
+				.andExpect(status().isNoContent());
+		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", ours)))
+				.andExpect(jsonPath("$.order.vendorAbandoned").value(false));
+
+		// And an order nobody has cancelled at all reads false rather than absent — the list is the
+		// other reader of this view, and a missing key there would render as "not a no-show" by
+		// accident rather than on purpose.
+		String live = createManual(vendorA, rice, "5");
+		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", live)))
+				.andExpect(jsonPath("$.order.vendorAbandoned").value(false));
+		mvc.perform(authed(get("/api/v1/purchase-orders")))
+				.andExpect(jsonPath("$[?(@.id=='" + blamed + "')].vendorAbandoned").value(true));
+	}
+
+	@Test
+	@DisplayName("the never-delivered flag cannot be set on an order that is not cancelled")
+	void theFlagIsStructurallyTiedToACancellation() throws Exception {
+		// A claim that a vendor never delivered an order still in progress would score them nothing
+		// for a delivery that has not happened yet. The schema refuses it rather than trusting every
+		// future writer to remember (purchase_orders_abandoned_is_a_cancellation).
+		String id = createManual(vendorA, rice, "5");
+		boolean refused = false;
+		try {
+			admin.update("UPDATE purchase_orders SET vendor_abandoned = true WHERE id = ?::uuid", id);
+		}
+		catch (org.springframework.dao.DataIntegrityViolationException expected) {
+			refused = true;
+		}
+		assert refused : "a live order must not be markable as abandoned";
+	}
+
+	@Test
 	@DisplayName("a line measured in something the ingredient can't be measured in is refused")
 	void crossFamilyLineIsRefused() throws Exception {
 		UUID ghee = ingredient("Ghee", "L");
@@ -457,6 +561,19 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 	private List<String> readIds(String body) throws Exception {
 		JsonNode arr = JSON.readTree(body).get("purchaseOrderIds");
 		return List.of(arr.get(0).asText(), arr.get(1).asText());
+	}
+
+	/** Whether this order was cancelled with "Vendor Never Delivered this Order" ticked (T-124). */
+	private boolean abandonedFlag(String id) {
+		return Boolean.TRUE.equals(admin.queryForObject(
+				"SELECT vendor_abandoned FROM purchase_orders WHERE id = ?::uuid", Boolean.class, id));
+	}
+
+	/** The line the cancellation left on the order's own activity trail. */
+	private String cancelEventDetail(String id) {
+		return admin.queryForObject(
+				"SELECT detail FROM po_events WHERE po_id = ?::uuid AND event_type = 'CANCELLED'",
+				String.class, id);
 	}
 
 	private static int seq(String poNumber) {

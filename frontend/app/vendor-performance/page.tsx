@@ -29,6 +29,12 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
  * supplier with fewer than five judged orders is marked and sorted below the ranked ones rather than
  * ranked on a figure that is really about the sample size.
  *
+ * <p><strong>On-time carries two counts and not one</strong> (T-124). It is scored per item now, so
+ * a bare 80% could be two items missing or ten items all a fifth short — the "eight of ten items"
+ * beneath the percentage is what tells those apart. A vendor who never turned up at all is named
+ * separately again, because a zero from a supplier who abandoned an order is a different fact from
+ * a zero from one who came a fortnight late, and averaging them into one figure would lose it.
+ *
  * <p><strong>No colour on the percentages.</strong> Semantic colour is for status, and "82% on time"
  * is not a status until somebody sets the number at which a supplier is failing — which is a temple's
  * policy and not this screen's to invent. The one thing coloured is an open order that is genuinely
@@ -146,8 +152,12 @@ function VendorTable({ report }: { report: VendorPerformance }) {
             <th scope="col" className={`${TH_TEXT} ${WRAP}`}>
               Vendor
             </th>
+            {/* "Orders on time" until T-124, and renamed with the arithmetic: the figure is no
+                longer a count of orders but the average of how much of each order was there in
+                time, and a header that says "orders" would send a reader looking for a fraction
+                that is not on the screen. */}
             <th scope="col" className={TH_NUM}>
-              Orders on time
+              On time
             </th>
             <th scope="col" className={TH_NUM}>
               Fill rate
@@ -178,6 +188,14 @@ function VendorTable({ report }: { report: VendorPerformance }) {
               <td className={TD_NUM}>
                 <span className="font-medium">{asPercent(vendor.onTimePercent)}</span>
                 <span className="mt-1 block text-xs text-ink-muted">{onTimeNote(vendor)}</span>
+                {/* Its own line and its own words, never folded into the note above. A supplier who
+                    never came is the finding this column exists to surface, and it is the one thing
+                    here that is a fact rather than a threshold — so it is allowed a pill. */}
+                {vendor.abandonedOrders > 0 && (
+                  <span className="mt-1 flex justify-end">
+                    <Badge tone="warning">{abandonedNote(vendor.abandonedOrders)}</Badge>
+                  </span>
+                )}
               </td>
 
               <td className={TD_NUM}>
@@ -233,9 +251,15 @@ function VendorTable({ report }: { report: VendorPerformance }) {
             <td className={`${TD_NUM} font-medium`}>
               {asPercent(report.onTimePercent)}
               <span className="mt-1 block text-xs font-normal text-ink-muted">
-                {report.onTimeOrders.toLocaleString("en-IN")} of{" "}
-                {report.ordersJudged.toLocaleString("en-IN")}
+                {itemsNote(report.itemsOnTime, report.itemsScored)} across{" "}
+                {report.ordersJudged.toLocaleString("en-IN")}{" "}
+                {report.ordersJudged === 1 ? "order" : "orders"}
               </span>
+              {report.abandonedOrders > 0 && (
+                <span className="mt-1 block text-xs font-normal text-ink-muted">
+                  {abandonedNote(report.abandonedOrders)}
+                </span>
+              )}
             </td>
             <td className={`${TD_NUM} font-medium`}>
               {asPercent(report.fillRatePercent)}
@@ -262,9 +286,10 @@ function VendorTable({ report }: { report: VendorPerformance }) {
  */
 function caveat(report: VendorPerformance): string {
   const parts = [
-    "An order is on time if something arrived on or before the day it was needed. The needed-by date is on the order, not on each ingredient, so this counts whole orders — an order of eight things is one late order, whichever of the eight was late.",
-    "It is measured at the first delivery, so it says the lorry turned up. The fill rate beside it is what says whether it brought everything.",
-    "Drafts and cancelled orders are left out. Orders on time and the fill rate cover orders placed in this period whose needed-by date has passed; open orders are whatever is open today, whenever it was ordered.",
+    "On time is scored item by item. Each thing on an order counts how much of it was there on or before the day it was needed, so eight of ten items in time is 80% — and bringing more than was ordered does not make up for something that never came.",
+    "An order split across two days is still fully on time if both days were inside the window. What is measured is whether the goods were there in time, not how many deliveries brought them.",
+    "The fill rate beside it is a different question: how much of the order turned up in the end, whenever it turned up, and how much of that the temple kept.",
+    "Drafts are left out, and so is a cancellation nobody has marked against the vendor. An order cancelled because the vendor never delivered it does count, and scores nothing. On time and the fill rate cover orders placed in this period whose needed-by date has passed; open orders are whatever is open today, whenever it was ordered.",
   ];
   if (report.ordersWithoutNeededBy > 0) {
     parts.push(
@@ -278,17 +303,45 @@ function caveat(report: VendorPerformance): string {
   return parts.join(" ");
 }
 
-/** The counts behind the on-time percentage — the whole point of the column. */
+/**
+ * The counts behind the on-time percentage — the whole point of the column.
+ *
+ * <p>Items and then orders, in that order, because items are the grain the percentage is made at
+ * (T-124) and orders are the context. "8 of 10 items across 3 orders" says two things a bare 80%
+ * does not: that two whole items were missing rather than every item being a fifth short, and that
+ * the figure rests on three orders rather than thirty.
+ */
 function onTimeNote(vendor: VendorPerformanceRow): string {
   if (vendor.ordersJudged === 0) {
     return vendor.ordersPlaced === 1 ? "1 order, not yet due" : `${vendor.ordersPlaced} orders, none yet due`;
   }
-  const counted = `${vendor.onTimeOrders.toLocaleString("en-IN")} of ${vendor.ordersJudged.toLocaleString(
-    "en-IN"
-  )}`;
+  const orders = `${vendor.ordersJudged.toLocaleString("en-IN")} ${
+    vendor.ordersJudged === 1 ? "order" : "orders"
+  }`;
+  const counted = `${itemsNote(vendor.itemsOnTime, vendor.itemsScored)} across ${orders}`;
   return vendor.ordersWithoutNeededBy > 0
     ? `${counted} · ${vendor.ordersWithoutNeededBy} with no date`
     : counted;
+}
+
+/**
+ * "8 of 10 items". Never a bare fraction: the word is what stops a reader taking it for orders,
+ * which is exactly what this line meant until T-124 — the same shape of sentence about a different
+ * thing.
+ */
+function itemsNote(onTime: number, scored: number): string {
+  return `${onTime.toLocaleString("en-IN")} of ${scored.toLocaleString("en-IN")} ${
+    scored === 1 ? "item" : "items"
+  }`;
+}
+
+/**
+ * The supplier who never came, in the words a person would use. Not "abandoned": that is the
+ * column's name in the data and it reads as something the temple did rather than something the
+ * vendor did.
+ */
+function abandonedNote(count: number): string {
+  return count === 1 ? "1 order never delivered" : `${count.toLocaleString("en-IN")} orders never delivered`;
 }
 
 function rejectionNote(vendor: VendorPerformanceRow): string {

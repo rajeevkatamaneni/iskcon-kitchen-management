@@ -100,7 +100,7 @@ public class PurchaseOrderController {
 			@PathVariable UUID id,
 			@Valid @RequestBody CancelPoRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
-		service.cancel(actor, id, request.reason());
+		service.cancel(actor, id, request.reason(), request.vendorAbandoned());
 		return ResponseEntity.noContent().build();
 	}
 

@@ -66,6 +66,9 @@ const MIXED: PurchaseOrderDetailView = {
     deliveryLocation: "Main store",
     notes: null,
     cancelReason: null,
+    // Required on PurchaseOrderView since T-126, so every fixture states it. This order is not a
+    // cancellation at all, let alone one held against the vendor.
+    vendorAbandoned: false,
     sentAt: "2026-08-01T10:00:00Z",
     cancelledAt: null,
     createdAt: "2026-08-01T09:00:00Z",

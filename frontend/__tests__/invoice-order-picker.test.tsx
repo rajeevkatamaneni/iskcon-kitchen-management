@@ -96,6 +96,10 @@ function order(o: Partial<PurchaseOrderView> & { id: string; poNumber: string; v
     deliveryLocation: null,
     notes: null,
     cancelReason: null,
+    // Stated rather than left off: PurchaseOrderView declares it required (T-126), so every
+    // construction site has to say whether this order is held against the vendor. None of these
+    // fixtures is a cancellation, so none of them is.
+    vendorAbandoned: false,
     sentAt: "2026-08-01T00:00:00Z",
     cancelledAt: null,
     createdAt: "2026-08-01T00:00:00Z",

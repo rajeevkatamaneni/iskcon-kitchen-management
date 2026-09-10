@@ -11,22 +11,36 @@ import java.util.UUID;
  * percentage on its own is a lie a scorecard tells easily: "50% on time" is a different statement
  * about a vendor with two orders and one with forty, and only the denominator says which.
  *
- * @param ordersPlaced        orders placed with this vendor in the period, drafts and cancelled
- *                            orders excluded. A draft was never sent to them and a cancelled order
- *                            was the temple's decision; neither can be held against a supplier.
- * @param ordersJudged        of those, the ones whose needed-by date has passed — the vendor's
- *                            chance is over and the order can be marked. The denominator of both
- *                            percentages below.
- * @param onTimeOrders        of the judged orders, those where something actually arrived on or
- *                            before the needed-by date. Measured at the <em>first</em> delivery, so
- *                            it says the lorry turned up — never that it brought everything, which
- *                            is what {@code fillRatePercent} is for.
+ * @param ordersPlaced        orders placed with this vendor in the period. Drafts are excluded — one
+ *                            was never sent to them — and so is a cancellation nobody has blamed on
+ *                            the vendor, which was the temple's own decision. A cancellation marked
+ *                            "Vendor Never Delivered this Order" <em>is</em> included (T-124): it is
+ *                            the only record the temple has of a supplier who never came.
+ * @param ordersJudged        of those, the ones there is now something to say about: their needed-by
+ *                            date has passed, or they were abandoned, which is judged the moment the
+ *                            box is ticked. The denominator of the on-time percentage.
+ * @param onTimeOrders        of the judged orders, those that scored a full hundred per cent — every
+ *                            item on them there in time. Not the numerator of {@code onTimePercent},
+ *                            deliberately: an order eight-tenths delivered on the day counts towards
+ *                            the percentage and not towards this, and a reader should see both.
+ * @param abandonedOrders     of the judged orders, those cancelled because the vendor never
+ *                            delivered them (T-124). Each scores nothing, and this is the count that
+ *                            says a zero came from a supplier who never turned up rather than from
+ *                            one who turned up late.
  * @param ordersWithoutNeededBy orders in the period with no needed-by date at all. There is nothing
  *                            to be late against, so they are outside both figures and counted here
  *                            instead of quietly scoring the vendor a hundred per cent.
- * @param onTimePercent       null where nothing has been judged yet — a figure divided by nothing is
- *                            worse than no figure.
+ * @param itemsScored         order lines that went into the on-time figure — the "of ten" in "eight
+ *                            of ten items". A described line ("four plastic stools") counts as one
+ *                            item like any other; the fill rate cannot judge it, on-time can.
+ * @param itemsOnTime         of those, the ones fully there in time. Eight of ten is a different
+ *                            statement from a bare 80%, and this is what makes the difference
+ *                            visible: two items missing entirely, or ten items all a fifth short.
+ * @param onTimePercent       the mean of the judged orders' scores. Null where nothing has been
+ *                            judged yet — a figure divided by nothing is worse than no figure.
  * @param linesJudged         order lines on the judged orders; the denominator of the fill rate.
+ *                            Not the same population as {@code itemsScored}: fill leaves out
+ *                            described lines and abandoned orders, on-time counts both.
  * @param fillRatePercent     the share of an average ordered line the vendor actually delivered and
  *                            the temple accepted. Over-delivery is capped at 100% per line: bringing
  *                            twice the coriander does not make up for bringing no rice.
@@ -49,7 +63,10 @@ public record VendorPerformanceRow(
 		int ordersPlaced,
 		int ordersJudged,
 		int onTimeOrders,
+		int abandonedOrders,
 		int ordersWithoutNeededBy,
+		int itemsScored,
+		int itemsOnTime,
 		BigDecimal onTimePercent,
 		int linesJudged,
 		BigDecimal fillRatePercent,

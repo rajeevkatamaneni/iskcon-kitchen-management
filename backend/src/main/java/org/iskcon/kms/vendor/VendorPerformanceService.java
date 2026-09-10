@@ -3,8 +3,6 @@ package org.iskcon.kms.vendor;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -35,8 +33,19 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <h2>What counts, and what cannot</h2>
  *
- * <p><strong>Drafts and cancelled orders are out.</strong> A draft was never sent to the vendor and
- * a cancellation was the temple's own decision; neither is evidence about a supplier.
+ * <p><strong>Drafts are out, and so is a cancellation nobody has blamed the vendor for.</strong> A
+ * draft was never sent. A cancellation is usually the temple's own decision — the festival moved,
+ * the kitchen found a cheaper source — and none of that is evidence about a supplier. The one
+ * exception is the fifth of Rajeev's delivery scenarios (T-124, 2026-09-09): <em>"nothing ever
+ * came; we cancelled and went elsewhere"</em>. That cancellation is the only record the temple has
+ * of a supplier's worst possible performance, and while every cancellation was excluded the vendor
+ * who never turned up was invisible on this report while the one who was merely late was not. So
+ * {@code purchase_orders.vendor_abandoned} — the tick box on the cancel dialog — brings exactly
+ * those back: scored zero, counted as abandoned in their own column, and named.
+ *
+ * <p><strong>An unticked cancellation is counted nowhere at all</strong>, neither on-time nor
+ * abandoned, and that is the safe direction rather than an omission. Silence blames nobody, which
+ * is what a box left alone should mean.
  *
  * <p><strong>The period selects orders by the date they were placed.</strong> One rule for
  * everything counted over a period, so no reader has to work out which date put a row where. The
@@ -49,18 +58,53 @@ import org.springframework.transaction.annotation.Transactional;
  * is nothing to be late against, so it is counted aside rather than scored a silent hundred per
  * cent.
  *
+ * <p><strong>An abandoned cancellation is the exception, and it is judged the moment it is
+ * cancelled</strong> (T-124), whether or not its needed-by date has passed. Ticking that box is
+ * itself the claim that the vendor is not coming; waiting for a date to arrive before believing it
+ * would be waiting for information nobody is going to send.
+ *
  * <h2>The three judgements this report makes</h2>
  *
- * <p><strong>A part-delivery stops the on-time clock; it does not stop the fill-rate one.</strong>
- * On-time is measured at the <em>first</em> arrival against the order — did the lorry turn up on the
- * day. That is knowingly generous: a vendor who drops one sack on the due date and the rest a
- * fortnight later scores on-time. It is generous on purpose, because the fill rate beside it is what
- * catches him, and the pair says something neither figure says alone. Measuring on-time at
- * completion instead would collapse the two into one number — short becomes late, and a punctual
- * but chronically short supplier stops being visible as such. It would also be measured on a clock
- * the vendor does not fully control: {@code PurchaseOrderService.isFullyAccountedFor} ignores
- * rejected quantity, so an order with anything refused stays {@code PARTIALLY_RECEIVED} until
- * somebody re-delivers, and "completed" is then partly the temple's own timetable.
+ * <p><strong>On-time is scored per item, and it is the average of what turned up in time</strong>
+ * (T-124, from Rajeev's five delivery scenarios of 2026-09-09). Each order line contributes the
+ * fraction of its ordered quantity that arrived on a receipt dated on or before the needed-by day,
+ * clamped to one — over-delivery is not a bonus. An order's score is the mean of its lines' and a
+ * vendor's is the mean of their orders'. So eight of ten items in the window and two a week late is
+ * 80%, and an order split across two days that are both inside the window is 100%: what matters is
+ * whether the goods were there in time, not how many lorries brought them.
+ *
+ * <p><strong>What it replaced, and why the old rule looked right for so long.</strong> On-time used
+ * to be binary per order and read the <em>earliest</em> arrival — {@code MIN(first_receipt_at)}
+ * against {@code needed_by} — so one sack on day one made a whole order punctual however little
+ * else ever came. That was a deliberate, argued position: on-time asked whether the lorry turned up
+ * on the day and the fill rate beside it was what caught a short delivery, and the pair was said to
+ * say something neither figure says alone. The flaw is that the two figures are not
+ * interchangeable. Fill measures how much of the order eventually arrived, over any timescale at
+ * all; it is silent about <em>when</em>. So a supplier who brought eight of ten items on the day
+ * and the last two a fortnight late scored a hundred per cent on-time and a hundred per cent fill,
+ * and nothing anywhere on the screen said the kitchen had cooked without them. Rajeev's third
+ * scenario is exactly that order, and he scored it 80%.
+ *
+ * <p><strong>Rejected quantity still counts as having arrived, and that half of the old rule is
+ * kept on purpose.</strong> On-time asks whether the goods were at the gate on the day; a sack
+ * refused there was. What became of it afterwards is the fill rate's question and the rejection
+ * column's, and folding it in here would collapse two figures into one in exactly the way scoring
+ * on-time at completion would. Measuring at completion would also run on a clock the vendor does
+ * not fully control: {@code PurchaseOrderService.isFullyAccountedFor} ignores rejected quantity, so
+ * an order with anything refused stays {@code PARTIALLY_RECEIVED} until somebody re-delivers, and
+ * "completed" is then partly the temple's own timetable.
+ *
+ * <p><strong>The fill rate does not move</strong> (T-124, decided while building rather than
+ * assumed). An abandoned order entering the fill rate would drag it to zero and quietly change what
+ * an existing number on an existing screen means — the same defect as summing a table after a new
+ * state has been added to it. On-time and the abandoned count answer Rajeev's question between
+ * them; fill does not need to move to help, and moving it would falsify every fill rate anybody has
+ * already read.
+ *
+ * <p><strong>One property to accept knowingly:</strong> averaging order scores means a one-line
+ * order weighs the same as a fifty-line one. The alternative — weighing by size — lets a single
+ * large order swamp a year of small ones. Neither is wrong; this is the one on the screen, and the
+ * item counts printed beside the percentage are what let a reader see the difference.
  *
  * <p><strong>Goods sent back afterwards come off the fill rate, if the vendor is why they went
  * back (T-103, ruled by Rajeev on 2026-09-10).</strong> Until this ruling the fill rate summed
@@ -73,17 +117,21 @@ import org.springframework.transaction.annotation.Transactional;
  * over-ordering and sending stock back is not the supplier's failure while weevils and a wrong item
  * are. {@link #VENDOR_FAULT_RETURNS} is that ruling, and {@code OTHER} is deliberately outside it.
  *
- * <p><strong>A return does not touch on-time, and that is a decision rather than an
- * oversight.</strong> The two figures answer different questions and the paragraph above is the
- * reason: on-time asks whether the lorry came on the day, fill asks how much of the order the
- * temple actually kept. The goods in a return <em>did</em> arrive on the day; they were sent back
- * later. Letting a return reverse an on-time score would collapse the pair into one number in
- * exactly the way measuring on-time at completion would, and it would do it on a clock the vendor
- * does not control — a return can be booked six weeks after the delivery, so a score already read
- * off the screen would silently change. The one case that is genuinely arguable is a
- * {@code NOT_DELIVERED} return, where the receipt itself was a keying error and nothing ever
- * arrived; that is a judgement at order grain rather than line grain, Rajeev has not been asked to
- * rule on it, and it is left alone here rather than smuggled in beside a ruling about fill.
+ * <p><strong>Most returns do not touch on-time; a {@code NOT_DELIVERED} one does, because nothing
+ * ever came</strong> (T-124). The two figures answer different questions and the paragraph above is
+ * the reason: on-time asks whether the goods were there in time, fill asks how much of the order
+ * the temple kept. The goods in an ordinary return <em>did</em> arrive on the day and were sent
+ * back later, so letting weevils reverse an on-time score would collapse the pair into one number
+ * and would do it on a clock the vendor does not control — a return can be booked six weeks after
+ * the delivery, and a score already read off the screen would silently change.
+ *
+ * <p>{@code NOT_DELIVERED} is not that. It is the fifty-keyed-for-five case: the receipt line
+ * itself was a keying error and the goods it claims never existed. Taking that quantity back out of
+ * the on-time count is not a new rule at all — it is the same sum with a wrong number removed, and
+ * it is what closes the hole T-103's builder found and correctly declined to widen its own ruling
+ * over (T-109). Because on-time is now scored per item, it needs no order-grain rule for the
+ * partial case: three lines keyed correctly and one keyed in error score three and a fraction of a
+ * fourth, which is what actually happened.
  *
  * <p><strong>"Arrival" is two things, and it has to be (T-066).</strong> A goods receipt is one. The
  * other is a described line recorded as having arrived — four plastic stools, a mixer motor repaired
@@ -91,10 +139,17 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code goods_receipt_lines.ingredient_id} is NOT NULL. Before T-066 there was no way to record
  * that such an order had been delivered, so an order of nothing but described lines had no first
  * receipt, could not have one, and scored <em>late for ever</em>: a permanent black mark against a
- * supplier for our schema's shape rather than for anything they did. On-time now reads the earlier
- * of the two. The alternative Rajeev considered and rejected — excluding such orders from on-time
- * judgement entirely — was quieter and would have made a vendor who genuinely never delivered the
- * stools indistinguishable from one who delivered them on the day.
+ * supplier for our schema's shape rather than for anything they did. The alternative Rajeev
+ * considered and rejected — excluding such orders from on-time judgement entirely — was quieter and
+ * would have made a vendor who genuinely never delivered the stools indistinguishable from one who
+ * delivered them on the day.
+ *
+ * <p><strong>So a described line scores yes or no, off {@code arrived_on}</strong> (T-124). There
+ * is no quantity to weigh: nobody records that two of the four stools turned up, and
+ * {@code arrived_on} is a single date for the whole line by construction
+ * ({@code po_lines_arrival_is_recorded_whole}). Weighing it as if it were a quantity would invent a
+ * precision the record does not have. It is a full item on the order either way, so it counts once
+ * in the mean alongside the rice.
  *
  * <p><strong>A vendor with few orders is shown, not ranked.</strong> No statistical model, no
  * confidence interval, no hiding of the figure. Below {@link #MIN_ORDERS_TO_RANK} judged orders the
@@ -108,12 +163,15 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <h2>The one modelling limit</h2>
  *
- * <p>{@code needed_by} lives on the purchase-order header, not on the line. So on-time is measured
- * <strong>per order, not per ingredient</strong>: an order of eight things is one on-time
- * observation, whichever of the eight was late. That is the right grain for a scorecard and the
- * model is deliberately not being changed to improve it — a per-line date would have to be captured
- * by whoever raises the order, on every line, for a report; and a screen labelled "orders on time"
- * is honest about what it counted.
+ * <p>{@code needed_by} lives on the purchase-order header, not on the line. Every item on an order
+ * is therefore judged against the same day, and an order whose rice was genuinely wanted on Monday
+ * and whose stools would have done any time that month is scored as though both were wanted on
+ * Monday. The model is deliberately not being changed to improve that: a per-line date would have
+ * to be typed by whoever raises the order, on every line, for a report — and the temple asks for
+ * one date because it wants one delivery.
+ *
+ * <p>What T-124 changed is the grain of the <em>answer</em>, not of the question. One needed-by
+ * date, ten items measured against it.
  */
 @Service
 public class VendorPerformanceService {
@@ -135,6 +193,20 @@ public class VendorPerformanceService {
 
 	/** Orders that were actually placed with a vendor: everything but a draft and a cancellation. */
 	private static final String LIVE_ORDER = "po.status NOT IN ('DRAFT', 'CANCELLED')";
+
+	/**
+	 * The orders on-time is scored over: every live one, plus a cancellation somebody has said the
+	 * vendor caused (T-124).
+	 *
+	 * <p><strong>Deliberately not the predicate the fill rate and the rejection counts use.</strong>
+	 * They keep {@link #LIVE_ORDER}, because an abandoned order entering the fill rate would drag it
+	 * to zero and silently change what an existing figure on an existing screen means. Two
+	 * predicates, one difference, and the difference is the ruling.
+	 */
+	private static final String SCORED_ORDER = """
+			(po.status NOT IN ('DRAFT', 'CANCELLED')
+			 OR (po.status = 'CANCELLED' AND po.vendor_abandoned))
+			""";
 
 	/**
 	 * The return reasons the fill rate holds against the supplier (T-103, ruled 2026-09-10).
@@ -194,7 +266,9 @@ public class VendorPerformanceService {
 		LocalDate today = LocalDate.now(clock.zone());
 
 		Map<UUID, Totals> byVendor = new LinkedHashMap<>();
-		countOrders(byVendor, from, to, today);
+		// The items first, then the orders that own them: an order's score is the mean of its
+		// lines', so the line arithmetic has to be complete before any order can be marked.
+		countOrders(byVendor, scoreItems(from, to, today), from, to, today);
 		countLines(byVendor, from, to, today);
 		countRejections(byVendor, from, to);
 		countOpenOrders(byVendor, today);
@@ -223,7 +297,8 @@ public class VendorPerformanceService {
 
 		return new VendorPerformance(from, to,
 				everything.ordersPlaced, everything.ordersJudged, everything.onTimeOrders,
-				everything.ordersWithoutNeededBy, percent(everything.onTimeOrders, everything.ordersJudged),
+				everything.abandonedOrders, everything.ordersWithoutNeededBy,
+				everything.itemsScored, everything.itemsOnTime, everything.onTimePercent(),
 				everything.linesJudged, everything.fillRate(), everything.rejectedLines,
 				everything.openOrders, everything.openCurrent, everything.openDue1To30,
 				everything.openOverdue31Plus, List.copyOf(rows));
@@ -232,37 +307,150 @@ public class VendorPerformanceService {
 	// ---------------------------------------------------------------------
 
 	/**
-	 * Every order placed in the period, and whether anything arrived against it in time.
+	 * How much of each item on a judged order was there in time, as a fraction of what was ordered
+	 * (T-124).
 	 *
-	 * <p>The first arrival, not the last: see the class comment. The comparison is made in the
-	 * temple's own day, because {@code received_at} is an instant and {@code needed_by} is a date,
-	 * and a delivery booked late on the needed-by evening is not the following morning's failure.
+	 * <p>Keyed by purchase order, because an order's score is the mean of its items' and this is the
+	 * only place the items are visible. An order with no lines at all produces no entry, and
+	 * {@link #countOrders} then leaves it unjudged rather than scoring it: there is nothing to
+	 * average, and a zero would be a statement about a supplier made out of an empty order.
 	 *
-	 * <p><strong>Two subqueries because an order can arrive in two ways</strong> (T-066). The
-	 * receipts table answers for everything the store room takes in. {@code arrived_on} answers for
-	 * the lines it cannot — a described line is acknowledged on the order rather than received into
-	 * stock — and it is already a temple-zone date, which is why only the first of the two is passed
-	 * through {@code templeDate}. Whichever came first is when this order turned up.
+	 * <p><strong>The two ways an item can be there, and they are exclusive by schema</strong>
+	 * (T-024, T-066). A catalogue line is answered by the goods receipts booked against it and by
+	 * nothing else. A described line — four plastic stools — can never take a receipt at all and is
+	 * answered by {@code arrived_on}, yes or no. {@code ingredient_id IS NULL} is the discriminator
+	 * and the database enforces the exclusivity, so no line can be counted twice.
 	 *
-	 * <p>An order with neither still scores late, and that is the point of doing it this way rather
-	 * than by excluding described orders from judgement: nobody has said the stools arrived, so as
-	 * far as this report knows they did not.
+	 * <p><strong>The date comparison is made in SQL, in the temple's own zone.</strong>
+	 * {@code received_at} is an instant and {@code needed_by} is a date, and a delivery booked late
+	 * on the needed-by evening in Bengaluru is not the following morning's failure. It is done here
+	 * rather than in Java because what is wanted is a conditional <em>sum</em> — how much arrived in
+	 * time, not when the first thing did — and pulling every receipt line back to add it up in Java
+	 * would be the same arithmetic further from the data. The zone is bound as a parameter and cast
+	 * explicitly, because {@code AT TIME ZONE ?} alone leaves PostgreSQL unable to infer the
+	 * parameter's type.
+	 *
+	 * <p><strong>Rejected quantity counts as having arrived</strong> — see the class comment. It was
+	 * at the gate on the day; what happened to it next is the fill rate's question and the rejection
+	 * column's.
+	 *
+	 * <p><strong>A {@code NOT_DELIVERED} return comes back off, and only the part of it that was
+	 * booked in time.</strong> That return says the receipt line was a keying error and the goods
+	 * never existed, so the quantity has to leave the on-time count the same way it leaves the fill
+	 * rate. The date filter on the returns subquery mirrors the one above it for the reason the
+	 * whole method exists: a correction to a late receipt must not reduce what arrived punctually.
+	 *
+	 * <p><strong>An abandoned order's items are read but not scored.</strong> They are here so that
+	 * the item counts beside the percentage still add up — ten items ordered, none of them on time —
+	 * and {@link #countOrders} forces the order's score to zero regardless of what the columns say.
+	 * A described line on such an order could in principle carry an {@code arrived_on}; the tick box
+	 * is the later and more deliberate statement, and it wins.
 	 */
-	private void countOrders(Map<UUID, Totals> byVendor, LocalDate from, LocalDate to, LocalDate today) {
+	private Map<UUID, OrderScore> scoreItems(LocalDate from, LocalDate to, LocalDate today) {
+		Map<UUID, OrderScore> byOrder = new LinkedHashMap<>();
+		String zone = clock.zone().getId();
 		jdbc.query("""
-				SELECT po.vendor_id, po.needed_by,
-					   (SELECT MIN(gr.received_at) FROM goods_receipts gr WHERE gr.po_id = po.id)
-						   AS first_receipt_at,
-					   (SELECT MIN(pol.arrived_on) FROM purchase_order_lines pol
-						 WHERE pol.po_id = po.id AND pol.arrived_on IS NOT NULL)
-						   AS first_arrival_on
+				SELECT po.id AS po_id, po.needed_by, po.vendor_abandoned,
+					   pol.ingredient_id, pol.quantity, pol.arrived_on,
+					   COALESCE((SELECT SUM(grl.received_qty + grl.rejected_qty)
+								 FROM goods_receipt_lines grl
+								 JOIN goods_receipts gr ON gr.id = grl.receipt_id
+								 WHERE grl.po_line_id = pol.id
+								   AND (gr.received_at AT TIME ZONE CAST(? AS text))::date
+									   <= po.needed_by), 0) AS arrived_in_time,
+					   -- And what a NOT_DELIVERED return says was never there to begin with (T-124).
+					   COALESCE((SELECT SUM(ret.quantity)
+								 FROM goods_returns ret
+								 JOIN goods_receipt_lines rl ON rl.id = ret.receipt_line_id
+								 JOIN goods_receipts gr ON gr.id = rl.receipt_id
+								 WHERE rl.po_line_id = pol.id
+								   AND ret.reason = 'NOT_DELIVERED'
+								   AND (gr.received_at AT TIME ZONE CAST(? AS text))::date
+									   <= po.needed_by), 0) AS never_came
+				FROM purchase_order_lines pol
+				JOIN purchase_orders po ON po.id = pol.po_id
+				WHERE
+				""" + SCORED_ORDER + """
+				  AND po.order_date BETWEEN ? AND ?
+				  AND (po.vendor_abandoned
+					   OR (po.needed_by IS NOT NULL AND po.needed_by < ?))
+				""", rs -> {
+			OrderScore score = byOrder.computeIfAbsent(rs.getObject("po_id", UUID.class),
+					k -> new OrderScore());
+			score.add(itemFraction(rs.getBoolean("vendor_abandoned"),
+					rs.getObject("ingredient_id", UUID.class) == null,
+					rs.getObject("needed_by", LocalDate.class),
+					rs.getObject("arrived_on", LocalDate.class),
+					rs.getBigDecimal("quantity"),
+					rs.getBigDecimal("arrived_in_time"),
+					rs.getBigDecimal("never_came")));
+		}, zone, zone, from, to, today);
+		return byOrder;
+	}
+
+	/**
+	 * One item's share of itself that was there in time, somewhere in {@code [0, 1]}.
+	 *
+	 * <p>Clamped at both ends and for different reasons. The ceiling is the ruling: bringing twelve
+	 * sacks where ten were ordered is not a bonus that pays for a late line elsewhere on the order.
+	 * The floor is defensive — {@code GoodsReturnService} caps cumulative returns at the receipt
+	 * line's {@code received_qty} ({@code KMS-400140}), so arithmetic alone should never get there,
+	 * but a negative fraction would drag down this vendor's <em>other</em> orders through the mean
+	 * and produce a figure nobody could reconcile against the counts printed beside it.
+	 */
+	private static BigDecimal itemFraction(boolean abandoned, boolean described, LocalDate neededBy,
+			LocalDate arrivedOn, BigDecimal ordered, BigDecimal arrivedInTime, BigDecimal neverCame) {
+		if (abandoned) {
+			return BigDecimal.ZERO;
+		}
+		if (described) {
+			// Yes or no, off the acknowledgement: there is no quantity to weigh, and inventing one
+			// would be a precision the record does not have. See the class comment.
+			return arrivedOn != null && !arrivedOn.isAfter(neededBy) ? BigDecimal.ONE : BigDecimal.ZERO;
+		}
+		if (ordered == null || ordered.signum() <= 0) {
+			return BigDecimal.ZERO;
+		}
+		return arrivedInTime.subtract(neverCame).max(BigDecimal.ZERO)
+				.divide(ordered, 6, RoundingMode.HALF_UP)
+				.min(BigDecimal.ONE);
+	}
+
+	/**
+	 * Every order placed in the period, and how well it was delivered.
+	 *
+	 * <p>Three outcomes and a fourth that is not an outcome at all. An abandoned cancellation is
+	 * judged straight away and scores nothing — ticking the box is itself the claim that the vendor
+	 * is not coming, so there is no date left to wait for. An order with no needed-by date has
+	 * nothing to be late against and is counted aside rather than scored a silent hundred per cent.
+	 * An order still inside its date is counted in the open columns and nowhere else. Everything
+	 * else is judged on the mean of its items.
+	 *
+	 * <p>The fourth case is an order with no lines on it, which cannot happen through the
+	 * application — the order screen refuses to remove the last line — and would have no items to
+	 * average if it did. It is counted as placed and left unjudged, which is the same treatment the
+	 * report already gives an order there is nothing to say about yet.
+	 */
+	private void countOrders(Map<UUID, Totals> byVendor, Map<UUID, OrderScore> scores,
+			LocalDate from, LocalDate to, LocalDate today) {
+		jdbc.query("""
+				SELECT po.id AS po_id, po.vendor_id, po.needed_by, po.vendor_abandoned
 				FROM purchase_orders po
 				WHERE
-				""" + LIVE_ORDER + """
+				""" + SCORED_ORDER + """
 				  AND po.order_date BETWEEN ? AND ?
 				""", rs -> {
 			Totals totals = totalsFor(byVendor, rs.getObject("vendor_id", UUID.class));
 			totals.ordersPlaced++;
+			OrderScore score = scores.get(rs.getObject("po_id", UUID.class));
+
+			if (rs.getBoolean("vendor_abandoned")) {
+				totals.ordersJudged++;
+				totals.abandonedOrders++;
+				// Zero, and the items counted so the note beside the percentage still adds up.
+				totals.itemsScored += score == null ? 0 : score.items;
+				return;
+			}
 			LocalDate neededBy = rs.getObject("needed_by", LocalDate.class);
 			if (neededBy == null) {
 				totals.ordersWithoutNeededBy++;
@@ -271,29 +459,45 @@ public class VendorPerformanceService {
 			if (!neededBy.isBefore(today)) {
 				return; // Still has time. Counted in the open columns and nowhere else.
 			}
+			if (score == null) {
+				return; // Nothing on the order to score. See this method's comment.
+			}
 			totals.ordersJudged++;
-			LocalDate firstArrival = earlier(
-					templeDate(rs.getObject("first_receipt_at", OffsetDateTime.class)),
-					rs.getObject("first_arrival_on", LocalDate.class));
-			if (firstArrival != null && !firstArrival.isAfter(neededBy)) {
+			BigDecimal mean = score.mean();
+			totals.onTimeScore = totals.onTimeScore.add(mean);
+			if (mean.compareTo(BigDecimal.ONE) == 0) {
 				totals.onTimeOrders++;
 			}
+			totals.itemsScored += score.items;
+			totals.itemsOnTime += score.fullyOnTime;
 		}, from, to);
 	}
 
 	/**
-	 * The earlier of two days, either of which may be absent. Null only when both are: an order that
-	 * took a goods receipt and never an acknowledgement, or the other way round, arrived on the one
-	 * date there is.
+	 * The items on one purchase order and what fraction of each was there in time.
+	 *
+	 * <p>{@code fullyOnTime} counts only the items that scored a whole one. It is what the screen
+	 * says beside the percentage — eight of ten — and it is deliberately not the same information as
+	 * the percentage: an order of two items, one of them half delivered on the day, is 75% with one
+	 * item fully on time, and a reader should be able to see both.
 	 */
-	private static LocalDate earlier(LocalDate a, LocalDate b) {
-		if (a == null) {
-			return b;
+	private static final class OrderScore {
+
+		private int items;
+		private int fullyOnTime;
+		private BigDecimal total = BigDecimal.ZERO;
+
+		private void add(BigDecimal fraction) {
+			items++;
+			total = total.add(fraction);
+			if (fraction.compareTo(BigDecimal.ONE) == 0) {
+				fullyOnTime++;
+			}
 		}
-		if (b == null) {
-			return a;
+
+		private BigDecimal mean() {
+			return total.divide(BigDecimal.valueOf(items), 6, RoundingMode.HALF_UP);
 		}
-		return a.isBefore(b) ? a : b;
 	}
 
 	/**
@@ -450,19 +654,6 @@ public class VendorPerformanceService {
 		return byVendor.computeIfAbsent(vendorId, k -> new Totals());
 	}
 
-	private LocalDate templeDate(OffsetDateTime at) {
-		return at == null ? null : at.atZoneSameInstant(clock.zone()).toLocalDate();
-	}
-
-	/** A whole percentage. The counts behind it are on the screen beside it, so tenths add nothing. */
-	private static BigDecimal percent(int numerator, int denominator) {
-		if (denominator <= 0) {
-			return null;
-		}
-		return BigDecimal.valueOf(numerator).multiply(HUNDRED)
-				.divide(BigDecimal.valueOf(denominator), 0, RoundingMode.HALF_UP);
-	}
-
 	private record VendorRef(UUID id, String name, boolean active) {
 	}
 
@@ -470,7 +661,16 @@ public class VendorPerformanceService {
 		private int ordersPlaced;
 		private int ordersJudged;
 		private int onTimeOrders;
+		private int abandonedOrders;
 		private int ordersWithoutNeededBy;
+		private int itemsScored;
+		private int itemsOnTime;
+		/**
+		 * The sum of the judged orders' scores, each somewhere in {@code [0, 1]}. Divided by
+		 * {@code ordersJudged} it is the on-time percentage; kept as a running sum rather than an
+		 * average so that the totals row can add two vendors together without averaging averages.
+		 */
+		private BigDecimal onTimeScore = BigDecimal.ZERO;
 		private int linesJudged;
 		private BigDecimal filled = BigDecimal.ZERO;
 		private int rejectedLines;
@@ -484,7 +684,11 @@ public class VendorPerformanceService {
 			ordersPlaced += other.ordersPlaced;
 			ordersJudged += other.ordersJudged;
 			onTimeOrders += other.onTimeOrders;
+			abandonedOrders += other.abandonedOrders;
 			ordersWithoutNeededBy += other.ordersWithoutNeededBy;
+			itemsScored += other.itemsScored;
+			itemsOnTime += other.itemsOnTime;
+			onTimeScore = onTimeScore.add(other.onTimeScore);
 			linesJudged += other.linesJudged;
 			filled = filled.add(other.filled);
 			rejectedLines += other.rejectedLines;
@@ -500,14 +704,24 @@ public class VendorPerformanceService {
 							.divide(BigDecimal.valueOf(linesJudged), 0, RoundingMode.HALF_UP);
 		}
 
+		/**
+		 * The mean of the judged orders' scores, as a whole percentage. Null where nothing has been
+		 * judged: a figure divided by nothing is worse than no figure.
+		 */
+		private BigDecimal onTimePercent() {
+			return ordersJudged <= 0 ? null
+					: onTimeScore.multiply(HUNDRED)
+							.divide(BigDecimal.valueOf(ordersJudged), 0, RoundingMode.HALF_UP);
+		}
+
 		private VendorPerformanceRow asRow(VendorRef ref) {
 			List<RejectionCount> byReason = new ArrayList<>();
 			rejections.forEach((reason, lines) -> byReason.add(new RejectionCount(reason, lines)));
 			byReason.sort(Comparator.comparingInt(RejectionCount::lines).reversed()
 					.thenComparing(RejectionCount::reason));
 			return new VendorPerformanceRow(ref.id(), ref.name(), ref.active(),
-					ordersPlaced, ordersJudged, onTimeOrders, ordersWithoutNeededBy,
-					percent(onTimeOrders, ordersJudged), linesJudged, fillRate(),
+					ordersPlaced, ordersJudged, onTimeOrders, abandonedOrders, ordersWithoutNeededBy,
+					itemsScored, itemsOnTime, onTimePercent(), linesJudged, fillRate(),
 					rejectedLines, List.copyOf(byReason),
 					openOrders, openCurrent, openDue1To30, openOverdue31Plus,
 					ordersJudged >= MIN_ORDERS_TO_RANK);

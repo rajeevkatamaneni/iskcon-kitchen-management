@@ -270,19 +270,44 @@ public class PurchaseOrderService {
 		documentService.autoGeneratePurchaseOrderPdf(id);
 	}
 
+	/**
+	 * Cancels an order, and records whether the vendor is why (T-124).
+	 *
+	 * <p><strong>{@code vendorAbandoned} is a statement about the supplier, not about the order.</strong>
+	 * Rajeev's fifth delivery scenario of 2026-09-09 — <em>"nothing ever came; we cancelled and went
+	 * elsewhere"</em> — is the only one the application could not record at all, because the vendor
+	 * scorecard excludes every cancellation on the perfectly good ground that a cancellation is
+	 * usually the temple's own decision. The tick box is what tells the two apart, and it is the one
+	 * new fact the whole of T-124 asks anybody to enter.
+	 *
+	 * <p>Nothing already stored could have inferred it. A cancelled order with no goods receipt is
+	 * equally consistent with a supplier who never came and with a festival called off the day after
+	 * the order went out.
+	 *
+	 * <p><strong>It goes into the audit record's after-state, and into the order's own trail.</strong>
+	 * The after-state because that is where a permanent claim about a third party belongs — who
+	 * ticked it and when are already carried by the audit actor and {@code cancelled_at}, so the
+	 * flag beside them makes the record readable as one act. The trail because the order screen
+	 * shows that trail and would otherwise offer a person a box to tick and then never show it back;
+	 * the sentence is appended to the reason rather than replacing it, so the operator's own words
+	 * survive verbatim in {@code cancel_reason} and in the line beneath them.
+	 */
 	@Transactional
-	public void cancel(AuthenticatedUser actor, UUID id, String reason) {
+	public void cancel(AuthenticatedUser actor, UUID id, String reason, boolean vendorAbandoned) {
 		PurchaseOrderView po = findHeader(id).orElseThrow(() -> notFound(id));
 		if (po.status() == PoStatus.RECEIVED || po.status() == PoStatus.CANCELLED) {
 			throw new ApplicationException(ErrorCode.PO_INVALID_TRANSITION, Map.of("purchaseOrderId", id));
 		}
 		jdbc.update("""
 				UPDATE purchase_orders SET status = 'CANCELLED', cancel_reason = ?, cancelled_at = now(),
-					updated_at = now() WHERE id = ?
-				""", reason.trim(), id);
-		recordEvent(id, "CANCELLED", reason.trim(), actor);
+					vendor_abandoned = ?, updated_at = now() WHERE id = ?
+				""", reason.trim(), vendorAbandoned, id);
+		recordEvent(id, "CANCELLED", vendorAbandoned
+				? reason.trim() + " — recorded as never delivered by the vendor."
+				: reason.trim(), actor);
 		auditService.record(actor, AuditAction.PO_CANCELLED, AuditEntityType.PURCHASE_ORDER, id,
-				Map.of("status", po.status().name()), Map.of("status", "CANCELLED"), reason.trim());
+				Map.of("status", po.status().name()),
+				Map.of("status", "CANCELLED", "vendorAbandoned", vendorAbandoned), reason.trim());
 	}
 
 	/**
@@ -618,8 +643,8 @@ public class PurchaseOrderService {
 
 	private static final String HEADER_SELECT = """
 			SELECT po.id, po.po_number, po.vendor_id, v.name AS vendor_name, po.status, po.order_date,
-				   po.needed_by, po.delivery_location, po.notes, po.cancel_reason, po.sent_at,
-				   po.cancelled_at, po.created_at
+				   po.needed_by, po.delivery_location, po.notes, po.cancel_reason,
+				   po.vendor_abandoned, po.sent_at, po.cancelled_at, po.created_at
 			FROM purchase_orders po
 			JOIN vendors v ON v.id = po.vendor_id
 			""";
@@ -635,6 +660,10 @@ public class PurchaseOrderService {
 			rs.getString("delivery_location"),
 			rs.getString("notes"),
 			rs.getString("cancel_reason"),
+			// getBoolean and not getObject: the column is NOT NULL DEFAULT FALSE (V118), so there is
+			// no third state to carry and a primitive says that plainly. Every order raised before
+			// V118 reads false, which is the reading that blames nobody.
+			rs.getBoolean("vendor_abandoned"),
 			instant(rs.getObject("sent_at", OffsetDateTime.class)),
 			instant(rs.getObject("cancelled_at", OffsetDateTime.class)),
 			instant(rs.getObject("created_at", OffsetDateTime.class)));

@@ -1,0 +1,137 @@
+=== 1. the fix is present, exactly once per file ===
+  backend/src/main/java/org/iskcon/kms/vendor/VendorPerformanceService.java: 'private Map<UUID, OrderScore> scoreItems(' x1 (expected 1)
+  backend/src/main/java/org/iskcon/kms/vendor/VendorPerformanceRow.java: 'int abandonedOrders,' x1 (expected 1)
+  backend/src/main/java/org/iskcon/kms/vendor/VendorPerformance.java: 'int abandonedOrders,' x1 (expected 1)
+  backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderService.java: 'vendor_abandoned = ?' x1 (expected 1)
+  backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderController.java: 'request.vendorAbandoned()' x1 (expected 1)
+  backend/src/main/java/org/iskcon/kms/purchaseorder/CancelPoRequest.java: 'boolean vendorAbandoned' x1 (expected 1)
+
+=== 2. saving the verified copies ===
+  saved VendorPerformanceService.java
+  saved VendorPerformanceRow.java
+  saved VendorPerformance.java
+  saved PurchaseOrderService.java
+  saved PurchaseOrderController.java
+  saved CancelPoRequest.java
+
+=== 3. stripping T-124 out: every backend product file, reverted to HEAD ===
+  reverted backend/src/main/java/org/iskcon/kms/vendor/VendorPerformanceService.java
+  reverted backend/src/main/java/org/iskcon/kms/vendor/VendorPerformanceRow.java
+  reverted backend/src/main/java/org/iskcon/kms/vendor/VendorPerformance.java
+  reverted backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderService.java
+  reverted backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderController.java
+  reverted backend/src/main/java/org/iskcon/kms/purchaseorder/CancelPoRequest.java
+
+=== 4. the tree really changed: every anchor is now gone ===
+  backend/src/main/java/org/iskcon/kms/vendor/VendorPerformanceService.java: 'private Map<UUID, OrderScore> scoreItems(' x0 (expected 0)
+  backend/src/main/java/org/iskcon/kms/vendor/VendorPerformanceRow.java: 'int abandonedOrders,' x0 (expected 0)
+  backend/src/main/java/org/iskcon/kms/vendor/VendorPerformance.java: 'int abandonedOrders,' x0 (expected 0)
+  backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderService.java: 'vendor_abandoned = ?' x0 (expected 0)
+  backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderController.java: 'request.vendorAbandoned()' x0 (expected 0)
+  backend/src/main/java/org/iskcon/kms/purchaseorder/CancelPoRequest.java: 'boolean vendorAbandoned' x0 (expected 0)
+
+=== 5. the tests, unaltered, against the unfixed code (--rerun-tasks) ===
+PurchaseOrderIT > a draft edited into a cross-family line is refused, and the draft is left as it was PASSED
+PurchaseOrderIT > a needed-by date behind the order's own date is refused PASSED
+PurchaseOrderIT > ticking the never-delivered box is recorded on the order, the trail and the audit FAILED
+    java.lang.AssertionError: the tick must reach purchase_orders.vendor_abandoned
+PurchaseOrderIT > an order is dated the temple's own day, not the machine's PASSED
+PurchaseOrderIT > purchase-order numbers are sequential and never duplicated within a tenant PASSED
+PurchaseOrderIT > a sent purchase order can no longer be edited PASSED
+PurchaseOrderIT > a line measured in something the ingredient can't be measured in is refused PASSED
+PurchaseOrderIT > a draft takes a changed quantity, a new line, and a line taken away PASSED
+PurchaseOrderIT > a cancellation says nothing about the vendor unless somebody ticks the box PASSED
+PurchaseOrderIT > generation still takes the earliest needed-by across a vendor's lines PASSED
+PurchaseOrderIT > three checked lines across two vendors generate exactly two correct draft POs PASSED
+PurchaseOrderIT > the needed-by date is frozen once the order has been sent PASSED
+PurchaseOrderIT > a draft's needed-by date can be set, changed, and cleared again PASSED
+PurchaseOrderIT > a computed needed-by already in the past still generates — the rule is for typed dates PASSED
+PurchaseOrderIT > a draft purchase order cannot be received — that isn't a valid step PASSED
+PurchaseOrderIT > a different unit of the same family is fine, and is stored as it was given PASSED
+PurchaseOrderIT > pieces convert to nothing: a weight against a counted ingredient is refused PASSED
+PurchaseOrderIT > the never-delivered flag cannot be set on an order that is not cancelled PASSED
+PurchaseOrderIT > cancelling records a reason and an event on the trail PASSED
+PurchaseOrderIT > a volunteer cannot manage purchase orders PASSED
+VendorPerformanceIT > a quarter of the order on the day is a quarter on time, not a punctual delivery FAILED
+    java.lang.AssertionError: JSON path "$.vendors[0].onTimePercent" expected:<25> but was:<100>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+VendorPerformanceIT > on-time is a percentage with the counts behind it — 4 of 5, and the vendor is ranked PASSED
+VendorPerformanceIT > a period whose end falls before its start is refused with KMS-400122 PASSED
+VendorPerformanceIT > a vendor with nothing ordered and nothing open is not a row of dashes PASSED
+VendorPerformanceIT > bringing more than was ordered is not a bonus: a line is capped at fully delivered FAILED
+    java.lang.AssertionError: JSON path "$.vendors[0].onTimePercent" expected:<50> but was:<100>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+VendorPerformanceIT > a return for weevils leaves on-time alone: the goods were there on the day FAILED
+    java.lang.AssertionError: No value at JSON path "$.vendors[0].itemsOnTime"
+VendorPerformanceIT > Rajeev's case B — some on day 2 and the rest on day 3, all inside the window, is 100% FAILED
+    java.lang.AssertionError: No value at JSON path "$.vendors[0].itemsOnTime"
+VendorPerformanceIT > a return the vendor is not to blame for leaves the score exactly where it was PASSED
+VendorPerformanceIT > Rajeev's case D — nothing inside the window and everything after it is 0% FAILED
+    java.lang.AssertionError: No value at JSON path "$.vendors[0].itemsScored"
+VendorPerformanceIT > an order still inside its needed-by date is open, not yet judged PASSED
+VendorPerformanceIT > an order of only described lines is judged on-time against the day they were recorded as arriving PASSED
+VendorPerformanceIT > a mixed order counts the rice and the stools once each, and the late half halves it FAILED
+    java.lang.AssertionError: JSON path "$.vendors[0].onTimeOrders" expected:<0> but was:<1>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+VendorPerformanceIT > the report totals every vendor's judged orders together PASSED
+VendorPerformanceIT > an order with no needed-by date is counted aside, never scored a silent hundred PASSED
+VendorPerformanceIT > an order of nothing but described lines leaves the fill rate blank, and scores late until somebody says they arrived PASSED
+VendorPerformanceIT > Rajeev's case E — nothing ever came, we cancelled and went elsewhere: 0%, and named FAILED
+    java.lang.AssertionError: No value at JSON path "$.vendors[0].vendorName"
+VendorPerformanceIT > too few orders to rank: shown with its figures, below the ranked ones, and marked PASSED
+VendorPerformanceIT > a described line is judged yes or no against the day it was recorded as arriving FAILED
+    java.lang.AssertionError: No value at JSON path "$.vendors[0].itemsScored"
+VendorPerformanceIT > an order due and never delivered is late, not merely absent PASSED
+VendorPerformanceIT > open orders age into the payables buckets, whenever they were placed PASSED
+VendorPerformanceIT > Rajeev's case A — all ten items inside the three days is 100% FAILED
+    java.lang.AssertionError: No value at JSON path "$.vendors[0].itemsScored"
+VendorPerformanceIT > a partial return takes off what went back and not one kilo more PASSED
+VendorPerformanceIT > more returned than was ever received floors the line at nothing filled, never below PASSED
+VendorPerformanceIT > a sack refused at the gate still arrived: on-time counts it, the fill rate does not PASSED
+VendorPerformanceIT > a NOT_DELIVERED return takes its quantity back out of the on-time count FAILED
+    java.lang.AssertionError: JSON path "$.vendors[0].onTimePercent" expected:<50> but was:<100>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+VendorPerformanceIT > a draft, and a cancellation nobody blamed the vendor for, are never held against them FAILED
+    java.lang.AssertionError: No value at JSON path "$.vendors[0].abandonedOrders"
+VendorPerformanceIT > Rajeev's case C — eight items inside the window and two on day 5 is 80% FAILED
+    java.lang.AssertionError: JSON path "$.vendors[0].onTimePercent" expected:<80> but was:<100>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+VendorPerformanceIT > a dropped vendor keeps their history on the report, marked as no longer used PASSED
+VendorPerformanceIT > a volunteer cannot read the temple's suppliers PASSED
+VendorPerformanceIT > a described line leaves the fill rate exactly where it would have been without it FAILED
+    java.lang.AssertionError: JSON path "$.vendors[0].vendorName" expected:<Stool Traders> but was:<Amba Traders>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+VendorPerformanceIT > a cancellation without the tick is counted nowhere at all, in either direction FAILED
+    java.lang.AssertionError: JSON path "$.vendors.length()" expected:<1> but was:<0>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+VendorPerformanceIT > rejections are counted by reason, commonest first PASSED
+VendorPerformanceIT > a delivery sent back for weevils is not a delivery, and the vendor is still on time PASSED
+> Task :test FAILED
+  Total:    53
+  Passed:   38
+  Failed:   15
+BUILD FAILED in 18s
+gradle exit: 1
+
+=== restoring, and proving the restore was byte-for-byte ===
+identical: backend/src/main/java/org/iskcon/kms/vendor/VendorPerformanceService.java
+identical: backend/src/main/java/org/iskcon/kms/vendor/VendorPerformanceRow.java
+identical: backend/src/main/java/org/iskcon/kms/vendor/VendorPerformance.java
+identical: backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderService.java
+identical: backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderController.java
+identical: backend/src/main/java/org/iskcon/kms/purchaseorder/CancelPoRequest.java
+ .../iskcon/kms/purchaseorder/CancelPoRequest.java  |  27 +-
+ .../kms/purchaseorder/PurchaseOrderController.java |   2 +-
+ .../kms/purchaseorder/PurchaseOrderService.java    |  35 +-
+ .../org/iskcon/kms/vendor/VendorPerformance.java   |  10 +
+ .../iskcon/kms/vendor/VendorPerformanceRow.java    |  41 ++-
+ .../kms/vendor/VendorPerformanceService.java       | 384 ++++++++++++++++-----
+ 6 files changed, 394 insertions(+), 105 deletions(-)
+work-lock: 'verify' released; command exited 0

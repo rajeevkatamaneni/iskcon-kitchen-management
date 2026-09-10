@@ -1892,14 +1892,37 @@ export interface VendorPerformanceRow {
   active: boolean;
   /** Orders placed in the period. Drafts and cancellations are excluded everywhere. */
   ordersPlaced: number;
-  /** Of those, the ones whose needed-by date has passed — the denominator of both percentages. */
+  /**
+   * Of those, the ones there is something to say about: their needed-by date has passed, or they
+   * were abandoned. The denominator of `onTimePercent`.
+   */
   ordersJudged: number;
-  /** Judged orders where something arrived on or before the needed-by date. */
+  /**
+   * Judged orders that scored a full hundred per cent — every item on them there in time.
+   *
+   * <p>Not the numerator of `onTimePercent`, deliberately (T-124). An order eight-tenths delivered
+   * on the day moves the percentage and does not count here, and a reader should see both.
+   */
   onTimeOrders: number;
+  /**
+   * Judged orders cancelled because the vendor never delivered them (T-124).
+   *
+   * <p>Each scores nothing. This is the count that says a zero came from a supplier who never
+   * turned up rather than from one who turned up late.
+   */
+  abandonedOrders: number;
   /** Orders with no needed-by date: nothing to be late against, so outside both figures. */
   ordersWithoutNeededBy: number;
-  /** Null where nothing has been judged yet — a figure divided by nothing is worse than none. */
+  /** Order lines that went into the on-time figure — the "of ten" in "eight of ten items". */
+  itemsScored: number;
+  /** Of those, the ones fully there in time — the "eight". */
+  itemsOnTime: number;
+  /**
+   * The mean of the judged orders' scores, each of them the mean of its items' (T-124). Null where
+   * nothing has been judged yet — a figure divided by nothing is worse than none.
+   */
   onTimePercent: number | null;
+  /** Order lines the fill rate could judge. Not the same population as `itemsScored`. */
   linesJudged: number;
   /** The share of an average ordered line that turned up and was kept. Capped at 100% per line. */
   fillRatePercent: number | null;
@@ -1922,8 +1945,10 @@ export interface VendorPerformanceRow {
  * was placed; the open-order and aging columns are present tense and unfiltered, because an order
  * left hanging since June is exactly what aging exists to surface.
  *
- * <p>On-time is measured per order and at the first delivery — the lorry turned up — never per
- * ingredient and never at completion. `fillRatePercent` is what says whether it brought everything.
+ * <p>On-time is scored per item (T-124): each item on an order contributes the fraction of it that
+ * was there on or before the needed-by day, capped at one; an order is the mean of its items and a
+ * vendor the mean of their orders. A cancellation marked "Vendor Never Delivered this Order" scores
+ * nothing and is counted again as abandoned; a cancellation nobody marked is counted nowhere.
  */
 export interface VendorPerformance {
   from: string;
@@ -1931,7 +1956,10 @@ export interface VendorPerformance {
   ordersPlaced: number;
   ordersJudged: number;
   onTimeOrders: number;
+  abandonedOrders: number;
   ordersWithoutNeededBy: number;
+  itemsScored: number;
+  itemsOnTime: number;
   onTimePercent: number | null;
   linesJudged: number;
   fillRatePercent: number | null;
@@ -1992,6 +2020,23 @@ export interface PurchaseOrderView {
   deliveryLocation: string | null;
   notes: string | null;
   cancelReason: string | null;
+  /**
+   * Whether the cancellation was recorded against the vendor — the "Vendor Never Delivered this
+   * Order" tick on the cancel form (T-124), in Rajeev's own words of 2026-09-09.
+   *
+   * <p>Declared beside `cancelReason` because the two are read together: the reason is what the
+   * temple wrote down, and this is whether the temple is holding the vendor responsible for it.
+   * Always `false` unless `status` is `"CANCELLED"` — the database refuses the pairing outright
+   * (`purchase_orders_abandoned_is_a_cancellation`, V118), so a screen never has to defend against
+   * a live order claiming a no-show.
+   *
+   * <p><strong>Required, never optional</strong>, like every other field here — an optional field
+   * is exempt from the excess-property check when it is spread, so a fixture or a caller that drops
+   * it type-checks and the value arrives as `undefined`, which reads as "not a no-show" and is
+   * indistinguishable from the truth. See `PurchaseOrderLineView.ingredientId` for where this
+   * convention was paid for.
+   */
+  vendorAbandoned: boolean;
   sentAt: string | null;
   cancelledAt: string | null;
   createdAt: string;
@@ -4867,10 +4912,19 @@ export const api = {
   sendPurchaseOrder: (id: string, token?: string) =>
     request<void>(`/api/v1/purchase-orders/${id}/send`, { method: "POST", token }),
 
-  cancelPurchaseOrder: (id: string, reason: string, token?: string) =>
+  /**
+   * Cancels an order, saying whether the vendor is why (T-124).
+   *
+   * `vendorAbandoned` is the tick box "Vendor Never Delivered this Order". It is a permanent
+   * statement about a supplier — it scores that order 0% on their record and names them as a
+   * no-show — so it is a required argument rather than an optional one: every caller has to say
+   * which of the two kinds of cancellation this is, and false is the answer for a temple cancelling
+   * for its own reasons.
+   */
+  cancelPurchaseOrder: (id: string, reason: string, vendorAbandoned: boolean, token?: string) =>
     request<void>(`/api/v1/purchase-orders/${id}/cancel`, {
       method: "POST",
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, vendorAbandoned }),
       token,
     }),
 
