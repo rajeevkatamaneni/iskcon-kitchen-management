@@ -15,8 +15,12 @@ current; the per-wave blocks further down are historical.
 released 2026-09-08** — T-005, T-071, T-072 and T-078. `main` is green, staging carries all of it,
 schema is `V104` and wave 10 adds no migration.
 
-**Next migration number is `V106`.** `V105` was allocated conditionally to T-014, went unused, and
-**no `V105` file exists** — it is a deliberate gap, not a missing file. Do not reuse it.
+**Next migration number is `V120`.** *(Was `V106` when this block was written on 2026-09-08 and went
+on being read as current for eleven waves — corrected 2026-09-10, wave 18.)* **`V119` is the highest
+applied to staging.** Three numbers are deliberate gaps and none is a missing file: `V105` was
+allocated conditionally to T-014 and went unused, and `V108` and `V109` are absent for the same
+reason. **`ls` on the migration directory cannot tell you the next number** — take it from the
+deployed schema history, as V119's own header explains.
 
 **Still to build — 7 real features:** T-007, T-013, T-015, T-016, T-019, T-020, T-021.
 
@@ -12867,6 +12871,26 @@ somebody deletes.**
   because the match is recomputed each time. Say what the page boundary means before choosing one.
 - **proof:** — · **shipped:** —
 
+### T-130 — the two days a vendor gets are counted twice
+
+- **id:** T-130
+- **source:** **T-090's builder, 2026-09-10**, found while building lead times and **deliberately not
+  fixed** — the fix changes what every generated order asks a supplier for, and `purchaseorder/**`
+  was outside its contract that night. Correct call.
+- **state:** queued.
+- **what, concretely:** a meal on 12 September, list regenerated on 10 September. The shopping list
+  writes the purchase order's needed-by as **meal date minus two days** — 10 September. The order
+  screen then reads that date and warns *"Sooner than the 2 days a vendor usually gets."*
+  **The buffer is applied when the order is written and then complained about when it is read.**
+- **why it can be fixed now and could not before:** the two-day subtraction was standing in for a
+  lead time nobody had recorded. **T-090 records one.** So the generated order should ask for the
+  date the food is actually needed, and the order-by date beside it says when to place it.
+- **the recommendation, which is the builder's:** drop the subtraction. Do not touch
+  `leadTimeWarning` — a warning about a date a human typed is still right.
+- **⚠ it changes every generated order's delivery date**, so it wants its own task, its own control,
+  and a look at any test that asserts the old date.
+- **proof:** — · **shipped:** —
+
 ### T-129 — a draft nobody sent can be marked "the vendor never delivered"
 
 - **id:** T-129
@@ -13568,15 +13592,67 @@ dispatch; do not fan out on the numbering.
 
 ### T-090 — lead time, and the order-by escalation
 
-- **id:** T-090 · **state:** queued · **wave:** unscheduled
-- **his escalation rule, restated around the last responsible moment.** **There is no lead-time field
+- **id:** T-090 · **state:** **SHIPPED 2026-09-10, wave 18. On staging, awaiting Rajeev's test.**
+- **his escalation rule, restated around the last responsible moment.** **There was no lead-time field
   anywhere in the product** — not on the ingredient, not on the vendor — so *"delivery time × 2"*
-  cannot be computed today. **It is a prerequisite**, and it belongs **per ingredient-and-vendor**
+  could not be computed. **It was a prerequisite**, and it belongs **per ingredient-and-vendor**
   rather than globally.
 - **what:** order-by date = need date − lead time. **Amber while there is slack; red the day you hit
   order-by; past that it is not a warning but a fact, and should say something different.**
-- **reservations:** migration TBD at dispatch. This is the largest single new field in the spine.
-- **proof:** — · **shipped:** —
+- **reservations:** migration `V119`. This is the largest single new field in the spine.
+
+**BUILT AND SHIPPED. The field, the date, and the three states.**
+
+**Where the field lives and why.** `vendor_supplies.lead_time_days` (V119) — the (vendor, ingredient)
+pair, which already carries `last_price` and `preferred` for the same reason. Not the vendor: the
+rice merchant may deliver rice next morning and take a week over jaggery he has to fetch. Not the
+ingredient: that would say rice takes four days no matter who is asked.
+
+**Nullable, no DEFAULT, and null is not zero** — guarded at all four points it could have collapsed:
+the form checks for a blank box before `Number("")` turns it into 0, the request record, `getObject`
+rather than `getInt` in both row mappers, and a boxed `Integer` on `LeadTimes.effectiveDays` so
+unboxing at a call site is a compile error. Unknown falls back to the two-day assumption; **zero
+stays a real, different answer** — cash-and-carry.
+
+**The three states, as words rather than shades.** `Short · order by 12 Sep` (amber),
+`Short · order today` (red), `Short · won't arrive in time` (**the same red**). A meal tomorrow short
+of rice is not less serious because the deadline passed, and a shade cannot tell a cook which of two
+different problems they have. The tests assert the sentences; the control patches the third into the
+second to prove the distinction is load-bearing.
+
+**The decision the brief asked for, written into the code in three places** (V119's header,
+`LeadTimes`' javadoc, a new javadoc on `LEAD_BUFFER_DAYS`): the existing two-day constant is a
+**delivery buffer**, answering *what date do we write on the order*, and a lead time answers *when is
+the last day we can ask*. A recorded lead time supersedes the assumption **for the order-by date
+only**; `shopping_list_lines.needed_by` is untouched, and so is every generated purchase order.
+
+**Two presentational calls the builder made and named, both easy to revert:** the shopping list's
+*Needed by* column now reads **Order by** (with no lead time recorded the two dates are identical, so
+both columns would have shown the same date under two names), and a muted **"assumed"** sits beside a
+badge whose lead time came from us rather than from the vendor.
+
+**One file outside the glob, flagged rather than hidden:** `frontend/components/planner/MealServices.tsx`.
+The contract reserved "the planner surface" but wrote the glob as `frontend/app/**`, and the badge
+does not live there. The builder checked the tree was clean, the locks empty and no queued row
+claimed the file before taking it; the edit is +41/−2 and adds one local function.
+
+- **control:** `docs/work/proof/T-090-control.log`. Two claims broken, not one — the null fallback
+  patched to `0`, and the `TOO_LATE` sentence replaced by the `ORDER_TODAY` one **with the colour
+  left alone**. Backend 3 of 17 red, including `expected:<TOO_LATE> but was:<IN_TIME>`, which is the
+  feature failing in the dangerous direction. Frontend 2 of 25 red. Restored byte-for-byte through an
+  `EXIT` trap and a green run after it.
+- **to drive once it deploys, and nobody has:** open a vendor at `/vendors/<id>`, record a lead time
+  against a supply row in the Supplies section, then open a planner day whose dish is short of that
+  ingredient and read the badge on three days either side of the order-by date. The shopping list at
+  `/shopping-list` shows the same date and state per line.
+- **left for Rajeev:** the order screen's own `leadTimeWarning` still uses the global two-day guess
+  even where a real lead time now exists for that vendor and ingredient; **the shopping list will read
+  amber on most rows**, because his rule says amber while there is slack and it was built as written
+  rather than with an invented threshold — if amber should be reserved for the last few days, that is
+  one comparison in `OrderUrgency.on`. And the double-count is **T-130**.
+- **proof:** `docs/work/proof/T-090.md` · **shipped:** `a497a3f`, 2026-09-10, wave 18 — *feat: how
+  long a vendor takes is recorded, and a shortage says the day it has to be ordered*. **Migration
+  `V119` — staging moves from `V118` to `V119`.**
 
 ### T-091 — secondary preferred vendor, on everything
 

@@ -1182,6 +1182,76 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-10 — How long a vendor takes is a thing the product knows, and a shortage says the day it has to be ordered (wave 18; task T-090)
+
+**The prerequisite was real and it was the bulk of the work (T-090).** Rajeev's rule from his review
+of 2026-09-08 — *order-by date = the date it is needed minus the lead time; amber while there is
+slack, red the day you hit it, and past that say something different* — could not be computed at all,
+because **there was no lead time anywhere in the product**. Not on the ingredient, not on the vendor.
+`vendor_supplies.lead_time_days` (**`V119`**) is that field, and it sits on the (vendor, ingredient)
+pair beside `last_price` and `preferred` because it is the same kind of fact: the rice merchant may
+deliver rice next morning and take a week over a sack of jaggery he has to fetch. Putting it on the
+vendor would average those into a figure wrong for both; putting it on the ingredient would say rice
+takes four days no matter who is asked. It is entered on the Supplies section of `/vendors/<id>`,
+which already existed — nothing new had to be invented for somebody to type it in.
+
+**Nobody having said is not the same as same-day, and the column is built so it cannot quietly
+become zero.** Nullable, no `DEFAULT`, and the fallback is the two-day assumption the product already
+carried. A `DEFAULT` of 2 was considered and rejected: it would make *unknown* and *the vendor told us
+two days* the same row, and the first is worth chasing while the second is worth acting on. The
+collapse is blocked at all four points it could happen — the form checks for a blank box before
+`Number("")` turns it into 0, the request record, `getObject` rather than `getInt` in both row
+mappers, and a boxed `Integer` on `LeadTimes.effectiveDays` so unboxing at a call site is a compile
+error rather than a silent zero. **Zero remains a real and different answer:** the shop somebody
+walks into and carries the goods home from.
+
+**Three states, and the third is a sentence rather than a darker red.** A short meal's badge on the
+planner and every computed shopping-list line now carry an order-by date: `Short · order by 12 Sep`
+in amber, `Short · order today` in red, and `Short · won't arrive in time` **in the same red**. A meal
+tomorrow that is short of rice is not less serious because the deadline has passed, so escalating the
+colour a third time would be wrong in the other direction — and a shade cannot tell a cook which of
+two quite different problems they have: get the order out today, or find another way to feed people.
+The tests assert the words, not the colours, and the negative control patches the third sentence into
+the second to show the distinction is load-bearing.
+
+**The two "2"s in the codebase are different numbers, and that is now written where it cannot drift.**
+`ShoppingListService.LEAD_BUFFER_DAYS` writes `needed_by = earliest demand − 2` and
+`PurchaseOrderService.generate` copies it onto the order as the date the vendor is asked to *deliver*
+by. That is a **delivery buffer** answering *what date do we write on the order*. A **lead time**
+answers *when is the last day we can ask*, and nothing in the product could answer it. So a recorded
+lead time supersedes the assumption **for the order-by date only** and leaves the buffer alone —
+recorded in three places, `V119`'s header, `LeadTimes`' javadoc and a new javadoc on
+`LEAD_BUFFER_DAYS` itself. **`shopping_list_lines.needed_by` is untouched**, because changing it
+would change what every generated purchase order asks a supplier for, which is a product decision and
+not a side effect of adding a field.
+
+**Nothing new refuses anything.** No gate, no blocked save, no disabled button. The only new refusal
+in the whole task is a lead time outside 0–365, ordinary bean validation on a number nobody means to
+type, reaching the person through the existing validation path — so no error code was allocated.
+
+**Two presentational calls, both named so he can overrule them.** The shopping list's *Needed by*
+column now reads **Order by**: with no lead time recorded the two dates are identical, so keeping both
+would have put two columns side by side showing the same date under two names. And a muted
+**"assumed"** appears beside a badge whose lead time came from us rather than from the vendor, as the
+nudge towards recording a real one. The delivery date is still in the payload, still on every purchase
+order and still on the order screen.
+
+**Not done, and worth knowing before anybody tests it.** Nobody has driven this on a screen — record a
+lead time on a preferred vendor, open a planner day whose dish is short, and read the badge on three
+days either side of the order-by date. **The shopping list will read amber on most rows**, because the
+rule as given says amber while there is slack and it was built as written rather than with an invented
+threshold; if amber should be reserved for the last few days that is one comparison in
+`OrderUrgency.on`. The order screen's own notice warning still uses the global two-day guess even
+where a real lead time now exists for that vendor and ingredient.
+
+**And the defect the task uncovered and deliberately did not fix, recorded as T-130.** The shopping
+list writes a purchase order's delivery date as *the meal date minus two days*, and the order screen
+then warns that that very date gives the vendor too little notice — the buffer is applied when the
+order is written and complained about when it is read. A meal on 12 September with the list
+regenerated on 10 September produces the warning on a date the application itself chose. The fix is to
+stop subtracting the buffer now that an order-by date exists to carry the notice, but it changes what
+every generated order asks a supplier for, so it is Rajeev's to settle and its own task.
+
 ### 2026-09-10 — The last copy of the unit rule that the backend could get rid of is gone (wave 17; task T-128)
 
 **The recipe scale preview stops choosing its own units (T-128).** Which unit a quantity is *said* in
