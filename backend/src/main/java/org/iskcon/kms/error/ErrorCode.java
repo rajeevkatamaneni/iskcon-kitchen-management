@@ -945,6 +945,17 @@ public enum ErrorCode {
 			"This message was sent, but no copy of it ever reached anybody.",
 			"There is nothing here to send again. Write the message again and send it."),
 
+	// Ruled by Rajeev on 2026-09-10 (T-129). The tick box that marks a cancellation as a vendor's
+	// no-show is offered on any purchase order, including a draft that was never sent — so a vendor
+	// who never heard of the order can be scored 0% on it. He chose to restrict the box to orders
+	// that have actually been sent.
+	//
+	// The screen hides the box; this is what stops it anyway. A rule that lives only in a form is
+	// not a rule — the same endpoint takes the same field from anything that can post to it.
+	PO_NEVER_SENT_TO_VENDOR(400147, 409,
+			"This order was never sent, so it can't be marked as one the vendor failed to deliver.",
+			"Cancel it without that mark. Nothing was asked of the vendor, so nothing counts against them."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

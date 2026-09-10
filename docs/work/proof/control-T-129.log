@@ -1,0 +1,184 @@
+baseline taken from the verified working tree:
+6b75cd1ac7dd0529498ccdb4e9a781d7e11e298b  /tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/baseline-T-129/PurchaseOrderService.java
+f62b2ba1f2e5c3313c48cac2785a1959bc8e59e6  /tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/baseline-T-129/page.tsx
+anchors: PO_NEVER_SENT_TO_VENDOR x1 in the service, wasSent x1 on the screen
+
+=== the patch applied (diff against the verified copy) ===
+--- /tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/baseline-T-129/PurchaseOrderService.java	2026-09-10 08:28:42
++++ /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderService.java	2026-09-10 08:28:42
+@@ -329,9 +329,6 @@
+ 		// Nothing was asked of the vendor, so nothing can be held against them (T-129). Read off
+ 		// sent_at rather than off the status, because a cancelled order's status no longer says
+ 		// whether it was ever sent — that is precisely the case this refuses.
+-		if (vendorAbandoned && po.sentAt() == null) {
+-			throw new ApplicationException(ErrorCode.PO_NEVER_SENT_TO_VENDOR, Map.of("purchaseOrderId", id));
+-		}
+ 		jdbc.update("""
+ 				UPDATE purchase_orders SET status = 'CANCELLED', cancel_reason = ?, cancelled_at = now(),
+ 					vendor_abandoned = ?, updated_at = now() WHERE id = ?
+--- /tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/baseline-T-129/page.tsx	2026-09-10 08:28:42
++++ /Users/Rajeev/Workspace/kitchen-management-system/frontend/app/orders/[id]/page.tsx	2026-09-10 08:28:42
+@@ -218,7 +218,7 @@
+   // this Order" tick on the cancel panel (T-129). Read off sentAt and not off the status: a
+   // cancelled order's status no longer says whether it was ever sent, and that is exactly the case
+   // the ruling is about — a draft, cancelled, with the box ticked.
+-  const wasSent = po?.sentAt != null;
++  const wasSent = true;
+   // Advisory only, and recomputed as the date is typed. A date inside the vendor's usual notice is
+   // a thing worth saying out loud and not a thing worth refusing — see leadTimeWarning.
+   const neededByWarning = draftNeededBy === "" ? null : leadTimeWarning(draftNeededBy);
+
+=== backend, with the guard removed (--rerun-tasks) ===
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+PurchaseOrderIT > a draft edited into a cross-family line is refused, and the draft is left as it was PASSED
+
+PurchaseOrderIT > a needed-by date behind the order's own date is refused PASSED
+
+PurchaseOrderIT > ticking the never-delivered box is recorded on the order, the trail and the audit PASSED
+
+PurchaseOrderIT > an order is dated the temple's own day, not the machine's PASSED
+
+PurchaseOrderIT > purchase-order numbers are sequential and never duplicated within a tenant PASSED
+
+PurchaseOrderIT > a sent purchase order can no longer be edited PASSED
+
+PurchaseOrderIT > a line measured in something the ingredient can't be measured in is refused PASSED
+
+PurchaseOrderIT > a draft takes a changed quantity, a new line, and a line taken away PASSED
+
+PurchaseOrderIT > a cancellation says nothing about the vendor unless somebody ticks the box PASSED
+
+PurchaseOrderIT > an unsent order is still perfectly cancellable, just not against the vendor PASSED
+
+PurchaseOrderIT > generation still takes the earliest needed-by across a vendor's lines PASSED
+
+PurchaseOrderIT > three checked lines across two vendors generate exactly two correct draft POs PASSED
+
+PurchaseOrderIT > the needed-by date is frozen once the order has been sent PASSED
+
+PurchaseOrderIT > a draft's needed-by date can be set, changed, and cleared again PASSED
+
+PurchaseOrderIT > marking an order sent is what opens the never-delivered box, and nothing else FAILED
+    java.lang.AssertionError: Status expected:<409> but was:<204>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.purchaseorder.PurchaseOrderIT.sendingIsWhatMakesTheVendorAnswerable(PurchaseOrderIT.java:376)
+
+PurchaseOrderIT > a computed needed-by already in the past still generates — the rule is for typed dates PASSED
+
+PurchaseOrderIT > a draft purchase order cannot be received — that isn't a valid step PASSED
+
+PurchaseOrderIT > a cancelled order's own screen can read back whether the vendor was blamed PASSED
+
+PurchaseOrderIT > a different unit of the same family is fine, and is stored as it was given PASSED
+
+PurchaseOrderIT > pieces convert to nothing: a weight against a counted ingredient is refused PASSED
+
+PurchaseOrderIT > an order nobody sent cannot be cancelled as one the vendor never delivered FAILED
+    java.lang.AssertionError: Status expected:<409> but was:<204>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.purchaseorder.PurchaseOrderIT.aNeverSentOrderCannotBlameTheVendor(PurchaseOrderIT.java:336)
+
+PurchaseOrderIT > the never-delivered flag cannot be set on an order that is not cancelled PASSED
+
+PurchaseOrderIT > cancelling records a reason and an event on the trail PASSED
+
+PurchaseOrderIT > a volunteer cannot manage purchase orders PASSED
+
+08:28:59.804 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+08:28:59.808 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+08:28:59.810 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    24
+  Passed:   22
+  Failed:   2
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+24 tests completed, 2 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 17s
+5 actionable tasks: 5 executed
+backend exited non-zero, as a control should
+
+=== frontend, with the screen ungated ===
+[33mThe CJS build of Vite's Node API is deprecated. See https://vitejs.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.2 /Users/Rajeev/Workspace/kitchen-management-system/frontend
+
+ ❯ __tests__/order-detail.test.tsx  (19 tests | 1 failed) 257ms
+   × purchase order detail > does not offer the never-delivered box on an order that was never sent, and says why
+     → expect(element).not.toBeInTheDocument()
+
+expected document not to contain element, found <input
+  class="mt-1 h-4 w-4 shrink-0 accent-accent"
+  name="vendorAbandoned"
+  type="checkbox"
+/> instead
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/order-detail.test.tsx > purchase order detail > does not offer the never-delivered box on an order that was never sent, and says why
+Error: expect(element).not.toBeInTheDocument()
+
+expected document not to contain element, found <input
+  class="mt-1 h-4 w-4 shrink-0 accent-accent"
+  name="vendorAbandoned"
+  type="checkbox"
+/> instead
+ ❯ __tests__/order-detail.test.tsx:294:78
+    292|     fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    293| 
+    294|     expect(screen.queryByLabelText(/Vendor Never Delivered this Order/…
+       |                                                                              ^
+    295|     expect(
+    296|       screen.getByText(/This order was never sent, so there is nothing…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+   Start at  08:29:00
+   Duration  792ms (transform 94ms, setup 50ms, collect 144ms, tests 257ms, environment 196ms, prepare 40ms)
+
+vitest exited non-zero, as a control should
+
+=== restored through the EXIT trap; byte-for-byte against the verified copy ===
+IDENTICAL  PurchaseOrderService.java
+IDENTICAL  page.tsx
+work-lock: 'verify' released; command exited 0

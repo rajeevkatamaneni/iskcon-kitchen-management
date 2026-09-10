@@ -284,6 +284,34 @@ public class PurchaseOrderService {
 	 * equally consistent with a supplier who never came and with a festival called off the day after
 	 * the order went out.
 	 *
+	 * <p><strong>An order nobody sent cannot be marked that way (T-129).</strong> Rajeev ruled on
+	 * 2026-09-10, from three options he was given, that the box is only offered once an order has
+	 * been sent. The occasion was a real one: the coordinator raised PO-2026-0036 as a draft on
+	 * staging, never pressed <em>Mark sent</em>, cancelled it with the box ticked, and Heritage Fresh
+	 * Dairy read "0% on time, 1 order never delivered" for an order the vendor had never heard of.
+	 * A permanent claim about somebody else's business needs, at the very least, something to have
+	 * been asked of them.
+	 *
+	 * <p>The refusal lives here rather than only on the cancel panel, for the same reason the
+	 * needed-by guard above does: the screen hides the box, and the endpoint takes the same field
+	 * from anything that can post to it. {@code sent_at} is the fact it reads, and that column is
+	 * stamped in exactly one place — {@link #send} — so "was it sent?" has one answer and not two.
+	 *
+	 * <p><strong>What was given up by choosing this, said plainly, because it is a real loss.</strong>
+	 * <em>Sent</em> in this application means somebody pressed a button, not that a vendor knows. A
+	 * temple that rings its dairy, never marks the order sent and is then let down now has no way to
+	 * record it. The route back is to mark the order sent first, which is true — it was asked for —
+	 * and then cancel it.
+	 *
+	 * <p><strong>It is not a schema CHECK, and that is deliberate.</strong> V118's
+	 * {@code purchase_orders_abandoned_is_a_cancellation} constrains two columns written by this one
+	 * statement, and no product decision could ever make an un-cancelled no-show meaningful. This
+	 * rule is a different kind of thing: it is a policy about what a person may assert, chosen from
+	 * three defensible options on one day, against a recommendation to leave it alone. Policy that
+	 * may be revisited belongs where reverting it is an edit to a method rather than a migration and
+	 * a second rewrite of stored rows. V120 corrects the one row that predates the ruling; it adds
+	 * no constraint.
+	 *
 	 * <p><strong>It goes into the audit record's after-state, and into the order's own trail.</strong>
 	 * The after-state because that is where a permanent claim about a third party belongs — who
 	 * ticked it and when are already carried by the audit actor and {@code cancelled_at}, so the
@@ -297,6 +325,12 @@ public class PurchaseOrderService {
 		PurchaseOrderView po = findHeader(id).orElseThrow(() -> notFound(id));
 		if (po.status() == PoStatus.RECEIVED || po.status() == PoStatus.CANCELLED) {
 			throw new ApplicationException(ErrorCode.PO_INVALID_TRANSITION, Map.of("purchaseOrderId", id));
+		}
+		// Nothing was asked of the vendor, so nothing can be held against them (T-129). Read off
+		// sent_at rather than off the status, because a cancelled order's status no longer says
+		// whether it was ever sent — that is precisely the case this refuses.
+		if (vendorAbandoned && po.sentAt() == null) {
+			throw new ApplicationException(ErrorCode.PO_NEVER_SENT_TO_VENDOR, Map.of("purchaseOrderId", id));
 		}
 		jdbc.update("""
 				UPDATE purchase_orders SET status = 'CANCELLED', cancel_reason = ?, cancelled_at = now(),

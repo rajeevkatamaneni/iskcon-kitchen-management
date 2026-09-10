@@ -252,7 +252,10 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 		// elsewhere". The tick is the one new fact anybody enters for the whole of T-124, and it is
 		// a permanent statement about somebody else's business — so it has to land in all three
 		// places a person might later read it back from.
+		// Sent first, because since T-129 there is nothing to hold a vendor to on an order they were
+		// never sent, and the endpoint says so (KMS-400147).
 		String id = createManual(vendorA, rice, "5");
+		markSent(id);
 		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/cancel", id))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"reason\":\"never answered the phone\",\"vendorAbandoned\":true}"))
@@ -288,6 +291,7 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 		// checked when true proves nothing about the far commoner case: a cancellation for our own
 		// reasons must come back saying so, not saying nothing.
 		String blamed = createManual(vendorA, rice, "5");
+		markSent(blamed);
 		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/cancel", blamed))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"reason\":\"never answered the phone\",\"vendorAbandoned\":true}"))
@@ -312,6 +316,72 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.order.vendorAbandoned").value(false));
 		mvc.perform(authed(get("/api/v1/purchase-orders")))
 				.andExpect(jsonPath("$[?(@.id=='" + blamed + "')].vendorAbandoned").value(true));
+	}
+
+	@Test
+	@DisplayName("an order nobody sent cannot be cancelled as one the vendor never delivered")
+	void aNeverSentOrderCannotBlameTheVendor() throws Exception {
+		// Rajeev's ruling of 2026-09-10 (T-129), taken from three options. The coordinator raised
+		// PO-2026-0036 as a draft on staging, never pressed Mark sent, cancelled it with the box
+		// ticked, and Heritage Fresh Dairy's scorecard then read "0% on time, 1 order never
+		// delivered" for an order the vendor had never heard of.
+		//
+		// The refusal is asserted here and not only on the cancel panel, because the panel hiding
+		// the box is not what stops this: the endpoint takes the same field from anything that can
+		// post to it.
+		String id = createManual(vendorA, rice, "5");
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/cancel", id))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"never answered the phone\",\"vendorAbandoned\":true}"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400147"));
+
+		// And the refusal is total: the order is still live, with no cancellation half-applied.
+		// A guard that threw after the UPDATE would leave the row cancelled and the caller told it
+		// had failed, which is the worse of the two possible bugs here.
+		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", id)))
+				.andExpect(jsonPath("$.order.status").value("DRAFT"))
+				.andExpect(jsonPath("$.order.vendorAbandoned").value(false))
+				.andExpect(jsonPath("$.order.cancelReason").isEmpty());
+	}
+
+	@Test
+	@DisplayName("an unsent order is still perfectly cancellable, just not against the vendor")
+	void aNeverSentOrderCancelsNormally() throws Exception {
+		// The other half of the ruling, and the half a guard like this usually breaks. What was
+		// removed is one claim a person may make, never the ability to call an order off — a draft
+		// raised against the wrong vendor still has to go somewhere.
+		String id = createManual(vendorA, rice, "5");
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/cancel", id))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"raised against the wrong vendor\"}"))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", id)))
+				.andExpect(jsonPath("$.order.status").value("CANCELLED"))
+				.andExpect(jsonPath("$.order.vendorAbandoned").value(false));
+	}
+
+	@Test
+	@DisplayName("marking an order sent is what opens the never-delivered box, and nothing else")
+	void sendingIsWhatMakesTheVendorAnswerable() throws Exception {
+		// The two requests differ in exactly one thing: whether Mark sent was pressed in between.
+		// Asserting the refusal alone would leave "the endpoint refuses this always" as an equally
+		// good explanation of a green run.
+		String id = createManual(vendorA, rice, "5");
+		String body = "{\"reason\":\"never answered the phone\",\"vendorAbandoned\":true}";
+
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/cancel", id))
+						.contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400147"));
+
+		markSent(id);
+
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/cancel", id))
+						.contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isNoContent());
+		assert abandonedFlag(id) : "once the order has been sent, the tick is allowed to land";
 	}
 
 	@Test
@@ -529,6 +599,16 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 	}
 
 	// ---------------------------------------------------------------------
+
+	/**
+	 * Presses "Mark sent", which is the only thing in the application that stamps
+	 * {@code purchase_orders.sent_at} — and therefore the only thing that makes a vendor answerable
+	 * for the order at all (T-129).
+	 */
+	private void markSent(String id) throws Exception {
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/send", id)))
+				.andExpect(status().isNoContent());
+	}
 
 	private String createManual(UUID vendor, UUID ingredient, String qty) throws Exception {
 		String body = "{\"vendorId\":\"" + vendor + "\",\"lines\":["

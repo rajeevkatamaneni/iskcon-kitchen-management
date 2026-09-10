@@ -289,7 +289,7 @@ function caveat(report: VendorPerformance): string {
     "On time is scored item by item. Each thing on an order counts how much of it was there on or before the day it was needed, so eight of ten items in time is 80% — and bringing more than was ordered does not make up for something that never came.",
     "An order split across two days is still fully on time if both days were inside the window. What is measured is whether the goods were there in time, not how many deliveries brought them.",
     "The fill rate beside it is a different question: how much of the order turned up in the end, whenever it turned up, and how much of that the temple kept.",
-    "Drafts are left out, and so is a cancellation nobody has marked against the vendor. An order cancelled because the vendor never delivered it does count, and scores nothing. On time and the fill rate cover orders placed in this period whose needed-by date has passed; open orders are whatever is open today, whenever it was ordered.",
+    "Drafts are left out, and so is a cancellation nobody has marked against the vendor. An order that was sent and then cancelled because the vendor never delivered it does count, and scores nothing; an order that was never sent cannot be marked that way at all, so nothing a vendor was never told about reaches these figures. On time and the fill rate cover orders placed in this period whose needed-by date has passed; open orders are whatever is open today, whenever it was ordered.",
   ];
   if (report.ordersWithoutNeededBy > 0) {
     parts.push(

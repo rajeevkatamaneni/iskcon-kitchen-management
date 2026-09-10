@@ -214,6 +214,11 @@ function PurchaseOrderDetailView() {
   const canReceive = po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
   const canCancel = po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
   const canWhatsApp = po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
+  // Whether anything was ever asked of the vendor, which is what gates the "Vendor Never Delivered
+  // this Order" tick on the cancel panel (T-129). Read off sentAt and not off the status: a
+  // cancelled order's status no longer says whether it was ever sent, and that is exactly the case
+  // the ruling is about — a draft, cancelled, with the box ticked.
+  const wasSent = po?.sentAt != null;
   // Advisory only, and recomputed as the date is typed. A date inside the vendor's usual notice is
   // a thing worth saying out loud and not a thing worth refusing — see leadTimeWarning.
   const neededByWarning = draftNeededBy === "" ? null : leadTimeWarning(draftNeededBy);
@@ -507,7 +512,12 @@ function PurchaseOrderDetailView() {
                     e.preventDefault();
                     const reason = String(new FormData(e.currentTarget).get("reason") ?? "").trim();
                     const ok = await run(
-                      (t) => api.cancelPurchaseOrder(id, reason, vendorAbandoned, t),
+                      // wasSent, not the state alone: the box is not rendered on an unsent order,
+                      // so the state cannot be true there today - but the endpoint refuses the
+                      // pairing outright (KMS-400147), and a screen that could send a request it
+                      // knows will be refused is a screen waiting to show somebody an error it
+                      // could have avoided.
+                      (t) => api.cancelPurchaseOrder(id, reason, wasSent && vendorAbandoned, t),
                       "We couldn’t cancel that order."
                     );
                     if (ok) {
@@ -534,22 +544,40 @@ function PurchaseOrderDetailView() {
                       The reason field above stays required either way: the box carries the fact and
                       the sentence carries the story.
                     */}
-                    <label className="mt-4 flex items-start gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        name="vendorAbandoned"
-                        checked={vendorAbandoned}
-                        onChange={(e) => setVendorAbandoned(e.target.checked)}
-                        className="mt-1 h-4 w-4 shrink-0 accent-accent"
-                      />
-                      <span>
-                        <span className="text-ink">Vendor Never Delivered this Order</span>
-                        <span className="mt-1 block max-w-prose text-ink-secondary">
-                          This counts against the vendor’s delivery record. Leave it alone if we are
-                          cancelling for our own reasons.
+                    {/*
+                      And it is only offered once the order has been sent (T-129, Rajeev's ruling of
+                      2026-09-10). A draft nobody sent is an order the vendor has never heard of, so
+                      there is nothing to hold them to; the coordinator ticked the box on exactly
+                      such a draft on staging and gave a dairy 0% for it.
+
+                      The absence is said out loud rather than left as a gap. A control that
+                      disappears with no explanation reads as a bug or as a missing permission, and
+                      the person cancelling is the one who most needs to know that this cancellation
+                      will not count against anybody.
+                    */}
+                    {wasSent ? (
+                      <label className="mt-4 flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          name="vendorAbandoned"
+                          checked={vendorAbandoned}
+                          onChange={(e) => setVendorAbandoned(e.target.checked)}
+                          className="mt-1 h-4 w-4 shrink-0 accent-accent"
+                        />
+                        <span>
+                          <span className="text-ink">Vendor Never Delivered this Order</span>
+                          <span className="mt-1 block max-w-prose text-ink-secondary">
+                            This counts against the vendor’s delivery record. Leave it alone if we are
+                            cancelling for our own reasons.
+                          </span>
                         </span>
-                      </span>
-                    </label>
+                      </label>
+                    ) : (
+                      <p className="mt-4 max-w-prose text-sm text-ink-secondary">
+                        This order was never sent, so there is nothing to hold the vendor to.
+                        Cancelling it counts against nobody’s delivery record.
+                      </p>
+                    )}
                   </form>
                 </section>
               )}

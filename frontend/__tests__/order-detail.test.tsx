@@ -81,7 +81,14 @@ function withDetail(detail: PurchaseOrderDetailView) {
   returnsRef.i = 0;
 }
 
-const DRAFT: PurchaseOrderDetailView = { ...DETAIL, order: { ...DETAIL.order, status: "DRAFT" } };
+// A draft has never been sent, so `sentAt` is null on it. Stated rather than inherited from
+// DETAIL: the cancel panel now reads that field to decide whether the vendor can be blamed for
+// anything (T-129), and a fixture that says a draft was sent at ten in the morning would have
+// tested the opposite of the rule while looking correct.
+const DRAFT: PurchaseOrderDetailView = {
+  ...DETAIL,
+  order: { ...DETAIL.order, status: "DRAFT", sentAt: null },
+};
 
 // The two kinds of cancelled order, which is the whole of T-126: the same status and the same
 // reason, differing only in whether the temple is holding the vendor responsible for it.
@@ -264,6 +271,52 @@ describe("purchase order detail", () => {
 
     expect((screen.getByLabelText(/Vendor Never Delivered this Order/) as HTMLInputElement).checked)
       .toBe(false);
+  });
+
+  /**
+   * And the box is not offered at all on an order nobody sent (T-129).
+   *
+   * <p>Rajeev's ruling of 2026-09-10, taken from three options. The coordinator raised
+   * PO-2026-0036 as a draft on staging, never pressed Mark sent, cancelled it with the box ticked,
+   * and Heritage Fresh Dairy's scorecard then read 0% on time for an order the vendor had never
+   * heard of.
+   *
+   * <p>Two separate things are asserted, and the second is the one that is easy to leave out: that
+   * the control is gone, and that its absence is explained. A control that simply disappears reads
+   * as a bug or as a missing permission, and the person cancelling is the one who most needs to
+   * know that this cancellation counts against nobody.
+   */
+  it("does not offer the never-delivered box on an order that was never sent, and says why", () => {
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    expect(screen.queryByLabelText(/Vendor Never Delivered this Order/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/This order was never sent, so there is nothing to hold the vendor to/)
+    ).toBeInTheDocument();
+    // The cancellation itself is still offered, and still wants a reason. The ruling removed one
+    // claim a person could make, not the ability to call an order off.
+    expect(screen.getByLabelText("Reason")).toBeRequired();
+    expect(screen.getByRole("button", { name: /cancel order/i })).toBeInTheDocument();
+  });
+
+  it("cancels an unsent order with the no-show flag false, without being asked", async () => {
+    // The server refuses the pairing outright (KMS-400147), so what is checked here is that the
+    // screen never puts it in a position to. `false` is asserted on the value itself rather than
+    // with objectContaining or a truthiness check: a missing third argument and an explicit false
+    // read identically to the convenient assertion, and this project has paid for that before.
+    const cancel = vi.spyOn(api, "cancelPurchaseOrder").mockResolvedValue(undefined);
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "raised against the wrong vendor" } });
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("button", { name: /cancel order/i }).closest("form")!);
+    });
+
+    expect(cancel.mock.calls[0].length).toBeGreaterThan(2);
+    expect(cancel.mock.calls[0][2]).toBe(false);
   });
 
   it("says on a cancelled order's face that the vendor never delivered it", () => {
