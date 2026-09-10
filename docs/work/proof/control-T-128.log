@@ -1,0 +1,139 @@
+[baseline] verified working-tree copy taken:
+042291494433ca00e91f3dcb66cb9eecd61c8106  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T128-baseline-RecipeScaler.java
+042291494433ca00e91f3dcb66cb9eecd61c8106  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/recipe/RecipeScaler.java
+[anchor] '		Unit displayUnit = Quantities.displayUnit(unit, inBase);' count=1 (want 1)
+[anchor] '	private static BigDecimal round(BigDecimal value) {' count=1 (want 1)
+[anchor] '		if (inBase.signum() == 0) {' count=1 (want 1)
+[patch] applied: RecipeScaler picks its own unit again, with no zero case.
+
+[changed] diff of the patched file against the verified baseline
+--- /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T128-baseline-RecipeScaler.java	2026-09-10 00:41:46
++++ /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/recipe/RecipeScaler.java	2026-09-10 00:41:46
+@@ -61,12 +61,21 @@
+ 		// which unit reads best at that size — the large one once there are 1000 of the small, the
+ 		// small one below that, and the line's own unit when there is nothing of it at all.
+ 		BigDecimal inBase = raw.multiply(BigDecimal.valueOf(unit.baseFactor()), PRECISION);
+-		Unit displayUnit = Quantities.displayUnit(unit, inBase);
++		Unit displayUnit = pickDisplayUnit(unit.family(), inBase);
+ 		BigDecimal displayValue = inBase.divide(BigDecimal.valueOf(displayUnit.baseFactor()), PRECISION);
+ 
+ 		return new ScaledQuantity(raw, unit.name(), round(displayValue), displayUnit.label());
+ 	}
+ 
++	private static Unit pickDisplayUnit(Unit.Family family, BigDecimal inBase) {
++		boolean atLeastOneLarge = inBase.abs().compareTo(BigDecimal.valueOf(1000)) >= 0;
++		return switch (family) {
++			case MASS -> atLeastOneLarge ? Unit.KG : Unit.GM;
++			case VOLUME -> atLeastOneLarge ? Unit.L : Unit.ML;
++			case COUNT -> Unit.PIECES;
++		};
++	}
++
+ 	private static BigDecimal round(BigDecimal value) {
+ 		return value.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros();
+ 	}
+[changed] the two states differ, as they must.
+042291494433ca00e91f3dcb66cb9eecd61c8106  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T128-baseline-RecipeScaler.java
+a931156f9bf26513e9b1f7faca503aff3c9709b2  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/recipe/RecipeScaler.java
+
+[run] the tests as written, unchanged, against the patched tree
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test FAILED
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+QuantitiesTest > rounding cannot compound, because it happens last PASSED
+
+QuantitiesTest > which unit a figure is said in — one table, every implementation that picks one > and so does the recipe scale preview, because it asks Quantities FAILED
+    org.opentest4j.AssertionFailedError: [0 L scaled 1:1] 
+    expected: "L"
+     but was: "ml"
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.ingredient.QuantitiesTest$UnitChoice.recipeScalerAgrees(QuantitiesTest.java:235)
+
+QuantitiesTest > which unit a figure is said in — one table, every implementation that picks one > a recipe line of nothing, scaled to a festival, is still nothing of what it is measured in FAILED
+    org.opentest4j.AssertionFailedError: 
+    expected: "L"
+     but was: "ml"
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.ingredient.QuantitiesTest$UnitChoice.zeroSurvivesTheScale(QuantitiesTest.java:247)
+
+QuantitiesTest > which unit a figure is said in — one table, every implementation that picks one > Quantities says every one of them in that unit PASSED
+
+QuantitiesTest > the cook's form — rounded, because somebody weighs against it > picks the readable unit first and rounds second PASSED
+
+QuantitiesTest > the cook's form — rounded, because somebody weighs against it > promotes again when rounding carries it over a whole unit PASSED
+
+QuantitiesTest > the cook's form — rounded, because somebody weighs against it > keeps half a gram where half a gram is the honest step PASSED
+
+QuantitiesTest > the cook's form — rounded, because somebody weighs against it > rounds the way a person would, on a step that grows with the number PASSED
+
+QuantitiesTest > the cook's form — rounded, because somebody weighs against it > never gives half a piece PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > a figure that is merely small still steps down, so zero is the only exception PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > leaves a count alone — it is a whole thing measured in itself PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > says zero in the unit the thing is kept in PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > promotes into the larger unit once there is a whole one of them PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > a zero that arrived from the database, scale and all, is still a zero PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > keeps the exact figure, so inventory rows still add up to the balance PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > steps down into the smaller unit rather than printing a fraction PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > says nothing rather than zero when there is no figure PASSED
+
+RecipeScalerTest > scaling is the linear ratio of target to base, exactly as RM 2019's scaled column PASSED
+
+RecipeScalerTest > pieces are counted, never promoted PASSED
+
+RecipeScalerTest > display demotes to the smaller unit below 1000 (0.4 Kg -> 400 gm) PASSED
+
+RecipeScalerTest > millilitres promote to litres the same way PASSED
+
+RecipeScalerTest > a 50,000-serving scale computes with no overflow or precision loss PASSED
+
+RecipeScalerTest > display promotes to the larger unit once past 1000 of the smaller (24,000 gm -> 24 Kg) PASSED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    23
+  Passed:   21
+  Failed:   2
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+23 tests completed, 2 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 8s
+5 actionable tasks: 5 executed
+[run] gradle exit: 1  (non-zero is the control working)
+
+[restore] EXIT trap — putting the verified file back
+[restore] diff is silent: the file is byte-for-byte what it was.
+042291494433ca00e91f3dcb66cb9eecd61c8106  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T128-baseline-RecipeScaler.java
+042291494433ca00e91f3dcb66cb9eecd61c8106  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/recipe/RecipeScaler.java
+work-lock: 'verify' released; command exited 0

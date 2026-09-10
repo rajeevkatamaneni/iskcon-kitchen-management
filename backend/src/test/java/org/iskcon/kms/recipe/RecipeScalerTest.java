@@ -7,7 +7,15 @@ import org.iskcon.kms.ingredient.Unit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** The scaling math (E2-S3): linear ratio, unit promotion, and festival-scale precision. */
+/**
+ * The scaling math (E2-S3): linear ratio, unit promotion, and festival-scale precision.
+ *
+ * <p><strong>Which unit a scaled line is shown in is not tested here.</strong> That rule belongs to
+ * {@code Quantities} — this class used to hold a second copy of it, and the copies disagreed about
+ * zero — so its vectors live in {@code QuantitiesTest.UnitChoice}, one table run through both
+ * callers. A unit-promotion case added here instead of there would prove only that this file agrees
+ * with itself, which is what went wrong the first time.
+ */
 class RecipeScalerTest {
 
 	@Test

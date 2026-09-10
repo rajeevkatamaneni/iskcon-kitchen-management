@@ -3,6 +3,9 @@ package org.iskcon.kms.ingredient;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.util.List;
+import org.iskcon.kms.recipe.RecipeScaler;
+import org.iskcon.kms.recipe.ScaledQuantity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -14,6 +17,13 @@ import org.junit.jupiter.api.Test;
  * quantities.test.ts}. The rule has to exist twice — the screens are TypeScript and the job card,
  * recipe card, purchase-order sheet and work order are rendered here — and two implementations of
  * one rule drift silently unless something holds them to the same answers. These are those answers.
+ *
+ * <p>It used to have to exist <em>three</em> times. {@code RecipeScaler} kept its own copy of the
+ * unit choice and was fixed on 2026-09-10 by being made to call {@link Quantities#displayUnit}
+ * instead, so there is nothing left on this side to drift. {@link UnitChoice} below is what says so
+ * out loud: it runs one table of vectors through both callers, so re-inlining the rule into
+ * {@code RecipeScaler} — or fixing one of them and not the other, which is the whole history of this
+ * file — fails here rather than on somebody's screen.
  */
 class QuantitiesTest {
 
@@ -157,6 +167,84 @@ class QuantitiesTest {
 		@DisplayName("never gives half a piece")
 		void countsStayWhole() {
 			assertThat(Quantities.cooks(n("3.4"), Unit.PIECES)).isEqualTo("3 pieces");
+		}
+	}
+
+	/**
+	 * One table of unit-choice vectors, run through every implementation of the rule that still picks
+	 * a unit on this side of the wire. There are two callers and one rule; before 2026-09-10 there
+	 * were two callers and two rules, which is how the recipe scale preview came to say "0 ml" for an
+	 * ingredient kept in litres after the stock screen and the job card had both been fixed.
+	 *
+	 * <p>The vectors are the ledger form's, because the ledger form does no rounding and so its unit
+	 * <em>is</em> the chosen unit. The cook's form is deliberately not in this table: it can promote a
+	 * second time after rounding — 999 gm rounds to 1000 gm, which is a kilo and says so — and that
+	 * carry is a rule of its own, covered by {@link Cooks#roundingCanPromote()}.
+	 */
+	@Nested
+	@DisplayName("which unit a figure is said in — one table, every implementation that picks one")
+	class UnitChoice {
+
+		/** A quantity as it is stored, and the unit it has to be said in. */
+		record Vector(String value, Unit stored, Unit said) {
+		}
+
+		private List<Vector> table() {
+			return List.of(
+					// Nothing is said in the unit the thing is kept in. This is the vector the third
+					// copy of the rule did not have, and the defect it did not have it for.
+					new Vector("0", Unit.L, Unit.L),
+					new Vector("0", Unit.KG, Unit.KG),
+					new Vector("0", Unit.ML, Unit.ML),
+					new Vector("0", Unit.GM, Unit.GM),
+					new Vector("0", Unit.PIECES, Unit.PIECES),
+					// ...including a nothing that came back from JDBC wearing its column's scale.
+					new Vector("0.000", Unit.L, Unit.L),
+					new Vector("0.00000", Unit.KG, Unit.KG),
+					// A figure that is merely small still steps down: zero is the only exception.
+					new Vector("0.0001", Unit.L, Unit.ML),
+					new Vector("0.6", Unit.KG, Unit.GM),
+					new Vector("0.2", Unit.L, Unit.ML),
+					// The boundary, from both sides of it.
+					new Vector("999", Unit.GM, Unit.GM),
+					new Vector("1000", Unit.GM, Unit.KG),
+					new Vector("1500", Unit.GM, Unit.KG),
+					new Vector("2", Unit.KG, Unit.KG),
+					new Vector("2000", Unit.ML, Unit.L),
+					new Vector("173542", Unit.ML, Unit.L),
+					// A count has no sibling to be moved into, at any size.
+					new Vector("3", Unit.PIECES, Unit.PIECES));
+		}
+
+		@Test
+		@DisplayName("Quantities says every one of them in that unit")
+		void quantitiesAgrees() {
+			for (Vector v : table()) {
+				assertThat(Quantities.exact(n(v.value()), v.stored()))
+						.as("%s %s", v.value(), v.stored())
+						.endsWith(" " + v.said().label());
+			}
+		}
+
+		@Test
+		@DisplayName("and so does the recipe scale preview, because it asks Quantities")
+		void recipeScalerAgrees() {
+			for (Vector v : table()) {
+				ScaledQuantity q = RecipeScaler.scale(n(v.value()), v.stored(), BigDecimal.ONE);
+				assertThat(q.displayUnit()).as("%s %s scaled 1:1", v.value(), v.stored())
+						.isEqualTo(v.said().label());
+			}
+		}
+
+		@Test
+		@DisplayName("a recipe line of nothing, scaled to a festival, is still nothing of what it is measured in")
+		void zeroSurvivesTheScale() {
+			// The surface: the scale preview on a recipe page renders displayQuantity and displayUnit
+			// side by side, straight from these two fields, with no formatter in between. A line of
+			// zero litres read "0 ml" there until this change.
+			ScaledQuantity q = RecipeScaler.scale(n("0"), Unit.L, new BigDecimal("500"));
+			assertThat(q.displayQuantity()).isEqualByComparingTo("0");
+			assertThat(q.displayUnit()).isEqualTo("L");
 		}
 	}
 

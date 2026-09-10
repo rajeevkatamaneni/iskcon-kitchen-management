@@ -3,6 +3,7 @@ package org.iskcon.kms.recipe;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import org.iskcon.kms.ingredient.Quantities;
 import org.iskcon.kms.ingredient.Unit;
 
 /**
@@ -14,6 +15,20 @@ import org.iskcon.kms.ingredient.Unit;
  * own unit, and is what downstream consumers (sufficiency in E4, orders in E5) compute against. The
  * <strong>display</strong> quantity is rounded and unit-promoted for a human — 24,000 gm shown as
  * 24 Kg — without the raw value ever losing precision.
+ *
+ * <p><strong>Which unit that display quantity is said in is not decided here.</strong> It was, once:
+ * this class is where the rule was written, {@link Quantities} was lifted out of it on 2026-08-30 to
+ * give the rest of the application the same answer, and the copy here was left in place. The two then
+ * drifted, exactly as two copies do — {@code Quantities} learned on 2026-09-10 that a quantity of
+ * nothing is said in the unit the thing is kept in ("0 L" for an ingredient measured in litres, not
+ * "0 ml"), and this file did not, so the recipe scale preview was the last screen in the application
+ * still saying it the old way. It calls {@link Quantities#displayUnit} now.
+ *
+ * <p>The <em>rounding</em> is still this class's own, and deliberately: a scaled line is rounded to
+ * two decimal places because it is a number the screen puts in a column beside the raw one, where
+ * {@code Quantities.cooks} rounds to a step a person can weigh to (135 gm, 10 Kg). Those are two
+ * different jobs and merging them would change every figure on the scale preview. Only the unit
+ * choice was ever the same rule.
  */
 public final class RecipeScaler {
 
@@ -42,24 +57,14 @@ public final class RecipeScaler {
 			return new ScaledQuantity(raw, unit.name(), round(raw), unit.label());
 		}
 
-		// Convert to the family's base unit (grams or millilitres), then pick the unit that reads
-		// best: the large unit once we're at 1000 of the small one, the small unit below that.
+		// Convert to the family's base unit (grams or millilitres), then ask the one place that knows
+		// which unit reads best at that size — the large one once there are 1000 of the small, the
+		// small one below that, and the line's own unit when there is nothing of it at all.
 		BigDecimal inBase = raw.multiply(BigDecimal.valueOf(unit.baseFactor()), PRECISION);
-		Unit displayUnit = pickDisplayUnit(unit.family(), inBase);
+		Unit displayUnit = Quantities.displayUnit(unit, inBase);
 		BigDecimal displayValue = inBase.divide(BigDecimal.valueOf(displayUnit.baseFactor()), PRECISION);
 
 		return new ScaledQuantity(raw, unit.name(), round(displayValue), displayUnit.label());
-	}
-
-	private static Unit pickDisplayUnit(Unit.Family family, BigDecimal inBase) {
-		boolean atLeastOneLarge = inBase.abs().compareTo(BigDecimal.valueOf(1000)) >= 0;
-		return switch (family) {
-			case MASS -> atLeastOneLarge ? Unit.KG : Unit.GM;
-			case VOLUME -> atLeastOneLarge ? Unit.L : Unit.ML;
-			// Unreachable — scale() returns above for a count — but the switch is exhaustive so that
-			// a new family fails to compile here rather than falling through to a wrong unit.
-			case COUNT -> Unit.PIECES;
-		};
 	}
 
 	private static BigDecimal round(BigDecimal value) {

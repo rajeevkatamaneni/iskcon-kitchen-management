@@ -14,6 +14,14 @@ import java.util.Map;
  * {@code 2 KG} while the recipe card for the same line said {@code 2 Kg}, a low-stock email
  * announcing {@code Ghee (173542 ML)}. This is that rule, lifted out and given to everybody.
  *
+ * <p><strong>The original was left in place when that lift happened</strong> (2026-08-10 for
+ * {@code RecipeScaler}, 2026-08-30 for this), so there were three copies of one rule and not two.
+ * {@code RecipeScaler} went on choosing its own display unit with its own {@code >= 1000} test, and
+ * when the zero case reached here the recipe scale preview would still have said "0 ml" for an
+ * ingredient kept in litres. It calls {@link #displayUnit} now, so that copy is gone. What is left is
+ * this and {@code frontend/lib/format.ts} — two implementations, in two languages, that cannot be
+ * merged, which is what the vector tables below are for.
+ *
  * <p><strong>There are two forms, and choosing between them is a question about the reader.</strong>
  *
  * <ul>
@@ -42,7 +50,13 @@ public final class Quantities {
 	/** Indian digit grouping, matching the browser's {@code toLocaleString("en-IN")} exactly. */
 	private static final Locale INDIA = Locale.forLanguageTag("en-IN");
 
-	/** The larger and smaller unit of each convertible family. Counts and servings have neither. */
+	/**
+	 * The larger and smaller unit of each convertible family. Counts and servings have neither, and a
+	 * unit missing from this map is shown in itself — which is right for a count and would be merely
+	 * unpromoted, never wrong, for anything else. This is the only place the backend declares that
+	 * pairing now: {@code RecipeScaler} used to declare it a second time, in a {@code switch} on
+	 * {@link Unit.Family}.
+	 */
 	private static final Map<Unit, Unit[]> FAMILY = Map.of(
 			Unit.KG, new Unit[] {Unit.KG, Unit.GM},
 			Unit.GM, new Unit[] {Unit.KG, Unit.GM},
@@ -80,6 +94,53 @@ public final class Quantities {
 		}
 	}
 
+	/**
+	 * Which unit a figure is <em>said</em> in: the family's large unit once there is a whole one of
+	 * them, the small one below that, and — when there is none of it at all — the unit the thing is
+	 * actually kept in.
+	 *
+	 * <p>Public because one other renderer legitimately needs this half of the rule on its own.
+	 * {@code RecipeScaler} hands a scaled recipe line to the screen as a number and a unit in separate
+	 * fields rather than as a finished string, so it cannot call {@link #cooks} or {@link #exact} —
+	 * and so, for a year, it kept its own copy of this choice instead. That copy is gone.
+	 *
+	 * @param unit the unit the quantity is stored and measured in
+	 * @param inBase that same quantity converted into the family's base unit — grams or millilitres.
+	 *     Asked for rather than computed here because the caller already holds it (it has to divide by
+	 *     the chosen unit's factor next), and computing it twice with two different roundings is
+	 *     exactly the kind of near-agreement that hides.
+	 */
+	public static Unit displayUnit(Unit unit, BigDecimal inBase) {
+		Unit[] family = FAMILY.get(unit);
+
+		// Pieces and servings are whole things counted in themselves, with no sibling to move into.
+		if (family == null) {
+			return unit;
+		}
+
+		// Zero is said in the unit the thing is actually kept in, not in the family's small one.
+		// The step-down rule exists to stop a fraction being printed — 0.6 Kg is 600 gm — and zero
+		// has no fraction to step away from, so all the rule did was change the subject: a work
+		// order's shortfall line reported "0 ml available" for an ingredient kept in litres, which
+		// makes the reader convert before they can compare it with the litres asked for beside it.
+		// The em dash in render() is a different case and is untouched — a null is "we have no
+		// figure", a zero is "we have none of it", and the two must go on reading differently.
+		//
+		// This mirrors the identical decision in frontend/lib/format.ts, made 2026-09-09 after the
+		// curd item's stock page read "0 ml" on hand against a reorder level of 15 L. The copies of
+		// this rule had disagreed about zero from that change until 2026-09-10, and no test anywhere
+		// would have said so, because no vector table held a zero at all — the screen said "0 L" and
+		// the printed job card in the cook's hand said "0 ml", for the same ingredient on the same day.
+		//
+		// signum() rather than equals(ZERO): a quantity arrives from JDBC scaled to its column, so a
+		// genuine nothing is "0.000" and equals() would answer false on the scale alone.
+		if (inBase.signum() == 0) {
+			return unit;
+		}
+
+		return inBase.abs().compareTo(BigDecimal.valueOf(1000)) >= 0 ? family[0] : family[1];
+	}
+
 	private static String render(BigDecimal value, Unit unit, boolean forCooking) {
 		// A quantity nobody has is not a zero — a dash says "no answer" where 0 would say
 		// "none left", and a store room screen depends on the difference.
@@ -101,26 +162,7 @@ public final class Quantities {
 
 		BigDecimal inBase = value.multiply(BigDecimal.valueOf(unit.baseFactor()));
 
-		// Zero is said in the unit the thing is actually kept in, not in the family's small one.
-		// The step-down rule exists to stop a fraction being printed — 0.6 Kg is 600 gm — and zero
-		// has no fraction to step away from, so all the rule did was change the subject: a work
-		// order's shortfall line reported "0 ml available" for an ingredient kept in litres, which
-		// makes the reader convert before they can compare it with the litres asked for beside it.
-		// The em dash above is a different case and is untouched — a null is "we have no figure", a
-		// zero is "we have none of it", and the two must go on reading differently.
-		//
-		// This mirrors the identical decision in frontend/lib/format.ts, made 2026-09-09 after the
-		// curd item's stock page read "0 ml" on hand against a reorder level of 15 L. The two copies
-		// of this rule had disagreed about zero from that change until this one, and no test on
-		// either side would have said so, because neither vector table held a zero at all — the
-		// screen said "0 L" and the printed job card in the cook's hand said "0 ml", for the same
-		// ingredient on the same day. Both tables carry the zero vectors now.
-		//
-		// signum() rather than equals(ZERO): a quantity arrives from JDBC scaled to its column, so a
-		// genuine nothing is "0.000" and equals() would answer false on the scale alone.
-		boolean empty = inBase.signum() == 0;
-		Unit display = empty ? unit
-				: inBase.abs().compareTo(BigDecimal.valueOf(1000)) >= 0 ? large : small;
+		Unit display = displayUnit(unit, inBase);
 		BigDecimal shown = inBase.divide(BigDecimal.valueOf(display.baseFactor()), 6, RoundingMode.HALF_UP);
 
 		if (forCooking) {
