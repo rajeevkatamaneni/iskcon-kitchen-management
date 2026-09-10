@@ -209,6 +209,81 @@ class VendorIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.supplies[0].preferred").value(true));
 	}
 
+	/**
+	 * The claim T-131's screen rests on: a PUT for a pair the vendor already supplies <em>edits</em>
+	 * that row rather than refusing it or adding a second one.
+	 *
+	 * <p>Worth an explicit test rather than left as a reading of the SQL, because the whole reason
+	 * the field T-090 shipped could not be filled in was that the screen had no way to send this
+	 * request — the Add form's picker offers only ingredients the vendor does not supply yet, so the
+	 * server's ability to take the edit had never been exercised from a screen at all. If this ever
+	 * became a refusal, the row would have to go back to Remove-and-add and the price and the
+	 * preference would start being thrown away again.
+	 *
+	 * <p>It also pins the half of the behaviour the client has to respect: <strong>the upsert writes
+	 * all three columns from what it is given</strong>, so a save that omitted the price would not
+	 * leave it alone, it would erase it. That is why the edit row seeds every control from the row
+	 * and sends all three back, and why the client's input type makes each of them required.
+	 */
+	@Test
+	@DisplayName("a supply the vendor already has is edited in place, not refused and not duplicated")
+	void anExistingSupplyIsEditedInPlace() throws Exception {
+		UUID id = create("{\"name\":\"Heritage Fresh Dairy\",\"phone\":\"+919812345678\"}");
+		mvc.perform(setSupply(id, "{\"ingredientId\":\"" + rice
+						+ "\",\"lastPrice\":58,\"preferred\":true}"))
+				.andExpect(status().isNoContent());
+
+		// The edit the screen now sends: a lead time recorded, the price corrected, the preference
+		// carried back unchanged because the person did not touch it.
+		mvc.perform(setSupply(id, "{\"ingredientId\":\"" + rice
+						+ "\",\"lastPrice\":62,\"leadTimeDays\":3,\"preferred\":true}"))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/vendors/{id}", id)))
+				.andExpect(jsonPath("$.supplies.length()").value(1))
+				.andExpect(jsonPath("$.supplies[0].lastPrice").value(62))
+				.andExpect(jsonPath("$.supplies[0].leadTimeDays").value(3))
+				.andExpect(jsonPath("$.supplies[0].preferred").value(true));
+	}
+
+	/**
+	 * The index this task had to be careful of: {@code vendor_supplies_one_preferred} is unique on
+	 * {@code (tenant_id, ingredient_id) WHERE preferred}, so at most one vendor in the temple is the
+	 * preferred source for a given ingredient.
+	 *
+	 * <p>{@link #preferredIsExclusive} already proves a <em>new</em> supply moves the preference.
+	 * This proves the same of an <em>edit</em>, which is the path T-131 opened: a row that exists,
+	 * is not preferred, and is ticked. The interesting part is that it must not fail — the service
+	 * clears the other vendor's preference inside the same transaction before writing this one — and
+	 * that the row's other facts survive being ticked, since the edit sends all three at once.
+	 *
+	 * <p>Which is why the screen carries no refusal and no error code for this, and instead states
+	 * plainly above the table that ticking Preferred takes it from whoever holds it. The other vendor
+	 * is not on that screen and cannot be named there.
+	 */
+	@Test
+	@DisplayName("editing a supply into preferred moves the preference rather than colliding with the index")
+	void editingIntoPreferredMovesThePreference() throws Exception {
+		UUID a = create("{\"name\":\"Vendor A\",\"phone\":\"+919800000001\"}");
+		UUID b = create("{\"name\":\"Vendor B\",\"phone\":\"+919800000002\"}");
+		mvc.perform(setSupply(a, "{\"ingredientId\":\"" + rice + "\",\"preferred\":true}"))
+				.andExpect(status().isNoContent());
+		mvc.perform(setSupply(b, "{\"ingredientId\":\"" + rice
+						+ "\",\"lastPrice\":41,\"leadTimeDays\":2,\"preferred\":false}"))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(setSupply(b, "{\"ingredientId\":\"" + rice
+						+ "\",\"lastPrice\":41,\"leadTimeDays\":2,\"preferred\":true}"))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/vendors/{id}", a)))
+				.andExpect(jsonPath("$.supplies[0].preferred").value(false));
+		mvc.perform(authed(get("/api/v1/vendors/{id}", b)))
+				.andExpect(jsonPath("$.supplies[0].preferred").value(true))
+				.andExpect(jsonPath("$.supplies[0].lastPrice").value(41))
+				.andExpect(jsonPath("$.supplies[0].leadTimeDays").value(2));
+	}
+
 	@Test
 	@DisplayName("a duplicate vendor name is refused")
 	void duplicateNameRefused() throws Exception {

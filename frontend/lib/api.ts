@@ -4850,13 +4850,29 @@ export const api = {
       token,
     }),
 
+  /**
+   * Write the whole supply row — ingredient, price, lead time and preference — creating it if this
+   * vendor does not supply the ingredient yet and replacing it if they do.
+   *
+   * <p><strong>Every field is required-and-nullable, and that is the point (T-131).</strong> The
+   * server's statement is an `INSERT … ON CONFLICT (vendor_id, ingredient_id) DO UPDATE SET
+   * last_price = EXCLUDED.last_price, lead_time_days = EXCLUDED.lead_time_days, preferred =
+   * EXCLUDED.preferred`, so **it writes all three columns on every call**. A caller that omits one
+   * is not saying "leave it alone", it is silently erasing it — an edit that meant to change a lead
+   * time would take the price and the preference down with it, which is the exact loss T-131 exists
+   * to stop. Optional keys let `tsc` wave that through; required-and-nullable ones make forgetting
+   * a compile error. Absent and null read identically to `objectContaining`, so the tests inspect
+   * `Object.keys` too.
+   *
+   * <p>On `leadTimeDays`: null clears it back to "nobody has said". **Never send 0 for unknown** —
+   * 0 means the goods come the same day, and the planner counts back from the two differently.
+   */
   setVendorSupply: (
     id: string,
     input: {
       ingredientId: string;
-      lastPrice?: number | null;
-      /** Null clears it back to "nobody has said"; omitting it does the same. Never send 0 for unknown. */
-      leadTimeDays?: number | null;
+      lastPrice: number | null;
+      leadTimeDays: number | null;
       preferred: boolean;
     },
     token?: string

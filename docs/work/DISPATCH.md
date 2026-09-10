@@ -12871,6 +12871,64 @@ somebody deletes.**
   because the match is recomputed each time. Say what the page boundary means before choosing one.
 - **proof:** — · **shipped:** —
 
+### T-131 — a lead time cannot be recorded on any supply a vendor already has
+
+- **id:** T-131
+- **source:** the coordinator, 2026-09-10, driving T-090 on staging the moment it deployed.
+- **state:** dispatched 2026-09-10.
+- **what:** the Supplies table has a **Lead time** column, every row reads **—**, and the only
+  control on a row is **Remove**. The input lives on the *Add supply* form, whose dropdown is built
+  as `available = ingredients.filter((i) => !suppliedIds.has(i.id))` — **so an ingredient the vendor
+  already supplies cannot be chosen, and its lead time can never be set.** The only route is Remove
+  and add again, which throws away that supply's `preferred` flag and `last_price`.
+- **why it matters more than a missing button:** every supply that exists already existed. **T-090's
+  whole escalation can never fire on anything**, on staging or in a real temple.
+- **and this is the point worth keeping.** T-090 was green: backend 2155, frontend 1330, `tsc`
+  silent, `next build` clean, a negative control that reproduced both claims, CI green, a verified
+  deploy, and the served bundle grepped for all three badge sentences. **Not one of those could see
+  that the field has no way in.** The tests set a lead time on a *new* supply, which is the one case
+  the screen allows and the one case a real temple never has.
+- **the fix:** edit a supply row in place, following the Edit/Save/Cancel pattern the Ingredients
+  screen already uses. Check first whether `SetVendorSupplyRequest` already upserts on the
+  `(vendor_id, ingredient_id)` unique index — if it does, there may be no backend change at all.
+- **two traps named in the brief:** clearing a lead time must land as **null, not 0** — null is
+  *nobody knows*, 0 is *arrives the same day*, and the planner counts back from them differently;
+  and `vendor_supplies_one_preferred` is a unique partial index allowing **one preferred vendor per
+  ingredient per temple**, so an inline edit that can set `preferred` can violate it from a screen
+  that says nothing about other vendors.
+
+**BUILT 2026-09-10. No backend production code changed at all.**
+
+**The server already did the thing.** `VendorService.setSupply` ends in
+`INSERT … ON CONFLICT (vendor_id, ingredient_id) DO UPDATE SET last_price = …, lead_time_days = …,
+preferred = …`, so a PUT for a pair the vendor already has edits that row. `git diff` on
+`VendorService.java` returns nothing. **It gained two tests instead, because the claim had never
+been exercised from a screen — the screen had no way to send the request.** The whole defect was a
+missing button over a working endpoint.
+
+**And the `preferred` clash was already handled**, three lines above: setting `preferred` first
+clears any other vendor's preference for that ingredient in the same transaction, so the tick
+**moves** the preference rather than colliding with the index. So it went into the inline edit, with
+one sentence above the table — *"Only one vendor can be preferred for an ingredient, so ticking
+Preferred here takes it from whichever vendor holds it now"* — because **the vendor losing it is not
+on that screen.**
+
+> **⚠ The trap it found, and it is the kind that erases data quietly.** `lastPrice` and
+> `leadTimeDays` were optional in `api.ts`. **The upsert writes all three columns, so an omitted key
+> does not preserve the old value — it erases it.** They are now required-and-nullable, which makes
+> the caller say what it means. Any future writer of an upsert-backed form should read this row.
+
+- **control:** four stages, restored between each. The screen reverted to `HEAD` → **10 of 11
+  editing tests red, the runner printing a Curd row whose lead time is `—` and whose only button is
+  `Remove`** — the coordinator's reproduction reproduced. Both null/zero guards broken → 4 red
+  including T-090's own test, `expected +0 to be null`. Conflict target moved to `(id)` → 3 red,
+  `expected:<204> but was:<500>`. The preference-clearing statement switched off → 2 red, **the index
+  clash demonstrated rather than argued.**
+- **and it reported a bug in its own control script** — a heredoc ate the Python's indentation, and
+  `set -e` plus the `EXIT` trap restored both files byte-for-byte before anything was patched.
+  Written up rather than dropped, which is the third builder tonight to do that.
+- **proof:** `docs/work/proof/T-131.md` · **shipped:** —
+
 ### T-130 — the two days a vendor gets are counted twice
 
 - **id:** T-130

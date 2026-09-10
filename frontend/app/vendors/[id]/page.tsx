@@ -17,7 +17,8 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { contractWarning, money, moment } from "@/lib/format";
 import { ALL_LANGUAGES, languageLabel } from "@/lib/languages";
 import { Loading } from "@/components/Loading";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import type { VendorSupplyView } from "@/lib/api";
 
 export default function VendorDetailPage() {
   return (
@@ -41,6 +42,19 @@ function VendorDetailView() {
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [saved, setSaved] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  /*
+    Which supply row is open for editing, by its ingredient id — the same shape `/ingredients` uses
+    for the same interaction, and keyed the same way its rows are.
+
+    Before T-131 a supply row had one control, Remove, and the only way to correct anything about it
+    was to remove it and add it again. That is not a longer route to the same place: adding it again
+    starts from an empty form, so the price the temple last paid and the preference the shopping list
+    reads both go in the bin to change a lead time. Worse, the Add form's picker deliberately offers
+    only ingredients this vendor does NOT already supply, so for an existing supply the lead-time box
+    could not be reached at all — the field T-090 shipped was unfillable on every row that already
+    existed, which is every row a real temple has.
+  */
+  const [editing, setEditing] = useState<string | null>(null);
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -92,19 +106,14 @@ function VendorDetailView() {
     event.preventDefault();
     const form = event.currentTarget;
     const f = new FormData(form);
-    const price = String(f.get("lastPrice") ?? "").trim();
-    // Blank stays null, and that is the whole care needed here: null means nobody has recorded how
-    // long this vendor takes, while 0 means cash-and-carry. Coercing an empty box through Number()
-    // would turn the first into the second and quietly tell the planner the goods arrive same-day.
-    const lead = String(f.get("leadTimeDays") ?? "").trim();
     const ok = await run(
       (token) =>
         api.setVendorSupply(
           id,
           {
             ingredientId: String(f.get("ingredientId") ?? ""),
-            lastPrice: price === "" ? null : Number(price),
-            leadTimeDays: lead === "" ? null : Number(lead),
+            lastPrice: numberOrNull(String(f.get("lastPrice") ?? "")),
+            leadTimeDays: numberOrNull(String(f.get("leadTimeDays") ?? "")),
             preferred: f.get("preferred") === "on",
           },
           token
@@ -206,6 +215,15 @@ function VendorDetailView() {
                 <p className="mt-1 text-sm text-ink-secondary">
                   A preferred supply is what the shopping list suggests, and its lead time is what
                   the planner counts back from to work out the last day something can be ordered.
+                  Edit a row to change any of the three.
+                </p>
+                {/* Said once, over the table and the form both, because both offer the tick and
+                    neither can show what it will affect: the other vendor is not on this screen.
+                    It is a plain statement of what happens rather than a warning, because moving a
+                    preference is a normal thing to do and the app does it without complaint. */}
+                <p className="mt-1 text-sm text-ink-secondary">
+                  Only one vendor can be preferred for an ingredient, so ticking Preferred here
+                  takes it from whichever vendor holds it now.
                 </p>
 
                 {supplies.length > 0 && (
@@ -216,11 +234,29 @@ function VendorDetailView() {
                         <th className={TH_NUM}>Last price</th>
                         <th className={TH_NUM}>Lead time</th>
                         <th className={TH_TEXT}>Preferred</th>
-                        <th className={TH_ACTIONS}>Remove</th>
+                        {/* "Remove" until T-131, when the column stopped holding only the one
+                            control. Named for what the column is rather than for what happens to
+                            be in it, as every other table on the site names it. */}
+                        <th className={TH_ACTIONS}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {supplies.map((s) => (
+                      {supplies.map((s) =>
+                        editing === s.ingredientId ? (
+                          <SupplyEditRow
+                            key={s.ingredientId}
+                            supply={s}
+                            busy={busy}
+                            onCancel={() => setEditing(null)}
+                            onSave={async (input) => {
+                              const ok = await run(
+                                (t) => api.setVendorSupply(id, { ingredientId: s.ingredientId, ...input }, t),
+                                "We couldn’t save that supply."
+                              );
+                              if (ok) setEditing(null);
+                            }}
+                          />
+                        ) : (
                         <tr key={s.ingredientId} className={TR}>
                           <td className={`${TD_TEXT} ${WRAP}`}>{s.ingredientName}</td>
                           <td className={TD_NUM}>{money(s.lastPrice, "INR")}</td>
@@ -234,12 +270,16 @@ function VendorDetailView() {
                           </td>
                           <td className={TD_TEXT}>{s.preferred ? <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Preferred</span> : "—"}</td>
                           <td className={TD_ACTIONS}>
-                            <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.removeVendorSupply(id, s.ingredientId, t), "We couldn’t remove that supply.")}>
-                              Remove
-                            </Button>
+                            <div className={ACTIONS_ROW}>
+                              <Button variant="ghost" size="sm" onClick={() => setEditing(s.ingredientId)}>Edit</Button>
+                              <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.removeVendorSupply(id, s.ingredientId, t), "We couldn’t remove that supply.")}>
+                                Remove
+                              </Button>
+                            </div>
                           </td>
                         </tr>
-                      ))}
+                        )
+                      )}
                     </tbody>
                   </table>
                 )}
@@ -359,4 +399,145 @@ function Field({
 function emptyToNull(s: string): string | null {
   const t = s.trim();
   return t === "" ? null : t;
+}
+
+/**
+ * What a number box on this screen means, in one place: **blank is null and zero is zero.**
+ *
+ * <p>Named rather than written inline at each of the four call sites, because the two ways of
+ * getting it wrong are opposite and both are one character from correct. `Number("")` is `0`, so
+ * the obvious coercion turns "nobody has recorded how long this vendor takes" into "this vendor
+ * delivers the same day" — and every ordering screen then counts back nought days and tells a cook
+ * there is still time to order rice that can no longer be got. Guarding with `Number(t) || null`
+ * fixes that and breaks the other direction, quietly discarding the real `0` a cash-and-carry shop
+ * has. The blank is tested as a string, before anything is coerced at all.
+ */
+function numberOrNull(raw: string): number | null {
+  const t = raw.trim();
+  return t === "" ? null : Number(t);
+}
+
+/** A supply's own value as a number box holds it — and `0` is "0", never "". */
+function boxValue(n: number | null): string {
+  return n === null ? "" : String(n);
+}
+
+/**
+ * One supply row, opened for editing.
+ *
+ * <p><strong>The pattern is `/ingredients`', deliberately and not by coincidence.</strong> That
+ * screen gives each row an Edit and a Delete, and Edit swaps the row for the same row as inputs
+ * with a Save and a Cancel at the end of it. This is the same interaction on the same kind of thing,
+ * so it is the same shape: a `<tr>` of exactly the header's five cells, the row's own values seeded
+ * into the controls, and nothing committed until Save.
+ *
+ * <p><strong>The ingredient is not editable, and that is the one departure.</strong> On
+ * `/ingredients` the name is a field, because the name is a property of the thing. Here the
+ * ingredient is what the row *is* — the server addresses a supply by `(vendor, ingredient)` — so
+ * changing it in this box would not correct this supply, it would create a different one and leave
+ * this one behind. Somebody who wants that removes the row and adds the other.
+ *
+ * <p><strong>All three values are sent on every Save, including the ones nobody touched.</strong>
+ * Not defensiveness: the server writes the whole row (see `setVendorSupply` in `lib/api.ts`), so a
+ * save that left one out would erase it. Seeding each control from the row is what makes that safe,
+ * and it is why the price box opens holding the price rather than empty.
+ *
+ * <p><strong>Preferred is offered here</strong> rather than left out, because it is one of the three
+ * facts that Remove-and-add was throwing away and the point of the row is that none of them should
+ * need that. The unique index allows one preferred vendor per ingredient across the temple, and it
+ * is not this screen that keeps that true: `VendorService.setSupply` clears any other vendor's
+ * preference for the ingredient inside the same transaction before writing this one, so the tick
+ * *moves* the preference and cannot collide with it. What the screen owes the person is therefore
+ * not a refusal but a sentence saying so, and that sits above the table where it covers this row and
+ * the Add form both — the other vendor is not on this screen and cannot be named here.
+ */
+function SupplyEditRow({
+  supply,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  supply: VendorSupplyView;
+  busy: boolean;
+  onSave: (input: { lastPrice: number | null; leadTimeDays: number | null; preferred: boolean }) => void;
+  onCancel: () => void;
+}) {
+  const [lastPrice, setLastPrice] = useState(boxValue(supply.lastPrice));
+  const [leadTimeDays, setLeadTimeDays] = useState(boxValue(supply.leadTimeDays));
+  const [preferred, setPreferred] = useState(supply.preferred);
+
+  return (
+    <tr className="border-t border-hairline bg-sunken align-top">
+      <td className={`${TD_TEXT} ${WRAP}`}>{supply.ingredientName}</td>
+      <td className={TD_NUM}>
+        <HintedField label="Last price (₹)">
+          {(fieldId) => (
+            <input
+              id={fieldId}
+              type="number"
+              min="0"
+              step="any"
+              value={lastPrice}
+              onChange={(e) => setLastPrice(e.target.value)}
+              className="min-h-touch w-32 rounded-control border border-hairline px-3"
+            />
+          )}
+        </HintedField>
+      </td>
+      {/* The field this task exists for, and the hint is the same words the Add form uses, because
+          it is answering the same question. Emptying the box is a real and useful edit — a lead time
+          recorded from a guess should be removable back to "nobody has said" — so the hint has to be
+          here too, where the clearing actually happens. */}
+      <td className={TD_NUM}>
+        <HintedField
+          label="Lead time (days)"
+          hint="How long this vendor takes to deliver this item once you ask. Leave it blank if you don’t know — we’ll assume two days until somebody records it. Put 0 for a shop you walk into and carry it back from."
+        >
+          {(fieldId) => (
+            <input
+              id={fieldId}
+              type="number"
+              min="0"
+              max="365"
+              step="1"
+              value={leadTimeDays}
+              onChange={(e) => setLeadTimeDays(e.target.value)}
+              className="min-h-touch w-32 rounded-control border border-hairline px-3"
+            />
+          )}
+        </HintedField>
+      </td>
+      <td className={TD_TEXT}>
+        <label className="flex items-center gap-2 text-sm text-ink-secondary">
+          {/* No `aria-label`: the wrapping `<label>` already names it, exactly as the Add form's
+              own Preferred box does, and a redundant one only invites the two to drift apart. */}
+          <input
+            type="checkbox"
+            checked={preferred}
+            onChange={(e) => setPreferred(e.target.checked)}
+            className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
+          />
+          Preferred
+        </label>
+      </td>
+      <td className={TD_ACTIONS}>
+        <div className={ACTIONS_ROW}>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              onSave({
+                lastPrice: numberOrNull(lastPrice),
+                leadTimeDays: numberOrNull(leadTimeDays),
+                preferred,
+              })
+            }
+          >
+            Save
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        </div>
+      </td>
+    </tr>
+  );
 }

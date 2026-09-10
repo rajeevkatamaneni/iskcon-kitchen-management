@@ -1,0 +1,2448 @@
+############################################################
+# STAGE 1 — the reported defect, reproduced on demand
+############################################################
+
+=== the screen is put back to HEAD; the tests are untouched ===
+=== the tree actually changed (condition 3) — first 30 changed lines ===
+-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+-import type { VendorSupplyView } from "@/lib/api";
++import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, WRAP } from "@/components/ds/table";
+-  /*
+-    Which supply row is open for editing, by its ingredient id — the same shape `/ingredients` uses
+-    for the same interaction, and keyed the same way its rows are.
+-    Before T-131 a supply row had one control, Remove, and the only way to correct anything about it
+-    was to remove it and add it again. That is not a longer route to the same place: adding it again
+-    starts from an empty form, so the price the temple last paid and the preference the shopping list
+-    reads both go in the bin to change a lead time. Worse, the Add form's picker deliberately offers
+-    only ingredients this vendor does NOT already supply, so for an existing supply the lead-time box
+-    could not be reached at all — the field T-090 shipped was unfillable on every row that already
+-    existed, which is every row a real temple has.
+-  */
+-  const [editing, setEditing] = useState<string | null>(null);
++    const price = String(f.get("lastPrice") ?? "").trim();
++    // Blank stays null, and that is the whole care needed here: null means nobody has recorded how
++    // long this vendor takes, while 0 means cash-and-carry. Coercing an empty box through Number()
++    // would turn the first into the second and quietly tell the planner the goods arrive same-day.
++    const lead = String(f.get("leadTimeDays") ?? "").trim();
+-            lastPrice: numberOrNull(String(f.get("lastPrice") ?? "")),
+-            leadTimeDays: numberOrNull(String(f.get("leadTimeDays") ?? "")),
++            lastPrice: price === "" ? null : Number(price),
++            leadTimeDays: lead === "" ? null : Number(lead),
+-                  Edit a row to change any of the three.
+-                {/* Said once, over the table and the form both, because both offer the tick and
+-                    neither can show what it will affect: the other vendor is not on this screen.
+-                    It is a plain statement of what happens rather than a warning, because moving a
+-                    preference is a normal thing to do and the app does it without complaint. */}
+-                <p className="mt-1 text-sm text-ink-secondary">
+
+=== tsc, then vitest, tests exactly as written ===
+control-T-131: tsc silent on HEAD's screen
+[33mThe CJS build of Vite's Node API is deprecated. See https://vitejs.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.2 /Users/Rajeev/Workspace/kitchen-management-system/frontend
+
+ ✓ __tests__/vendor-lead-time.test.tsx  (6 tests) 132ms
+ ❯ __tests__/vendor-supply-edit.test.tsx  (11 tests | 10 failed) 211ms
+   × editing a supply in place > offers Edit beside Remove on every row
+     → Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "—":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"text-ink-muted"[39m
+    [36m>[39m
+      [0m—[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+   × editing a supply in place > opens the row holding what it already says
+     → Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "4 days":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m4 days[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+   × editing a supply in place > records a lead time on a supply that already exists, and keeps the price and the preference
+     → Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "—":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"text-ink-muted"[39m
+    [36m>[39m
+      [0m—[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+   × editing a supply in place > changes a price without disturbing the lead time
+     → Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "2 days":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m2 days[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+   × editing a supply in place > clears a lead time to an explicit null, never a zero
+     → Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "5 days":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m5 days[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+   × editing a supply in place > seeds a cash-and-carry zero as 0 rather than as blank, and saves it back as 0
+     → Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "0 days":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m0 days[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+   × editing a supply in place > clears a price to an explicit null too
+     → Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "—":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"text-ink-muted"[39m
+    [36m>[39m
+      [0m—[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+   × editing a supply in place > moves the preference when the box is ticked, and says on the screen that it will
+     → Unable to find an element with the text: /only one vendor can be preferred for an ingredient/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33maria-current[39m=[32m"page"[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out bg-accent-bg font-semibold text-accent-text"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+         ...
+   × editing a supply in place > sends nothing at all on Cancel, and puts the row back
+     → Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "—":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"text-ink-muted"[39m
+    [36m>[39m
+      [0m—[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+   × editing a supply in place > keeps the editing row the same width as the header
+     → Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "—":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"text-ink-muted"[39m
+    [36m>[39m
+      [0m—[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > offers Edit beside Remove on every row
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "—":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"text-ink-muted"[39m
+    [36m>[39m
+      [0m—[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ __tests__/vendor-supply-edit.test.tsx:170:24
+    168| 
+    169|     const row = rowFor("Curd");
+    170|     expect(within(row).getByRole("button", { name: "Edit" })).toBeTrut…
+       |                        ^
+    171|     expect(within(row).getByRole("button", { name: "Remove" })).toBeTr…
+    172|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > opens the row holding what it already says
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "4 days":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m4 days[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ openEditor __tests__/vendor-supply-edit.test.tsx:120:40
+    118| /** Open a row for editing and hand back the row, now holding controls…
+    119| async function openEditor(name: string): Promise<HTMLElement> {
+    120|   fireEvent.click(within(rowFor(name)).getByRole("button", { name: "Ed…
+       |                                        ^
+    121|   await screen.findByRole("button", { name: "Save" });
+    122|   return rowFor(name);
+ ❯ __tests__/vendor-supply-edit.test.tsx:179:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > records a lead time on a supply that already exists, and keeps the price and the preference
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "—":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"text-ink-muted"[39m
+    [36m>[39m
+      [0m—[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ openEditor __tests__/vendor-supply-edit.test.tsx:120:40
+    118| /** Open a row for editing and hand back the row, now holding controls…
+    119| async function openEditor(name: string): Promise<HTMLElement> {
+    120|   fireEvent.click(within(rowFor(name)).getByRole("button", { name: "Ed…
+       |                                        ^
+    121|   await screen.findByRole("button", { name: "Save" });
+    122|   return rowFor(name);
+ ❯ __tests__/vendor-supply-edit.test.tsx:193:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > changes a price without disturbing the lead time
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "2 days":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m2 days[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ openEditor __tests__/vendor-supply-edit.test.tsx:120:40
+    118| /** Open a row for editing and hand back the row, now holding controls…
+    119| async function openEditor(name: string): Promise<HTMLElement> {
+    120|   fireEvent.click(within(rowFor(name)).getByRole("button", { name: "Ed…
+       |                                        ^
+    121|   await screen.findByRole("button", { name: "Save" });
+    122|   return rowFor(name);
+ ❯ __tests__/vendor-supply-edit.test.tsx:212:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > clears a lead time to an explicit null, never a zero
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "5 days":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m5 days[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ openEditor __tests__/vendor-supply-edit.test.tsx:120:40
+    118| /** Open a row for editing and hand back the row, now holding controls…
+    119| async function openEditor(name: string): Promise<HTMLElement> {
+    120|   fireEvent.click(within(rowFor(name)).getByRole("button", { name: "Ed…
+       |                                        ^
+    121|   await screen.findByRole("button", { name: "Save" });
+    122|   return rowFor(name);
+ ❯ __tests__/vendor-supply-edit.test.tsx:229:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > seeds a cash-and-carry zero as 0 rather than as blank, and saves it back as 0
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "0 days":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m0 days[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ openEditor __tests__/vendor-supply-edit.test.tsx:120:40
+    118| /** Open a row for editing and hand back the row, now holding controls…
+    119| async function openEditor(name: string): Promise<HTMLElement> {
+    120|   fireEvent.click(within(rowFor(name)).getByRole("button", { name: "Ed…
+       |                                        ^
+    121|   await screen.findByRole("button", { name: "Save" });
+    122|   return rowFor(name);
+ ❯ __tests__/vendor-supply-edit.test.tsx:245:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > clears a price to an explicit null too
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "—":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"text-ink-muted"[39m
+    [36m>[39m
+      [0m—[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ openEditor __tests__/vendor-supply-edit.test.tsx:120:40
+    118| /** Open a row for editing and hand back the row, now holding controls…
+    119| async function openEditor(name: string): Promise<HTMLElement> {
+    120|   fireEvent.click(within(rowFor(name)).getByRole("button", { name: "Ed…
+       |                                        ^
+    121|   await screen.findByRole("button", { name: "Save" });
+    122|   return rowFor(name);
+ ❯ __tests__/vendor-supply-edit.test.tsx:260:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > moves the preference when the box is ticked, and says on the screen that it will
+TestingLibraryElementError: Unable to find an element with the text: /only one vendor can be preferred for an ingredient/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33maria-current[39m=[32m"page"[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out bg-accent-bg font-semibold text-accent-text"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+         ...
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ __tests__/vendor-supply-edit.test.tsx:276:14
+    274| 
+    275|     expect(
+    276|       screen.getByText(/only one vendor can be preferred for an ingred…
+       |              ^
+    277|     ).toBeTruthy();
+    278| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > sends nothing at all on Cancel, and puts the row back
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "—":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"text-ink-muted"[39m
+    [36m>[39m
+      [0m—[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ openEditor __tests__/vendor-supply-edit.test.tsx:120:40
+    118| /** Open a row for editing and hand back the row, now holding controls…
+    119| async function openEditor(name: string): Promise<HTMLElement> {
+    120|   fireEvent.click(within(rowFor(name)).getByRole("button", { name: "Ed…
+       |                                        ^
+    121|   await screen.findByRole("button", { name: "Save" });
+    122|   return rowFor(name);
+ ❯ __tests__/vendor-supply-edit.test.tsx:292:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > keeps the editing row the same width as the header
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "Edit"
+
+Here are the accessible roles:
+
+  cell:
+
+  Name "Curd":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "₹58":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "—":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Preferred":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------cell:
+
+  Name "Remove":
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Remove":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<tr[39m
+  [33mclass[39m=[32m"border-t border-hairline align-top hover:bg-sunken"[39m
+[36m>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap !whitespace-normal"[39m
+  [36m>[39m
+    [0mCurd[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [0m₹58[0m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap tabular-nums"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"text-ink-muted"[39m
+    [36m>[39m
+      [0m—[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<span[39m
+      [33mclass[39m=[32m"rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold"[39m
+    [36m>[39m
+      [0mPreferred[0m
+    [36m</span>[39m
+  [36m</td>[39m
+  [36m<td[39m
+    [33mclass[39m=[32m"px-5 py-3 whitespace-nowrap"[39m
+  [36m>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-danger  disabled:opacity-45"[39m
+    [36m>[39m
+      [0mRemove[0m
+    [36m</button>[39m
+  [36m</td>[39m
+[36m</tr>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ openEditor __tests__/vendor-supply-edit.test.tsx:120:40
+    118| /** Open a row for editing and hand back the row, now holding controls…
+    119| async function openEditor(name: string): Promise<HTMLElement> {
+    120|   fireEvent.click(within(rowFor(name)).getByRole("button", { name: "Ed…
+       |                                        ^
+    121|   await screen.findByRole("button", { name: "Save" });
+    122|   return rowFor(name);
+ ❯ __tests__/vendor-supply-edit.test.tsx:311:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  10 failed | 7 passed (17)
+   Start at  02:40:53
+   Duration  608ms (transform 93ms, setup 53ms, collect 234ms, tests 343ms, environment 239ms, prepare 48ms)
+
+control-T-131: stage 1 frontend exit=1
+control-T-131: stage 1 restored before the next stage
+
+############################################################
+# STAGE 2 — the two null/zero guards
+############################################################
+
+=== anchors counted before any edit (condition 2) ===
+  page.tsx: [return t === "" ? null : Number(t);] x1 (expected 1)
+  page.tsx: [return n === null ? "" : String(n);] x1 (expected 1)
+
+=== the tree actually changed: verified copy vs patched file (condition 3) ===
+-  return t === "" ? null : Number(t);
++  return Number(raw);
+-  return n === null ? "" : String(n);
++  return n ? String(n) : "";
+
+=== tsc, then vitest ===
+[33mThe CJS build of Vite's Node API is deprecated. See https://vitejs.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.2 /Users/Rajeev/Workspace/kitchen-management-system/frontend
+
+ ❯ __tests__/vendor-lead-time.test.tsx  (6 tests | 1 failed) 136ms
+   × a vendor's lead time > posts an explicit null when the box is left blank, and never a zero
+     → expected +0 to be null
+ ❯ __tests__/vendor-supply-edit.test.tsx  (11 tests | 3 failed) 296ms
+   × editing a supply in place > clears a lead time to an explicit null, never a zero
+     → expected +0 to be null
+   × editing a supply in place > seeds a cash-and-carry zero as 0 rather than as blank, and saves it back as 0
+     → expected '' to be '0' // Object.is equality
+   × editing a supply in place > clears a price to an explicit null too
+     → expected +0 to be null
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/vendor-lead-time.test.tsx > a vendor's lead time > posts an explicit null when the box is left blank, and never a zero
+AssertionError: expected +0 to be null
+ ❯ __tests__/vendor-lead-time.test.tsx:185:31
+    183|     const body = setVendorSupplyMock.mock.calls[0][1] as Record<string…
+    184|     expect(Object.keys(body)).toContain("leadTimeDays");
+    185|     expect(body.leadTimeDays).toBeNull();
+       |                               ^
+    186|   });
+    187| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > clears a lead time to an explicit null, never a zero
+AssertionError: expected +0 to be null
+ ❯ __tests__/vendor-supply-edit.test.tsx:236:31
+    234|     const body = setVendorSupplyMock.mock.calls[0][1] as Record<string…
+    235|     expect(Object.keys(body)).toContain("leadTimeDays");
+    236|     expect(body.leadTimeDays).toBeNull();
+       |                               ^
+    237|   });
+    238| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > seeds a cash-and-carry zero as 0 rather than as blank, and saves it back as 0
+AssertionError: expected '' to be '0' // Object.is equality
+
+- Expected
++ Received
+
+- 0
+
+ ❯ __tests__/vendor-supply-edit.test.tsx:246:54
+    244| 
+    245|     const row = await openEditor("Curd");
+    246|     expect((leadBox(row) as HTMLInputElement).value).toBe("0");
+       |                                                      ^
+    247| 
+    248|     fireEvent.click(within(row).getByRole("button", { name: "Save" }));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  __tests__/vendor-supply-edit.test.tsx > editing a supply in place > clears a price to an explicit null too
+AssertionError: expected +0 to be null
+ ❯ __tests__/vendor-supply-edit.test.tsx:267:28
+    265|     const body = setVendorSupplyMock.mock.calls[0][1] as Record<string…
+    266|     expect(Object.keys(body)).toContain("lastPrice");
+    267|     expect(body.lastPrice).toBeNull();
+       |                            ^
+    268|   });
+    269| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 13 passed (17)
+   Start at  02:40:54
+   Duration  696ms (transform 97ms, setup 55ms, collect 242ms, tests 433ms, environment 248ms, prepare 59ms)
+
+control-T-131: stage 2 frontend exit=1
+control-T-131: stage 2 restored before the next stage
+
+############################################################
+# STAGE 3 — the upsert the whole screen rests on
+############################################################
+
+=== anchor counted before any edit (condition 2) ===
+  VendorService.java: [ON CONFLICT (vendor_id, ingredient_id) DO UPDATE] x1 (expected 1)
+
+=== the tree actually changed (condition 3) ===
+-				ON CONFLICT (vendor_id, ingredient_id) DO UPDATE
++				ON CONFLICT (id) DO UPDATE
+
+=== gradle, --rerun-tasks, nothing piped through tail (condition 4) ===
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+ReturnToVendorIT > a repeated submission under the same key returns the first return and withdraws nothing more PASSED
+
+ReturnToVendorIT > a line belonging to another delivery cannot be returned under this receipt PASSED
+
+ReturnToVendorIT > the goods receipt line is byte-for-byte what it was before the return PASSED
+
+ReturnToVendorIT > returning more than was received is refused with KMS-400140, and writes nothing PASSED
+
+ReturnToVendorIT > a fifty-for-five keying error goes back in full even though only five were ever there PASSED
+
+ReturnToVendorIT > the cap is cumulative: 20 back then 11 more is refused, 20 then 10 is not PASSED
+
+ReturnToVendorIT > the CHECK constraint and MovementType agree, proven by inserting every value including the new one PASSED
+
+ReturnToVendorIT > returning 5 of 30 takes 5 off stock through a RETURN_TO_VENDOR movement on the receipt's own batch PASSED
+
+VendorIT > a vendor cannot be deactivated without a reason PASSED
+
+VendorIT > a contract end date is recorded and warned about, and changes nothing else PASSED
+
+VendorIT > a vendor is created with a supplied ingredient and appears with it PASSED
+
+VendorIT > editing a supply into preferred moves the preference rather than colliding with the index FAILED
+    java.lang.AssertionError: Status expected:<204> but was:<500>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.vendor.VendorIT.editingIntoPreferredMovesThePreference(VendorIT.java:277)
+
+VendorIT > a deactivated vendor vanishes from the default list but history is preserved PASSED
+
+VendorIT > the history is append-only — the application cannot edit or erase a reason PASSED
+
+VendorIT > a lead time of zero is kept, and an absurd one is refused PASSED
+
+VendorIT > a duplicate vendor name is refused PASSED
+
+VendorIT > successive deactivations each leave their own record — nothing is overwritten PASSED
+
+VendorIT > an edit can set and clear the contract end date PASSED
+
+VendorIT > bringing a vendor back needs no reason, and still leaves a record PASSED
+
+VendorIT > a volunteer cannot manage vendors PASSED
+
+VendorIT > an invalid phone is rejected at entry PASSED
+
+VendorIT > preferred vendor per ingredient is exclusive — a new preference clears the old PASSED
+
+VendorIT > a contract with years to run does not warn, and no date at all is not a warning PASSED
+
+VendorIT > a supply the vendor already has is edited in place, not refused and not duplicated FAILED
+    java.lang.AssertionError: Status expected:<204> but was:<500>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.vendor.VendorIT.anExistingSupplyIsEditedInPlace(VendorIT.java:240)
+
+VendorIT > lead time is recorded per vendor and ingredient, and an unrecorded one is null, not zero FAILED
+    java.lang.AssertionError: Status expected:<204> but was:<500>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.vendor.VendorIT.leadTimeIsPerSupplyAndUnknownIsNotZero(VendorIT.java:135)
+
+VendorIT > the reason is dated, attributed, and readable on the vendor's own page PASSED
+
+02:41:13.415 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+02:41:13.418 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+02:41:13.420 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+02:41:13.423 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+02:41:13.428 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+02:41:13.429 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    26
+  Passed:   23
+  Failed:   3
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+26 tests completed, 3 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 17s
+5 actionable tasks: 5 executed
+control-T-131: stage 3 backend exit=1
+control-T-131: stage 3 restored before the next stage
+
+############################################################
+# STAGE 4 — the preference the server moves out of the way
+############################################################
+
+=== anchor counted before any edit (condition 2) ===
+  VendorService.java: [if (request.preferred()) {] x1 (expected 1)
+
+=== the tree actually changed (condition 3) ===
+-		if (request.preferred()) {
++		if (request.preferred() && false) {
+
+=== gradle, --rerun-tasks, nothing piped through tail (condition 4) ===
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+VendorIT > a vendor cannot be deactivated without a reason PASSED
+
+VendorIT > a contract end date is recorded and warned about, and changes nothing else PASSED
+
+VendorIT > a vendor is created with a supplied ingredient and appears with it PASSED
+
+VendorIT > editing a supply into preferred moves the preference rather than colliding with the index FAILED
+    java.lang.AssertionError: Status expected:<204> but was:<500>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.vendor.VendorIT.editingIntoPreferredMovesThePreference(VendorIT.java:277)
+
+VendorIT > a deactivated vendor vanishes from the default list but history is preserved PASSED
+
+VendorIT > the history is append-only — the application cannot edit or erase a reason PASSED
+
+VendorIT > a lead time of zero is kept, and an absurd one is refused PASSED
+
+VendorIT > a duplicate vendor name is refused PASSED
+
+VendorIT > successive deactivations each leave their own record — nothing is overwritten PASSED
+
+VendorIT > an edit can set and clear the contract end date PASSED
+
+VendorIT > bringing a vendor back needs no reason, and still leaves a record PASSED
+
+VendorIT > a volunteer cannot manage vendors PASSED
+
+VendorIT > an invalid phone is rejected at entry PASSED
+
+VendorIT > preferred vendor per ingredient is exclusive — a new preference clears the old FAILED
+    java.lang.AssertionError: Status expected:<204> but was:<500>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.vendor.VendorIT.preferredIsExclusive(VendorIT.java:204)
+
+VendorIT > a contract with years to run does not warn, and no date at all is not a warning PASSED
+
+VendorIT > a supply the vendor already has is edited in place, not refused and not duplicated PASSED
+
+VendorIT > lead time is recorded per vendor and ingredient, and an unrecorded one is null, not zero PASSED
+
+VendorIT > the reason is dated, attributed, and readable on the vendor's own page PASSED
+
+ReturnToVendorIT > a repeated submission under the same key returns the first return and withdraws nothing more PASSED
+
+ReturnToVendorIT > a line belonging to another delivery cannot be returned under this receipt PASSED
+
+ReturnToVendorIT > the goods receipt line is byte-for-byte what it was before the return PASSED
+
+ReturnToVendorIT > returning more than was received is refused with KMS-400140, and writes nothing PASSED
+
+ReturnToVendorIT > a fifty-for-five keying error goes back in full even though only five were ever there PASSED
+
+ReturnToVendorIT > the cap is cumulative: 20 back then 11 more is refused, 20 then 10 is not PASSED
+
+ReturnToVendorIT > the CHECK constraint and MovementType agree, proven by inserting every value including the new one PASSED
+
+ReturnToVendorIT > returning 5 of 30 takes 5 off stock through a RETURN_TO_VENDOR movement on the receipt's own batch PASSED
+
+02:41:30.355 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+02:41:30.359 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+02:41:30.361 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+02:41:30.364 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+02:41:30.366 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+02:41:30.368 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    26
+  Passed:   24
+  Failed:   2
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+26 tests completed, 2 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 16s
+5 actionable tasks: 5 executed
+control-T-131: stage 4 backend exit=1
+
+control-T-131: done — the restore runs from the EXIT trap below.
+control-T-131: restored /Users/Rajeev/Workspace/kitchen-management-system/frontend/app/vendors/[id]/page.tsx byte-for-byte from /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T//control-T-131.SzE3Jk/page.tsx
+control-T-131: restored /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/vendor/VendorService.java byte-for-byte from /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T//control-T-131.SzE3Jk/VendorService.java
+control-T-131: exit 0
+work-lock: 'verify' released; command exited 0
