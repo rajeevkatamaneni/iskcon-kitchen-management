@@ -12512,7 +12512,7 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **id:** T-109
 - **source:** **T-103's builder, 2026-09-10**, which was ruled on fill rate, found this next to it,
   and **flagged it rather than quietly widening its own ruling.** Exactly right.
-- **state:** **queued — needs Rajeev's ruling. It is a different grain from the one he already gave.**
+- **state:** **CLOSED 2026-09-10 by T-124, wave 16 — dissolved rather than answered.** On-time is now scored per item, so there is no order-grain partial case left to rule on: a `NOT_DELIVERED` return simply takes its own quantity back out of the count. The question below was never put to Rajeev and no longer needs to be.
 - **what:** a return with reason `NOT_DELIVERED` means the goods **never came** — the receipt itself
   was a keying error. T-103 now takes such a return off the vendor's **fill rate**. It does **not**
   touch **on-time**, so an order whose entire first receipt is later reversed as never-delivered
@@ -12867,13 +12867,159 @@ somebody deletes.**
   because the match is recomputed each time. Say what the page boundary means before choosing one.
 - **proof:** — · **shipped:** —
 
+### T-128 — a third copy of the same unit rule
+
+- **id:** T-128
+- **source:** **T-127's builder, 2026-09-10**, which fixed the second copy and went looking for more.
+- **state:** queued. Small, and deliberately not folded into T-127.
+- **what:** `backend/.../recipe/RecipeScaler.java:55` picks its display unit with the same
+  `>= 1000` test and **no zero case** — the third implementation of one rule. `Quantities.java`'s own
+  javadoc records that it was lifted out of `RecipeScaler` and **the original was left behind**.
+- **honest scope note:** its only caller is the recipe scale preview (`RecipeService:143`), so the
+  blast radius is far smaller than the job card's. Worth doing, not worth alarm.
+- **the question to answer while building it, and it is bigger than the fix:** three copies of one
+  rule is now a pattern rather than an accident. Either they collapse into one, or something has to
+  test that they agree — **the frontend copy cannot be merged with the backend ones**, so the
+  shared-vector-table approach T-127 used is the realistic answer.
+- **proof:** — · **shipped:** —
+
+### T-126 — a cancelled order says on its face that the vendor never delivered
+
+- **id:** T-126
+- **source:** **T-124's builder, 2026-09-10**, which built the tick box and then reported that
+  nothing showed it. Raised rather than smuggled in, because the field it needed was outside its
+  contract — the right call, and the reason this row exists instead of a silent scope creep.
+- **state:** **SHIPPED 2026-09-10, wave 16. On staging, awaiting Rajeev's test.**
+- **what:** under the existing `Cancelled: {reason}` line on the order screen, a warning badge
+  reading **Never delivered**, followed by *"The vendor never delivered this order. It counts against
+  their delivery record."*
+- **why the sentence and not just the badge:** *"Never delivered"* beside a line already saying
+  *Cancelled* could as easily mean the goods never came **because** we called it off. The sentence
+  names who is being blamed, which is the entire difference between the two kinds of cancellation.
+- **no new style** — the same `Badge tone="warning"` the vendor scorecard already uses for
+  *"1 order never delivered"*.
+- **verification:** backend 67/67, frontend 61/61, `tsc` silent. The control reproduced the defect
+  exactly — `PathNotFoundException: No results for path: $['order']['vendorAbandoned']`, and the
+  screen test failing on the missing sentence.
+
+> **⚠ The ledger point, and it is a rule about contracts rather than about this task.** Four test
+> fixtures construct that type. **The contract named one**, because it was written from
+> `grep -rn "PurchaseOrderView"` — which misses every fixture that builds a
+> `PurchaseOrderDetailView` literal and lets `order:` be inferred. The builder found the other three
+> with a type-check and fixed them. **When a contract grants "the fixtures that construct type X",
+> enumerate them with a type-check, not a grep.**
+
+- **and one thing the coordinator got wrong and was corrected on:** it told this builder that T-124
+  had added `vendorAbandoned` to `api.ts` and left two fixtures red. **T-124 had done no such
+  thing** — its proof says plainly that it stopped at its contract line, which is why T-126 exists at
+  all. The field, and the brief red type-check, were T-126's own. The coordinator passed on a second
+  builder's inference without checking it against the first builder's proof.
+- **open for Rajeev:** the sentence is the builder's wording, not his — he gave the checkbox label
+  only. One string, cheap to change.
+- **proof:** `docs/work/proof/T-126.md` · **shipped:** `f1d6c09`, 2026-09-10, wave 16 — *feat: on-time is scored per item, and a cancelled order can name the vendor who never came*. Committed together with T-124: the two share `PurchaseOrderService`, `PurchaseOrderIT`, the order detail screen and its test, so splitting them would have needed hunk-level staging and produced an intermediate that did not compile.
+
+### T-127 — the printed sheet and the screen disagree about zero
+
+- **id:** T-127
+- **source:** **T-125's builder, 2026-09-10**, while fixing the same rule on the frontend.
+- **state:** **SHIPPED 2026-09-10, wave 16. On staging, awaiting Rajeev's test.**
+- **what:** `backend/.../ingredient/Quantities.java:97` is a second implementation of the unit rule
+  T-125 just corrected in `frontend/lib/format.ts`. Since that fix they disagree: the stock page says
+  **0 L**, a printed job card says **0 ml**, for the same ingredient on the same day.
+- **the duplication is deliberate and stays** — `quantities.test.ts` says so in its own comment. This
+  makes the second copy tell the same truth, it does not merge them.
+- **why nothing caught it:** **neither vector table has a zero case.** Two implementations of one
+  rule, and no test on either side for the case where they diverge.
+
+**BUILT 2026-09-10, in the tree, not yet deployed.** 14/14 targeted, 54/54 with `JobCardIT` and
+`WorkOrderIT` beside it. Control: 2 of 14 red with `expected: "0 L" but was: "0 ml"`.
+
+**The trap inside the fix, which is the part worth keeping.** The obvious spelling is
+`inBase.equals(ZERO)`. **It would have passed the unit test and failed in the running app** — a
+quantity read from JDBC arrives as `0.000`, and `BigDecimal.equals` compares scale, so `0.000` is not
+equal to `0`. The builder used `signum()` and wrote a test that pins it. This is the same class as
+the RLS `RESET`-leaves-an-empty-string trap: a comparison that is right about the value and wrong
+about the representation.
+
+**And its control avoided T-125's baseline mistake explicitly:** it diffed against a copy of the
+verified working tree, not `HEAD` — because this fix is not in `HEAD`, so `git diff HEAD` goes
+**silent exactly when the control is working**.
+
+**No renderer needed touching:** all eleven printed-quantity call sites across `JobCardService`,
+`WorkOrderService` and `DocumentGenerationService` already go through `Quantities.cooks`.
+
+- **to drive once it ships:** a work order for an out-of-stock ingredient kept in litres —
+  `WorkOrderService:289` prints the shortfall's `available()`, and an empty shelf is exactly when
+  that is zero. It should read *0 L available*.
+- **proof:** `docs/work/proof/T-127.md` · **shipped:** `1346486`, 2026-09-10, wave 16 — *fix: the printed job card and the screen stop disagreeing about zero*. Raised **T-128**: a third copy of the same rule in `RecipeScaler`, with the same missing zero case.
+
+### T-125 — five things found by driving the deployed app after wave 15
+
+- **id:** T-125
+- **source:** the coordinator, 2026-09-10, signed in to staging api-00140 / web-00128 as the Temple
+  Admin an hour after the wave shipped. **Every one was seen on a screen.** None came from reading
+  code, and the suite was green for all five.
+- **state:** **SHIPPED 2026-09-10, wave 16. On staging, awaiting Rajeev's test.**
+
+1. **A raw enum reaches the reader.** Curd's stock page prints `USED_BEYOND_RECORDED_STOCK` in the
+   Type column, between rows saying "Cooked" and "Adjustment". `TYPE_LABEL` in
+   `frontend/app/inventory/[id]/page.tsx` holds four of the movement types and falls back to
+   `?? m.type`. `RETURN_TO_VENDOR` has been shouting since T-103 shipped and nobody saw it.
+   **The general lesson, which is why this row leads with it:** `ErrorCodeTest` polices
+   `ErrorCode.java`, and this is a *second channel to the same reader* with nothing watching it.
+   T-098 is the same shape in a third channel — Bean Validation defaults in `fieldErrors`.
+2. **Zero is said in the wrong unit** — "0 ml" on an item kept in litres, because `format.ts` picks
+   the small unit whenever the amount is under a thousand base units, and zero always is.
+3. **The receipt screen never notices the PDF arrived.** Issued at 11:51, `READY` 24 seconds later,
+   and the Download button stayed disabled under *"The receipt is being prepared"* until the page
+   was reloaded by hand. The status is read once and never again.
+4. **A banner promises a thank-you nobody can receive** — shown for a gift with no phone number and
+   no email. The detail page says the true thing two clicks later, which is what makes it a defect
+   rather than a missing feature: the product already knows.
+5. **A ruling was never built.** T-073's Question 1 — the duplicate-invoice warning must ignore
+   voided invoices — was decided on 2026-09-10 and `countByVendorAndNumber` is unchanged.
+   **This is the third time a decision has been recorded and not carried into the tree.** The
+   pattern to break is a ruling that closes a discussion and opens no task.
+
+**And the thing worth keeping from tonight, beyond the five:** wave 15 shipped with a green suite,
+a green CI, a verified deploy and a `next build` that proved the new route exists. **All of that was
+true and none of it saw any of these.** Four of the five are about what a person reads on a screen,
+which is the class of defect this project's tests are structurally unable to see.
+
+**BUILT 2026-09-10, in the tree, not yet deployed.** 107 frontend and 27 backend tests green,
+`next build` green. Control: 11 frontend and 2 backend tests red with the five fixes patched out,
+restored byte-for-byte under an `EXIT` trap.
+
+**The brief undercounted the first one.** `TYPE_LABEL` was missing **three** constants, not two —
+`ISSUE` as well as `RETURN_TO_VENDOR` and `USED_BEYOND_RECORDED_STOCK`. The coordinator listed the
+two it had seen on a screen; the builder read the enum. **That is the argument for the exhaustiveness
+test in one line:** a list written from what somebody noticed is always shorter than the enum.
+
+**Two things it found that were nobody's task, and reported rather than absorbed:**
+
+- **The backend keeps a second copy of the quantity rule** (`ingredient/Quantities.java:97`) and now
+  disagrees with the screen about zero — a job card in a cook's hand printing *"0 ml"* while the
+  stock page says *"0 L"*. **Neither vector table has a zero case at all**, so nothing went red and
+  nothing would have. **Dispatched as T-127.**
+- **`tsc` was red on the shared checkout from T-124's in-flight work** — `vendorAbandoned` added to
+  `PurchaseOrderView` without two fixtures that construct it. Not its work and not in its contract,
+  so it said so instead of fixing it silently. **Folded into T-126**, which holds that file.
+
+**And it wrote up two flaws in its own negative control rather than quietly re-running it:** a gradle
+leg piped through `tail`, which truncated the output and hid one of two failures; and a "tree
+changed" check using `git diff` against `HEAD`, which proves nothing about a control that reverts
+*to* `HEAD`. Both re-run properly, all legs in the log in the order they happened. **This is the
+behaviour to want** — a control nobody can audit is worth less than no control at all.
+
+- **proof:** `docs/work/proof/T-125.md` · **shipped:** `62b427d`, 2026-09-10, wave 16 — *fix: five things found by driving the deployed app after wave 15*. All five built; the backend's own copy of the quantity rule then disagreed with the frontend's, which became T-127 and shipped in the same wave.
+
 ### T-124 — on-time delivery is scored per item, and a vendor who never turned up is named
 
 - **id:** T-124
 - **source:** **Rajeev, 2026-09-09**, in his own five scenarios. He wrote them out rather than
   answering T-109, and they replace how on-time is scored rather than patching it — so T-109 is
   closed by this row, not built separately.
-- **state:** approved, ready to build.
+- **state:** **SHIPPED 2026-09-10, wave 16. On staging, awaiting Rajeev's test.**
 
 **His five cases, and what each must score:**
 
@@ -12939,7 +13085,32 @@ as a fifty-line one. The alternative — weighing by size — lets a single larg
 small ones. Neither is wrong; this one is the one on the screen, and the counts beside it are what
 let a reader see the difference.
 
-- **proof:** — · **shipped:** —
+**BUILT 2026-09-10, in the tree, not yet deployed.** Backend 53/53 across `VendorPerformanceIT` and
+`PurchaseOrderIT`, frontend 53/53, `tsc` silent. All five of Rajeev's scenarios are named tests
+asserting his figures. **The negative control is the strongest this project has produced:** six
+backend product files reverted to HEAD gave **15 failures of 53**, and case C reproduced the live
+defect exactly — `expected:<80> but was:<100>` — while case E's vendor vanished from the report
+altogether. Restore verified byte-for-byte with `cmp`; the confirming run is 53/53.
+
+**Three things the builder was right to refuse or raise:**
+
+- **The brief asked for a "receipt number" that does not exist.** `goods_receipts` has `id`,
+  `idempotency_key`, `delivery_note_ref` (a GCS object name) and `received_at` — no number. The only
+  `receipt_number` in the tree is `donations.receipt_number` from V117, an unrelated thing. It built
+  the other two of the three Rajeev asked for — `8 of 10 items across 3 orders`, and abandoned as its
+  own count — and **invented nothing for the third**. Its guess at what he meant is a per-line
+  *"8 of 10 kg in time, received 12 Sep"* on the **order** screen, which is a new surface. **Ask him.**
+- **The tick was recorded and scored but shown nowhere a person would look** — activity trail only,
+  not on the cancelled order's face. Raised rather than smuggled in, because the field it needed was
+  outside its contract. **Dispatched as T-126.**
+- **No new error code**, because nothing here refuses anybody anything. `ErrorCode.java` unopened.
+
+**And one judgement call it pinned with a test rather than burying:** **rejected quantity still
+counts as having arrived** for on-time — it was at the gate on the day, and the fill rate and the
+rejection column beside it are what catch it. None of Rajeev's five cases involves a rejection, so
+this is the builder's reading rather than his ruling. It is one SQL term to reverse.
+
+- **proof:** `docs/work/proof/T-124.md` · **shipped:** `f1d6c09`, 2026-09-10, wave 16 — *feat: on-time is scored per item, and a cancelled order can name the vendor who never came*. `V118` is the migration; it applied to staging on this wave's deploy. Carries T-126 in the same commit — see that row for why.
 
 ### T-096 — two admins pressing Send at once send the whole letter twice
 

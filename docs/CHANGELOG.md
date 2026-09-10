@@ -1182,6 +1182,77 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-10 — A vendor is scored on what actually arrived, a cancellation can name the supplier who never came, and five things found by driving the deployed app (wave 16; tasks T-124, T-125, T-126, T-127)
+
+**On-time is scored per item, and the fifth scenario finally has somewhere to go (T-124).** Rajeev
+wrote out five delivery scenarios on 2026-09-09, each with the figure he expected from it, and the
+application answered three of them wrongly. On-time was a **binary read of the first goods receipt**:
+the lorry either came inside the promised window or it did not, and every item after that counted for
+nothing. It is now the **mean of the per-item fractions** — eight of ten sacks inside the window is
+80%, not a pass and not a fail — so a part delivery reads as the part delivery it was. A line is
+**capped at fully delivered**, because bringing more than was ordered is not a bonus, and a
+`NOT_DELIVERED` return **takes its quantity back out of the count**, because a receipt reversed as
+never having happened should not go on scoring. A return for weevils leaves on-time alone: the goods
+were there on the day, and that is what on-time measures.
+
+His fifth scenario — *nothing ever came, we cancelled and went elsewhere* — had no home in the
+product at all. The report's rule excluded every cancelled order, which was written on a true premise
+(a cancellation is usually the temple's own decision and cannot be held against a supplier) and
+missed that a cancellation is sometimes the **only record of a supplier's worst possible
+performance**. Cancelling now offers a tick box in Rajeev's own words, **"Vendor Never Delivered this
+Order"**. Ticked, the order scores 0% and counts as abandoned; unticked — the default, and every
+cancellation ever raised before today — it is counted **nowhere at all, in either direction**, because
+silence blames nobody. `V118` adds the column with a CHECK tying it to `CANCELLED`, so it cannot be
+set on an order still in progress, and the flag goes into the existing `PO_CANCELLED` audit record
+rather than growing a second pair of who-and-when columns beside `cancelled_at`.
+
+**This is also how T-109 stops being a question rather than getting an answer.** It asked what an
+order-grain on-time figure should do when one line of four never arrived, and at that grain there was
+no defensible answer to give. At item grain there is no special case left to rule on.
+
+**The cancelled order says on its face who is being blamed (T-126).** T-124 recorded the tick in the
+row, the trail and the scorecard; a person opening the order still saw only the reason. Beside it now:
+a **Never delivered** badge and the sentence *"The vendor never delivered this order. It counts
+against their delivery record."* A bare badge under a line already reading *Cancelled* could as easily
+mean the goods never came **because** we called it off — the sentence names who we are holding
+responsible, which is the entire difference between the two kinds of cancellation. The wording is the
+cancel form's own promise said back, so nobody is told two different things about one tick.
+
+**Five things found by driving the deployed app after wave 15 (T-125).** An ingredient's movement list
+printed **`USED_BEYOND_RECORDED_STOCK`** at the reader — three of the seven kinds had no label at all,
+so the screen fell back to the stored constant; all three have one now and the fallback humanises
+whatever a later migration adds instead of shouting it. **Zero was shown in the wrong unit**: an item
+kept in litres read *0 ml*, because the rule that turns 0.4 L into 400 ml has nothing to step down from
+when the figure is nothing; zero now keeps the item's own unit, while *no figure at all* still reads as
+an em dash, because "we have no figure" and "we have none of it" are different things. **The receipt
+card never noticed its PDF was ready** — the document is generated elsewhere and the card was drawn
+once, so the only way to get the download button was to reload the page; it now re-reads while one is
+pending, stops the moment it is ready, and does not run while the tab is hidden. **The banner after
+recording a gift promised a thank-you nobody could receive** — an anonymous gift leaves nobody to
+thank, and a named donor with neither phone number nor email cannot be reached; it now says which of
+the three it is, from the server's own reachability test. And **the duplicate-invoice warning counted
+voided invoices**, which is exactly the case where a number is being reused on purpose — T-073 ruled
+that a struck invoice should not hold its number and the ruling had never been built.
+
+**The printed sheet and the screen stop disagreeing about zero (T-127).** The backend keeps its own
+copy of the quantity display rule, for the job card, the work order and the generated documents. T-125
+fixed the screen; this side still stepped zero down, so a cook holding the sheet read *0 ml* against a
+screen reading *0 L* for the same ingredient. The comparison is on the sign rather than on equality
+with zero — a quantity comes back through JDBC carrying its column's scale, so a genuine nothing
+arrives as `0.000` and an equality test would answer false on the scale alone, working in a unit test
+and not in the application. A figure that is merely small still steps down. The class javadoc claimed
+that changing one copy without the other fails the build; that was never true, this defect is what it
+cost, and it now says what actually holds.
+
+**Not done.** None of the four has been seen working by anybody yet — they deploy to staging with this
+entry and want a pass as the Kitchen Manager (the scorecard, a cancellation with the tick, a cancelled
+order's face) and as a Temple Admin (the receipt card, the ledger banner, an item kept in litres).
+**T-126's sentence is the builder's wording, not Rajeev's** — he gave the tick box's label only, and
+one string is cheap to change. **A third copy of the quantity rule still exists**, in `RecipeScaler`,
+with the same missing zero case; it is recorded as **T-128** rather than folded in, because three
+copies of one rule is now a pattern and the question of whether they collapse or get a shared test is
+bigger than the fix.
+
 ### 2026-09-10 — An ingredient's stock stops at zero, a donation opens on its own page with its 80G receipt, and seven errors stop naming a door the reader cannot open (wave 15; tasks T-122, T-110, T-104, T-095)
 
 **Stock stops at zero, and the shortfall stays on the record (T-122).** T-087 shipped that morning
