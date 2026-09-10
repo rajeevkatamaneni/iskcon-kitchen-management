@@ -12340,7 +12340,7 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **id:** T-103
 - **source:** **T-013's builder, 2026-09-09**, which was asked *"who already sums `stock_movements`?"*
   and answered a better question as well.
-- **state:** **dispatched 2026-09-10** after Rajeev ruled it. See the decision recorded above.
+- **state:** **SHIPPED `e59ad13`, deployed to staging.** Marked 2026-09-10. *(This row lagged the tree again — the second time in one day. The ledger is only worth what its last update was worth.)*
 
 > **Rajeev's decision, 2026-09-10, on the fill-rate half:** *subtract only the returns whose reason
 > blames the vendor — `DAMAGED`, `SPOILED`, `WRONG_ITEM`, `NOT_DELIVERED` — and **not** `OTHER`.*
@@ -12587,7 +12587,7 @@ one receipt for the whole payment.
 - **id:** T-114
 - **source:** **split out of T-058 on Rajeev's instruction, 2026-09-10.** Originally found by T-037's
   builder, which fixed the neighbouring case and **named this sliver rather than hiding it.**
-- **state:** queued. **The only item in T-058 that was a defect rather than tidying**, which is why
+- **state:** **SHIPPED `9458969`, deployed to staging.** Marked 2026-09-10. *(This row lagged the tree again — the second time in one day. The ledger is only worth what its last update was worth.)*
   it left.
 - **what:** `frontend/app/register/page.tsx:421` maps Firebase's `auth/email-already-in-use` to
   *"There is already an account with that email. Sign in instead."*
@@ -12612,7 +12612,7 @@ one receipt for the whole payment.
 
 - **id:** T-115
 - **source:** **split out of T-058 on Rajeev's instruction, 2026-09-10.** Found by T-057's builder.
-- **state:** queued. **It is not tidying: it has disabled a rule this project relies on.**
+- **state:** **SHIPPED `9458969`, deployed to staging.** Marked 2026-09-10. *(This row lagged the tree again — the second time in one day. The ledger is only worth what its last update was worth.)*
 - **what:** all three Cloud Run services carry a perpetual `scaling { min_instance_count = 0 -> null }`
   diff, **present in the untouched baseline at `HEAD`.**
 - **and the comment explaining it is wrong too.** `infra/environment/main.tf:640`'s `lifecycle`
@@ -12702,7 +12702,7 @@ one receipt for the whole payment.
 - **id:** T-119
 - **source:** **item 1 of T-058, put to Rajeev three times and answered on 2026-09-10.** It leaves
   the cleanup bucket because it was never cleanup — it is a product decision.
-- **state:** queued. **Ruled and ready to brief.**
+- **state:** **SHIPPED `7606480`, deployed to staging.** Marked 2026-09-10. *(This row lagged the tree again — the second time in one day. The ledger is only worth what its last update was worth.)*
 
 **What happens today.** Importing a recipe from the shared library creates any ingredient this
 temple does not already have — silently, and on purpose: `RecipeImportService` says standing a
@@ -12766,6 +12766,48 @@ so that is all it says.
   readers, and this project's standing lesson is that a count goes on compiling perfectly when the
   meaning of a row changes underneath it. **Adding a state to a derived enum is exactly that shape.**
 - **proof:** — · **shipped:** —
+
+# Six tasks shipped with no ledger row, and this is them — written 2026-09-10
+
+**A gap in how this session ran, recorded rather than quietly filled.** Each of these was dispatched
+with a brief that said *"no ledger row yet — this brief is authoritative"*, on the reasoning that the
+brief carried everything the builder needed. **That was true for the builder and false for the
+record.** Each shipped, each is live on staging, and none had a row here until now.
+
+**The rule that should have been followed:** a task gets its row **before** it is dispatched, even a
+one-line one. The brief is for the builder; the row is for whoever reads this in six months. They are
+not the same document and one does not stand in for the other.
+
+### T-106 — correcting attendance narrows to Temple Admin and Kitchen Manager
+- **state:** **SHIPPED `54da64e`.** Rajeev's decision, 2026-09-10, from three options: Kitchen Staff
+  keep marking attendance but can no longer **correct** a colleague's. New permission
+  `CORRECT_RECORDED_ATTENDANCE`, split out the way `CORRECT_RECORDED_MEAL` was.
+- **the find worth keeping:** the correction buttons had **no role check at all** — every cook would
+  have seen buttons that fail on click. The copy lied to them too, and now reads *"a kitchen manager
+  can change a mark afterwards"*.
+
+### T-107 — the arrivals panel starts with nothing ticked
+- **state:** **SHIPPED `e59ad13`.** Rajeev, after seeing it on staging: every described line arrived
+  **pre-ticked** on a permanent, un-undoable write.
+- **the control found it was worse than described:** with boxes pre-ticked, unticking one and
+  clicking sent **the wrong line entirely** — one click meaning *"the stools came"* could record the
+  mixer repair instead. The semantics were inverted, not merely over-eager.
+
+### T-111, T-112, T-113 — recurring donations leave Phase 1
+- **state:** **SHIPPED `9458969`.** Backend and database, frontend, and documents, split three ways
+  because a removal's blast radius includes what promised the feature. See **D-23** for the whole
+  decision; `V114` drops the table.
+
+### T-121 — the ingredients table stops inviting a mistake
+- **state:** **SHIPPED `8660234`.** Ekadashi becomes a real label in view mode and a checkbox in
+  edit; the import label clears only on a **real** change; edit-mode order is Rajeev's.
+- **and it closed a privilege hole it would otherwise have opened:** putting the Ekadashi flag on the
+  update body would have let kitchen staff set the fasting restriction, because `PUT` on an
+  ingredient sits behind `MANAGE_RECIPES` while **create** always checked the dietary-policy
+  permission separately. Now `update` checks it too. **Second instance this week of a permission that
+  was right for an endpoint's original job and wrong once it gained a field.**
+
+---
 
 ### T-096 — two admins pressing Send at once send the whole letter twice
 
@@ -12953,7 +12995,7 @@ argument. They are written here as rows because a ruling with no row does not ge
 
 - **id:** T-081
 - **source:** Rajeev's review, ruling 7, 2026-09-08. Found by working through the race he asked about.
-- **state:** **dispatched 2026-09-10** after Rajeev ruled it, with his donor-message wording recorded above.
+- **state:** **SHIPPED `e59ad13 / a1475c3`, deployed to staging.** Marked 2026-09-10. *(This row lagged the tree again — the second time in one day. The ledger is only worth what its last update was worth.)*
 
 > **Rajeev's decision, 2026-09-10: ONE donation record, with the split recorded inside it.** One card
 > payment produces one 80G receipt, because the receipt is what a human sees and what the tax
@@ -13052,7 +13094,7 @@ dispatch; do not fan out on the numbering.
 
 ### T-086 — on hand, committed, available
 
-- **id:** T-086 · **state:** queued · **wave:** unscheduled
+- **id:** T-086 · **state:** **SHIPPED `88feeb5`, deployed to staging 2026-09-10** · **wave:** unscheduled
 - **ruled: Option 2, with one word changed.** He proposed locking committed stock and **hiding** it;
   the coordinator argued hiding destroys the only question inventory exists to answer, **and he took
   the amendment.**
@@ -13087,7 +13129,7 @@ dispatch; do not fan out on the numbering.
 
 ### T-087 — recording never refuses on stock grounds
 
-- **id:** T-087 · **state:** queued · **wave:** unscheduled
+- **id:** T-087 · **state:** **SHIPPED `88feeb5`, deployed to staging 2026-09-10** · **wave:** unscheduled
 - **the principle, in his words:** *"There should NEVER be a situation where the food was cooked and
   our tool tells them NOPE you are lying, you didn't have the ingredients to cook that food."*
 - **driven on live staging during the review and reproduced exactly:** recording Dinner on 23 August
@@ -13121,7 +13163,7 @@ dispatch; do not fan out on the numbering.
 
 ### T-088 — the planner badge judges against available
 
-- **id:** T-088 · **state:** queued · **wave:** unscheduled
+- **id:** T-088 · **state:** **SHIPPED `171b3b4`, deployed to staging 2026-09-10** · **wave:** unscheduled
 - **the prize is on the planner, not the inventory page** — his framing, and it is the reason the
   spine is worth doing at all. Sufficiency today allocates against **batch stock alone** with no
   knowledge of any other day's plan, so **six days each needing 10 kg against 50 kg in the store are
@@ -13133,7 +13175,7 @@ dispatch; do not fan out on the numbering.
 
 ### T-089 — Supplies splits out of Ingredients, and Equipment gains a second tier
 
-- **id:** T-089 · **state:** queued · **wave:** unscheduled
+- **id:** T-089 · **state:** **SHIPPED `88feeb5`, deployed to staging 2026-09-10** · **wave:** unscheduled
 - **today** food-or-supply is a **boolean flag** on an ingredient, badged on the list (**D-1**).
 - **ruled: Supplies becomes its own menu item under Kitchen, after Ingredients.**
 - **the line between Supplies and Equipment is his, and it is better than the coordinator's.** The
