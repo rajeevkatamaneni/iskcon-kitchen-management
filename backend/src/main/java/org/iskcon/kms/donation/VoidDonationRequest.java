@@ -14,5 +14,7 @@ import jakarta.validation.constraints.Size;
  * can put a blank one in behind this.
  */
 public record VoidDonationRequest(
-		@NotBlank @Size(max = 500) String reason) {
+		@NotBlank(message = "Say why this gift is being struck out.")
+		@Size(max = 500, message = "That reason is too long.")
+		String reason) {
 }

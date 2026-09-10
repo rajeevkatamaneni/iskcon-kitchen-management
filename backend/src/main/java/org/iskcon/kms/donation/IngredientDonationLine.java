@@ -11,8 +11,10 @@ import java.util.UUID;
  * movement. Expiry is optional — a donor may bring dated packaged goods, or loose produce with none.
  */
 public record IngredientDonationLine(
-		@NotNull UUID ingredientId,
-		@NotNull @Positive BigDecimal quantity,
-		@NotNull String unit,
+		@NotNull(message = "Choose an ingredient.") UUID ingredientId,
+		@NotNull(message = "Enter how much was given.")
+		@Positive(message = "Enter an amount greater than zero.")
+		BigDecimal quantity,
+		@NotNull(message = "Choose a unit.") String unit,
 		LocalDate expiryDate) {
 }

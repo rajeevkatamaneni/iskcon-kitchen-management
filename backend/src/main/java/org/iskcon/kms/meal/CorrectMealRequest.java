@@ -42,9 +42,11 @@ import java.util.UUID;
  *               unchanged is the one thing this form must not do.
  */
 public record CorrectMealRequest(
-		@NotBlank @Size(max = 2000) String note,
+		@NotBlank(message = "Say what is being corrected and why.")
+		@Size(max = 2000, message = "That note is too long.")
+		String note,
 
-		@Valid @NotEmpty List<DishCorrection> dishes) {
+		@Valid @NotEmpty(message = "Choose at least one dish to correct.") List<DishCorrection> dishes) {
 
 	/**
 	 * One dish as it should have been recorded: how much was cooked, and how much of it was eaten.
@@ -63,7 +65,7 @@ public record CorrectMealRequest(
 	 *                         one <em>out of</em> it draws stock for the first time.
 	 */
 	public record DishCorrection(
-			@NotNull UUID mealPlanId,
+			@NotNull(message = "Say which dish this correction is for.") UUID mealPlanId,
 			BigDecimal actualServings,
 			BigDecimal consumedQuantity,
 			boolean notMade) {

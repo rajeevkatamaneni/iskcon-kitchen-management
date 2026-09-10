@@ -20,8 +20,10 @@ import java.util.UUID;
  *     subtracted from a date, and a mistyped 3650 turns every screen red at once.
  */
 public record SetVendorSupplyRequest(
-		@NotNull UUID ingredientId,
-		@PositiveOrZero BigDecimal lastPrice,
-		@PositiveOrZero @Max(365) Integer leadTimeDays,
+		@NotNull(message = "Choose an ingredient.") UUID ingredientId,
+		@PositiveOrZero(message = "A price cannot be less than nothing.") BigDecimal lastPrice,
+		@PositiveOrZero(message = "A lead time is between 0 and 365 days.")
+		@Max(value = 365, message = "A lead time is between 0 and 365 days.")
+		Integer leadTimeDays,
 		boolean preferred) {
 }

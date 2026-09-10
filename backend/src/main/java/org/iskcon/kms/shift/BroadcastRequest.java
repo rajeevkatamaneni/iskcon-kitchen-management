@@ -8,6 +8,8 @@ import jakarta.validation.constraints.Size;
  * template allows; {@code includeWaitlist} adds the waitlist to the signed-up recipients (default off).
  */
 public record BroadcastRequest(
-		@NotBlank @Size(max = 1000) String message,
+		@NotBlank(message = "Write the message to send.")
+		@Size(max = 1000, message = "That message is too long.")
+		String message,
 		boolean includeWaitlist) {
 }

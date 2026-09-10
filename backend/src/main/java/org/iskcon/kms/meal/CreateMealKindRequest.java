@@ -9,7 +9,9 @@ import java.time.LocalTime;
  * input: it makes the kind ask for a time every time it is planned.
  */
 public record CreateMealKindRequest(
-		@NotBlank @Size(max = 80) String name,
+		@NotBlank(message = "Enter the meal's name.")
+		@Size(max = 80, message = "That name is too long.")
+		String name,
 		int sortOrder,
 		LocalTime defaultReadyTime,
 

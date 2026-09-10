@@ -27,8 +27,10 @@ import java.time.LocalDate;
  * accurately.
  */
 public record RecordServiceRequest(
-		@NotNull LocalDate servicedOn,
-		@Size(max = 200) String serviceCompany,
-		@Size(max = 1000) String workDone,
-		@PositiveOrZero @Digits(integer = 10, fraction = 2) BigDecimal costInr) {
+		@NotNull(message = "Enter the date it was serviced.") LocalDate servicedOn,
+		@Size(max = 200, message = "That name is too long.") String serviceCompany,
+		@Size(max = 1000, message = "That description is too long.") String workDone,
+		@PositiveOrZero(message = "A service cost cannot be less than nothing.")
+		@Digits(integer = 10, fraction = 2, message = "Enter a cost in rupees and paise, for example 4500.")
+		BigDecimal costInr) {
 }

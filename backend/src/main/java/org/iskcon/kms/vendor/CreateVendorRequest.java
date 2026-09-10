@@ -22,15 +22,19 @@ import java.time.LocalDate;
  * what should happen to a field somebody typed a space into.
  */
 public record CreateVendorRequest(
-		@NotBlank @Size(max = 200) String name,
-		@Size(max = 200) String contactPerson,
+		@NotBlank(message = "Enter the vendor's name.")
+		@Size(max = 200, message = "That name is too long.")
+		String name,
+		@Size(max = 200, message = "That name is too long.") String contactPerson,
 		@Pattern(regexp = "^\\+[1-9][0-9]{7,14}$",
 				message = "Include the country code, for example +919876543210.") String phone,
-		@Email @Size(max = 200) String email,
-		@Size(max = 500) String address,
-		@Size(max = 30) String gstin,
-		@Size(max = 10) String preferredLanguage,
-		@Size(max = 1000) String notes,
+		@Email(message = "That doesn't look like an email address.")
+		@Size(max = 200, message = "That email address is too long.")
+		String email,
+		@Size(max = 500, message = "That address is too long.") String address,
+		@Size(max = 30, message = "That GSTIN is too long.") String gstin,
+		@Size(max = 10, message = "That language code is too long.") String preferredLanguage,
+		@Size(max = 1000, message = "That note is too long.") String notes,
 		/**
 		 * When the agreement with this vendor runs out, or null if there is no such date. Recorded
 		 * and warned about, never acted on — it does not deactivate anybody.

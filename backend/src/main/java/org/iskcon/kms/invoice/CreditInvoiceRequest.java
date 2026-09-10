@@ -14,6 +14,10 @@ import java.math.BigDecimal;
  * invoice wearing the wrong name, and the database refuses one too.
  */
 public record CreditInvoiceRequest(
-		@NotNull @Positive BigDecimal amount,
-		@NotBlank @Size(max = 500) String reason) {
+		@NotNull(message = "Enter the amount to credit.")
+		@Positive(message = "A credit has to be more than zero.")
+		BigDecimal amount,
+		@NotBlank(message = "Say why the vendor is being credited.")
+		@Size(max = 500, message = "That reason is too long.")
+		String reason) {
 }

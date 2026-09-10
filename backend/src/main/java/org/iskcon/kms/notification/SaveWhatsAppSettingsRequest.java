@@ -12,8 +12,12 @@ import jakarta.validation.constraints.Size;
  * supplied, they replace what is there.
  */
 public record SaveWhatsAppSettingsRequest(
-		@NotBlank @Size(max = 64) String phoneNumberId,
-		@NotBlank @Size(max = 64) String wabaId,
-		@Size(max = 500) String accessToken,
-		@Size(max = 200) String appSecret) {
+		@NotBlank(message = "Enter the phone number id from your WhatsApp Business account.")
+		@Size(max = 64, message = "That id is too long.")
+		String phoneNumberId,
+		@NotBlank(message = "Enter the account id from your WhatsApp Business account.")
+		@Size(max = 64, message = "That id is too long.")
+		String wabaId,
+		@Size(max = 500, message = "That access key is too long.") String accessToken,
+		@Size(max = 200, message = "That secret is too long.") String appSecret) {
 }

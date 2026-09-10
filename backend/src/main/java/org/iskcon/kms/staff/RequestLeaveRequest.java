@@ -15,9 +15,9 @@ import java.time.LocalDate;
  * refusing it would only teach people to record the wrong dates.
  */
 public record RequestLeaveRequest(
-		@NotNull LeaveType leaveType,
-		@NotNull LocalDate fromDate,
-		@NotNull LocalDate toDate,
+		@NotNull(message = "Choose the kind of leave.") LeaveType leaveType,
+		@NotNull(message = "Enter the first day you will be away.") LocalDate fromDate,
+		@NotNull(message = "Enter the last day you will be away.") LocalDate toDate,
 		boolean halfDay,
-		@Size(max = 500) String reason) {
+		@Size(max = 500, message = "That reason is too long.") String reason) {
 }

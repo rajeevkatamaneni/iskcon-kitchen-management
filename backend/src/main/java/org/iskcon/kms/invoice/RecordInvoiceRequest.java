@@ -14,12 +14,16 @@ import java.util.UUID;
  * enforces exactly one of those shapes.
  */
 public record RecordInvoiceRequest(
-		@NotNull UUID vendorId,
+		@NotNull(message = "Choose a vendor.") UUID vendorId,
 		UUID purchaseOrderId,
-		@Size(max = 500) String description,
-		@NotBlank @Size(max = 100) String invoiceNumber,
-		@NotNull LocalDate invoiceDate,
-		@NotNull @Positive BigDecimal amount,
+		@Size(max = 500, message = "That description is too long.") String description,
+		@NotBlank(message = "Enter the number printed on the vendor's bill.")
+		@Size(max = 100, message = "That number is too long.")
+		String invoiceNumber,
+		@NotNull(message = "Enter the date on the bill.") LocalDate invoiceDate,
+		@NotNull(message = "Enter the amount on the bill.")
+		@Positive(message = "A bill has to be for more than zero.")
+		BigDecimal amount,
 		LocalDate dueDate,
-		@Size(max = 500) String scanRef) {
+		@Size(max = 500, message = "That reference is too long.") String scanRef) {
 }

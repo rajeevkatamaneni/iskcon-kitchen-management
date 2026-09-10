@@ -9,5 +9,7 @@ import jakarta.validation.constraints.Size;
  * exists to prevent.
  */
 public record CompensateRequest(
-		@NotBlank @Size(max = 500) String note) {
+		@NotBlank(message = "Say what is being put right.")
+		@Size(max = 500, message = "That note is too long.")
+		String note) {
 }

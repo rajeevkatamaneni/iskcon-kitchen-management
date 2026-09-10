@@ -11,7 +11,11 @@ import jakarta.validation.constraints.Size;
  * see. Left blank, the stored one is kept and re-proven; supplied, it replaces it.
  */
 public record SavePaymentSettingsRequest(
-		@NotBlank @Size(max = 40) String provider,
-		@NotBlank @Size(max = 200) String keyId,
-		@Size(max = 200) String keySecret) {
+		@NotBlank(message = "Choose a payment provider.")
+		@Size(max = 40, message = "That name is too long.")
+		String provider,
+		@NotBlank(message = "Enter the key id from your payment provider.")
+		@Size(max = 200, message = "That key id is too long.")
+		String keyId,
+		@Size(max = 200, message = "That secret is too long.") String keySecret) {
 }

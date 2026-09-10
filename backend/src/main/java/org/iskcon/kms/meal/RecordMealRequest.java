@@ -28,15 +28,17 @@ import java.util.UUID;
  *               must not do.
  */
 public record RecordMealRequest(
-		@NotNull LocalDate planDate,
-		@NotBlank @Size(max = 80) String mealKind,
+		@NotNull(message = "Choose the day this meal was cooked.") LocalDate planDate,
+		@NotBlank(message = "Choose which meal this is.")
+		@Size(max = 80, message = "That name is too long.")
+		String mealKind,
 
-		@Size(max = 200) String eventName,
+		@Size(max = 200, message = "That event name is too long.") String eventName,
 
 		/** Anything the office wants on the record — "ran short, sent out at 220". */
-		@Size(max = 2000) String note,
+		@Size(max = 2000, message = "That note is too long.") String note,
 
-		@Valid @NotEmpty List<DishRecord> dishes) {
+		@Valid @NotEmpty(message = "Say what happened to every dish on the card.") List<DishRecord> dishes) {
 
 	/**
 	 * One dish as the card came back: how much was cooked, and how much of it was eaten.
@@ -54,7 +56,7 @@ public record RecordMealRequest(
 	 * @param notMade        the dish never went into a pot, so it draws nothing from stock.
 	 */
 	public record DishRecord(
-			@NotNull UUID mealPlanId,
+			@NotNull(message = "Say which dish this row is for.") UUID mealPlanId,
 			BigDecimal actualServings,
 			BigDecimal consumedQuantity,
 			boolean notMade) {

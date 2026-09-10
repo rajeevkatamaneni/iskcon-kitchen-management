@@ -30,13 +30,15 @@ import java.util.UUID;
  */
 public record RecordDonationRequest(
 		boolean anonymous,
-		@Size(max = 200) String donorName,
-		@Size(max = 120) String donorPhone,
-		@Size(max = 200) String donorEmail,
-		@Positive BigDecimal cashAmountInr,
-		@PositiveOrZero BigDecimal estimatedValueInr,
-		@NotNull LocalDate donatedOn,
-		@Size(max = 1000) String notes,
+		@Size(max = 200, message = "That name is too long.") String donorName,
+		@Size(max = 120, message = "That phone number is too long.") String donorPhone,
+		@Size(max = 200, message = "That email address is too long.") String donorEmail,
+		@Positive(message = "A cash gift has to be more than zero. Leave it blank if the gift was goods.")
+		BigDecimal cashAmountInr,
+		@PositiveOrZero(message = "An estimated value cannot be less than nothing.")
+		BigDecimal estimatedValueInr,
+		@NotNull(message = "Enter the date the gift was given.") LocalDate donatedOn,
+		@Size(max = 1000, message = "That note is too long.") String notes,
 		UUID wishlistItemId,
 		@Valid List<IngredientDonationLine> ingredients,
 		@Valid List<EquipmentDonationLine> equipment) {

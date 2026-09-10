@@ -18,11 +18,15 @@ import java.util.UUID;
  * all. A null leaves {@code vendor_supplies.last_price} exactly as it was.
  */
 public record ReceiptLineInput(
-		@NotNull UUID poLineId,
-		@NotNull @PositiveOrZero BigDecimal receivedQty,
-		@NotNull @PositiveOrZero BigDecimal rejectedQty,
+		@NotNull(message = "Say which line of the order this is.") UUID poLineId,
+		@NotNull(message = "Enter how much arrived in good condition.")
+		@PositiveOrZero(message = "An amount received cannot be less than nothing.")
+		BigDecimal receivedQty,
+		@NotNull(message = "Enter how much was sent back, or zero.")
+		@PositiveOrZero(message = "An amount rejected cannot be less than nothing.")
+		BigDecimal rejectedQty,
 		RejectReason rejectReason,
 		LocalDate expiryDate,
 		LocalDate receivedDate,
-		@PositiveOrZero BigDecimal unitPrice) {
+		@PositiveOrZero(message = "A price cannot be less than nothing.") BigDecimal unitPrice) {
 }

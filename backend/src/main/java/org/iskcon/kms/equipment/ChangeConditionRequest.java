@@ -9,6 +9,8 @@ import jakarta.validation.constraints.Size;
  * point of the state-change flow is that "sent for repair" or "scrapped" never happens without a why.
  */
 public record ChangeConditionRequest(
-		@NotNull EquipmentCondition condition,
-		@NotBlank @Size(max = 500) String reason) {
+		@NotNull(message = "Choose the condition it is in now.") EquipmentCondition condition,
+		@NotBlank(message = "Say why the condition changed.")
+		@Size(max = 500, message = "That reason is too long.")
+		String reason) {
 }

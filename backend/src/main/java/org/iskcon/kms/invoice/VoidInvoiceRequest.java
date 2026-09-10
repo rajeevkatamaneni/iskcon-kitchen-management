@@ -10,5 +10,8 @@ import jakarta.validation.constraints.Size;
  * queue next month has only these words to tell them whether the bill was a duplicate, a vendor's
  * mistake, or something the temple is still arguing about — and the mark is never overwritten.
  */
-public record VoidInvoiceRequest(@NotBlank @Size(max = 500) String reason) {
+public record VoidInvoiceRequest(
+		@NotBlank(message = "Say why this bill is being struck out.")
+		@Size(max = 500, message = "That reason is too long.")
+		String reason) {
 }

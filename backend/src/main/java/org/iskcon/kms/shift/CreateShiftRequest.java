@@ -13,14 +13,17 @@ import java.util.List;
  * single 24h (1440-minute) reminder; each offset is minutes before the shift start.
  */
 public record CreateShiftRequest(
-		@NotBlank @Size(max = 200) String title,
-		@Size(max = 2000) String description,
-		@NotNull LocalDate shiftDate,
-		@NotNull LocalTime startTime,
-		@NotNull LocalTime endTime,
-		@Size(max = 300) String location,
-		@Positive int capacity,
-		List<@Positive Integer> reminderOffsetsMinutes,
+		@NotBlank(message = "Give the shift a title.")
+		@Size(max = 200, message = "That title is too long.")
+		String title,
+		@Size(max = 2000, message = "That description is too long.") String description,
+		@NotNull(message = "Choose the day of the shift.") LocalDate shiftDate,
+		@NotNull(message = "Choose what time the shift starts.") LocalTime startTime,
+		@NotNull(message = "Choose what time the shift ends.") LocalTime endTime,
+		@Size(max = 300, message = "That location is too long.") String location,
+		@Positive(message = "A shift needs room for at least one volunteer.") int capacity,
+		List<@Positive(message = "A reminder goes out at least one minute before the shift.") Integer>
+				reminderOffsetsMinutes,
 		/**
 		 * The meal this shift is posted for (D-14), or nothing at all where it is not posted for one.
 		 *
@@ -36,6 +39,6 @@ public record CreateShiftRequest(
 		 * lunch has not been planned yet would make the field unusable in the order it is used.
 		 */
 		LocalDate mealDate,
-		@Size(max = 100) String mealKind,
-		@Size(max = 200) String mealEventName) {
+		@Size(max = 100, message = "That name is too long.") String mealKind,
+		@Size(max = 200, message = "That event name is too long.") String mealEventName) {
 }

@@ -10,11 +10,11 @@ import java.time.LocalDate;
  * negative amount is a compensating correction of an earlier one.
  */
 public record RecordInvoicePaymentRequest(
-		@NotNull LocalDate paidOn,
-		@NotNull BigDecimal amount,
-		@NotNull PaymentMethod method,
-		@Size(max = 100) String reference,
-		@Size(max = 500) String note) {
+		@NotNull(message = "Enter the date of the payment.") LocalDate paidOn,
+		@NotNull(message = "Enter the amount paid.") BigDecimal amount,
+		@NotNull(message = "Choose how the vendor was paid.") PaymentMethod method,
+		@Size(max = 100, message = "That reference is too long.") String reference,
+		@Size(max = 500, message = "That note is too long.") String note) {
 
 	public enum PaymentMethod { BANK_TRANSFER, UPI, CHEQUE, CASH }
 }

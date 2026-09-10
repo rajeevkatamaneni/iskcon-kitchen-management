@@ -57,10 +57,10 @@ public record HireStaffRequest(
 		@Past(message = "A date of birth has to be in the past.")
 		LocalDate dateOfBirth,
 
-		@Size(max = 500) String address,
+		@Size(max = 500, message = "That address is too long.") String address,
 
-		@Size(max = 200) String emergencyContactName,
-		@Size(max = 100) String emergencyContactRelationship,
+		@Size(max = 200, message = "That name is too long.") String emergencyContactName,
+		@Size(max = 100, message = "That relationship is too long.") String emergencyContactRelationship,
 		@Pattern(
 				regexp = "^\\+[1-9][0-9]{7,14}$",
 				message = "Include the country code, for example +919876543210.")
@@ -107,5 +107,5 @@ public record HireStaffRequest(
 		 */
 		AadhaarIdentity aadhaar,
 
-		@Size(max = 2000) String notes) {
+		@Size(max = 2000, message = "That note is too long.") String notes) {
 }

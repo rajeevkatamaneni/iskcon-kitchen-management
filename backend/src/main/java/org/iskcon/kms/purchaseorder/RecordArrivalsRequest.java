@@ -19,5 +19,6 @@ import java.util.UUID;
  * backdating can be added later without re-interpreting anything already stored. Flagged in
  * docs/work/proof/T-066.md.
  */
-public record RecordArrivalsRequest(@NotEmpty List<UUID> poLineIds) {
+public record RecordArrivalsRequest(
+		@NotEmpty(message = "Tick at least one line that arrived.") List<UUID> poLineIds) {
 }

@@ -26,8 +26,8 @@ import java.util.UUID;
  */
 public record AdjustStockRequest(
 		UUID batchId,
-		@NotNull BigDecimal quantity,
-		@NotNull String unit,
-		@NotNull AdjustmentReason reason,
-		@Size(max = 500) String note) {
+		@NotNull(message = "Enter how much to add or take away.") BigDecimal quantity,
+		@NotNull(message = "Choose a unit.") String unit,
+		@NotNull(message = "Choose why the stock is being adjusted.") AdjustmentReason reason,
+		@Size(max = 500, message = "That note is too long.") String note) {
 }

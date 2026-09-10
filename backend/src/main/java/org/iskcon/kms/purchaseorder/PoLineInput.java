@@ -26,8 +26,10 @@ import java.util.UUID;
  */
 public record PoLineInput(
 		UUID ingredientId,
-		@Size(max = 200) String description,
-		@NotNull @Positive BigDecimal quantity,
-		@NotBlank String unit,
-		@PositiveOrZero BigDecimal expectedPrice) {
+		@Size(max = 200, message = "That description is too long.") String description,
+		@NotNull(message = "Enter how much to order.")
+		@Positive(message = "Enter an amount greater than zero.")
+		BigDecimal quantity,
+		@NotBlank(message = "Choose a unit.") String unit,
+		@PositiveOrZero(message = "A price cannot be less than nothing.") BigDecimal expectedPrice) {
 }

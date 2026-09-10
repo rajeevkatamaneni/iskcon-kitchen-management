@@ -19,12 +19,12 @@ import java.time.LocalDate;
  * record (build brief §4, "One concept, not two"), so the grid has no separate write of its own.
  */
 public record RecordLeaveRequest(
-		@NotNull java.util.UUID staffProfileId,
-		@NotNull LeaveType leaveType,
-		@NotNull LocalDate fromDate,
-		@NotNull LocalDate toDate,
+		@NotNull(message = "Choose who this leave is for.") java.util.UUID staffProfileId,
+		@NotNull(message = "Choose the kind of leave.") LeaveType leaveType,
+		@NotNull(message = "Enter the first day of the leave.") LocalDate fromDate,
+		@NotNull(message = "Enter the last day of the leave.") LocalDate toDate,
 		boolean halfDay,
-		@Size(max = 500) String reason,
+		@Size(max = 500, message = "That reason is too long.") String reason,
 		/** What the approver wants on the record — "rang in, fever" — rather than why it was asked. */
-		@Size(max = 500) String decisionNote) {
+		@Size(max = 500, message = "That note is too long.") String decisionNote) {
 }

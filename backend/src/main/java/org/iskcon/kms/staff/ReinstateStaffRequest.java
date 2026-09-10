@@ -37,5 +37,6 @@ public record ReinstateStaffRequest(
 		/** What they come back with. Null means no login at all, and is not an omission. */
 		SystemAccess systemAccess,
 
-		@Size(max = 1000) String reason) {
+		@Size(max = 1000, message = "That reason is too long.")
+		String reason) {
 }

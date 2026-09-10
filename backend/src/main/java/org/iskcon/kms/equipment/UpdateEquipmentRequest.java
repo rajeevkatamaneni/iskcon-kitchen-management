@@ -17,12 +17,16 @@ import java.time.LocalDate;
  * same decision — do the service company and its phone number.
  */
 public record UpdateEquipmentRequest(
-		@NotBlank @Size(max = 200) String name,
-		@Size(max = 120) String storageLocation,
+		@NotBlank(message = "Enter the equipment's name.")
+		@Size(max = 200, message = "That name is too long.")
+		String name,
+		@Size(max = 120, message = "That location is too long.") String storageLocation,
 		LocalDate acquisitionDate,
 		EquipmentSource source,
-		@Size(max = 1000) String notes,
-		@Size(max = 120) String serialNumber,
-		@PositiveOrZero @Digits(integer = 10, fraction = 2) BigDecimal purchaseCostInr,
+		@Size(max = 1000, message = "That note is too long.") String notes,
+		@Size(max = 120, message = "That serial number is too long.") String serialNumber,
+		@PositiveOrZero(message = "A purchase cost cannot be less than nothing.")
+		@Digits(integer = 10, fraction = 2, message = "Enter a cost in rupees and paise, for example 4500.")
+		BigDecimal purchaseCostInr,
 		LocalDate warrantyExpiry) {
 }

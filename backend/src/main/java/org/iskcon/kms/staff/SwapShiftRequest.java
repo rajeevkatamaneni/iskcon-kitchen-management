@@ -13,8 +13,8 @@ import java.time.LocalDate;
  */
 public record SwapShiftRequest(
 		/** The day they normally work and will not, now. */
-		@NotNull LocalDate fromDate,
+		@NotNull(message = "Choose the day they will not be working.") LocalDate fromDate,
 		/** The day they will work instead, taking the hours the first day was going to have. */
-		@NotNull LocalDate toDate,
-		@Size(max = 300) String note) {
+		@NotNull(message = "Choose the day they will work instead.") LocalDate toDate,
+		@Size(max = 300, message = "That note is too long.") String note) {
 }

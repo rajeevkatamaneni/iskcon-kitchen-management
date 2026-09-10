@@ -9,6 +9,6 @@ import java.util.UUID;
  * consumed before the rest, which still follow FEFO.
  */
 public record BatchOverride(
-		@NotNull UUID ingredientId,
-		@NotNull UUID batchId) {
+		@NotNull(message = "Choose an ingredient.") UUID ingredientId,
+		@NotNull(message = "Choose which batch to take it from.") UUID batchId) {
 }

@@ -28,5 +28,6 @@ public record RecordStaffAdvanceRequest(
 		@Size(max = 100, message = "That reference is too long.")
 		String reference,
 
-		@Size(max = 1000) String note) {
+		@Size(max = 1000, message = "That note is too long.")
+		String note) {
 }

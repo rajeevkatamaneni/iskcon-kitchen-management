@@ -21,7 +21,7 @@ public record EndEmploymentRequest(
 		@NotNull(message = "Enter their last working day.")
 		LocalDate lastWorkingDay,
 
-		@Size(max = 1000) String reason,
+		@Size(max = 1000, message = "That reason is too long.") String reason,
 
 		/** True disables the account outright; false returns them to being an ordinary devotee. */
 		boolean revokeSignIn,

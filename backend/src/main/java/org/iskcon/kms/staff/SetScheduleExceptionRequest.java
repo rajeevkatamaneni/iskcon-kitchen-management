@@ -7,9 +7,9 @@ import java.time.LocalTime;
 
 /** Override one date on a staff member's schedule (E6-S1), leaving the template untouched. */
 public record SetScheduleExceptionRequest(
-		@NotNull LocalDate exceptionDate,
+		@NotNull(message = "Choose the day this change is for.") LocalDate exceptionDate,
 		boolean working,
 		LocalTime startTime,
 		LocalTime endTime,
-		@Size(max = 300) String note) {
+		@Size(max = 300, message = "That note is too long.") String note) {
 }

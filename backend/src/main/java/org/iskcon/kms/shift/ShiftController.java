@@ -151,7 +151,8 @@ public class ShiftController {
 	 * against somebody who came — and on this path it would be overwriting an answer somebody had
 	 * already considered.
 	 */
-	public record CorrectAttendanceRequest(@NotNull Boolean attended) {
+	public record CorrectAttendanceRequest(
+			@NotNull(message = "Say whether they turned up.") Boolean attended) {
 	}
 
 	/**

@@ -17,10 +17,12 @@ import java.math.BigDecimal;
  * so they are the one thing a devotee still has to type. The service checks them (E7-S4).
  */
 public record AccountDonationRequest(
-		@NotNull @Positive BigDecimal amountInr,
+		@NotNull(message = "Enter how much you would like to give.")
+		@Positive(message = "A gift has to be more than zero.")
+		BigDecimal amountInr,
 		boolean wants80g,
-		@Size(max = 500) String address,
-		@Size(max = 10) String pan) {
+		@Size(max = 500, message = "That address is too long.") String address,
+		@Size(max = 10, message = "A PAN is ten characters, for example ABCDE1234F.") String pan) {
 
 	/** The donor this gift is from: the account, plus whatever an 80G certificate additionally needs. */
 	public DonorDetails toDonor(org.iskcon.kms.auth.AuthenticatedUser actor) {

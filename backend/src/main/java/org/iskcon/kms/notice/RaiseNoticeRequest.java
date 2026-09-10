@@ -17,10 +17,14 @@ import jakarta.validation.constraints.Size;
  */
 public record RaiseNoticeRequest(
 
-		@NotNull NoticeSeverity severity,
+		@NotNull(message = "Choose how serious this is.") NoticeSeverity severity,
 
-		@NotBlank @Size(max = 120) String subject,
+		@NotBlank(message = "Give it a subject.")
+		@Size(max = 120, message = "That subject is too long.")
+		String subject,
 
 		/** Long enough for batch numbers and a phone number; too short to be a newsletter. */
-		@NotBlank @Size(max = 4000) String body) {
+		@NotBlank(message = "Write what the other temples need to know.")
+		@Size(max = 4000, message = "That notice is too long.")
+		String body) {
 }

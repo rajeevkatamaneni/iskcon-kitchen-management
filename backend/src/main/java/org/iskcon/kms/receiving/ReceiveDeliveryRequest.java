@@ -12,8 +12,10 @@ import java.util.List;
  * recorded rather than booking stock twice (SYSTEM_DESIGN §6).
  */
 public record ReceiveDeliveryRequest(
-		@NotBlank @Size(max = 100) String idempotencyKey,
-		@Size(max = 500) String deliveryNoteRef,
-		@Size(max = 1000) String note,
-		@NotEmpty @Valid List<ReceiptLineInput> lines) {
+		@NotBlank(message = "Reload the page and record this delivery again.")
+		@Size(max = 100, message = "Reload the page and record this delivery again.")
+		String idempotencyKey,
+		@Size(max = 500, message = "That reference is too long.") String deliveryNoteRef,
+		@Size(max = 1000, message = "That note is too long.") String note,
+		@NotEmpty(message = "A delivery needs at least one line.") @Valid List<ReceiptLineInput> lines) {
 }

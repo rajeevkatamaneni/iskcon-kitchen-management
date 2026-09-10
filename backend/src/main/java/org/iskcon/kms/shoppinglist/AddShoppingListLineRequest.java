@@ -23,7 +23,7 @@ import java.util.UUID;
  * shape has to admit a vendor for the day this screen offers one; no screen sends it today.
  */
 public record AddShoppingListLineRequest(
-		@NotNull UUID ingredientId,
+		@NotNull(message = "Choose an ingredient.") UUID ingredientId,
 
 		/**
 		 * How much to buy, in the ingredient's canonical unit.
@@ -34,7 +34,9 @@ public record AddShoppingListLineRequest(
 		 * carrying the list to the market nothing, and would reach the database only to be refused
 		 * by a constraint whose message nobody can read.
 		 */
-		@NotNull @Positive BigDecimal suggestedQty,
+		@NotNull(message = "Enter how much to buy.")
+		@Positive(message = "Enter an amount greater than zero.")
+		BigDecimal suggestedQty,
 
 		UUID suggestedVendorId) {
 }

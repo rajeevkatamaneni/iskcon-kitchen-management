@@ -127,14 +127,17 @@ public class SettingsController {
 	}
 
 	/** The new daily broadcast cap. */
-	public record UpdateBroadcastLimitRequest(@Positive int limit) {
+	public record UpdateBroadcastLimitRequest(
+			@Positive(message = "A daily limit of at least one message is needed.") int limit) {
 	}
 
 	/** An ISO 639-1 code — {@code kn}, {@code hi}, {@code en}. The region is added on the way in. */
-	public record UpdateLanguageRequest(@NotBlank String language) {
+	public record UpdateLanguageRequest(
+			@NotBlank(message = "Choose a language.") String language) {
 	}
 
 	/** A theme's identifier — {@code temple-terracotta}, {@code harbour-blue}. */
-	public record UpdateThemeRequest(@NotBlank String themeId) {
+	public record UpdateThemeRequest(
+			@NotBlank(message = "Choose a theme.") String themeId) {
 	}
 }

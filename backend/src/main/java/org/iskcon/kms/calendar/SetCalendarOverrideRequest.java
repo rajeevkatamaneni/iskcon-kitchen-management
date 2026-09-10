@@ -13,8 +13,12 @@ import jakarta.validation.constraints.Size;
  */
 public record SetCalendarOverrideRequest(
 		boolean isEkadashi,
-		@Size(max = 120) String ekadashiName,
-		@Min(0) @Max(29) Integer tithi,
-		@Size(max = 200) String festivalNote,
-		@NotBlank @Size(max = 500) String reason) {
+		@Size(max = 120, message = "That name is too long.") String ekadashiName,
+		@Min(value = 0, message = "A tithi is a number from 0 to 29.")
+		@Max(value = 29, message = "A tithi is a number from 0 to 29.")
+		Integer tithi,
+		@Size(max = 200, message = "That festival note is too long.") String festivalNote,
+		@NotBlank(message = "Say why this date is being changed.")
+		@Size(max = 500, message = "That reason is too long.")
+		String reason) {
 }

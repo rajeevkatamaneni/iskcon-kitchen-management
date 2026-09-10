@@ -14,5 +14,6 @@ import jakarta.validation.constraints.Size;
  * Emptiness is checked in the service, because a note of nothing but spaces passes {@code @Size} and
  * would be permanent (KMS-400012).
  */
-public record AddConductNoteRequest(@Size(max = 4000) String body) {
+public record AddConductNoteRequest(
+		@Size(max = 4000, message = "That note is too long.") String body) {
 }

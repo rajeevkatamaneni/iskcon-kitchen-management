@@ -10,5 +10,5 @@ import jakarta.validation.constraints.Size;
  * deactivation reason comes back as {@code KMS-400011} — which says what is missing and why it
  * matters — rather than the generic validation failure.
  */
-public record ChangeVendorStatusRequest(@Size(max = 500) String reason) {
+public record ChangeVendorStatusRequest(@Size(max = 500, message = "That reason is too long.") String reason) {
 }

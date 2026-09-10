@@ -11,5 +11,8 @@ import jakarta.validation.constraints.Size;
  * retraction — and a retraction that says only "withdrawn" leaves them worse informed than before,
  * unable to tell a recall that was mistaken from one that is over.
  */
-public record WithdrawNoticeRequest(@NotBlank @Size(max = 500) String reason) {
+public record WithdrawNoticeRequest(
+		@NotBlank(message = "Say why this notice is being taken down.")
+		@Size(max = 500, message = "That reason is too long.")
+		String reason) {
 }

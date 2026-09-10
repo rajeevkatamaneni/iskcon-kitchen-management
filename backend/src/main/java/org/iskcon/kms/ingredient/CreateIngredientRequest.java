@@ -39,5 +39,5 @@ public record CreateIngredientRequest(
 		boolean supply,
 
 		/** Optional alternate names, matched by typeahead alongside the name. */
-		List<@Size(max = 200) String> aliases) {
+		List<@Size(max = 200, message = "That alias is too long.") String> aliases) {
 }

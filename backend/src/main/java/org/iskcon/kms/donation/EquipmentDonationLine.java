@@ -11,6 +11,8 @@ import jakarta.validation.constraints.Size;
  * temple could not extend was worse than none, and the name of the thing already says what it is.
  */
 public record EquipmentDonationLine(
-		@NotBlank @Size(max = 200) String name,
-		@Size(max = 1000) String notes) {
+		@NotBlank(message = "Enter what was given.")
+		@Size(max = 200, message = "That name is too long.")
+		String name,
+		@Size(max = 1000, message = "That note is too long.") String notes) {
 }

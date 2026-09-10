@@ -19,6 +19,8 @@ import jakarta.validation.constraints.Size;
  * reinstatement with no why is a row that answers nothing when somebody reads it in a year.
  */
 public record ReinstateEquipmentRequest(
-		@NotNull EquipmentCondition condition,
-		@NotBlank @Size(max = 500) String reason) {
+		@NotNull(message = "Choose the condition it is back in.") EquipmentCondition condition,
+		@NotBlank(message = "Say why it is being brought back into use.")
+		@Size(max = 500, message = "That reason is too long.")
+		String reason) {
 }

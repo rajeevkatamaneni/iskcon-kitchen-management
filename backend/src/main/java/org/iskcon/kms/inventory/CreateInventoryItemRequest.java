@@ -12,8 +12,9 @@ import java.util.UUID;
  * the movement ledger.
  */
 public record CreateInventoryItemRequest(
-		@NotNull UUID ingredientId,
-		@Size(max = 120) String storageLocation,
-		@PositiveOrZero BigDecimal reorderThreshold,
-		@Size(max = 1000) String notes) {
+		@NotNull(message = "Choose an ingredient.") UUID ingredientId,
+		@Size(max = 120, message = "That location is too long.") String storageLocation,
+		@PositiveOrZero(message = "A reorder level cannot be less than nothing.")
+		BigDecimal reorderThreshold,
+		@Size(max = 1000, message = "That note is too long.") String notes) {
 }

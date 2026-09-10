@@ -9,7 +9,7 @@ import java.util.UUID;
  * Editing marks the line so a regeneration leaves it untouched.
  */
 public record UpdateShoppingListLineRequest(
-		@Positive BigDecimal suggestedQty,
+		@Positive(message = "Enter an amount greater than zero.") BigDecimal suggestedQty,
 		UUID suggestedVendorId,
 		boolean included) {
 }

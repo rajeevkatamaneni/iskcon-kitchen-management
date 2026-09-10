@@ -25,9 +25,13 @@ import java.util.UUID;
  * append-only and a stock draw that got in twice can only be undone by a compensating adjustment.
  */
 public record ReturnGoodsRequest(
-		@NotBlank @Size(max = 100) String idempotencyKey,
-		@NotNull UUID receiptLineId,
-		@NotNull @Positive BigDecimal quantity,
-		@NotNull ReturnReason reason,
-		@Size(max = 1000) String note) {
+		@NotBlank(message = "Reload the page and record this return again.")
+		@Size(max = 100, message = "Reload the page and record this return again.")
+		String idempotencyKey,
+		@NotNull(message = "Say which delivered line is going back.") UUID receiptLineId,
+		@NotNull(message = "Enter how much is going back.")
+		@Positive(message = "Enter an amount greater than zero.")
+		BigDecimal quantity,
+		@NotNull(message = "Choose why it is going back.") ReturnReason reason,
+		@Size(max = 1000, message = "That note is too long.") String note) {
 }

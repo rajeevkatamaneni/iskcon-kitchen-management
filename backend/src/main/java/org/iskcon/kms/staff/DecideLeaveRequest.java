@@ -7,5 +7,6 @@ import jakarta.validation.constraints.Size;
  * the only thing they take is the note, and the verb is the endpoint rather than a field. A body
  * carrying {@code action: "DECLINE"} would let a mistyped string mean approval.
  */
-public record DecideLeaveRequest(@Size(max = 500) String note) {
+public record DecideLeaveRequest(
+		@Size(max = 500, message = "That note is too long.") String note) {
 }

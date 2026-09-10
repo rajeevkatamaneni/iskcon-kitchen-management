@@ -20,9 +20,11 @@ import java.util.UUID;
  * @param note           free-text context stored on each consumption movement
  */
 public record ConsumeRequest(
-		@NotNull UUID recipeId,
-		@NotNull @Positive BigDecimal targetYield,
+		@NotNull(message = "Choose a recipe.") UUID recipeId,
+		@NotNull(message = "Enter how much is being made.")
+		@Positive(message = "Enter an amount greater than zero.")
+		BigDecimal targetYield,
 		UUID mealPlanId,
 		@Valid List<BatchOverride> batchOverrides,
-		@Size(max = 500) String note) {
+		@Size(max = 500, message = "That note is too long.") String note) {
 }

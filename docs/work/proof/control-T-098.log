@@ -1,0 +1,119 @@
+=== 0. baseline: a byte-for-byte copy of the working tree as verified, not of HEAD ===
+baseline at /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T/tmp.5IhfhrrgqF
+java files copied: 592
+
+=== 1. the three anchors are present exactly once each ===
+CreateVendorRequest.java: 1 occurrence(s) of the anchor
+UpdateVendorRequest.java: 1 occurrence(s) of the anchor
+CompensateRequest.java: 1 occurrence(s) of the anchor
+
+=== 2. patch the defect back in ===
+18: * <p>{@code @NotBlank} is therefore gone and {@code @Pattern} deliberately stays: anything actually
+25:		@NotBlank
+18:		@NotBlank(message = "must not be blank")
+12:		@NotBlank(message = "say what is being put right")
+
+=== 3. prove the tree actually changed against the verified baseline ===
+diff -r /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T/tmp.5IhfhrrgqF/org/iskcon/kms/inventory/CompensateRequest.java /Users/Rajeev/Workspace/kitchen-management-system/.claude/worktrees/agent-ae9d1105e7b21d8b0/backend/src/main/java/org/iskcon/kms/inventory/CompensateRequest.java
+12c12
+< 		@NotBlank(message = "Say what is being put right.")
+---
+> 		@NotBlank(message = "say what is being put right")
+diff -r /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T/tmp.5IhfhrrgqF/org/iskcon/kms/vendor/CreateVendorRequest.java /Users/Rajeev/Workspace/kitchen-management-system/.claude/worktrees/agent-ae9d1105e7b21d8b0/backend/src/main/java/org/iskcon/kms/vendor/CreateVendorRequest.java
+25c25
+< 		@NotBlank(message = "Enter the vendor's name.")
+---
+> 		@NotBlank
+diff -r /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T/tmp.5IhfhrrgqF/org/iskcon/kms/vendor/UpdateVendorRequest.java /Users/Rajeev/Workspace/kitchen-management-system/.claude/worktrees/agent-ae9d1105e7b21d8b0/backend/src/main/java/org/iskcon/kms/vendor/UpdateVendorRequest.java
+18c18
+< 		@NotBlank(message = "Enter the vendor's name.")
+---
+> 		@NotBlank(message = "must not be blank")
+tree differs from baseline: good
+
+=== 4. run the test with --rerun-tasks, expecting RED ===
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test FAILED
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+FieldErrorMessageTest > no message blames the user or apologises theatrically PASSED
+
+FieldErrorMessageTest > no message is the validation library's sentence written out by hand FAILED
+    java.lang.AssertionError: [a message that says what the constraint is called has not been translated, only retyped. Say what the person should do instead — the phone field's "Include the country code, for example +919876543210." is the standard:
+    vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" contains "must not be blank"] 
+    Expecting empty but was: ["vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" contains "must not be blank""]
+        at org.iskcon.kms.error.FieldErrorMessageTest.noMessageIsJakartasPhrasing(FieldErrorMessageTest.java:259)
+
+FieldErrorMessageTest > every constraint a user can trip carries a message written for a person FAILED
+    java.lang.AssertionError: [1 constraint(s) leave `message` unset, so Jakarta Bean Validation's own English is what a temple volunteer reads next to the box they got wrong. Give each one a sentence in the product's voice:
+    vendor.CreateVendorRequest.name @NotBlank] 
+    Expecting empty but was: ["vendor.CreateVendorRequest.name @NotBlank"]
+        at org.iskcon.kms.error.FieldErrorMessageTest.everyConstraintCarriesAMessage(FieldErrorMessageTest.java:238)
+
+FieldErrorMessageTest > the walk actually reached the product's request bodies PASSED
+
+FieldErrorMessageTest > no message contains language that only means something to a developer PASSED
+
+FieldErrorMessageTest > every message reads as a sentence, not a fragment FAILED
+    java.lang.AssertionError: [field errors sit beside KMS-nnnnnn messages on the same screen and are read by the same person, so they are written the same way — a capital, a verb and a full stop:
+    vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" does not start with a capital
+    vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" does not end in a full stop
+    inventory.CompensateRequest.note @NotBlank — "say what is being put right" does not start with a capital
+    inventory.CompensateRequest.note @NotBlank — "say what is being put right" does not end in a full stop] 
+    Expecting empty but was: ["vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" does not start with a capital",
+        "vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" does not end in a full stop",
+        "inventory.CompensateRequest.note @NotBlank — "say what is being put right" does not start with a capital",
+        "inventory.CompensateRequest.note @NotBlank — "say what is being put right" does not end in a full stop"]
+        at org.iskcon.kms.error.FieldErrorMessageTest.everyMessageReadsAsASentence(FieldErrorMessageTest.java:281)
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    6
+  Passed:   3
+  Failed:   3
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+6 tests completed, 3 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/.claude/worktrees/agent-ae9d1105e7b21d8b0/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 9s
+5 actionable tasks: 5 executed
+gradle exit status: 1
+
+--- the three sites the test named ---
+    vendor.CreateVendorRequest.name @NotBlank] 
+    Expecting empty but was: ["vendor.CreateVendorRequest.name @NotBlank"]
+    vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" contains "must not be blank"] 
+    Expecting empty but was: ["vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" contains "must not be blank""]
+    vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" does not start with a capital
+    vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" does not end in a full stop
+    Expecting empty but was: ["vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" does not start with a capital",
+        "vendor.UpdateVendorRequest.name @NotBlank — "must not be blank" does not end in a full stop",
+    inventory.CompensateRequest.note @NotBlank — "say what is being put right" does not start with a capital
+    inventory.CompensateRequest.note @NotBlank — "say what is being put right" does not end in a full stop] 
+        "inventory.CompensateRequest.note @NotBlank — "say what is being put right" does not start with a capital",
+        "inventory.CompensateRequest.note @NotBlank — "say what is being put right" does not end in a full stop"]
+all three defects were named by the test
+
+=== 5. restore from the baseline copy, then diff byte-for-byte ===
+RESTORED CLEAN: diff -r baseline vs tree is empty
+work-lock: 'verify' released; command exited 0

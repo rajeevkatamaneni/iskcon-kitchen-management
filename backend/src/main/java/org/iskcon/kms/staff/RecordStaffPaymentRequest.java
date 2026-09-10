@@ -39,7 +39,8 @@ public record RecordStaffPaymentRequest(
 		@NotNull(message = "Say whether this is salary or a final settlement.")
 		PaymentPurpose purpose,
 
-		@Size(max = 1000) String note,
+		@Size(max = 1000, message = "That note is too long.")
+		String note,
 
 		/** Advances repaid out of this payment. Empty for a payment with nothing docked. */
 		@Valid List<PaymentDeductionRequest> deductions) {

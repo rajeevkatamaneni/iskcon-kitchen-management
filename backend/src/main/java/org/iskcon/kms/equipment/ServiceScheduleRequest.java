@@ -30,8 +30,10 @@ import jakarta.validation.constraints.Size;
  * Blank clears them, exactly as an empty interval clears the schedule.
  */
 public record ServiceScheduleRequest(
-		@Positive @Max(100) Integer intervalCount,
+		@Positive(message = "A servicing interval is between 1 and 100.")
+		@Max(value = 100, message = "A servicing interval is between 1 and 100.")
+		Integer intervalCount,
 		ServiceInterval intervalUnit,
-		@Size(max = 200) String serviceCompany,
-		@Size(max = 40) String serviceCompanyPhone) {
+		@Size(max = 200, message = "That name is too long.") String serviceCompany,
+		@Size(max = 40, message = "That phone number is too long.") String serviceCompanyPhone) {
 }

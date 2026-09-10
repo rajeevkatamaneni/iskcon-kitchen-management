@@ -31,15 +31,17 @@ import java.util.List;
  *                    default they inherit.
  */
 public record ReusePlanRequest(
-		@NotNull LocalDate sourceStart,
+		@NotNull(message = "Choose the first day to copy from.") LocalDate sourceStart,
 
 		/**
 		 * Capped at 62 days. Two months covers every buying cycle anybody has described, and the cap
 		 * is what stops a mistyped figure walking a copy across a year of somebody's plan.
 		 */
-		@Min(1) @Max(62) int days,
+		@Min(value = 1, message = "Copy between 1 and 62 days at a time.")
+		@Max(value = 62, message = "Copy between 1 and 62 days at a time.")
+		int days,
 
-		@NotNull LocalDate targetStart,
+		@NotNull(message = "Choose the day the copy should start on.") LocalDate targetStart,
 		List<String> mealKinds,
 		List<String> eventNames) {
 }

@@ -15,5 +15,5 @@ import jakarta.validation.constraints.Size;
  * @param reason why it was taken back. Optional — a temple correcting its own mistake should not have
  *               to justify itself before it is allowed to
  */
-public record RetractEmploymentBanRequest(@Size(max = 1000) String reason) {
+public record RetractEmploymentBanRequest(@Size(max = 1000, message = "That reason is too long.") String reason) {
 }

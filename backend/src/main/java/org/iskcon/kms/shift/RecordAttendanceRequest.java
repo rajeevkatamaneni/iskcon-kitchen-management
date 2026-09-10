@@ -23,9 +23,12 @@ import java.util.UUID;
  * <p>Somebody left out of {@code marks} is left <em>unmarked</em>, not marked absent — see
  * {@code shift_signups.attended}, whose third state exists for exactly that.
  */
-public record RecordAttendanceRequest(@NotEmpty @Valid List<Mark> marks) {
+public record RecordAttendanceRequest(
+		@NotEmpty(message = "Mark at least one volunteer.") @Valid List<Mark> marks) {
 
 	/** One volunteer, and whether they came. */
-	public record Mark(@NotNull UUID userId, @NotNull Boolean attended) {
+	public record Mark(
+			@NotNull(message = "Say which volunteer this mark is for.") UUID userId,
+			@NotNull(message = "Say whether they turned up.") Boolean attended) {
 	}
 }

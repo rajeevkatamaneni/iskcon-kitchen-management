@@ -10,5 +10,8 @@ import jakarta.validation.constraints.Size;
  * <p>Reverse rather than void, and the name is the point: {@code invoice_payments} is append-only,
  * so there is no row to mark. The reason travels on the compensating entry the server appends.
  */
-public record ReverseInvoicePaymentRequest(@NotBlank @Size(max = 500) String reason) {
+public record ReverseInvoicePaymentRequest(
+		@NotBlank(message = "Say why the payment is being reversed.")
+		@Size(max = 500, message = "That reason is too long.")
+		String reason) {
 }

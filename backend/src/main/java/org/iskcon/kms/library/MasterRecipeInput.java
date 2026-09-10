@@ -20,37 +20,45 @@ import java.util.List;
 public record MasterRecipeInput(
 
 		@NotBlank(message = "Enter the recipe's name.")
-		@Size(max = 300) String name,
+		@Size(max = 300, message = "That name is too long.") String name,
 
-		@Size(max = 300) String subtitle,
+		@Size(max = 300, message = "That subtitle is too long.") String subtitle,
 
 		@NotBlank(message = "Say which state this is from.")
-		@Size(max = 100) String state,
+		@Size(max = 100, message = "That state name is too long.") String state,
 
-		@NotBlank @Size(max = 100) String stateSlug,
-		@Size(max = 100) String bookLanguage,
+		@NotBlank(message = "Enter the state's short name.")
+		@Size(max = 100, message = "That short name is too long.")
+		String stateSlug,
+		@Size(max = 100, message = "That language name is too long.") String bookLanguage,
 
-		@NotBlank @Size(max = 200) String recipeSlug,
+		@NotBlank(message = "Enter the recipe's short name.")
+		@Size(max = 200, message = "That short name is too long.")
+		String recipeSlug,
 
-		@NotBlank @Size(max = 100) String categoryKey,
-		@NotBlank @Size(max = 200) String categoryName,
+		@NotBlank(message = "Enter the category's short name.")
+		@Size(max = 100, message = "That short name is too long.")
+		String categoryKey,
+		@NotBlank(message = "Enter the category's name.")
+		@Size(max = 200, message = "That category name is too long.")
+		String categoryName,
 
 		@NotBlank(message = "Choose how often this is cooked.") String badge,
 
-		@NotBlank(message = "Say what it makes.") @Size(max = 200) String yieldText,
+		@NotBlank(message = "Say what it makes.") @Size(max = 200, message = "That description of what it makes is too long.") String yieldText,
 
 		@NotNull(message = "Enter the yield.")
 		@DecimalMin(value = "0.0", inclusive = false, message = "The yield must be more than zero.")
 		BigDecimal yieldQty,
 
-		@NotBlank String yieldUnit,
+		@NotBlank(message = "Choose a yield unit.") String yieldUnit,
 
-		@Size(max = 100) String perHeadText,
+		@Size(max = 100, message = "That per-head amount is too long.") String perHeadText,
 		BigDecimal perHeadQty,
 		String perHeadUnit,
 
 		BigDecimal indicativeCost,
-		@Size(max = 200) String region,
+		@Size(max = 200, message = "That region name is too long.") String region,
 
 		@NotBlank(message = "Say why a temple would cook this.") String why,
 		String cateringNote,
@@ -58,8 +66,8 @@ public record MasterRecipeInput(
 		String noteVessel,
 		String noteSeason,
 
-		List<@Size(max = 100) String> tags,
-		List<@Size(max = 200) String> serveWith,
+		List<@Size(max = 100, message = "That tag is too long.") String> tags,
+		List<@Size(max = 200, message = "That serving suggestion is too long.") String> serveWith,
 
 		@NotEmpty(message = "A recipe needs at least one ingredient.")
 		@Valid List<Line> ingredients,
@@ -74,7 +82,11 @@ public record MasterRecipeInput(
 	 *            does not resolve: a quantity nobody can compute with is worse than no recipe.
 	 */
 	public record Line(
-			@NotBlank @Size(max = 300) String name,
-			@NotBlank @Size(max = 50) String qty) {
+			@NotBlank(message = "Enter the ingredient's name.")
+			@Size(max = 300, message = "That name is too long.")
+			String name,
+			@NotBlank(message = "Enter how much of it is needed.")
+			@Size(max = 50, message = "That amount is too long.")
+			String qty) {
 	}
 }

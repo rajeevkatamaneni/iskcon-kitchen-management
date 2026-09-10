@@ -62,5 +62,5 @@ public record UpdateIngredientRequest(
 		 */
 		Boolean ekadashiProhibited,
 
-		List<@Size(max = 200) String> aliases) {
+		List<@Size(max = 200, message = "That alias is too long.") String> aliases) {
 }

@@ -26,6 +26,8 @@ import jakarta.validation.constraints.Size;
  * permanent statement about somebody else's business.
  */
 public record CancelPoRequest(
-		@NotBlank @Size(max = 500) String reason,
+		@NotBlank(message = "Say why this order is being cancelled.")
+		@Size(max = 500, message = "That reason is too long.")
+		String reason,
 		boolean vendorAbandoned) {
 }
