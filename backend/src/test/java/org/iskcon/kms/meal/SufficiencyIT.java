@@ -156,6 +156,137 @@ class SufficiencyIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[0].unit").value("KG"));
 	}
 
+	/**
+	 * The defect T-088 exists for, in the shape it was reported in: six days, ten kilos each, fifty
+	 * kilos in the store. The badge used to allocate only across the range it was asked about, and
+	 * the day screen asks about one day — so every one of the six, opened on its own, saw the whole
+	 * sack and read "Ingredients ready". The store then ran out on a Friday nobody had been warned
+	 * about.
+	 *
+	 * <p>The second half of this test is the one that matters. The first half — asking about all six
+	 * at once — passed before the fix as well.
+	 */
+	@Test
+	@DisplayName("six days of 10 KG against a 50 KG sack: the sixth is short, whichever day you open")
+	void theSackRunsOutOnTheSixthDayWhicheverDayIsOpened() throws Exception {
+		seedReceipt("43"); // 7 from setUp + 43 = 50 KG
+		LocalDate[] days = new LocalDate[6];
+		for (int i = 0; i < 6; i++) {
+			days[i] = LocalDate.now(IST).plusDays(i + 1L);
+			plan(days[i], "200"); // 200 of a 100-KG recipe drawing 5 KG of rice = 10 KG each
+		}
+
+		mvc.perform(get("/api/v1/meal-plans/sufficiency")
+						.param("from", LocalDate.now(IST).toString())
+						.param("to", days[5].toString())
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(6))
+				.andExpect(jsonPath("$[0].status").value("SUFFICIENT"))
+				.andExpect(jsonPath("$[4].status").value("SUFFICIENT"))
+				.andExpect(jsonPath("$[5].status").value("SHORT"))
+				.andExpect(jsonPath("$[5].shortfalls[0].ingredientName").value("Rice"))
+				.andExpect(jsonPath("$[5].shortfalls[0].shortBy").value(10));
+
+		// One day at a time — `api.mealSufficiency(date, date)`, which is what DayView asks.
+		for (int i = 0; i < 5; i++) {
+			day(days[i]).andExpect(jsonPath("$[0].status").value("SUFFICIENT"));
+		}
+		day(days[5])
+				.andExpect(jsonPath("$[0].status").value("SHORT"))
+				.andExpect(jsonPath("$[0].shortfalls[0].ingredientName").value("Rice"))
+				.andExpect(jsonPath("$[0].shortfalls[0].shortBy").value(10))
+				.andExpect(jsonPath("$[0].shortfalls[0].available").value(0));
+	}
+
+	/**
+	 * The trap in judging against <em>available</em>: available is on hand minus what the plan has
+	 * claimed, and a planned meal is one of those claims. Subtract it and then measure the meal
+	 * against what is left and every meal in the temple reports short by exactly its own size — an
+	 * answer that looks entirely reasonable on screen and is wrong everywhere.
+	 */
+	@Test
+	@DisplayName("a meal is not reported short because of its own claim")
+	void aMealIsNotChargedForItself() throws Exception {
+		seedReceipt("43"); // 50 KG for a single meal that draws 5
+		plan(d1);
+
+		day(d1)
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].status").value("SUFFICIENT"))
+				.andExpect(jsonPath("$[0].shortfalls.length()").value(0));
+	}
+
+	/**
+	 * The same dish on two days is two claims, not one, and neither is charged for itself. The
+	 * numbers here are chosen so that a meal charged for its twin would be wrong in both directions:
+	 * 15 KG covers the first 10 KG Khichdi and leaves the second 5 KG short.
+	 */
+	@Test
+	@DisplayName("the same recipe planned on two days excludes only itself")
+	void theSameRecipeOnTwoDaysExcludesOnlyItself() throws Exception {
+		seedReceipt("8"); // 7 from setUp + 8 = 15 KG
+		plan(d1, "200");
+		plan(d2, "200");
+
+		// The first is covered — it is not charged for the identical dish behind it.
+		day(d1).andExpect(jsonPath("$[0].status").value("SUFFICIENT"));
+		// The second is charged for the first, and for the first only: 15 − 10 = 5, needs 10.
+		day(d2)
+				.andExpect(jsonPath("$[0].status").value("SHORT"))
+				.andExpect(jsonPath("$[0].shortfalls[0].shortBy").value(5))
+				.andExpect(jsonPath("$[0].shortfalls[0].available").value(5));
+	}
+
+	/**
+	 * A meal beyond the window the temple is buying for is claimed by nobody, including itself, and
+	 * the badge says nothing about stock rather than inventing a comparison: the rice it will be
+	 * cooked from has not been bought yet, and marking a Janmashtami plan red for three months is
+	 * noise a person cannot act on. It stays out of the ordering feed for the same reason.
+	 */
+	@Test
+	@DisplayName("a meal beyond the buying window is not judged, and does not claim today's stock")
+	void aMealBeyondTheHorizonIsNotJudged() throws Exception {
+		LocalDate far = LocalDate.now(IST).plusDays(90);
+		plan(far, "200"); // 10 KG, against the 7 KG in the store
+		plan(d1, "200"); // 10 KG, inside the window
+
+		day(far)
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].status").value("PLANNING"))
+				.andExpect(jsonPath("$[0].shortfalls.length()").value(0));
+
+		// The in-window meal sees the whole 7 KG: the far one took nothing from it.
+		day(d1)
+				.andExpect(jsonPath("$[0].status").value("SHORT"))
+				.andExpect(jsonPath("$[0].shortfalls[0].shortBy").value(3));
+
+		// And the ordering feed buys for the fortnight, not for the festival three months out.
+		mvc.perform(get("/api/v1/meal-plans/shortfall").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].shortBy").value(3));
+	}
+
+	/**
+	 * Recording a meal moves its stock through the ledger, so the plan stops being a claim on the
+	 * shelf at that moment. The badge stops speaking for it — the planner badges a cooked dish from
+	 * its own status — and the rice it was holding is released to the meals behind it, because the
+	 * on-hand figure has already paid for it.
+	 */
+	@Test
+	@DisplayName("the badge stops speaking for a meal once it is recorded, and its claim is released")
+	void aRecordedMealIsNeitherJudgedNorCounted() throws Exception {
+		plan(d1);
+		plan(d2);
+		day(d2).andExpect(jsonPath("$[0].status").value("SHORT"));
+
+		admin.update("UPDATE meal_plans SET status = 'COOKED' WHERE plan_date = ?", d1);
+
+		day(d1).andExpect(jsonPath("$.length()").value(0));
+		day(d2).andExpect(jsonPath("$[0].status").value("SUFFICIENT"));
+	}
+
 	@Test
 	@DisplayName("a volunteer cannot read sufficiency")
 	void volunteerForbidden() throws Exception {
@@ -169,11 +300,29 @@ class SufficiencyIT extends AbstractIntegrationTest {
 	// ---------------------------------------------------------------------
 
 	private void plan(LocalDate date) throws Exception {
+		plan(date, "100");
+	}
+
+	/**
+	 * {@code targetYield} against a 100 KG recipe drawing 5 KG of rice: 100 plans a 5 KG draw, 200 a
+	 * 10 KG one. {@code ekadashiAcknowledged} because these tests plan grains on whichever dates the
+	 * calendar hands them, and one of them will eventually be an Ekadashi.
+	 */
+	private void plan(LocalDate date, String targetYield) throws Exception {
 		mvc.perform(post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"planDate\":\"" + date + "\",\"mealKind\":\"Lunch\",\"recipeId\":\"" + khichdi
-								+ "\",\"targetYield\":100,\"adults\":100,\"dayType\":\"REGULAR\"}"))
+								+ "\",\"targetYield\":" + targetYield
+								+ ",\"adults\":100,\"dayType\":\"REGULAR\",\"ekadashiAcknowledged\":true}"))
 				.andExpect(status().isCreated());
+	}
+
+	/** One day asked about on its own — the question {@code DayView} puts, from=to=the day. */
+	private org.springframework.test.web.servlet.ResultActions day(LocalDate date) throws Exception {
+		return mvc.perform(get("/api/v1/meal-plans/sufficiency")
+						.param("from", date.toString()).param("to", date.toString())
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk());
 	}
 
 	private void seedReceipt(String qtyKg) {

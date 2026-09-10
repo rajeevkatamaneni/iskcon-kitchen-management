@@ -1,0 +1,125 @@
+=== anchors counted (condition 2) ===
+fixed file:    committedStock.claimsInHorizon() call sites = 1 (expected exactly 1)
+patched file:  evaluate(loadPlannedMeals(from, to)) sites  = 1 (expected exactly 1)
+patched file:  any claimsInHorizon reference               = 0 (expected exactly 0)
+=== the tree actually changed: verified copy vs patched file (condition 3) ===
+67 added / 126 removed lines; the head of it:
+--- /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T/control-T-088-SufficiencyService.z13RyGXa4r	2026-09-09 18:21:06
++++ /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/meal/SufficiencyService.java	2026-09-09 18:21:06
+@@ -2,137 +2,75 @@
+ 
+ import java.math.BigDecimal;
+ import java.time.LocalDate;
++import java.time.ZoneId;
+ import java.util.ArrayList;
+ import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.UUID;
+ import org.iskcon.kms.ingredient.Unit;
+-import org.iskcon.kms.inventory.CommittedStockService;
+ import org.iskcon.kms.inventory.InventoryUnits;
++import org.iskcon.kms.occasion.OccasionService;
++import org.iskcon.kms.occasion.ResolvedOccasion;
++import org.iskcon.kms.recipe.ScaledLine;
++import org.iskcon.kms.recipe.ScaledRecipeView;
++import org.iskcon.kms.recipe.RecipeService;
++import org.iskcon.kms.tenancy.TempleClock;
+ import org.springframework.jdbc.core.JdbcTemplate;
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+ 
+(git itself now reports the file as unmodified, because the control put HEAD back and the fix
+ is uncommitted — which is why the diff above is against the verified copy and not against HEAD.)
+=== running SufficiencyIT against the pre-fix service, tests untouched ===
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+SufficiencyIT > the same recipe planned on two days excludes only itself FAILED
+    java.lang.AssertionError: JSON path "$[0].status" expected:<SHORT> but was:<SUFFICIENT>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.meal.SufficiencyIT.theSameRecipeOnTwoDaysExcludesOnlyItself(SufficiencyIT.java:236)
+
+SufficiencyIT > two meals can't both claim one sack; stock arriving clears the shortfall PASSED
+
+SufficiencyIT > the shortfall feed aggregates the exact quantity the ordering pipeline needs PASSED
+
+SufficiencyIT > the badge stops speaking for a meal once it is recorded, and its claim is released FAILED
+    java.lang.AssertionError: JSON path "$[0].status" expected:<SHORT> but was:<SUFFICIENT>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.meal.SufficiencyIT.aRecordedMealIsNeitherJudgedNorCounted(SufficiencyIT.java:282)
+
+SufficiencyIT > a meal is not reported short because of its own claim PASSED
+
+SufficiencyIT > a meal beyond the buying window is not judged, and does not claim today's stock FAILED
+    java.lang.AssertionError: JSON path "$[0].status" expected:<PLANNING> but was:<SHORT>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.meal.SufficiencyIT.aMealBeyondTheHorizonIsNotJudged(SufficiencyIT.java:256)
+
+SufficiencyIT > a volunteer cannot read sufficiency PASSED
+
+SufficiencyIT > six days of 10 KG against a 50 KG sack: the sixth is short, whichever day you open FAILED
+    java.lang.AssertionError: JSON path "$[0].status" expected:<SHORT> but was:<SUFFICIENT>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.meal.SufficiencyIT.theSackRunsOutOnTheSixthDayWhicheverDayIsOpened(SufficiencyIT.java:196)
+
+18:21:18.902 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+18:21:18.907 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+18:21:18.909 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    8
+  Passed:   4
+  Failed:   4
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+8 tests completed, 4 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 12s
+5 actionable tasks: 5 executed
+control-T-088: gradle exited non-zero (expected)
+control-T-088: restored /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/meal/SufficiencyService.java byte-for-byte from /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T/control-T-088-SufficiencyService.z13RyGXa4r
+work-lock: 'verify' released; command exited 0
+EXIT=0

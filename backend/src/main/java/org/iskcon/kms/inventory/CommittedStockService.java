@@ -48,8 +48,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><strong>Only within the ordering horizon.</strong> The horizon is not a new idea invented here:
  * it is the one the shopping list already buys against — fourteen days, extended to reach any
- * festival falling within thirty ({@link #BASE_HORIZON_DAYS}, {@link #FESTIVAL_LOOKAHEAD_DAYS}, the
- * same pair {@code SufficiencyService.shortfallFeed()} uses). The argument for bounding it at all is
+ * festival falling within thirty ({@link #BASE_HORIZON_DAYS}, {@link #FESTIVAL_LOOKAHEAD_DAYS} — the
+ * pair the shopping list's shortfall feed and the planner's badge both read, through
+ * {@link #claimsInHorizon()}). The argument for bounding it at all is
  * that <em>available</em> means "what is left of what is on the shelf, for the meals that will
  * actually draw on it". A Janmashtami plan three months out will be cooked from rice nobody has
  * bought yet; subtracting it from today's sack says "you are short" when the truthful answer is "you
@@ -57,10 +58,13 @@ import org.springframework.transaction.annotation.Transactional;
  * comes within thirty days its claim appears — which is exactly when the shopping list starts buying
  * for it, and the two screens agree because they are reading the same window.
  *
- * <p><strong>The duplication of that pair of constants is deliberate and temporary.</strong>
- * {@code SufficiencyService} still holds its own copy; T-088 is the task that makes the planner
- * badge judge against <em>available</em> and merges the two readings, and that is where one horizon
- * should end up. Moving it now would have meant editing a file another task owns to save four lines.
+ * <p><strong>That pair of constants now lives here and nowhere else</strong> (T-088). T-086 left a
+ * second copy in {@code SufficiencyService} deliberately, for this task to collapse; the planner
+ * badge no longer computes a window at all, because it reads the claims themselves through
+ * {@link #claimsInHorizon()}. So the badge on the planner and the <em>committed</em> column on
+ * inventory cannot disagree about which meals count — not by a day of festival lookahead, and not
+ * by an exclusion added to one and forgotten in the other. Anything else that comes to need this
+ * window should read it from here too rather than restating fourteen and thirty.
  */
 @Service
 public class CommittedStockService {
@@ -118,6 +122,34 @@ public class CommittedStockService {
 					claim.mealPlanId(), claim.planDate(), claim.mealKind(), claim.eventName(),
 					claim.recipeName(), InventoryUnits.fromBase(claim.quantityBase(), canonicalUnit),
 					canonicalUnit.name()));
+		}
+		return out;
+	}
+
+	/**
+	 * The plan's claims inside the horizon, one entry per dish, in the order the store will be drawn
+	 * down — date, then the time the food is due.
+	 *
+	 * <p>This is the same set of claims {@link #committedBaseByIngredient()} sums, handed over
+	 * un-summed so that the planner's sufficiency badge can allocate stock to them one dish at a time
+	 * (T-088). Two callers, one definition of what the plan claims and one definition of the window
+	 * it claims within: a dish that is committed on the inventory screen is a dish the badge counts,
+	 * necessarily rather than by agreement.
+	 *
+	 * <p>A dish whose recipe names no ingredients is absent rather than present-and-empty. There is
+	 * no claim to make for it, and the caller reads absent as "nothing to assess".
+	 */
+	@Transactional(readOnly = true)
+	public List<MealClaim> claimsInHorizon() {
+		Map<UUID, Map<UUID, BigDecimal>> byMeal = new LinkedHashMap<>();
+		for (Claim claim : claims()) {
+			byMeal.computeIfAbsent(claim.mealPlanId(), k -> new LinkedHashMap<>())
+					.merge(claim.ingredientId(), claim.quantityBase(), BigDecimal::add);
+		}
+
+		List<MealClaim> out = new ArrayList<>();
+		for (Map.Entry<UUID, Map<UUID, BigDecimal>> e : byMeal.entrySet()) {
+			out.add(new MealClaim(e.getKey(), e.getValue()));
 		}
 		return out;
 	}
@@ -204,6 +236,17 @@ public class CommittedStockService {
 				rs.getObject("recipe_id", UUID.class),
 				rs.getString("recipe_name"),
 				rs.getBigDecimal("target_yield")), from, to);
+	}
+
+	/**
+	 * One dish's whole claim on the store: every ingredient it draws, in base units, with a recipe's
+	 * repeated lines already merged.
+	 *
+	 * <p>Public because {@link #claimsInHorizon()} hands it out, and nested rather than given its own
+	 * file because it means nothing on its own: it is a position in that list, and the position — the
+	 * order the dishes reach the pot — is half of what it says.
+	 */
+	public record MealClaim(UUID mealPlanId, Map<UUID, BigDecimal> requirementsBase) {
 	}
 
 	private record PlannedDish(
