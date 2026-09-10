@@ -1,0 +1,125 @@
+==============================================================
+T-127 negative control — 2026-09-09 23:49:48
+task: T-127   file under control: /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/ingredient/Quantities.java
+==============================================================
+
+[baseline] verified working-tree copy taken:
+5542aceb95e3960c0bc419813d6b2016a4111bb5  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T127-baseline-Quantities.java
+5542aceb95e3960c0bc419813d6b2016a4111bb5  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/ingredient/Quantities.java
+
+[anchors] each of these must appear exactly once before anything is edited
+  count=1 (want 1)  boolean empty = inBase.signum() == 0;
+  count=1 (want 1)  Unit display = empty ? unit
+  count=1 (want 1)  : inBase.abs().compareTo(BigDecimal.valueOf(1000)) >= 0 ? large : small;
+[anchors] all three matched exactly once.
+
+[patch] reverting the display-unit choice to the single-line pre-fix form
+  patched: 1 replacement written
+
+[changed] diff of the patched file against the verified baseline
+          (non-empty here is the proof the control actually applied)
+--- /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T127-baseline-Quantities.java	2026-09-09 23:49:48
++++ /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/ingredient/Quantities.java	2026-09-09 23:49:48
+@@ -118,9 +118,7 @@
+ 		//
+ 		// signum() rather than equals(ZERO): a quantity arrives from JDBC scaled to its column, so a
+ 		// genuine nothing is "0.000" and equals() would answer false on the scale alone.
+-		boolean empty = inBase.signum() == 0;
+-		Unit display = empty ? unit
+-				: inBase.abs().compareTo(BigDecimal.valueOf(1000)) >= 0 ? large : small;
++		Unit display = inBase.abs().compareTo(BigDecimal.valueOf(1000)) >= 0 ? large : small;
+ 		BigDecimal shown = inBase.divide(BigDecimal.valueOf(display.baseFactor()), 6, RoundingMode.HALF_UP);
+ 
+ 		if (forCooking) {
+[changed] the two states differ, as they must.
+5542aceb95e3960c0bc419813d6b2016a4111bb5  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T127-baseline-Quantities.java
+5b14c0e7b2bd60e20fd4235c01dc66d28ee00558  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/ingredient/Quantities.java
+
+==============================================================
+[run] ./gradlew test --tests "*QuantitiesTest*" --rerun-tasks
+      tests exactly as written — not one assertion adjusted to make this fail
+==============================================================
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test FAILED
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+QuantitiesTest > rounding cannot compound, because it happens last PASSED
+
+QuantitiesTest > the cook's form — rounded, because somebody weighs against it > picks the readable unit first and rounds second PASSED
+
+QuantitiesTest > the cook's form — rounded, because somebody weighs against it > promotes again when rounding carries it over a whole unit PASSED
+
+QuantitiesTest > the cook's form — rounded, because somebody weighs against it > keeps half a gram where half a gram is the honest step PASSED
+
+QuantitiesTest > the cook's form — rounded, because somebody weighs against it > rounds the way a person would, on a step that grows with the number PASSED
+
+QuantitiesTest > the cook's form — rounded, because somebody weighs against it > never gives half a piece PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > a figure that is merely small still steps down, so zero is the only exception PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > leaves a count alone — it is a whole thing measured in itself PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > says zero in the unit the thing is kept in FAILED
+    org.opentest4j.AssertionFailedError: 
+    expected: "0 L"
+     but was: "0 ml"
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.ingredient.QuantitiesTest$Ledger.zeroKeepsItsOwnUnit(QuantitiesTest.java:83)
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > promotes into the larger unit once there is a whole one of them PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > a zero that arrived from the database, scale and all, is still a zero FAILED
+    org.opentest4j.AssertionFailedError: 
+    expected: "0 L"
+     but was: "0 ml"
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.ingredient.QuantitiesTest$Ledger.zeroAtAnyScale(QuantitiesTest.java:101)
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > keeps the exact figure, so inventory rows still add up to the balance PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > steps down into the smaller unit rather than printing a fraction PASSED
+
+QuantitiesTest > the ledger form — exact, because somebody reconciles against it > says nothing rather than zero when there is no figure PASSED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    14
+  Passed:   12
+  Failed:   2
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+14 tests completed, 2 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 4s
+5 actionable tasks: 5 executed
+
+[run] gradle exit: 1  (non-zero is the control working)
+
+--------------------------------------------------------------
+[restore] EXIT trap — putting the verified file back
+--------------------------------------------------------------
+[restore] diff is silent: the file is byte-for-byte what it was.
+5542aceb95e3960c0bc419813d6b2016a4111bb5  /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T127-baseline-Quantities.java
+5542aceb95e3960c0bc419813d6b2016a4111bb5  /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/ingredient/Quantities.java
+work-lock: 'verify' released; command exited 0
+wrapper exit: 0

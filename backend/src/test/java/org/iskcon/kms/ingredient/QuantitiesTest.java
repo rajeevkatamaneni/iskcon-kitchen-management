@@ -66,6 +66,54 @@ class QuantitiesTest {
 			assertThat(Quantities.exact(n("5"), (Unit) null)).isEqualTo("—");
 			assertThat(Quantities.exact(n("5"), "FURLONGS")).isEqualTo("—");
 		}
+
+		@Test
+		@DisplayName("says zero in the unit the thing is kept in")
+		void zeroKeepsItsOwnUnit() {
+			// Curd's stock page read "0 ml" on hand against a reorder level of 15 L, on an item kept
+			// in litres (staging, 2026-09-09). The step-down rule exists to stop a fraction being
+			// printed — 0.6 Kg is 600 gm — and zero has no fraction to step away from, so all the
+			// rule did there was change the subject and make the reader convert before they could
+			// compare the two figures in front of them.
+			//
+			// The frontend was fixed first and this copy was not, so for a day the screen said
+			// "0 L" and the job card in the cook's hand said "0 ml" for the same ingredient. These
+			// are the same seven vectors the frontend table carries, word for word, and they are
+			// here so that the next time one side moves the other one fails.
+			assertThat(Quantities.exact(n("0"), Unit.L)).isEqualTo("0 L");
+			assertThat(Quantities.exact(n("0"), Unit.KG)).isEqualTo("0 Kg");
+			assertThat(Quantities.exact(n("0"), Unit.ML)).isEqualTo("0 ml");
+			assertThat(Quantities.exact(n("0"), Unit.GM)).isEqualTo("0 gm");
+			assertThat(Quantities.exact(n("0"), Unit.PIECES)).isEqualTo("0 pieces");
+			// And the cook's form says it the same way — a job card line of nothing is still nothing
+			// of whatever the recipe measures in.
+			assertThat(Quantities.cooks(n("0"), Unit.L)).isEqualTo("0 L");
+			assertThat(Quantities.cooks(n("0"), Unit.KG)).isEqualTo("0 Kg");
+		}
+
+		@Test
+		@DisplayName("a zero that arrived from the database, scale and all, is still a zero")
+		void zeroAtAnyScale() {
+			// This side has a hazard the frontend does not: a quantity read back through JDBC
+			// carries its column's scale, so a genuine nothing arrives as "0.000" rather than as
+			// "0". BigDecimal.equals() compares scale as well as value and would answer false to
+			// every one of these, which is why the rule above tests signum() instead.
+			assertThat(Quantities.exact(n("0.000"), Unit.L)).isEqualTo("0 L");
+			assertThat(Quantities.exact(n("0.00000"), Unit.KG)).isEqualTo("0 Kg");
+			assertThat(Quantities.cooks(n("0.000"), Unit.L)).isEqualTo("0 L");
+			assertThat(Quantities.exact(BigDecimal.ZERO.setScale(6), Unit.ML)).isEqualTo("0 ml");
+		}
+
+		@Test
+		@DisplayName("a figure that is merely small still steps down, so zero is the only exception")
+		void nearlyZeroStillStepsDown() {
+			// The guard is for zero exactly and nothing wider. A tenth of a millilitre is a
+			// fraction, and a fraction is what the step-down rule is for — if this ever answered
+			// "0.0001 L" the fix would have been written as "small numbers keep their unit", which
+			// is a different and wrong rule.
+			assertThat(Quantities.exact(n("0.0001"), Unit.L)).isEqualTo("0.1 ml");
+			assertThat(Quantities.exact(n("0.000001"), Unit.KG)).isEqualTo("0.001 gm");
+		}
 	}
 
 	@Nested

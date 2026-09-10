@@ -29,7 +29,13 @@ import java.util.Map;
  * <p>The mirror of this class in TypeScript is {@code frontend/lib/format.ts}. Two implementations
  * of one rule drift silently, so both are held to the same table of vectors — {@code QuantitiesTest}
  * here and {@code __tests__/quantities.test.ts} there, with identical inputs and identical expected
- * strings. Changing one without the other fails the build.
+ * strings.
+ *
+ * <p><strong>Those tables are the whole mechanism, and they only cover the cases they list.</strong>
+ * The two copies really did drift, over zero, on 2026-09-09, and both suites stayed green through it
+ * — neither table had a zero vector, so there was nothing to notice that the screen said "0 L" while
+ * the printed job card said "0 ml". A vector added to one table is not optional in the other: it is
+ * the only thing standing between these two files and a silent disagreement.
  */
 public final class Quantities {
 
@@ -94,7 +100,27 @@ public final class Quantities {
 		Unit small = family[1];
 
 		BigDecimal inBase = value.multiply(BigDecimal.valueOf(unit.baseFactor()));
-		Unit display = inBase.abs().compareTo(BigDecimal.valueOf(1000)) >= 0 ? large : small;
+
+		// Zero is said in the unit the thing is actually kept in, not in the family's small one.
+		// The step-down rule exists to stop a fraction being printed — 0.6 Kg is 600 gm — and zero
+		// has no fraction to step away from, so all the rule did was change the subject: a work
+		// order's shortfall line reported "0 ml available" for an ingredient kept in litres, which
+		// makes the reader convert before they can compare it with the litres asked for beside it.
+		// The em dash above is a different case and is untouched — a null is "we have no figure", a
+		// zero is "we have none of it", and the two must go on reading differently.
+		//
+		// This mirrors the identical decision in frontend/lib/format.ts, made 2026-09-09 after the
+		// curd item's stock page read "0 ml" on hand against a reorder level of 15 L. The two copies
+		// of this rule had disagreed about zero from that change until this one, and no test on
+		// either side would have said so, because neither vector table held a zero at all — the
+		// screen said "0 L" and the printed job card in the cook's hand said "0 ml", for the same
+		// ingredient on the same day. Both tables carry the zero vectors now.
+		//
+		// signum() rather than equals(ZERO): a quantity arrives from JDBC scaled to its column, so a
+		// genuine nothing is "0.000" and equals() would answer false on the scale alone.
+		boolean empty = inBase.signum() == 0;
+		Unit display = empty ? unit
+				: inBase.abs().compareTo(BigDecimal.valueOf(1000)) >= 0 ? large : small;
 		BigDecimal shown = inBase.divide(BigDecimal.valueOf(display.baseFactor()), 6, RoundingMode.HALF_UP);
 
 		if (forCooking) {
