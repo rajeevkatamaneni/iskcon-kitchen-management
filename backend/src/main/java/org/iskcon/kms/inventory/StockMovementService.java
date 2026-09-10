@@ -23,9 +23,18 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The one place the application writes to the stock ledger (E3-S2).
  *
- * <p>Inventory is <em>derived</em> from {@code stock_movements}: current stock is the sum of a
- * consumable's rows, batch stock the sum per batch (SYSTEM_DESIGN.md §5). Nothing sets a stock
- * level directly. Every operational write path — a purchase-order receipt (E5), an in-kind donation
+ * <p>Inventory is <em>derived</em> from {@code stock_movements}: on hand is
+ * {@code SUM(to_on_hand_qty(quantity, unit, movement_type))} over a consumable's rows, batch stock
+ * the same sum per batch (SYSTEM_DESIGN.md §5). Nothing sets a stock level directly.
+ *
+ * <p><strong>Sum through the function, never through {@code to_base_qty} (V116, T-122).</strong>
+ * Not every row here moves stock. A {@code USED_BEYOND_RECORDED_STOCK} row records that a kitchen
+ * cooked with more of something than the books held — a discrepancy for somebody to chase, in a
+ * quantity the store room never had — and it counts as zero, which is how on hand stops at zero
+ * rather than going to minus forty kilos. Six readers sum this table and the function is what stops
+ * them disagreeing; {@code StockMovementLedgerIT} fails a seventh that forgets.
+ *
+ * <p>Every operational write path — a purchase-order receipt (E5), an in-kind donation
  * (E3-S5), cooking a meal (E3-S6), a manual adjustment (E3-S7) — builds a {@link RecordMovement} and
  * hands it to {@link #record}, so the shape of a movement and the rule that it is signed, immutable,
  * and attributed to the connection's tenant live here and nowhere else.
@@ -147,10 +156,28 @@ public class StockMovementService {
 
 	/**
 	 * Undoes a movement by appending its exact reverse, cross-referencing the original. The
-	 * correction is an {@code ADJUSTMENT} carrying {@link MovementReference#CORRECTION} and the
-	 * original's id, reversing its quantity within the same batch — so the batch nets back to where
-	 * it was, and both directions of the link are queryable without ever touching the immutable
-	 * original. A movement may be corrected once; correct the correction if you need to go further.
+	 * correction carries {@link MovementReference#CORRECTION} and the original's id, reversing its
+	 * quantity within the same batch — so the batch nets back to where it was, and both directions
+	 * of the link are queryable without ever touching the immutable original. A movement may be
+	 * corrected once; correct the correction if you need to go further.
+	 *
+	 * <p><strong>A correction is normally an {@code ADJUSTMENT}, and a discrepancy is retracted in
+	 * kind instead (T-122).</strong> This is the one place where the rule "on hand stops at zero"
+	 * could have been undone from the other side, and it is worth spelling out because nothing about
+	 * it is visible from the reading end. A {@code USED_BEYOND_RECORDED_STOCK} row records that the
+	 * kitchen cooked with more than the books held; it subtracts nothing, because the store room
+	 * never had the food it is about. Reversing that row as a <em>plus forty kilos adjustment</em> —
+	 * which is what this method used to do for every kind alike — would have conjured forty kilos of
+	 * rice out of a correction: the discrepancy counts as zero, its reversal would have counted in
+	 * full, and the ingredient would have finished a corrected-down meal holding stock nobody ever
+	 * delivered. The same figure, wrong in the opposite direction, reached through the write path
+	 * rather than the six read paths.
+	 *
+	 * <p>So a row that does not move stock is retracted by a row of its own kind, which does not
+	 * move stock either. The pair reads honestly in the ledger — the discrepancy was raised, then
+	 * withdrawn when the meal it came from was corrected — and neither half touches the shelf. It
+	 * carries no {@code reason_category} for the same reason: a reason is an adjustment's word for
+	 * why somebody changed a count, and nobody changed a count here.
 	 */
 	@Transactional
 	public UUID compensate(AuthenticatedUser actor, UUID originalId, String note) {
@@ -160,16 +187,18 @@ public class StockMovementService {
 					ErrorCode.MOVEMENT_ALREADY_CORRECTED, Map.of("movementId", originalId));
 		}
 
+		boolean movesStock = original.type() != MovementType.USED_BEYOND_RECORDED_STOCK;
+
 		RecordMovement reversal = new RecordMovement(
 				original.ingredientId(),
 				original.storageLocation(),
 				original.batchId(),
 				original.quantity().negate(),
 				org.iskcon.kms.ingredient.Unit.valueOf(original.unit()),
-				MovementType.ADJUSTMENT,
+				movesStock ? MovementType.ADJUSTMENT : original.type(),
 				null,
 				null,
-				AdjustmentReason.COUNT_CORRECTION,
+				movesStock ? AdjustmentReason.COUNT_CORRECTION : null,
 				MovementReference.CORRECTION,
 				originalId,
 				note);

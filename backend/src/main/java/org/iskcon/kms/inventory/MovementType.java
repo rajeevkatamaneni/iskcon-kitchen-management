@@ -19,8 +19,14 @@ package org.iskcon.kms.inventory;
  *   <li>{@link #RETURN_TO_VENDOR} — sent back to the supplier after it was already taken into stock
  *       (T-013). Negative, and the third door.
  *   <li>{@link #USED_BEYOND_RECORDED_STOCK} — cooked with more of something than the books held
- *       (T-087). Negative, and the only one of these the temple did not choose to do.
+ *       (T-087). The only one of these the temple did not choose to do, and <strong>the only one
+ *       that moves no stock at all</strong> (T-122): it records a discrepancy, not a movement.
  * </ul>
+ *
+ * <p><strong>So a sum over this ledger is not a sum over its quantities.</strong> On hand is
+ * {@code SUM(to_on_hand_qty(quantity, unit, movement_type))} (V116), which counts the discrepancy
+ * kind as zero. Summing {@code to_base_qty} instead reads a store room as holding minus forty kilos
+ * of rice, which is not a quantity — it is a symptom.
  *
  * <p><strong>Adding a value here is never only a Java change.</strong> The CHECK constraint above is
  * the other half of this enum, and a value added on one side alone fails at runtime rather than at
@@ -65,7 +71,10 @@ public enum MovementType {
 
 	/**
 	 * The kitchen cooked with more of an ingredient than the store room's books held (T-087).
-	 * Negative, and the fourth door — but the only one the temple did not choose to walk through.
+	 *
+	 * <p><strong>Not a door at all, and that is the correction T-122 made.</strong> The other six
+	 * kinds move stock; this one records that the books and the kitchen disagree, and it subtracts
+	 * nothing. It is the memorandum row in an otherwise arithmetical ledger.
 	 *
 	 * <p><strong>It exists because recording a meal is not allowed to refuse.</strong> The food is
 	 * already cooked and the rice already left the store; refusing the record does not put it back,
@@ -89,11 +98,21 @@ public enum MovementType {
 	 * inconsistency it has just discovered. Collapsing the two would bury the discovery among the
 	 * corrections, which is exactly the list it needs to stand out from.
 	 *
-	 * <p><strong>Stock is allowed to go impossible, and that is the finding rather than the bug.</strong>
-	 * If the books say 20 Kg and the kitchen used 60, the missing 40 did not come from nowhere:
-	 * somebody did not record a delivery. The ingredient sits below zero until that delivery is
-	 * written down, and it should — an on-hand figure of minus forty kilos is a question, and the
-	 * question is the point.
+	 * <p><strong>And it subtracts nothing, which is where T-087 first got this wrong.</strong> It
+	 * booked the shortfall as a negative movement, so an ingredient's total read minus forty kilos,
+	 * and it defended that as the finding rather than the bug. Shown it, Rajeev: <em>"That makes no
+	 * sense. We should stop at 0. How does negative ingredients make any sense?"</em> — and his
+	 * original ruling had said as much already. The named movement was meant as what <em>replaces</em>
+	 * the minus sign, not as what makes it explicable. If the books say 20 Kg and the kitchen used
+	 * 60, the missing 40 still did not come from nowhere and somebody still has to go and find the
+	 * delivery nobody wrote down; what carries that question is this row, with the ingredient's name
+	 * in it, on a list somebody reads. A store room that holds minus forty kilos is not a fact about
+	 * a shelf, and the shelf is what on hand counts.
+	 *
+	 * <p><strong>The figure that may still go negative is <em>available</em>, and deliberately.</strong>
+	 * Available is on hand minus what the saved plans have claimed (T-086), so a negative there says
+	 * the temple has promised more of something than it holds — true, useful, and nothing to do with
+	 * this kind of row. Different figures, different rules.
 	 */
 	USED_BEYOND_RECORDED_STOCK
 }

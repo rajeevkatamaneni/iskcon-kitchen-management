@@ -134,6 +134,8 @@ class MealPlanIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM audit_events");
+		// A regenerated shopping list also holds the ingredient down (T-122's reader test).
+		admin.execute("DELETE FROM shopping_list_lines");
 		// Anything that moved through the stock ledger is tracked now, so the item rows exist
 		// even where the test never asked for them, and they hold the ingredient down.
 		admin.execute("DELETE FROM inventory_items");
@@ -547,10 +549,13 @@ class MealPlanIT extends AbstractIntegrationTest {
 	 * into the meal record, where nobody reconciles it. So the recording now stands, and the
 	 * 40 Kg the books could not account for is booked as a movement that says so.
 	 *
-	 * <p><strong>The store room is left at minus forty kilos, and that is the finding rather than the
-	 * bug.</strong> The missing rice did not come from nowhere — somebody did not record a delivery —
-	 * and the negative figure is the question that gets asked. What is <em>not</em> left negative is
-	 * any lot the store room knows about: FEFO drew the 10 Kg batch to zero and stopped.
+	 * <p><strong>The store room is left at zero, not at minus forty kilos (T-122).</strong> That is
+	 * the half of T-087 that was wrong and shipped: it made the shortfall subtract, so the ingredient
+	 * read minus forty and the proof file argued the impossible figure was the finding rather than
+	 * the bug. Shown it, Rajeev: <em>"That makes no sense. We should stop at 0. How does negative
+	 * ingredients make any sense?"</em> The missing rice still did not come from nowhere and somebody
+	 * still has to find the delivery nobody wrote down — what carries that question is the row below,
+	 * which is unchanged in every respect except that it no longer comes off the shelf.
 	 */
 	@Test
 	@DisplayName("recording a meal the books could not cover succeeds, and books the shortfall")
@@ -566,8 +571,14 @@ class MealPlanIT extends AbstractIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.recorded").value(true));
 
-		// 10 KG drawn from the one batch there was, 40 KG booked as used beyond it, so the books
-		// read minus 40 KG until somebody writes down the delivery that is missing.
+		// 10 KG drawn from the one batch there was, 40 KG booked as used beyond it — and the shelf
+		// is empty, which is as far down as a shelf goes.
+		assertThat(onHand(rice))
+				.as("on hand stops at zero (T-122)")
+				.isEqualByComparingTo("0");
+		// The record of the discrepancy is untouched: every quantity in the ledger still adds up to
+		// minus forty, which is a figure the application now shows nobody and this test asserts only
+		// to prove the row is still there saying what it said.
 		assertThat(admin.queryForObject("""
 				SELECT COALESCE(SUM(to_base_qty(quantity, unit)),0)
 				FROM stock_movements WHERE ingredient_id = ?
@@ -595,6 +606,105 @@ class MealPlanIT extends AbstractIntegrationTest {
 		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.status").value("COOKED"))
 				.andExpect(jsonPath("$.actualServings").value(1000.0));
+	}
+
+	/**
+	 * <strong>Every reader of the ledger reports the same empty shelf (T-122).</strong>
+	 *
+	 * <p>This is the test the correction exists for, and it is worth saying why it is one test rather
+	 * than six. Six places sum {@code stock_movements} for an on-hand figure, across four services,
+	 * and the whole risk in excluding a kind of row from that sum is that one of them is missed —
+	 * whereupon the stock screen and the planner disagree about how much rice there is, which is
+	 * worse than the minus forty this task removes. A figure that is wrong everywhere gets found; a
+	 * figure that is wrong on one screen gets argued about.
+	 *
+	 * <p>So the same shelf is asked through every surface those readers have, after the same
+	 * recording, in one test. Two of the six are private helpers with no surface of their own
+	 * ({@code InventoryItemService.onHandBase}, which only sizes an adjustment, and
+	 * {@code batchStockBase}, which is per-lot); they are the same {@code to_on_hand_qty} expression,
+	 * asserted at the end in SQL, and {@code StockMovementLedgerIT} fails any reader that stops using
+	 * it.
+	 */
+	@Test
+	@DisplayName("every reader of the ledger reports the same shelf: empty, not minus forty kilos")
+	void everyReaderAgreesTheShelfIsEmpty() throws Exception {
+		UUID dinner = create("""
+				{"planDate":"2025-03-17","mealKind":"Dinner","recipeId":"%s","targetYield":1000,"adults":1000}
+				""".formatted(khichdi)); // needs 50 KG, only 10 available
+		mvc.perform(record("""
+				{"planDate":"2025-03-17","mealKind":"Dinner",
+				 "dishes":[{"mealPlanId":"%s","actualServings":1000,"notMade":false}]}
+				""".formatted(dinner)))
+				.andExpect(status().isOk());
+
+		// Something still to cook, so the planner and the shopping list have a question to answer
+		// about this ingredient. Seeded directly and dated from today rather than created through
+		// the API on a 2025 date: since T-088 the planner's claims come from CommittedStockService,
+		// which only looks inside the ordering horizon, and a plan in the past claims nothing at all.
+		LocalDate soon = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).plusDays(2);
+		admin.update("""
+				INSERT INTO meal_plans (
+					tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield,
+					day_type, status, created_by)
+				VALUES (?, ?, 'Lunch', TIME '12:00', ?, 100, 'REGULAR', 'PLANNED',
+						(SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'))
+				""", tenant, soon, khichdi); // needs 5 KG
+
+		// A reorder level, so the shopping list has a reason to carry rice whatever the dates say.
+		admin.update("UPDATE inventory_items SET reorder_threshold = 10 WHERE ingredient_id = ?", rice);
+		UUID itemId = admin.queryForObject(
+				"SELECT id FROM inventory_items WHERE ingredient_id = ?", UUID.class, rice);
+
+		// Readers 1 and 2 — InventoryItemService.loadBatches, through the stock list and the item.
+		mvc.perform(get("/api/v1/inventory/items").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')].onHand").value(0));
+		mvc.perform(get("/api/v1/inventory/items/{id}", itemId)
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.item.onHand").value(0))
+				.andExpect(jsonPath("$.batches.length()").value(0));
+
+		// Reader 3 — FefoAllocator.loadPositiveBatches, through the consumption preview. There is
+		// nothing to draw, so the whole requirement is short and `available` is zero, not minus forty.
+		mvc.perform(post("/api/v1/inventory/consumption/preview")
+						.header("Authorization", "Bearer valid-token")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"recipeId\":\"" + khichdi + "\",\"targetYield\":100}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.sufficient").value(false))
+				.andExpect(jsonPath("$.shortfalls[?(@.ingredientName=='Rice')].required").value(5))
+				.andExpect(jsonPath("$.shortfalls[?(@.ingredientName=='Rice')].available").value(0));
+
+		// Reader 4 — SufficiencyService, through the planner's own report.
+		mvc.perform(get("/api/v1/meal-plans/sufficiency")
+						.header("Authorization", "Bearer valid-token")
+						.param("from", soon.toString()).param("to", soon.toString()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].shortfalls[?(@.ingredientName=='Rice')].available").value(0))
+				.andExpect(jsonPath("$[0].shortfalls[?(@.ingredientName=='Rice')].shortBy").value(5));
+
+		// Readers 5 and 6 — ShoppingListService, both of its sums, through a real regeneration.
+		// The line's `currentStock` is the second of them; the first decided the quantity, which is
+		// now 12 Kg to reach the reorder level rather than 52 to climb out of a hole nobody dug.
+		mvc.perform(post("/api/v1/shopping-list/regenerate")
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk());
+		mvc.perform(get("/api/v1/shopping-list").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')].currentStock").value(0.0))
+				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')].suggestedQty").value(12.0));
+
+		// And the two with no surface of their own, in the expression they share with all six.
+		assertThat(onHand(rice)).isEqualByComparingTo("0");
+		assertThat(admin.queryForObject("""
+				SELECT COALESCE(SUM(to_on_hand_qty(quantity, unit, movement_type)), 0)
+				FROM stock_movements WHERE ingredient_id = ? AND batch_id = (
+					SELECT batch_id FROM stock_movements
+					WHERE movement_type = 'USED_BEYOND_RECORDED_STOCK')
+				""", BigDecimal.class, rice))
+				.as("the lot the shortfall was booked against holds nothing, which is why it is not listed")
+				.isEqualByComparingTo("0");
 	}
 
 	@Test
@@ -753,6 +863,18 @@ class MealPlanIT extends AbstractIntegrationTest {
 		return admin.queryForObject(
 				"SELECT delivery_latitude, delivery_longitude FROM meal_plans WHERE id = ?",
 				(rs, n) -> new BigDecimal[] { rs.getBigDecimal(1), rs.getBigDecimal(2) }, id);
+	}
+
+	/**
+	 * What the shelf holds, computed the way every reader in the application computes it (V116).
+	 * A {@code USED_BEYOND_RECORDED_STOCK} row records a discrepancy rather than a movement of
+	 * stock and counts as zero, which is what stops this figure going below it.
+	 */
+	private BigDecimal onHand(UUID ingredientId) {
+		return admin.queryForObject("""
+				SELECT COALESCE(SUM(to_on_hand_qty(quantity, unit, movement_type)), 0)
+				FROM stock_movements WHERE ingredient_id = ?
+				""", BigDecimal.class, ingredientId);
 	}
 
 	private MockHttpServletRequestBuilder createRequest(String json) {

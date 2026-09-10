@@ -301,10 +301,13 @@ public class ShoppingListService {
 	 * What is in the store room for one ingredient, in base units. The same sum
 	 * {@link #onHandBaseByIngredient()} takes for every ingredient at once, narrowed to one — a
 	 * hand-add is about a single line and has no reason to read the whole ledger.
+	 *
+	 * <p>Both go through {@code to_on_hand_qty} (V116, T-122), which is what keeps the two of them —
+	 * and the four elsewhere — saying the same number. See {@link #onHandBaseByIngredient()}.
 	 */
 	private BigDecimal onHandBase(UUID ingredientId) {
 		BigDecimal base = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
+				SELECT COALESCE(SUM(to_on_hand_qty(quantity, unit, movement_type)), 0)
 				FROM stock_movements WHERE ingredient_id = ?
 				""", BigDecimal.class, ingredientId);
 		return base == null ? BigDecimal.ZERO : base;
@@ -379,11 +382,27 @@ public class ShoppingListService {
 		return refs;
 	}
 
+	/**
+	 * What the store room holds, per ingredient, in base units.
+	 *
+	 * <p><strong>{@code to_on_hand_qty}, never {@code to_base_qty} (V116, T-122).</strong> A
+	 * {@code USED_BEYOND_RECORDED_STOCK} row says a meal was cooked with more of something than the
+	 * books held. It is a record of a discrepancy rather than a movement of stock, and it counts as
+	 * zero here as it does everywhere else.
+	 *
+	 * <p>It is worth being explicit about what that costs this list, because it is a real change and
+	 * it is the right one. While the shortfall subtracted, an ingredient forty kilos in the red
+	 * pulled forty extra kilos onto the shopping list, and that pressure was defended as what gets
+	 * the missing delivery written down. It is not: the temple would have bought forty kilos of rice
+	 * it may well already have, on the strength of a paperwork failure. The suggestion is now
+	 * computed from a shelf of zero, and the thing that gets chased is the row in the ledger with
+	 * the ingredient's name in it.
+	 */
 	private Map<UUID, BigDecimal> onHandBaseByIngredient() {
 		Map<UUID, BigDecimal> map = new LinkedHashMap<>();
 		jdbc.query("""
 				SELECT ingredient_id,
-					   SUM(to_base_qty(quantity, unit)) AS base
+					   SUM(to_on_hand_qty(quantity, unit, movement_type)) AS base
 				FROM stock_movements GROUP BY ingredient_id
 				""", rs -> {
 			map.put(rs.getObject("ingredient_id", UUID.class), rs.getBigDecimal("base"));

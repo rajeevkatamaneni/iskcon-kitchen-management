@@ -130,6 +130,17 @@ public class FefoAllocator {
 		return units;
 	}
 
+	/**
+	 * The lots that actually hold something, per ingredient.
+	 *
+	 * <p><strong>{@code to_on_hand_qty}, not {@code to_base_qty} (V116, T-122)</strong>, even though
+	 * the {@code HAVING} below already excluded the one row that made the difference: a shortfall's
+	 * phantom lot summed negative and was dropped, and now sums to zero and is dropped. The change
+	 * is here anyway because it costs nothing and the alternative is an exception — six sums over
+	 * this ledger of which five ask the function and one is exempt for a reason a reader has to
+	 * reconstruct. Every on-hand sum asks the same question the same way, or the next one added will
+	 * copy whichever it happened to land next to.
+	 */
 	private Map<UUID, List<BatchAgg>> loadPositiveBatches(List<UUID> ingredientIds) {
 		Map<UUID, List<BatchAgg>> byIngredient = new LinkedHashMap<>();
 		if (ingredientIds.isEmpty()) {
@@ -137,7 +148,7 @@ public class FefoAllocator {
 		}
 		List<BatchAgg> rows = jdbc.query("""
 				SELECT m.ingredient_id, m.batch_id,
-					   SUM(to_base_qty(m.quantity, m.unit))
+					   SUM(to_on_hand_qty(m.quantity, m.unit, m.movement_type))
 						   AS qty_base,
 					   MAX(m.expiry_date)   AS expiry_date,
 					   MAX(m.received_date) AS received_date
@@ -145,7 +156,7 @@ public class FefoAllocator {
 				WHERE m.ingredient_id IN (""" + placeholders(ingredientIds) + """
 				)
 				GROUP BY m.ingredient_id, m.batch_id
-				HAVING SUM(to_base_qty(m.quantity, m.unit)) > 0
+				HAVING SUM(to_on_hand_qty(m.quantity, m.unit, m.movement_type)) > 0
 				""", BATCH_MAPPER, ingredientIds.toArray());
 		for (BatchAgg row : rows) {
 			byIngredient.computeIfAbsent(row.ingredientId(), k -> new ArrayList<>()).add(row);

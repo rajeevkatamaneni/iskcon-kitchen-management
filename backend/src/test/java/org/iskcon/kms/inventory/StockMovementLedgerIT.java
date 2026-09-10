@@ -8,10 +8,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 import javax.sql.DataSource;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.AuthenticatedUser;
@@ -344,6 +349,95 @@ class StockMovementLedgerIT extends AbstractIntegrationTest {
 				.hasMessageContaining("stock_movements_type_valid");
 	}
 
+	/**
+	 * <strong>The seventh reader, caught before it ships (T-122).</strong>
+	 *
+	 * <p>Six places sum this ledger for an on-hand figure and all six must exclude the one kind of
+	 * row that records a discrepancy rather than a movement of stock. Miss one and two screens
+	 * disagree about how much rice there is, which is worse than the minus-forty this correction
+	 * removes: a figure wrong everywhere gets found, a figure wrong on one screen gets argued about.
+	 * Nothing else can catch it — the query still compiles, still runs, and still returns a number.
+	 *
+	 * <p>So the rule is enforced on the source: <strong>a file that reads {@code stock_movements}
+	 * may not call {@code to_base_qty}</strong>. It must go through {@code to_on_hand_qty} (V116),
+	 * which is where the exclusion lives, once. {@code to_base_qty} stays perfectly correct over
+	 * every other table that carries a quantity and a unit, which is why the check is a pair rather
+	 * than a ban.
+	 *
+	 * <p>Same shape and same reasoning as {@code BaseQuantityIT.noHandWrittenConversionRemains},
+	 * which exists because the same table's unit arithmetic was once copied to seven places and two
+	 * of the copies had silently drifted. This is that lesson applied to the second half of the same
+	 * expression. It is a text match, so it is deliberately conservative: it can only be tripped by
+	 * a file that mentions both, which is precisely the file that would be summing the ledger.
+	 */
+	@Test
+	@DisplayName("no reader of the ledger computes on hand without to_on_hand_qty")
+	void everyLedgerSumGoesThroughTheOnHandFunction() throws IOException {
+		Path main = Files.isDirectory(Path.of("src")) ? Path.of("src/main/java")
+				: Path.of("backend/src/main/java");
+
+		try (Stream<Path> tree = Files.walk(main)) {
+			List<String> offenders = tree
+					.filter(p -> p.toString().endsWith(".java"))
+					.filter(p -> {
+						try {
+							String body = Files.readString(p);
+							return body.contains("stock_movements") && body.contains("to_base_qty(");
+						} catch (IOException e) {
+							throw new IllegalStateException("Could not read " + p, e);
+						}
+					})
+					.map(Path::toString)
+					.toList();
+
+			assertThat(offenders)
+					.as("these read the stock ledger with to_base_qty; on hand is to_on_hand_qty (V116)")
+					.isEmpty();
+		}
+	}
+
+	/**
+	 * <strong>A row that moves no stock is retracted by a row that moves no stock (T-122).</strong>
+	 *
+	 * <p>This is the trap the correction laid for itself, and it is on the write path rather than
+	 * among the six readers, so no amount of care about sums would have found it. A
+	 * {@code USED_BEYOND_RECORDED_STOCK} row counts as zero on hand. Reversing it as a
+	 * <em>plus forty kilos adjustment</em> — which is what a correction used to be for every kind
+	 * alike — would have counted in full, and a temple that corrected a short meal downwards would
+	 * have finished holding forty kilos of rice nobody ever delivered. The same wrong figure as
+	 * before, in the opposite direction, reached from the other end.
+	 */
+	@Test
+	@DisplayName("correcting a used-beyond-stock row retracts it in kind and moves no stock either way")
+	void correctingADiscrepancyMovesNoStock() throws Exception {
+		UUID batch = UUID.randomUUID();
+		seedMovement(templeA, ingredientA, batch, "10", MovementType.PO_RECEIPT);
+		seedMovement(templeA, ingredientA, batch, "-10", MovementType.CONSUMPTION);
+		UUID shortfall = seedMovement(templeA, ingredientA, UUID.randomUUID(), "-40",
+				MovementType.USED_BEYOND_RECORDED_STOCK);
+
+		assertThat(onHand(ingredientA)).as("the shelf is empty before the correction").isEqualByComparingTo("0");
+
+		mvc.perform(compensate(shortfall, "The delivery turned up in the file after all"))
+				.andExpect(status().isCreated());
+
+		Map<String, Object> retraction = admin.queryForMap("""
+				SELECT quantity, movement_type, reason_category
+				FROM stock_movements WHERE reference_type = 'CORRECTION' AND reference_id = ?
+				""", shortfall);
+		assertThat((BigDecimal) retraction.get("quantity")).isEqualByComparingTo("40");
+		assertThat(retraction.get("movement_type"))
+				.as("in kind — an ADJUSTMENT here would put 40 Kg of rice on a shelf that never had it")
+				.isEqualTo("USED_BEYOND_RECORDED_STOCK");
+		assertThat(retraction.get("reason_category"))
+				.as("nobody adjusted a count, so there is no reason to give for having done so")
+				.isNull();
+
+		assertThat(onHand(ingredientA))
+				.as("and the shelf is still empty afterwards: neither half of the pair touched it")
+				.isEqualByComparingTo("0");
+	}
+
 	@Test
 	@DisplayName("kitchen staff may correct a movement; a volunteer may not")
 	void permissionGuardsCorrection() throws Exception {
@@ -367,6 +461,14 @@ class StockMovementLedgerIT extends AbstractIntegrationTest {
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder builder) {
 		return builder.header("Authorization", "Bearer valid-token");
+	}
+
+	/** On hand as every reader in the application computes it (V116): discrepancy rows count zero. */
+	private BigDecimal onHand(UUID ingredientId) {
+		return admin.queryForObject("""
+				SELECT COALESCE(SUM(to_on_hand_qty(quantity, unit, movement_type)), 0)
+				FROM stock_movements WHERE ingredient_id = ?
+				""", BigDecimal.class, ingredientId);
 	}
 
 	private UUID seedMovement(UUID tenant, UUID ingredient, UUID batch, String qty, MovementType type) {

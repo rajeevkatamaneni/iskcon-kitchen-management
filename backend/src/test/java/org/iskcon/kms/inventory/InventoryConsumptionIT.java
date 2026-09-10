@@ -121,8 +121,8 @@ class InventoryConsumptionIT extends AbstractIntegrationTest {
 	void consumeReducesStock() throws Exception {
 		mvc.perform(consumeAt("", "100", null)).andExpect(status().isCreated());
 
-		assertThat(baseStock(rice)).as("14 KG - 5 KG").isEqualByComparingTo("9000");
-		assertThat(baseStock(dal)).as("3 KG - 2 KG").isEqualByComparingTo("1000");
+		assertThat(onHand(rice)).as("14 KG - 5 KG").isEqualByComparingTo("9000");
+		assertThat(onHand(dal)).as("3 KG - 2 KG").isEqualByComparingTo("1000");
 		assertThat(consumptionMovements()).isEqualTo(3); // rice from two batches + dal from one
 	}
 
@@ -156,9 +156,12 @@ class InventoryConsumptionIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.sufficient").value(false))
 				.andExpect(jsonPath("$.shortfalls[?(@.ingredientName=='Toor Dal')].required").value(4));
 
-		assertThat(baseStock(rice)).as("rice was there: 14 KG - 10 KG").isEqualByComparingTo("4000");
-		assertThat(baseStock(dal))
-				.as("the books held 3 KG and the kitchen used 4, so they now read minus one")
+		assertThat(onHand(rice)).as("rice was there: 14 KG - 10 KG").isEqualByComparingTo("4000");
+		assertThat(onHand(dal))
+				.as("the books held 3 KG and the kitchen used 4: the shelf is empty, not minus one (T-122)")
+				.isEqualByComparingTo("0");
+		assertThat(rawLedgerSum(dal))
+				.as("and the missing kilo is still recorded — it just is not stock any more")
 				.isEqualByComparingTo("-1000");
 		assertThat(batchStock(dalBatch))
 				.as("no lot the store room knows about goes negative — it was drawn to zero and stopped")
@@ -204,7 +207,12 @@ class InventoryConsumptionIT extends AbstractIntegrationTest {
 
 		mvc.perform(consumeAt("", "100", null)).andExpect(status().isCreated());
 
-		assertThat(baseStock(ghee)).isEqualByComparingTo("-1000");
+		assertThat(onHand(ghee))
+				.as("a store room that has never held a gram of ghee holds zero, never minus one kilo")
+				.isEqualByComparingTo("0");
+		assertThat(rawLedgerSum(ghee))
+				.as("the kilo the kitchen used is still on the record")
+				.isEqualByComparingTo("-1000");
 		assertThat(admin.queryForObject("""
 				SELECT count(*) FROM stock_movements
 				WHERE ingredient_id = ? AND movement_type = 'CONSUMPTION'
@@ -213,6 +221,60 @@ class InventoryConsumptionIT extends AbstractIntegrationTest {
 				SELECT count(*) FROM stock_movements
 				WHERE ingredient_id = ? AND movement_type = 'USED_BEYOND_RECORDED_STOCK'
 				""", Integer.class, ghee)).isEqualTo(1);
+	}
+
+	/**
+	 * <strong>What the storekeeper's two screens say afterwards (T-122).</strong>
+	 *
+	 * <p>This is the half of the correction that has a person on the end of it. Until now the stock
+	 * list read <em>Toor Dal −1 Kg</em>, and the item's own screen listed the shortfall's private
+	 * batch id among the real lots as a bare UUID holding minus one kilo, with no arrival date and
+	 * no expiry — a lot that does not exist, on the list of lots that do. Rajeev saw both.
+	 *
+	 * <p>Neither is fixed by anything that knows about them. On hand is now summed through
+	 * {@code to_on_hand_qty}, so the phantom lot aggregates to zero, and {@code get()} already drops
+	 * a batch holding nothing.
+	 */
+	@Test
+	@DisplayName("the stock screens read zero, and the shortfall's phantom lot is not among the real ones")
+	void theInventoryScreensReadZeroAndListNoPhantomLot() throws Exception {
+		mvc.perform(consumeAt("", "200", null)).andExpect(status().isCreated());
+
+		UUID phantom = admin.queryForObject("""
+				SELECT batch_id FROM stock_movements WHERE movement_type = 'USED_BEYOND_RECORDED_STOCK'
+				""", UUID.class);
+		UUID itemId = admin.queryForObject(
+				"SELECT id FROM inventory_items WHERE ingredient_id = ?", UUID.class, dal);
+
+		// The list screen. Nothing on it is allowed to say the temple holds less than nothing.
+		mvc.perform(get("/api/v1/inventory/items").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[?(@.ingredientName=='Toor Dal')].onHand").value(0));
+
+		// The item screen: the same total, and a lot list with only the lot that really existed —
+		// which the store room drew to zero, so it is not there either.
+		mvc.perform(get("/api/v1/inventory/items/{id}", itemId)
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.item.onHand").value(0))
+				.andExpect(jsonPath("$.batches[?(@.batchId=='" + phantom + "')]").isEmpty())
+				// The real lot is gone from the list too, and for the older, right reason: FEFO drew
+				// it to zero and a lot holding nothing has never been listed. An ingredient that came
+				// up short has no lot left with anything in it, so the list being empty is the only
+				// honest answer — what changed is that the row above it is no longer a UUID nobody
+				// can look up, holding minus one kilo, dated nowhere.
+				.andExpect(jsonPath("$.batches[?(@.batchId=='" + dalBatch + "')]").isEmpty())
+				.andExpect(jsonPath("$.batches.length()").value(0));
+
+		// And the row itself is untouched: still there, still a kilo, still naming the ingredient.
+		mvc.perform(get("/api/v1/inventory/movements")
+						.header("Authorization", "Bearer valid-token")
+						.param("ingredientId", dal.toString())
+						.param("type", "USED_BEYOND_RECORDED_STOCK"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].quantity").value(-1000.0))
+				.andExpect(jsonPath("$[0].ingredientName").value("Toor Dal"));
 	}
 
 	@Test
@@ -258,7 +320,24 @@ class InventoryConsumptionIT extends AbstractIntegrationTest {
 				.content(json.toString());
 	}
 
-	private BigDecimal baseStock(UUID ingredientId) {
+	/**
+	 * What the shelf holds, computed the way the application computes it (V116, T-122) — the
+	 * discrepancy rows count as zero, so this is the figure the six readers report.
+	 */
+	private BigDecimal onHand(UUID ingredientId) {
+		return admin.queryForObject("""
+				SELECT COALESCE(SUM(to_on_hand_qty(quantity, unit, movement_type)), 0)
+				FROM stock_movements WHERE ingredient_id = ?
+				""", BigDecimal.class, ingredientId);
+	}
+
+	/**
+	 * Every quantity in the ledger added up regardless of what kind of row it is — which is what on
+	 * hand used to be, and is now no figure the application shows anybody. Kept because the tests
+	 * need to say <em>the record is still there and still says minus one kilo</em> as distinctly
+	 * from <em>and it did not come off the shelf</em>.
+	 */
+	private BigDecimal rawLedgerSum(UUID ingredientId) {
 		return admin.queryForObject("""
 				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
 				FROM stock_movements WHERE ingredient_id = ?
@@ -267,7 +346,7 @@ class InventoryConsumptionIT extends AbstractIntegrationTest {
 
 	private BigDecimal batchStock(UUID batchId) {
 		return admin.queryForObject("""
-				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
+				SELECT COALESCE(SUM(to_on_hand_qty(quantity, unit, movement_type)), 0)
 				FROM stock_movements WHERE batch_id = ?
 				""", BigDecimal.class, batchId);
 	}

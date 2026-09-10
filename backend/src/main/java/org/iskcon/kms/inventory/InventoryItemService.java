@@ -46,6 +46,14 @@ import org.springframework.transaction.annotation.Transactional;
  * digest and the reorder suggestions, so all three now see a commitment the same way the screen
  * does.
  *
+ * <p><strong>On hand stops at zero; available does not (T-122).</strong> On hand is a count of a
+ * shelf, and no shelf holds minus forty kilos of rice — so where the kitchen cooked with more of
+ * something than the books held, the difference is recorded as a discrepancy that subtracts nothing
+ * ({@code USED_BEYOND_RECORDED_STOCK}, summed through {@code to_on_hand_qty} in V116) rather than
+ * as stock leaving a store room that never had it. Available is the other way round: it is on hand
+ * minus what the plans have claimed, so a negative there is a true and useful sentence — <em>you
+ * have promised more of this than you have</em> — and is left exactly as it is.
+ *
  * <p>Movements may be recorded in any unit of the ingredient's family (a sack received in KG, a
  * spoonful consumed in GM), so quantities are summed in base units — grams, millilitres, pieces —
  * and presented back in the ingredient's canonical unit. Batches are shown first-expiry-first, and
@@ -310,18 +318,43 @@ public class InventoryItemService {
 
 	// ---------------------------------------------------------------------
 
-	/** A single batch's stock in base units, or null if the batch has no movements (doesn't exist). */
+	/**
+	 * A single batch's stock in base units, or null if the batch has no movements (doesn't exist).
+	 *
+	 * <p>One of the six sums over this ledger, and like every one of them it goes through
+	 * {@code to_on_hand_qty} rather than {@code to_base_qty} (V116). See {@link #onHandBase}.
+	 */
 	private BigDecimal batchStockBase(UUID ingredientId, UUID batchId) {
 		return jdbc.queryForObject("""
-				SELECT SUM(to_base_qty(quantity, unit))
+				SELECT SUM(to_on_hand_qty(quantity, unit, movement_type))
 				FROM stock_movements WHERE ingredient_id = ? AND batch_id = ?
 				""", BigDecimal.class, ingredientId, batchId);
 	}
 
-	/** A consumable's total stock in base units (zero if none). */
+	/**
+	 * A consumable's total stock in base units (zero if none).
+	 *
+	 * <p><strong>{@code to_on_hand_qty}, never {@code to_base_qty} (V116, T-122).</strong> Not every
+	 * row in the ledger moves stock: a {@code USED_BEYOND_RECORDED_STOCK} row records that the
+	 * kitchen cooked with more of something than the books held, and it is a statement about the
+	 * paperwork rather than about the shelf. The function is where that rule lives, so that the six
+	 * places that sum this table cannot come to disagree about how much rice there is — which is
+	 * exactly what happened when the shortfall was allowed to subtract and an ingredient read minus
+	 * forty kilos.
+	 *
+	 * <p><strong>On hand does not need clamping, and is deliberately not clamped.</strong> It lands
+	 * at zero rather than below it because every batch it is made of is non-negative: FEFO draws a
+	 * lot to zero and stops, an adjustment that would take a batch below zero is refused
+	 * ({@link ErrorCode#STOCK_WOULD_GO_NEGATIVE}), and an opening count may only add. A
+	 * {@code GREATEST(0, …)} here would hide a real defect on the day one of those stopped holding.
+	 *
+	 * <p>Note which figure this is. <em>Available</em> — on hand minus what the saved plans have
+	 * claimed — may still be negative, and should be: it says the temple has promised more than it
+	 * holds. Different figures, different rules.
+	 */
 	private BigDecimal onHandBase(UUID ingredientId) {
 		BigDecimal value = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
+				SELECT COALESCE(SUM(to_on_hand_qty(quantity, unit, movement_type)), 0)
 				FROM stock_movements WHERE ingredient_id = ?
 				""", BigDecimal.class, ingredientId);
 		return value == null ? BigDecimal.ZERO : value;
@@ -346,11 +379,20 @@ public class InventoryItemService {
 		}
 	}
 
-	/** Batch aggregates keyed by ingredient. With a non-null id, only that ingredient's batches. */
+	/**
+	 * Batch aggregates keyed by ingredient. With a non-null id, only that ingredient's batches.
+	 *
+	 * <p>{@code to_on_hand_qty} again (V116), and here it does something visible as well as
+	 * arithmetical. A shortfall is booked against a fresh batch id of its own — an unrecorded lot,
+	 * which is what it is — and while that row still subtracted, this method's ungrouped sum put a
+	 * lot holding <em>minus</em> forty kilos, with no arrival date and no expiry, in among the real
+	 * ones on the item's screen. It now sums to zero, and {@link #get} already drops a batch holding
+	 * nothing, so the phantom lot leaves the list without anything here having to know about it.
+	 */
 	private Map<UUID, List<BatchAgg>> loadBatches(UUID ingredientId) {
 		String sql = """
 				SELECT m.ingredient_id, m.batch_id,
-					   SUM(to_base_qty(m.quantity, m.unit))
+					   SUM(to_on_hand_qty(m.quantity, m.unit, m.movement_type))
 						   AS qty_base,
 					   MAX(m.expiry_date)   AS expiry_date,
 					   MAX(m.received_date) AS received_date

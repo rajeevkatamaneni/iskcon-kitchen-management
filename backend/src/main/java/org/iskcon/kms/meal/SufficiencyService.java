@@ -193,11 +193,25 @@ public class SufficiencyService {
 		return out;
 	}
 
+	/**
+	 * What the store room holds, per ingredient, in base units.
+	 *
+	 * <p><strong>{@code to_on_hand_qty}, never {@code to_base_qty} (V116, T-122)</strong> — the same
+	 * function every other on-hand sum in the application asks, so the planner's badge and the
+	 * inventory screen cannot come to disagree about how much rice there is. A
+	 * {@code USED_BEYOND_RECORDED_STOCK} row records that a meal was cooked with more than the books
+	 * held; it is a discrepancy for somebody to chase, not stock that left the shelf, and it counts
+	 * as zero here.
+	 *
+	 * <p>What the walk above does with this figure is unchanged, and the negative it can still
+	 * produce is a different one: a meal's <em>remaining</em> stock falls below zero when the plans
+	 * claim more than the temple holds, which is the sentence this report exists to say.
+	 */
 	private Map<UUID, BigDecimal> onHandBaseByIngredient() {
 		Map<UUID, BigDecimal> map = new LinkedHashMap<>();
 		jdbc.query("""
 				SELECT ingredient_id,
-					   SUM(to_base_qty(quantity, unit)) AS base
+					   SUM(to_on_hand_qty(quantity, unit, movement_type)) AS base
 				FROM stock_movements GROUP BY ingredient_id
 				""", (rs) -> {
 			map.put(rs.getObject("ingredient_id", UUID.class), rs.getBigDecimal("base"));

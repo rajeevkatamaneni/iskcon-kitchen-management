@@ -50,8 +50,14 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  *
  * <p>Two kinds of assertion appear throughout and they are not interchangeable. {@code consumed()}
  * sums only {@code CONSUMPTION} rows and so says what was ever <em>drawn</em>; {@code onHand()} sums
- * every row and so says what the shelf actually holds. A correction is exactly the operation where
- * those two diverge, and asserting only the first would let a reversal that never happened pass.
+ * what each row does to the shelf and so says what the temple actually holds. A correction is
+ * exactly the operation where those two diverge, and asserting only the first would let a reversal
+ * that never happened pass.
+ *
+ * <p>{@code onHand()} is a sum of effects rather than of quantities, which is a distinction T-122
+ * had to draw: a {@code USED_BEYOND_RECORDED_STOCK} row records that a meal was cooked with more
+ * than the books held, and counts as zero, because on hand is a count of a shelf and no shelf holds
+ * less than nothing.
  */
 @AutoConfigureMockMvc
 @Import(MealCorrectionIT.StubVerifierConfiguration.class)
@@ -604,7 +610,9 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 				.andExpect(status().isOk());
 
 		assertThat(usedBeyondRecordedStock(ragi)).isEqualTo(1);
-		assertThat(onHand(ragi)).as("4 Kg out, 2.4 Kg more than there was").isEqualByComparingTo("-2400");
+		assertThat(onHand(ragi))
+				.as("4 Kg out and the shelf empty — not minus 2.4 Kg, which is no quantity of ragi (T-122)")
+				.isEqualByComparingTo("0");
 
 		// The card said 400, which the shelf covered all along.
 		mvc.perform(correct(serviceId(), """
@@ -615,11 +623,16 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.corrected").value(true));
 
 		assertThat(onHand(ragi))
-				.as("the shortfall went back with the draws: 4 Kg in, 4 Kg out, and no hole left behind")
+				.as("4 Kg in, 4 Kg out. And the shelf did not gain 2.4 Kg from the retraction either")
 				.isEqualByComparingTo("0");
+		assertThat(standingShortfalls(ragi))
+				.as("the discrepancy was retracted with the draws: there is nothing left to chase")
+				.isZero();
 		assertThat(usedBeyondRecordedStock(ragi))
-				.as("and no second one was booked — the re-draw met the shelf the meal was cooked against")
-				.isEqualTo(1);
+				.as("two rows now, and neither moved stock: the one that was raised and the one that "
+						+ "withdrew it. No second shortfall was booked — the re-draw met the shelf the "
+						+ "meal was cooked against")
+				.isEqualTo(2);
 	}
 
 	// ---- Two dishes, one ingredient, opposite directions (T-083) ------------
@@ -777,10 +790,17 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 				""", BigDecimal.class, ingredient);
 	}
 
-	/** What the shelf holds: every row, which is what "current stock is a sum" actually means. */
+	/**
+	 * What the shelf holds, computed the way the application computes it (V116, T-122).
+	 *
+	 * <p>It used to sum every row, on the reading that "current stock is a sum" meant a sum of
+	 * quantities. It is a sum of <em>effects</em>: a {@code USED_BEYOND_RECORDED_STOCK} row records
+	 * that a meal was cooked with more than the books held, and no shelf went down by it, so it
+	 * counts as zero — which is what stops this figure landing at minus forty kilos.
+	 */
 	private BigDecimal onHand(UUID ingredient) {
 		return admin.queryForObject("""
-				SELECT COALESCE(SUM(to_base_qty(quantity, unit)), 0)
+				SELECT COALESCE(SUM(to_on_hand_qty(quantity, unit, movement_type)), 0)
 				FROM stock_movements WHERE ingredient_id = ?
 				""", BigDecimal.class, ingredient);
 	}
@@ -792,6 +812,26 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 	 * at all: a sum would read zero for "none written" and for "two written that happen to cancel",
 	 * and the second of those is precisely the false state a dish-at-a-time correction would leave.
 	 */
+	/**
+	 * How many of those rows still stand — raised and not since retracted (T-122).
+	 *
+	 * <p>Distinct from the count above and both are needed. A meal corrected down retracts its
+	 * discrepancy <em>in kind</em>, because a row that moves no stock cannot be reversed by an
+	 * adjustment that does; so after a correction the ledger holds two rows of the kind and nothing
+	 * outstanding. The raw count says what was written, this says what is left to chase.
+	 */
+	private int standingShortfalls(UUID ingredient) {
+		Integer count = admin.queryForObject("""
+				SELECT count(*) FROM stock_movements m
+				WHERE m.ingredient_id = ? AND m.movement_type = 'USED_BEYOND_RECORDED_STOCK'
+				  AND (m.reference_type IS NULL OR m.reference_type <> 'CORRECTION')
+				  AND NOT EXISTS (
+					  SELECT 1 FROM stock_movements c
+					  WHERE c.reference_type = 'CORRECTION' AND c.reference_id = m.id)
+				""", Integer.class, ingredient);
+		return count == null ? 0 : count;
+	}
+
 	private int usedBeyondRecordedStock(UUID ingredient) {
 		Integer count = admin.queryForObject("""
 				SELECT count(*) FROM stock_movements

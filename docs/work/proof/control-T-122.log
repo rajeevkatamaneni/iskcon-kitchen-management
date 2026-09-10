@@ -1,0 +1,401 @@
+work-lock: waiting for 'verify' — verify (held 4s by pid 58993 — set -o pipefail; cd frontend && npx vitest run __tests__/donation-receipt.test.tsx __tests__/donations.test.tsx __tests__/donation-void.test.tsx __tests__/design-system.test.ts __tests__/nav.test.ts __tests__/routes.test.tsx 2>&1 | tail -40 && echo "=== next build ===" && npx next build 2>&1 | tail -25)
+work-lock: acquired 'verify' after 15s
+==================================================================
+CONTROL 1 — the shortfall subtracts again
+==================================================================
+CONTROL: anchor [WHEN movement_type = 'USED_BEYOND_RECORDED_STOCK' THEN 0] matches 1 time(s) in V116__on_hand_stops_at_zero.sql; 1 expected
+CONTROL1: sha256 before 1ed69ad6cde2acc07616406ac32d20e1c8162ac61d404e2b4112e7d5e15f6b88
+CONTROL1: sha256 after  a895600ed521c808c0a5db6367cc34566235bf0529576c84728ba31128bcd5c5
+CONTROL1: diff against my own verified copy (not against HEAD):
+--- /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T/tmp.JvM0OLDI7c/migration.orig	2026-09-09 22:26:44
++++ backend/src/main/resources/db/migration/V116__on_hand_stops_at_zero.sql	2026-09-09 22:26:44
+@@ -79,7 +79,7 @@
+         -- The kitchen cooked with more of this than the books held. The row records a discrepancy
+         -- for somebody to chase; it moves nothing, because nothing moved that the store room can
+         -- account for. Whatever it left the store as, it did not leave the shelf we are counting.
+-        WHEN movement_type = 'USED_BEYOND_RECORDED_STOCK' THEN 0
++        WHEN movement_type = 'USED_BEYOND_RECORDED_STOCK' THEN 1
+         ELSE 1
+     END;
+ $$ LANGUAGE SQL IMMUTABLE;
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+InventoryConsumptionIT > a batch override pulls the chosen batch to the front of the draw PASSED
+
+InventoryConsumptionIT > planning still refuses a short shelf; recording books the shortfall instead FAILED
+    org.opentest4j.AssertionFailedError: [the books held 3 KG and the kitchen used 4: the shelf is empty, not minus one (T-122)] 
+    expected: 0
+     but was: -1000.000
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.inventory.InventoryConsumptionIT.planningRefusesAndRecordingBooksTheShortfall(InventoryConsumptionIT.java:162)
+
+InventoryConsumptionIT > preview draws FEFO and reports sufficiency without writing anything PASSED
+
+InventoryConsumptionIT > the stock screens read zero, and the shortfall's phantom lot is not among the real ones FAILED
+    java.lang.AssertionError: JSON path "$[?(@.ingredientName=='Toor Dal')].onHand" expected:<0> but was:<-1>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.inventory.InventoryConsumptionIT.theInventoryScreensReadZeroAndListNoPhantomLot(InventoryConsumptionIT.java:252)
+
+InventoryConsumptionIT > overriding to a batch that holds nothing is rejected PASSED
+
+InventoryConsumptionIT > consume writes the negative movements and reduces stock PASSED
+
+InventoryConsumptionIT > a volunteer cannot consume stock PASSED
+
+InventoryConsumptionIT > an ingredient the store has never held is booked in full, and the recording stands FAILED
+    org.opentest4j.AssertionFailedError: [a store room that has never held a gram of ghee holds zero, never minus one kilo] 
+    expected: 0
+     but was: -1000.000
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.inventory.InventoryConsumptionIT.anIngredientWithNoBatchesAtAllIsBookedInFull(InventoryConsumptionIT.java:212)
+
+InventoryStockIT > the detail page names the meals that claimed the stock, and the day each belongs to PASSED
+
+InventoryStockIT > over-promising reads Low even where no reorder level has ever been set PASSED
+
+InventoryStockIT > a volunteer cannot see the stock view PASSED
+
+InventoryStockIT > an item can be filtered by storage location PASSED
+
+InventoryStockIT > you cannot track another temple's ingredient PASSED
+
+InventoryStockIT > on hand is the sum of movements, across mixed units of the same family PASSED
+
+InventoryStockIT > on hand stops at zero while available goes negative — different figures, different rules FAILED
+    java.lang.AssertionError: JSON path "$[0].onHand" expected:<0> but was:<-40>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.inventory.InventoryStockIT.onHandStopsAtZeroWhileAvailableGoesNegative(InventoryStockIT.java:347)
+
+InventoryStockIT > Low judges available: plenty on hand, nearly all of it committed, reads Low PASSED
+
+InventoryStockIT > detail lists batches first-expiry-first and flags the one expiring soon PASSED
+
+InventoryStockIT > a recorded day's plan is not committed again — the stock has already moved PASSED
+
+InventoryStockIT > a fully consumed batch drops out of the on-shelf batch list PASSED
+
+InventoryStockIT > another temple's plans never commit this temple's stock PASSED
+
+InventoryStockIT > a new item shows zero on hand and, with a threshold set, reads as below it PASSED
+
+InventoryStockIT > available is on hand minus committed, and is derived rather than stored PASSED
+
+InventoryStockIT > an ingredient can be tracked only once PASSED
+
+InventoryStockIT > a cancelled plan, a past plan nobody recorded, and one beyond the buying horizon do not commit stock PASSED
+
+StockMovementLedgerIT > another temple's movements are simply not in this temple's history PASSED
+
+StockMovementLedgerIT > the ledger refuses a unit the ingredient can't be measured in, posted straight at it PASSED
+
+StockMovementLedgerIT > history is newest-first and can be filtered to one movement type PASSED
+
+StockMovementLedgerIT > a correction is a compensating movement that reverses the original within its batch PASSED
+
+StockMovementLedgerIT > every movement type the enum declares is one the database accepts, and nothing else is PASSED
+
+StockMovementLedgerIT > a movement written before the unit rule existed can still be corrected away PASSED
+
+StockMovementLedgerIT > kitchen staff may correct a movement; a volunteer may not PASSED
+
+StockMovementLedgerIT > no reader of the ledger computes on hand without to_on_hand_qty PASSED
+
+StockMovementLedgerIT > a different unit of the same family is ordinary, and adds up in the family's base PASSED
+
+StockMovementLedgerIT > correcting a used-beyond-stock row retracts it in kind and moves no stock either way FAILED
+    org.opentest4j.AssertionFailedError: [the shelf is empty before the correction] 
+    expected: 0
+     but was: -40000.000
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.inventory.StockMovementLedgerIT.correctingADiscrepancyMovesNoStock(StockMovementLedgerIT.java:419)
+
+StockMovementLedgerIT > stock is the sum of a consumable's movements, not a stored level PASSED
+
+StockMovementLedgerIT > the ledger's owner keeps the privileges PostgreSQL's foreign keys need PASSED
+
+StockMovementLedgerIT > a movement can be corrected only once PASSED
+
+StockMovementLedgerIT > the application role can INSERT a movement but never UPDATE or DELETE one PASSED
+
+MealCorrectionIT > a dish corrected to not-made gives back everything it drew and takes nothing PASSED
+
+MealCorrectionIT > cost per serving is computed from the plan, so a corrected figure does not move it PASSED
+
+MealCorrectionIT > a correction that corrects nothing is refused rather than recorded PASSED
+
+MealCorrectionIT > the ledger can be asked what one dish drew, which is what a meal is a set of PASSED
+
+MealCorrectionIT > a failure moving the stock leaves the meal uncorrected — neither half survives alone PASSED
+
+MealCorrectionIT > correcting twice is refused with KMS-400137, and the second attempt moves nothing PASSED
+
+MealCorrectionIT > a draw somebody already reversed by hand is skipped, not refused PASSED
+
+MealCorrectionIT > two dishes swapping figures against tight stock: the falling dish first PASSED
+
+MealCorrectionIT > a dish the correction left out is refused rather than assumed unchanged PASSED
+
+MealCorrectionIT > somebody who may record a meal may not correct one PASSED
+
+MealCorrectionIT > a dish restated unchanged is not touched, in the ledger or on the row PASSED
+
+MealCorrectionIT > 400 corrected to 640: the ledger nets to 640, and 400 is still readable PASSED
+
+MealCorrectionIT > two dishes swapping figures against tight stock: the rising dish first PASSED
+
+MealCorrectionIT > a shortfall booked at recording is given back when the meal is corrected down FAILED
+    org.opentest4j.AssertionFailedError: [4 Kg out and the shelf empty — not minus 2.4 Kg, which is no quantity of ragi (T-122)] 
+    expected: 0
+     but was: -2400.000
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.meal.MealCorrectionIT.aBookedShortfallIsReversedByACorrection(MealCorrectionIT.java:615)
+
+MealCorrectionIT > a correction with no reason is refused PASSED
+
+MealPlanIT > a kind the temple doesn't have is refused, and a volunteer cannot plan PASSED
+
+MealPlanIT > a preparation with nobody to eat it is refused, whether the count is nought or absent PASSED
+
+MealPlanIT > an event has a name, and nothing is asked of an in-house one but that PASSED
+
+MealPlanIT > planning on a festival date auto-tags the day-type and records the occasion PASSED
+
+MealPlanIT > a placed delivery keeps its pin through an edit, and 0,0 never becomes a place PASSED
+
+MealPlanIT > a meal cannot have its head count taken away by an edit either PASSED
+
+MealPlanIT > Breakfast, Lunch and Dinner see none of the event block PASSED
+
+MealPlanIT > recording a meal the books could not cover succeeds, and books the shortfall FAILED
+    org.opentest4j.AssertionFailedError: [on hand stops at zero (T-122)] 
+    expected: 0
+     but was: -40000.000
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.meal.MealPlanIT.recordingShortSucceedsAndBooksTheShortfall(MealPlanIT.java:578)
+
+MealPlanIT > every reader of the ledger reports the same shelf: empty, not minus forty kilos FAILED
+    java.lang.AssertionError: JSON path "$[?(@.ingredientName=='Rice')].onHand" expected:<0> but was:<-40>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.meal.MealPlanIT.everyReaderAgreesTheShelfIsEmpty(MealPlanIT.java:661)
+
+MealPlanIT > an everyday meal takes the temple's time; an occasional one insists on being given one PASSED
+
+MealPlanIT > six kinds, and neither Catering order nor Outside event is one of them PASSED
+
+MealPlanIT > an event saves with an amount and nobody counted; a Breakfast still does not PASSED
+
+MealPlanIT > an event going outside needs a contact, and a delivered one an address and a serving time PASSED
+
+MealPlanIT > recording a meal draws stock and flips its dishes; a cooked meal can't be cancelled PASSED
+
+MealPlanIT > a dish is swapped and re-scaled in place until the meal is recorded, and never after PASSED
+
+MealPlanIT > one child is a head count: 0.6 of a portion is not nothing PASSED
+
+MealPlanIT > an event repeats forward as copies, and editing one leaves the others alone PASSED
+
+MealPlanIT > upcoming outside commitments: future, in date order, cancelled ones gone, in-house never on it PASSED
+
+MealPlanIT > day-context suggests festival on Gaura Purnima and regular on a weekday PASSED
+
+22:27:10.225 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+22:27:10.229 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+22:27:10.231 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+22:27:10.236 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+22:27:10.238 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+22:27:10.241 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+22:27:10.244 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+22:27:10.246 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Shutdown initiated...
+22:27:10.249 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Shutdown completed.
+22:27:10.253 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+22:27:10.255 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-4 - Shutdown initiated...
+22:27:10.259 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-4 - Shutdown completed.
+22:27:10.262 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+22:27:10.264 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-5 - Shutdown initiated...
+22:27:10.265 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-5 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    72
+  Passed:   64
+  Failed:   8
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+72 tests completed, 8 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 26s
+5 actionable tasks: 5 executed
+CONTROL1: gradle exit 1
+CONTROL1: migration put back
+==================================================================
+CONTROL 2 — a discrepancy reversed as an adjustment
+==================================================================
+CONTROL: anchor [movesStock ? MovementType.ADJUSTMENT : original.type()] matches 1 time(s) in StockMovementService.java; 1 expected
+CONTROL: anchor [movesStock ? AdjustmentReason.COUNT_CORRECTION : null] matches 1 time(s) in StockMovementService.java; 1 expected
+CONTROL2: sha256 before c84aee049d9e39a9778084af4bcb43a0f226ba3fe88e82bcb4fab43d7b21cc46
+CONTROL2: sha256 after  b4bcef5b875297bc7f4c8ef7ae3e5da58c9c281994eb13d8906b9bb681803e06
+CONTROL2: the old always-ADJUSTMENT reversal is back in the tree:
+196:				MovementType.ADJUSTMENT,
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+StockMovementLedgerIT > another temple's movements are simply not in this temple's history PASSED
+
+StockMovementLedgerIT > the ledger refuses a unit the ingredient can't be measured in, posted straight at it PASSED
+
+StockMovementLedgerIT > history is newest-first and can be filtered to one movement type PASSED
+
+StockMovementLedgerIT > a correction is a compensating movement that reverses the original within its batch PASSED
+
+StockMovementLedgerIT > every movement type the enum declares is one the database accepts, and nothing else is PASSED
+
+StockMovementLedgerIT > a movement written before the unit rule existed can still be corrected away PASSED
+
+StockMovementLedgerIT > kitchen staff may correct a movement; a volunteer may not PASSED
+
+StockMovementLedgerIT > no reader of the ledger computes on hand without to_on_hand_qty PASSED
+
+StockMovementLedgerIT > a different unit of the same family is ordinary, and adds up in the family's base PASSED
+
+StockMovementLedgerIT > correcting a used-beyond-stock row retracts it in kind and moves no stock either way FAILED
+    org.opentest4j.AssertionFailedError: [in kind — an ADJUSTMENT here would put 40 Kg of rice on a shelf that never had it] 
+    expected: "USED_BEYOND_RECORDED_STOCK"
+     but was: "ADJUSTMENT"
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.inventory.StockMovementLedgerIT.correctingADiscrepancyMovesNoStock(StockMovementLedgerIT.java:431)
+
+StockMovementLedgerIT > stock is the sum of a consumable's movements, not a stored level PASSED
+
+StockMovementLedgerIT > the ledger's owner keeps the privileges PostgreSQL's foreign keys need PASSED
+
+StockMovementLedgerIT > a movement can be corrected only once PASSED
+
+StockMovementLedgerIT > the application role can INSERT a movement but never UPDATE or DELETE one PASSED
+
+MealCorrectionIT > a dish corrected to not-made gives back everything it drew and takes nothing PASSED
+
+MealCorrectionIT > cost per serving is computed from the plan, so a corrected figure does not move it PASSED
+
+MealCorrectionIT > a correction that corrects nothing is refused rather than recorded PASSED
+
+MealCorrectionIT > the ledger can be asked what one dish drew, which is what a meal is a set of PASSED
+
+MealCorrectionIT > a failure moving the stock leaves the meal uncorrected — neither half survives alone PASSED
+
+MealCorrectionIT > correcting twice is refused with KMS-400137, and the second attempt moves nothing PASSED
+
+MealCorrectionIT > a draw somebody already reversed by hand is skipped, not refused PASSED
+
+MealCorrectionIT > two dishes swapping figures against tight stock: the falling dish first PASSED
+
+MealCorrectionIT > a dish the correction left out is refused rather than assumed unchanged PASSED
+
+MealCorrectionIT > somebody who may record a meal may not correct one PASSED
+
+MealCorrectionIT > a dish restated unchanged is not touched, in the ledger or on the row PASSED
+
+MealCorrectionIT > 400 corrected to 640: the ledger nets to 640, and 400 is still readable PASSED
+
+MealCorrectionIT > two dishes swapping figures against tight stock: the rising dish first PASSED
+
+MealCorrectionIT > a shortfall booked at recording is given back when the meal is corrected down FAILED
+    org.opentest4j.AssertionFailedError: [4 Kg in, 4 Kg out. And the shelf did not gain 2.4 Kg from the retraction either] 
+    expected: 0
+     but was: 2400.000
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.meal.MealCorrectionIT.aBookedShortfallIsReversedByACorrection(MealCorrectionIT.java:627)
+
+MealCorrectionIT > a correction with no reason is refused PASSED
+
+22:27:28.399 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+22:27:28.403 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+22:27:28.407 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+22:27:28.411 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+22:27:28.413 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+22:27:28.416 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    29
+  Passed:   27
+  Failed:   2
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+29 tests completed, 2 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 18s
+5 actionable tasks: 5 executed
+CONTROL2: gradle exit 1
+CONTROL: both controls done; the EXIT trap restores both files now.
+CONTROL: restored, byte-for-byte identical to the pre-patch copies
+work-lock: 'verify' released; command exited 0

@@ -309,6 +309,47 @@ class InventoryStockIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[0].belowThreshold").value(true));
 	}
 
+	/**
+	 * <strong>Two figures on one row, and they obey opposite rules (T-122).</strong>
+	 *
+	 * <p>This is the distinction the correction to T-087 turns on, and it is asserted here rather
+	 * than described anywhere because the two are one subtraction apart on the same screen and the
+	 * temptation is to give them one rule.
+	 *
+	 * <ul>
+	 *   <li><strong>On hand stops at zero.</strong> It is a count of a shelf. The kitchen cooked with
+	 *       fifty kilos when the books held ten, and the forty the books cannot account for is
+	 *       recorded as a discrepancy that subtracts nothing. The shelf is empty; it is not minus
+	 *       forty kilos, because no shelf is.
+	 *   <li><strong>Available may be negative, and here is.</strong> Available is on hand minus what
+	 *       the saved plans have claimed, so minus twenty says the temple has promised twenty kilos
+	 *       it does not have. That is true, it is useful, and nothing in T-122 touches it.
+	 * </ul>
+	 */
+	@Test
+	@DisplayName("on hand stops at zero while available goes negative — different figures, different rules")
+	void onHandStopsAtZeroWhileAvailableGoesNegative() throws Exception {
+		createItem(toorDal, "Main store", null);
+		UUID batch = UUID.randomUUID();
+		seedMovement(templeA, toorDal, batch, "10", "KG", MovementType.PO_RECEIPT, null);
+
+		// The kitchen cooked with 50 KG: the lot the store knew about was drawn to zero, and the
+		// 40 KG nobody can account for is booked against a lot of its own, as consumption does it.
+		seedMovement(templeA, toorDal, batch, "-10", "KG", MovementType.CONSUMPTION, null);
+		seedMovement(templeA, toorDal, UUID.randomUUID(), "-40", "KG",
+				MovementType.USED_BEYOND_RECORDED_STOCK, null);
+
+		// And Thursday's lunch has already claimed 20 KG that nobody has bought yet.
+		planMeal(insertKhichadi(), LocalDate.now(IST).plusDays(2), "Lunch", "400", "PLANNED");
+
+		mvc.perform(authed(get("/api/v1/inventory/items")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].onHand").value(0))
+				.andExpect(jsonPath("$[0].committed").value(20))
+				.andExpect(jsonPath("$[0].available").value(-20))
+				.andExpect(jsonPath("$[0].belowThreshold").value(true));
+	}
+
 	@Test
 	@DisplayName("the detail page names the meals that claimed the stock, and the day each belongs to")
 	void detailListsTheMealsThatCommittedTheStock() throws Exception {

@@ -36,7 +36,9 @@ import org.springframework.transaction.annotation.Transactional;
  * people. <strong>Refusing the record does not put the rice back — it moves the lie out of the
  * stock ledger and into the meal record, where it is far harder to find.</strong> What a shortfall
  * gets instead is {@link MovementType#USED_BEYOND_RECORDED_STOCK}: a named row in the ledger saying
- * which ingredient the paperwork is behind on. See {@link #consume} for the reasoning in full.
+ * which ingredient the paperwork is behind on — and one that <strong>subtracts nothing</strong>, so
+ * the store room lands at zero rather than at minus forty kilos (T-122). See {@link #consume} for
+ * the reasoning in full.
  *
  * <p><strong>The FEFO rule itself lives in {@link FefoAllocator} now, not here.</strong> Issuing to
  * one of the temple's other kitchens (E10-S7) asks the same question this does, and two copies of
@@ -101,13 +103,24 @@ public class InventoryConsumptionService {
 	 * <em>"Negative numbers get normalised and ignored; a named movement appears in a list somebody
 	 * reads, and it says which ingredient's paperwork is behind."</em>
 	 *
-	 * <p><strong>And stock is allowed to go impossible — that is the finding rather than the
-	 * bug.</strong> If the books say 20 Kg and the kitchen used 60, the missing 40 did not come from
-	 * nowhere: somebody did not record a delivery. The ingredient's on-hand figure sits below zero
-	 * until that delivery is written down, and it should, because a store room that is minus forty
-	 * kilos of rice is a question somebody has to answer. Note what does <em>not</em> go negative: no
-	 * batch does. FEFO takes each lot down to zero and stops, and the remainder is booked against a
-	 * batch id of its own — an unrecorded lot, which is precisely what it is.
+	 * <p><strong>And the shortfall subtracts nothing — on hand stops at zero (T-122).</strong> This
+	 * is the half T-087 got wrong and shipped. It booked the shortfall as a negative movement, so an
+	 * ingredient's total read minus forty kilos, and it argued that the impossible figure was the
+	 * finding rather than the bug. Shown that on staging, Rajeev: <em>"That makes no sense. We
+	 * should stop at 0. How does negative ingredients make any sense?"</em> The draw takes what
+	 * actually exists — FEFO to the bottom of each lot and no further, so no batch goes negative and
+	 * neither does their total — and the remainder is a record of a <em>discrepancy</em> rather than
+	 * a movement of <em>stock</em>: it says "40 Kg used beyond recorded stock", and the ledger's own
+	 * arithmetic knows not to count it ({@code to_on_hand_qty}, V116).
+	 *
+	 * <p>Nothing else about the row changes. The missing forty kilos still did not come from nowhere,
+	 * somebody still has not recorded a delivery, and the row still names which ingredient and still
+	 * hangs off the meal that found it. What it no longer does is answer that question with a number
+	 * no shelf can hold.
+	 *
+	 * <p><strong>Available may still be negative, and must be left alone.</strong> Available is on
+	 * hand minus what the saved plans have claimed, so a minus there means the temple has promised
+	 * more than it holds — a different figure, a different rule, and a sentence worth saying.
 	 *
 	 * <p><strong>The shortfall carries the same reference as the draws</strong>, deliberately, and it
 	 * is what makes a correction whole. {@code StockMovementService.compensateAllFor} finds
@@ -176,9 +189,17 @@ public class InventoryConsumptionService {
 	 *
 	 * <p><strong>A fresh batch id, not the last lot drawn.</strong> This food did not come out of any
 	 * lot the store room knows about — that is the whole claim the row is making — and hanging it on
-	 * a real batch would drive a real sack of rice to a negative number, which is both untrue and the
-	 * unreadable thing the named movement exists to avoid. Its own id keeps every recorded lot at
-	 * zero or above and leaves the impossibility where it belongs: on the ingredient's total.
+	 * a real batch would say a real sack of rice held less than nothing. Its own id keeps every
+	 * recorded lot at zero or above; and since T-122 that lot holds zero rather than minus forty
+	 * kilos, so it no longer lists itself among the real ones on the item's screen as a bare UUID
+	 * with a minus number and no dates.
+	 *
+	 * <p><strong>The quantity stays negative, and the row still moves nothing.</strong> Those are not
+	 * in tension once the two are told apart: the sign is what the row <em>says</em> — forty kilos
+	 * went out of this kitchen that the books cannot account for, which is how the movement list
+	 * renders it and how a storekeeper reads it — while what it <em>does</em> to the shelf is decided
+	 * by its kind, in {@code to_on_hand_qty}. Flipping it positive to match the arithmetic would make
+	 * the one row on that list read like a delivery.
 	 */
 	private void bookShortfall(
 			AuthenticatedUser actor, AllocatedLine line, Unit base, BigDecimal drawnBase,
