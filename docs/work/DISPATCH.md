@@ -12412,7 +12412,7 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **id:** T-104
 - **source:** **T-102's builder, 2026-09-09**, reporting a limitation of its own finished work rather
   than declaring victory. The most useful kind of report this arrangement produces.
-- **state:** queued. **Needs a decision on whether the cure is worth the exception it requires.**
+- **state:** **shipped 2026-09-10, wave 15.** The decision it needed was taken: the exception is worth it, and it is recorded as an exception.
 - **what:** T-102 put the guard in the statement that records the send —
   `WHERE id = ? AND status = 'DRAFT'`. Its control proved the claim (**C1**: lock removed and
   `ON CONFLICT DO NOTHING` added, and the compare-and-swap alone still refused with `KMS-400086`).
@@ -12440,7 +12440,8 @@ is a **behaviour change** — it makes partial sends durable — and may want it
   reach the code.** Here behaviour cannot, and a source assertion is the only thing that can — which
   makes this a **named exception to a good rule** rather than a quiet breach of it. If it is taken,
   it should say so in a comment, or the next person will read it as the mistake the rule forbids.
-- **proof:** — · **shipped:** —
+- **proof:** `docs/work/proof/T-104.md`
+- **shipped:** `729775c`, 2026-09-10, wave 15 — *test: the guard that stops one letter being sent twice can no longer be deleted quietly*. The exception was taken deliberately; it is argued in "The one sanctioned exception to 'make no assertion about the text of the SQL'" above.
 
 ### T-105 — a typo in a request body is answered "something went wrong at our end"
 
@@ -12535,7 +12536,7 @@ is a **behaviour change** — it makes partial sends durable — and may want it
 - **source:** **T-020 and T-073's second question, merged on Rajeev's instruction, 2026-09-10.**
   Both were separately approved and both land on a donation; building them apart would have meant
   two routes into one set of facts. **Neither original row should be dispatched — this replaces both.**
-- **state:** queued. Ready to brief.
+- **state:** **shipped 2026-09-10, wave 15.**
 
 **Why one page.** T-020 needed a `/donations/[id]` detail screen that does not exist today, to hang
 an 80G receipt on. `donorHistory` takes a **donation id** and answers *"what else has this person
@@ -12580,7 +12581,8 @@ downloads; re-sending does not create a second document; a voided donation canno
 the history defaults to good gifts only and the toggle reveals the rest; a split gift (T-081) shows
 one receipt for the whole payment.
 
-- **proof:** — · **shipped:** —
+- **proof:** `docs/work/proof/T-110.md`
+- **shipped:** `dc546ca`, 2026-09-10, wave 15 — *feat: a donation opens on its own page, with its 80G receipt and what else that donor has given*. Raised T-123 (unbounded donor history) and reused `KMS-400134` rather than minting a code — both flagged in the proof.
 
 ### T-114 — somebody with no temple membership is told to sign in instead
 
@@ -12809,6 +12811,136 @@ not the same document and one does not stand in for the other.
 
 ---
 
+# The one sanctioned exception to "make no assertion about the text of the SQL"
+
+Recorded 2026-09-10, because without it the next brief restates the rule flatly and the next builder
+reads the exception as the mistake it forbids. **Flagged by T-104's builder, in its own file, as a
+loose end it could not close from inside its contract.**
+
+**The rule stands, everywhere else.** Every concurrency brief in waves 10–12 said it and was right:
+asserting that a string contains `FOR UPDATE` proves nothing about behaviour and passes happily
+against a lock in the wrong place. **Where behaviour can reach the code, test the behaviour.**
+
+**The one place it cannot.** `CommunicationService.recordSend` guards the send with
+`WHERE id = ? AND status = 'DRAFT'`. With `lockCommunication` in front of it, **no request can make
+that predicate fire** — so deleting it leaves every behavioural test green. A green suite was
+consistent with the guard being present *and* with it having been deleted, which is exactly the state
+the negative-control rule exists to make impossible.
+
+**The sanctioned exception is `CommunicationSendGuardSourceTest`**, and it is narrower and better than
+a grep:
+
+- It **locates** the one statement that moves a communication to `SENT`, then reads its `WHERE`
+  clause — whitespace collapsed, so re-wrapping the SQL changes nothing.
+- It asserts that clause **equals the clause the behavioural test actually runs** against two real
+  unprivileged connections. That tie was previously made by review alone; now it is mechanical.
+- It **refuses to guess**: a renamed method, SQL that stops being a text block, or a second `WHERE`
+  each fail with a message naming what happened and saying *"rename it here too — do not delete the
+  assertion."*
+
+**Why not a grep, concretely:** `CommunicationRetryIT` already contains a **second**
+`UPDATE communications SET status = 'SENT' … WHERE id = ?` — a fixture with no predicate at all. A
+file-wide grep reads the wrong one of the two and passes.
+
+**So when writing the next concurrency brief:** state the rule, and name this class as the exception
+with its reason. **An exception nobody records becomes a precedent somebody copies, or a mistake
+somebody deletes.**
+
+---
+
+### T-123 — a donor's history is unbounded
+
+- **id:** T-123
+- **source:** **T-110's builder, 2026-09-10**, which rendered `donorHistory` for the first time in the
+  product's life and reviewed what it returns while doing so.
+- **state:** queued. Small, and it has a clock on it rather than a bug.
+- **what:** `donorHistory` has **no limit and no paging.** It returns every gift matching a donor,
+  for ever, and the new donation page renders all of them.
+- **why it has never mattered and will:** the endpoint had **no caller at all** until today, so
+  nothing has ever been slow. A temple's regular giver across five years is a long table on a screen
+  somebody opens to issue one receipt.
+- **the honest scope note, and it is the same shape as T-097:** **nobody has measured this.** Do not
+  schedule it as a performance fix until somebody has opened the page for a real donor with a long
+  history. It is recorded so it is not rediscovered as a surprise, not because it is known to hurt.
+- **and one thing to decide when it is built:** the history is **matched, not keyed** — account, else
+  PAN fingerprint, else phone-and-email. Paging a matched set is not the same as paging a keyed one,
+  because the match is recomputed each time. Say what the page boundary means before choosing one.
+- **proof:** — · **shipped:** —
+
+### T-124 — on-time delivery is scored per item, and a vendor who never turned up is named
+
+- **id:** T-124
+- **source:** **Rajeev, 2026-09-09**, in his own five scenarios. He wrote them out rather than
+  answering T-109, and they replace how on-time is scored rather than patching it — so T-109 is
+  closed by this row, not built separately.
+- **state:** approved, ready to build.
+
+**His five cases, and what each must score:**
+
+| | what happened | score |
+|---|---|---|
+| A | all ten items inside the three days | 100% |
+| B | some on day 2, the rest on day 3 — all inside the window | 100% |
+| C | eight items inside the window, two on day 5 | 80% |
+| D | nothing inside the window, everything after it | 0% |
+| E | nothing ever came; we cancelled and went elsewhere | 0%, **and named a no-show** |
+
+**What the code does today, which is why four of the five are wrong:**
+
+- On-time is **binary per order** and reads the **earliest** arrival — `MIN(first_receipt_at)`
+  against `needed_by`. So **C scores 100%**: one sack on day 1 makes the whole order punctual.
+- `LIVE_ORDER = "po.status NOT IN ('DRAFT', 'CANCELLED')"` — so **E is not counted at all.** The
+  vendor who never turned up is invisible; the one who was merely late is not.
+
+**The arithmetic to build:**
+
+1. **Per line:** `on-time quantity ÷ ordered quantity`, **clamped to 1** — over-delivery is not a
+   bonus. On-time quantity is what arrived on a receipt dated on or before `needed_by`.
+2. **Per order:** the mean of its line fractions. Each line counts once, which is what "eight of ten
+   items" means.
+3. **Per vendor:** the mean of its order scores.
+4. **Described lines** (`ingredient_id IS NULL`, no quantity) score **binary** off `arrived_on` —
+   there is no quantity to weigh, and T-066 is why they can be judged at all.
+5. **A `NOT_DELIVERED` return takes that quantity back out of the on-time count.** The receipt was a
+   keying error; nothing arrived. **This is how T-109 dissolves — no special rule, just the same
+   sum with a wrong number removed.** Other return reasons still do not touch on-time (the goods
+   did arrive on the day), and the reasoning for that is already in the service's own header.
+6. **Cancelled and abandoned scores 0** and enters the count. **Cancelled without the tick scores
+   nothing at all** — neither on-time nor abandoned. Silence blames nobody, which is the point.
+
+**The checkbox, which is the only new data anyone has to enter:**
+
+- On the cancel dialog, **unticked by default**, labelled exactly **"Vendor Never Delivered this
+  Order"** — Rajeev's wording, 2026-09-09 — with a line under it saying it counts against the
+  vendor's record and to leave it alone if we are cancelling for our own reasons.
+- Default unticked is not a style choice. **Two defects this week came from boxes that were already
+  ticked** — the arrivals panel in T-107 and the attendance roster in T-085 — both recording things
+  nobody meant to say. A tick here is a permanent statement about somebody else's business.
+- `purchase_orders.vendor_abandoned BOOLEAN NOT NULL DEFAULT FALSE`. Who ticked it and when is
+  already carried by `cancelled_at` and the `PO_CANCELLED` audit record; put the flag in that
+  record's after-state so the trail says it.
+- `CancelPoRequest` gains the field. The free-text reason **stays required** — the box carries the
+  fact, the sentence carries the story.
+
+**On the screen, beside the percentage** (his words, and he asked for all three): the **receipt
+number** the on-time quantity came from, **quantity-within-line** so a reader can see 8-of-10
+rather than a bare 80, and **abandoned** as its own count.
+
+**Two things to decide while building, both recorded rather than assumed:**
+
+- **Fill rate is left alone.** An abandoned order entering the fill rate would drag it to zero and
+  quietly change what an existing number on an existing screen means. On-time and abandoned answer
+  his question; fill does not need to move. Say so in the header.
+- **An abandoned cancellation is judged the moment it is cancelled**, whether or not `needed_by`
+  has passed. Ticking that box is itself the claim that the vendor is not coming.
+
+**One property to accept knowingly:** averaging order scores means a one-line order weighs the same
+as a fifty-line one. The alternative — weighing by size — lets a single large order swamp a year of
+small ones. Neither is wrong; this one is the one on the screen, and the counts beside it are what
+let a reader see the difference.
+
+- **proof:** — · **shipped:** —
+
 ### T-096 — two admins pressing Send at once send the whole letter twice
 
 - **id:** T-096
@@ -12903,7 +13035,7 @@ not the same document and one does not stand in for the other.
 - **id:** T-095
 - **source:** the coordinator, 2026-09-08, after fixing **two instances of one shape in a single
   wave** — and the second was shipped beside the first.
-- **state:** queued. Needs Rajeev's word on scope before it is briefed.
+- **state:** **shipped 2026-09-10, wave 15.** Scope settled as: audit all 148 by hand, automate the decidable half, fix what the audit found.
 - **what:** `KMS-400098` told kitchen staff to *"record a correction"* when `CORRECT_RECORDED_MEAL`
   is the Temple Admin's alone. `KMS-400143` told an admin to *"send it first"* when `requireDraft`
   refuses them with `KMS-400086`. **Same defect class, two instances, one wave.** Both were found by
@@ -12940,7 +13072,8 @@ not the same document and one does not stand in for the other.
 > `KMS-400129` names one that **was never built**. The third kind is invisible to both checks
 > proposed above, which is the argument for scoping this task carefully rather than assuming a
 > permission cross-reference covers it.
-- **proof:** — · **shipped:** —
+- **proof:** `docs/work/proof/T-095.md`
+- **shipped:** `f054637`, 2026-09-10, wave 15 — *fix: seven errors stop telling a reader to do something their role does not allow*. The check is a floor, not the audit: six of the seven were invisible to it and on the seventh it went green while naming the wrong door.
 
 ---
 
@@ -13607,3 +13740,64 @@ against two *coordinators*.** The wave-8 work manager saw it from the other side
 same thing: it declined to kill the other coordinator because that was not reversible, and said so
 rather than acting.
 
+
+---
+
+# Wave 15, released 2026-09-10 — and the row T-122 never had
+
+Four tasks, four commits, one deployed image. Written here because the ledger is what a cold session
+reads, and one of the four had been dispatched, built and proved without ever getting a row.
+
+### T-122 — on hand stops at zero, and the shortfall becomes a memorandum rather than a movement
+
+- **id:** T-122
+- **source:** **Rajeev, 2026-09-10**, seeing T-087's own output on the ingredient screen the morning
+  it shipped: *"That makes no sense. We should stop at 0. How does negative ingredients make any
+  sense?"*
+- **state:** **shipped 2026-09-10, wave 15.**
+- **what:** T-087 recorded the amount cooked beyond the books as a `USED_BEYOND_RECORDED_STOCK` row
+  that **subtracted**, so an ingredient read −40 Kg. On hand is now the sum of what actually moved:
+  the row is unchanged in every respect a person can see — quantity, meal reference, note, its place
+  in the movement list — and posts nothing to the total. **Available is deliberately left alone and
+  can still go below zero**, because it is a forecast (on the shelf minus already promised) and being
+  over-promised is a real thing a planner has to see.
+- **where it lives, and why it stayed in `stock_movements`:** three properties of the row are
+  load-bearing and all three already work in that table and nowhere else — reachable from the meal by
+  the same `(reference_type, reference_id)` pair `compensateAllFor` uses, on a list somebody actually
+  reads (the movement history on the ingredient's screen), and naming which ingredient's paperwork is
+  behind, in its note. A `stock_discrepancies` table would have had to rebuild all three, and the read
+  surface would have needed an endpoint, a client type and a screen that were not reserved.
+- **the contradiction, answered rather than ignored:** a row in a movements table that moves no stock
+  has to be legible to the next reader, so the rule is written where they cannot miss it —
+  `COMMENT ON TABLE stock_movements`, `COMMENT ON COLUMN stock_movements.quantity`, and the name of
+  the function every reader now calls (`to_on_hand_qty`). In ledger terms it is a **memorandum
+  entry**: a row the book records and does not post.
+- **no backfill, on purpose.** V115 is applied to staging and staging holds these rows. Moving them
+  would mean a backfill out of an **append-only ledger, per tenant, under RLS** — the exact shape
+  this project has paid for three hotfix migrations to get right. Excluding them at read time means
+  **staging heals on this deploy with no data touched at all**, which is the right property for a
+  correction to something already live.
+- **reservations used as issued:** migration **V116** (T-110 held V117). `ErrorCode.java` was not
+  opened — `KMS-400042` still has no thrower, which remains Rajeev's call.
+- **proof:** `docs/work/proof/T-122.md`
+- **shipped:** `c14f8c2`, 2026-09-10, wave 15 — *fix: an ingredient's stock stops at zero, and the
+  shortfall stays on the record*
+
+## Why it had no row, and what to take from that
+
+T-122 was raised from Rajeev's reaction to something that had shipped hours earlier, dispatched the
+same morning, and the row was never written. Nothing went wrong — the brief was sound, the builder
+proved it, and the release found the gap by grepping the ledger for each task id before marking it
+shipped. **That grep is the guard, and it should stay in the release step.** A task with a proof file
+and no row is invisible to exactly the reader this ledger exists for: the next cold session, which
+will find `to_on_hand_qty` in a migration and have nowhere to read why.
+
+## Two things this wave leaves standing
+
+- **T-110 reused `KMS-400134`** for *"a voided donation cannot have a receipt issued"* because
+  `ErrorCode.java` was reserved and no number could be minted. It reads correctly there and its next
+  step is reachable. If a code of its own is wanted it is one constant and one line in
+  `DonationReceiptService.issueNumber`.
+- **`NotificationTemplate.DONATION_RECEIPT` must be registered with Meta** under `donation_receipt`
+  before WhatsApp will carry it. Until then it falls through to SMS and email like any unapproved
+  template.

@@ -1182,6 +1182,75 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-10 — An ingredient's stock stops at zero, a donation opens on its own page with its 80G receipt, and seven errors stop naming a door the reader cannot open (wave 15; tasks T-122, T-110, T-104, T-095)
+
+**Stock stops at zero, and the shortfall stays on the record (T-122).** T-087 shipped that morning
+with the amount cooked beyond the books **subtracting**, so an ingredient read **−40 Kg** on its own
+screen. Rajeev, seeing it: *"That makes no sense. We should stop at 0. How does negative ingredients
+make any sense?"* On hand is now the sum of what actually moved. The `USED_BEYOND_RECORDED_STOCK` row
+is unchanged in every respect a person can see — same quantity, same meal, same note naming the
+ingredient, same place in the movement list — and it posts nothing to the total. In ledger terms it is
+a **memorandum entry**: a row the book records and does not post, and V116 says so in the comments on
+the table and on the quantity column so the next reader meets the rule rather than a puzzle.
+**Available is deliberately left alone and can still go below zero** — it is a forecast, what is on the
+shelf minus what is already promised, and being over-promised is a real thing a planner needs to see.
+Six readers now agree on the on-hand figure: the item screen, the FEFO allocator, the shopping list,
+the sufficiency check and both sums behind them. **No backfill** — staging carries V115's negative
+rows and heals on this deploy with no data touched, which is the right property for a correction to
+something already live.
+
+**A donation opens on its own page, with its receipt and the donor's other gifts (T-110).** The
+donations list finally links somewhere. `/donations/[id]` carries the gift, its receipt — issue,
+download, send again — and the donor's other gifts, completed ones by default with everything on a
+toggle. T-020 wanted a detail screen to hang a receipt on and T-073's second half wanted the history;
+Rajeev merged them because somebody deciding whether to issue a receipt is asking both questions at
+once. The receipt is a **fifth kind in the existing documents pipeline** rather than a path beside it,
+so it inherits storage, download and send, and it carries a **permanent number** from a per-tenant
+counter, issued once and never reissued — pressing *send again* re-sends the document that exists
+rather than building a new one. **The wording tells the truth about what can actually be claimed:** a
+cash gift from a registered temple gets an 80G receipt, goods get an acknowledgement that says plainly
+it is not one because only money qualifies, and a temple with no registration gets a receipt saying it
+supports no deduction.
+
+*Not done, and named rather than hidden:* refusing a receipt on a struck donation **reuses
+`KMS-400134`** because `ErrorCode.java` was reserved and no code could be minted — it reads correctly
+there and the screen withholds the control anyway. `donorHistory` is **unbounded** — no limit, no
+paging — which has never mattered because until now it had no caller at all; recorded as **T-123**
+rather than guessed at. And **WhatsApp will not carry the receipt** until `donation_receipt` is
+registered with Meta; until then it falls through to SMS and email.
+
+**Seven errors stop telling a reader to do something their role does not allow (T-095).** A next step
+is a lie whenever the person who can hit the error cannot open the door it names. A cook meeting a
+scrapped machine was told to reinstate it — the Temple Admin's alone. A volunteer meeting a cancelled
+shift was told to post a new one. Somebody requesting their own leave was told to change the existing
+record, which is the approver's job. Two kitchen errors told an ingredient requester to restore an
+archived kitchen or turn a meal planner off, both Temple Admin settings. An approver was told to send
+a request for review when only its author can. And **`KMS-400139` told a cook to change the mark on a
+roster the day after T-106 stopped cooks doing exactly that** — the sentence was written to name a
+control, and then the control moved.
+
+`NextStepPermissionTest` now reads the tree rather than a list somebody maintains: each code's
+throwing endpoints, the permission each declares, and whether the reader who can reach the error holds
+what the next step's action needs. **Its limits are in its own javadoc rather than left to be
+discovered** — it matched only 4 of the 33 codes that instruct a door, **six of the seven fixed here
+were invisible to it**, and on the seventh it went green while identifying the wrong door. It is a
+floor, not the audit; the audit was a person reading all 148 sentences.
+
+**The double-send guard can no longer be deleted quietly (T-104).** T-102's guard against two admins
+sending one letter twice lives in the statement that records the send — `WHERE id = ? AND status =
+'DRAFT'`. With the row lock in front of it **no request can make that predicate fire**, so removing it
+left all fourteen tests green: a green suite was consistent with the belt-and-braces being present
+*and* with its having been deleted. This adds the one assertion that tells those apart, as a **named
+exception** to this project's rule against asserting on the text of SQL rather than a quiet breach of
+it — the rule holds everywhere behaviour can reach the code, and this is the one place it cannot. Not
+a grep, for a concrete reason: `CommunicationRetryIT` already contains a **second** `UPDATE
+communications SET status = 'SENT'` with no predicate at all, and a file-wide grep reads the wrong one
+of the two and passes. No production code changed.
+
+**Nobody has seen any of this working yet.** It is on staging and awaiting a pass on the deployed
+site.
+
+
 ### 2026-09-08 — A recorded meal can be corrected, a failed message can be sent again to the addresses it failed for, and a roster can say who turned up (wave 8; tasks T-007, T-015, T-016)
 
 **What was cooked can now be changed, and the sentence saying it could not is gone from four places
