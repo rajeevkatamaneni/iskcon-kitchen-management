@@ -1182,6 +1182,90 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-10 — A supply a vendor already has can be edited, which is what makes last night's lead time reachable at all (wave 19; task T-131)
+
+**The field shipped with nowhere to type into.** T-090 added `vendor_supplies.lead_time_days` and put
+a **Lead time (days)** box on the Supplies section of `/vendors/<id>` — on the **Add supply** form.
+That form's picker is built as `ingredients.filter((i) => !suppliedIds.has(i.id))`, deliberately, so
+that adding is not a second way of editing. **The consequence nobody drew: an ingredient the vendor
+already supplies cannot be chosen, so its lead time could never be set.** Every supply that exists
+already existed. On staging and in any real temple, the escalation T-090 built — amber while there is
+slack, red the day the deadline lands — **could not fire on a single row**, because every row's lead
+time was permanently `—`.
+
+**The only route left was destructive.** Remove the supply and add it again, which starts from an
+empty form: the last price the temple paid and the preferred flag the shopping list reads both go in
+the bin in order to record how long a vendor takes. Three facts thrown away to change one.
+
+**Each supply row now has an Edit beside its Remove**, and Edit swaps the row for the same row as
+inputs with a Save and a Cancel at the end — the pattern `/ingredients` already uses for the same
+interaction on the same kind of thing, read first and copied rather than invented a second time. Price,
+lead time and preference are all editable. **The ingredient is not**, and that is the one departure
+from the precedent: on `/ingredients` the name is a property of the thing, whereas here the ingredient
+is what the row *is* — the server addresses a supply by (vendor, ingredient) — so changing it in the
+box would not correct this supply, it would create a different one and leave this one behind.
+
+**No backend production code changed, and that is the finding worth keeping.** `VendorService.setSupply`
+already ended in `INSERT … ON CONFLICT (vendor_id, ingredient_id) DO UPDATE`, so a PUT for a pair the
+vendor already has has always edited that row. And the clash with `vendor_supplies_one_preferred` —
+the partial unique index allowing one preferred vendor per ingredient per temple — was already handled
+three lines above it: setting `preferred` clears any other vendor's preference for that ingredient in
+the same transaction, so the tick **moves** the preference rather than colliding with the index.
+**Neither claim had ever been exercised from a screen, because no screen could send the request.**
+Both have tests now, and the negative control demonstrates the second rather than asserting it: switch
+that one statement off and ticking Preferred on an existing row is a 500. The screen therefore owes
+the person a sentence rather than a refusal, and there is one above the table — *"Only one vendor can
+be preferred for an ingredient, so ticking Preferred here takes it from whichever vendor holds it
+now"* — placed over the table and the Add form both, **because the vendor losing the preference is not
+on this screen and cannot be named there.**
+
+> **The trap this turned up, and it is the kind that erases data quietly.** `setVendorSupply`'s
+> `lastPrice` and `leadTimeDays` were **optional** keys in `frontend/lib/api.ts`. But the server writes
+> **all three columns on every call**, so a caller that omits one is not saying *leave it alone* — it is
+> silently erasing it, and an edit meaning to change a lead time would take the price and the preference
+> down with it. That is the exact loss this task exists to stop, arriving through a different door. Both
+> are now **required-and-nullable**, which turns forgetting one into a compile error, and the reason is
+> in the method's own javadoc. Anyone writing a form over an upsert should read it.
+
+**Clearing a box lands as null and never as 0**, in one named function used by the Add form and the
+edit row alike rather than in four inline ternaries — because the two ways of getting it wrong are
+opposite and both are one character from correct. `Number("")` is `0`, which turns *nobody has recorded
+this* into *the goods arrive the same day* and has the planner tell a cook there is still time to order
+rice that can no longer be got. The reflex guard `Number(t) || null` fixes that direction and breaks
+the other, quietly discarding the real `0` that a shop you walk into and carry the goods home from
+actually has. The blank is tested as a string, before anything is coerced.
+
+**And the wider lesson, which cost a whole wave.** T-090 was green by every measure this project has:
+2155 backend tests, 1330 frontend, `tsc` silent, `next build` clean, a negative control that reproduced
+both of its claims, green CI, a verified deploy, and the served bundle grepped for all three badge
+sentences. **Not one of those could see that the field had no way in.** Its tests set a lead time on a
+*new* supply — the one case the screen allowed, and the one case a real temple never has. The defect was
+found in the first minute of driving the deployed app. Nothing is a substitute for that minute.
+
+**No migration.** The column exists; staging stays at `V119`.
+
+**Not done, and it needs Rajeev.**
+
+1. **Not yet seen working by a person.** The check to run: open a vendor with an existing supply, press
+   **Edit** on a row, put a number in **Lead time (days)**, Save, and confirm the row reads that many
+   days with the price and the Preferred badge still on it. Then Edit again, empty the box, Save, and
+   confirm it goes back to **—** rather than to **0 days**.
+2. **`preferred` was put into the inline edit rather than left out of it**, which the brief left open.
+   The reasoning: it is one of the three facts Remove-and-add was destroying, so leaving it out would
+   fix two thirds of the defect and leave the third still needing the destructive route. The
+   alternative — leave the tick on the Add form only and send the row's current value back untouched —
+   is two lines away. **What cannot be had both ways** is `preferred` editable and no explanation on
+   the screen.
+3. **The sentence about the preference moving is a session's wording, not his.**
+4. **The Add supply form is unchanged and still cannot reach an existing supply.** Deliberate, and
+   pinned by a test: with the row editable, "add" and "edit" being two routes to one thing is how they
+   come to disagree. If he would rather the picker offered everything and the form simply overwrote,
+   that is a different decision.
+5. **T-090's own outstanding items still stand.** The order screen's warning still uses the global
+   two-day guess even on rows where a real lead time now exists, and the shopping list still reads
+   amber on most rows. Both are outside this task, and the second of them is **T-130**, which is
+   waiting on him.
+
 ### 2026-09-10 — How long a vendor takes is a thing the product knows, and a shortage says the day it has to be ordered (wave 18; task T-090)
 
 **The prerequisite was real and it was the bulk of the work (T-090).** Rajeev's rule from his review

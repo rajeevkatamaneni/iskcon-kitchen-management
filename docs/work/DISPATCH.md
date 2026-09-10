@@ -12875,7 +12875,7 @@ somebody deletes.**
 
 - **id:** T-131
 - **source:** the coordinator, 2026-09-10, driving T-090 on staging the moment it deployed.
-- **state:** dispatched 2026-09-10.
+- **state:** **SHIPPED 2026-09-10, wave 19. On staging, awaiting Rajeev's test.**
 - **what:** the Supplies table has a **Lead time** column, every row reads **—**, and the only
   control on a row is **Remove**. The input lives on the *Add supply* form, whose dropdown is built
   as `available = ingredients.filter((i) => !suppliedIds.has(i.id))` — **so an ingredient the vendor
@@ -12927,7 +12927,12 @@ on that screen.**
 - **and it reported a bug in its own control script** — a heredoc ate the Python's indentation, and
   `set -e` plus the `EXIT` trap restored both files byte-for-byte before anything was patched.
   Written up rather than dropped, which is the third builder tonight to do that.
-- **proof:** `docs/work/proof/T-131.md` · **shipped:** —
+- **proof:** `docs/work/proof/T-131.md` · **shipped:** `e421741`, 2026-09-10, wave 19 — *fix: a
+  supply a vendor already has can be edited, so its lead time can finally be set (T-131)*. No
+  migration; staging stays at `V119`. **Not yet seen working by a person** — open a vendor with an
+  existing supply, press **Edit** on a row, set a lead time, Save, and check the price and the
+  Preferred badge are still on it; then empty the box, Save, and check it reads **—** and not
+  **0 days**.
 
 ### T-130 — the two days a vendor gets are counted twice
 
