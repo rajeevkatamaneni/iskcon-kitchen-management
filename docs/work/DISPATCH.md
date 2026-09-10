@@ -12939,7 +12939,14 @@ fail-wrong**, and already how `PIECES` behaves.
 - **control:** the third copy put back and `Quantities` left alone — **2 of 23 red**,
   `expected: "L" but was: "ml"`. `quantitiesAgrees` stays green on purpose, because it tests the copy
   the patch did not touch, and the proof says so rather than leaving a reader to wonder.
-- **to drive once it ships:** the scale preview on a recipe with a zero line kept in litres — *0 L*.
+- **to drive once it ships: there is nothing to drive, and this was found after the deploy.** A
+  recipe line of zero **cannot be created through the API at all** —
+  `RecipeIngredientLine.quantity` carries `@DecimalMin(value = "0.0", inclusive = false)`, *"Quantity
+  must be greater than zero."* The builder's proof says a zero line is "saveable but odd"; against
+  the running API it is not saveable. So the visible half of this task is reachable only by a line
+  that got into the database another way (a library import or a direct write), and **T-128 stands on
+  the duplication it removed, not on a screen anybody can be shown**. Nobody should go hunting for a
+  *0 L* that the form will not let them enter.
 - **proof:** `docs/work/proof/T-128.md` · **shipped:** `44ff102`, 2026-09-10, wave 17 — *fix: the
   recipe scale preview stops keeping its own copy of the unit rule*. Backend only; no migration, so
   staging stays at `V118`. Nobody has driven the scale preview since — the screen to open is

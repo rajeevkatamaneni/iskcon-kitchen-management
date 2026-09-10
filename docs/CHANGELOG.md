@@ -1206,8 +1206,11 @@ new family would have failed to compile there; the map that replaces it shows an
 its own unit instead. Fail-soft rather than fail-wrong, already how pieces behave, and it is written
 into the field's comment for whoever adds the next family.
 
-**Not done.** Nobody has driven the scale preview since — open a recipe, enter a target yield, and a
-line of zero kept in litres should read **0 L**. No migration in this wave: staging stays at `V118`.
+**Not done, and there is less to see than the task implied.** A recipe line of zero **cannot be
+entered at all** — the form and the API both refuse a quantity that is not greater than zero — so the
+*0 L* this fixes is reachable only by a line that got into the database some other way. Found by
+calling the deployed API after this shipped. The change stands on the copy it removed, not on a
+screen anybody can be shown. No migration in this wave: staging stays at `V118`.
 And **a draft purchase order nobody sent can still be ticked as "the vendor never delivered"**, while
 the scorecard's own explanation says drafts are left out. That is recorded as **T-129** with two
 options and a recommendation, and it is Rajeev's to settle, not a defect to fix quietly.
