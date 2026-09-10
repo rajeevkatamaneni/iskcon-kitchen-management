@@ -1,0 +1,89 @@
+T-095 — negative control for NextStepPermissionTest
+====================================================
+
+The question this answers: does the permission check actually catch a next step
+whose door the reader cannot open, or is its green run green because it does
+nothing?
+
+Method. A fixture — not a change to ErrorCode.java, which is reserved — was fed
+through the same loop the real enum goes through:
+
+    Verdict control = check(new Subject("Reinstate the scrapped equipment.",
+            Set.of("equipment"), Set.of("MANAGE_INVENTORY")), model);
+
+Everything about that fixture except the sentence is real and read from the tree:
+equipment condition is changed behind MANAGE_INVENTORY (Temple Admin, Kitchen
+Manager, Kitchen Staff) and taking a scrapping back is
+REINSTATE_SCRAPPED_EQUIPMENT (Temple Admin alone, D-15). It is KMS-400043's real
+defect, restated in the permission's own vocabulary so the matcher can see it.
+
+--- run with the control injected into the real assertion ------------------------
+> Task :test FAILED
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+NextStepPermissionTest > the check catches a delegation to somebody who cannot help either PASSED
+
+NextStepPermissionTest > a next step that delegates names somebody who holds the permission PASSED
+
+NextStepPermissionTest > the check catches a next step whose door the reader cannot open PASSED
+
+NextStepPermissionTest > the same sentence behind the right permission is left alone PASSED
+
+NextStepPermissionTest > the model this check rests on is actually populated PASSED
+
+NextStepPermissionTest > an instructing next step names no door its own reader lacks the permission for FAILED
+    java.lang.AssertionError: [each of these tells its reader to open a door their own permissions do not open — the shape of KMS-400098. Reword the next step, or widen the permission; do not widen this test] 
+    Expecting empty but was: ["KMS-999001 SHUT           REINSTATE_SCRAPPED_EQUIPMENT     reachable by [KITCHEN_MANAGER, KITCHEN_STAFF] who do NOT hold REINSTATE_SCRAPPED_EQUIPMENT"]
+        at org.iskcon.kms.error.NextStepPermissionTest.instructedDoorsAreOpenToEveryoneWhoCanMeetTheError(NextStepPermissionTest.java:159)
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    6
+  Passed:   5
+  Failed:   1
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+
+--- run with the injection removed (the tree as shipped) -------------------------
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+NextStepPermissionTest > the check catches a delegation to somebody who cannot help either PASSED
+
+NextStepPermissionTest > a next step that delegates names somebody who holds the permission PASSED
+
+NextStepPermissionTest > the check catches a next step whose door the reader cannot open PASSED
+
+NextStepPermissionTest > the same sentence behind the right permission is left alone PASSED
+
+NextStepPermissionTest > the model this check rests on is actually populated PASSED
+
+NextStepPermissionTest > an instructing next step names no door its own reader lacks the permission for PASSED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    6
+  Passed:   6
+  Failed:   0
+  Skipped:  0
+  Result:   SUCCESS
+────────────────────────────────────────────────────────
+
+BUILD SUCCESSFUL in 3s
+
+Outcome. The check named the code and the permission, and named the two roles
+that lack it. The injection was then reverted; the fixture survives as the
+permanent test "the check catches a next step whose door the reader cannot open",
+alongside its positive half ("the same sentence behind the right permission is
+left alone") — without which a check that flagged the sentence unconditionally
+would also have looked caught.
+
+What this control does NOT establish: that the check would catch KMS-400043
+itself. It would not. The real sentence is "Register a replacement, or reinstate
+this item if it's back in use.", and REINSTATE_SCRAPPED_EQUIPMENT scores one
+matching word against it where two are required. That is the honest gap, and it
+is why this control had to be sharpened rather than lifted verbatim.

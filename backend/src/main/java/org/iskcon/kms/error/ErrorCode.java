@@ -282,7 +282,9 @@ public enum ErrorCode {
 
 	EQUIPMENT_SCRAPPED(400043, 409,
 			"This item has been scrapped, so its condition can't change.",
-			"Register a replacement, or reinstate this item if it's back in use."),
+			// Reinstating is REINSTATE_SCRAPPED_EQUIPMENT, the Temple Admin's alone, while this error is
+			// reached on MANAGE_INVENTORY. Named a door the reader could not open until 2026-09-10 (T-095).
+			"Register a replacement, or ask a Temple Admin to reinstate it if it's back in use."),
 
 	OCCASION_ALREADY_EXISTS(400044, 409,
 			"An occasion with that name already exists.",
@@ -356,7 +358,9 @@ public enum ErrorCode {
 
 	SHIFT_NOT_OPEN(400058, 409,
 			"This shift has been cancelled.",
-			"Cancelled shifts can't be changed or signed up for. Post a new shift instead."),
+			// Reached by a volunteer signing up or joining a waitlist. Posting a shift is
+			// MANAGE_VOLUNTEER_SHIFTS, which no volunteer holds (T-095, 2026-09-10).
+			"Look for another shift, or ask whoever runs the roster to post a new one."),
 
 	SHIFT_ALREADY_STARTED(400059, 409,
 			"This shift has already started.",
@@ -547,7 +551,10 @@ public enum ErrorCode {
 	// Leave (B7)
 	LEAVE_OVERLAPS_EXISTING(400089, 409,
 			"This person already has leave recorded across some of those dates.",
-			"Open their leave and change the existing record, or choose dates that don't overlap."),
+			// Also reached from self-service on REQUEST_OWN_LEAVE, where changing an existing record is
+			// APPROVE_LEAVE and not theirs. The pronoun gave it away: "their leave" reads as an
+			// administrator's sentence and this error is not only an administrator's (T-095).
+			"Choose dates that don't overlap, or ask whoever approves leave to change the existing record."),
 
 	LEAVE_ALREADY_DECIDED(400090, 409,
 			"That request has already been answered.",
@@ -644,11 +651,14 @@ public enum ErrorCode {
 
 	KITCHEN_ARCHIVED(400109, 409,
 			"That kitchen has been archived.",
-			"Restore it from the kitchens list first, or pick a different one."),
+			// Restoring is MANAGE_KITCHENS, the Temple Admin's alone; this is reached on
+			// REQUEST_INGREDIENTS (T-095, 2026-09-10).
+			"Pick a different kitchen, or ask a Temple Admin to restore this one."),
 
 	KITCHEN_PLANS_ITS_OWN_MEALS(400110, 409,
 			"This kitchen plans its meals here, so its ingredients are drawn when a meal is recorded.",
-			"Pick a kitchen that only asks for ingredients, or turn the meal planner off for this one."),
+			// Turning the planner off is MANAGE_KITCHENS, the Temple Admin's alone (T-095, 2026-09-10).
+			"Pick a kitchen that only asks for ingredients, or ask a Temple Admin to turn the meal planner off for this one."),
 
 	INGREDIENT_REQUEST_NOT_FOUND(400111, 404,
 			"We couldn't find that request.",
@@ -684,7 +694,9 @@ public enum ErrorCode {
 
 	INGREDIENT_REQUEST_NOT_SUBMITTED(400119, 409,
 			"This request hasn't been sent for review yet.",
-			"Open it and send it for review, then it can be approved or turned down."),
+			// Not a permission failure but an ownership one, and the only such case found: the reader here
+			// is the approver, and submit() refuses anyone but the author with KMS-400112 (T-095).
+			"Whoever raised it has to send it for review first."),
 
 	KITCHEN_MAIN_MOVED(400120, 409,
 			"Somebody else changed your temple's main kitchen a moment ago.",
@@ -861,7 +873,12 @@ public enum ErrorCode {
 	// and opens: the roster carries a button per row for the answer it does not hold.
 	ATTENDANCE_ALREADY_RECORDED(400139, 409,
 			"Attendance for this shift has already been recorded.",
-			"Change the mark on the shift's roster, beside the volunteer's name."),
+			// Amended twice in two days, and the second time by the first amendment's own author.
+			// T-079 built the correction and this sentence was written to name it. Then T-106 narrowed
+			// correcting to CORRECT_RECORDED_ATTENDANCE — Temple Admin and Kitchen Manager — while this
+			// error is still reached on MANAGE_VOLUNTEER_SHIFTS, which Kitchen Staff hold. So it told a
+			// cook to do the one thing that ruling had just stopped them doing. Found by T-095.
+			"A Kitchen Manager or Temple Admin can change the mark on the shift's roster, beside the volunteer's name."),
 
 	// Returning goods to a vendor after they were accepted (T-013). Rejection only ever worked at
 	// the gate — the rejected quantity is a field of the receiving submission itself — so weevils
