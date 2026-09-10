@@ -159,15 +159,26 @@ function DonationsView() {
   // Recording happens on /donations/new and ends here, so the confirmation travels in the URL. The
   // ref guards the capture against a router object that is new on every render.
   const router = useRouter();
-  const recorded = useSearchParams().get("recorded");
+  const params = useSearchParams();
+  const recorded = params.get("recorded");
+  // Whether a thank-you actually went out, decided on the screen that recorded the gift and carried
+  // here, because by the time the ledger paints, the donor's phone number and email are no longer
+  // on hand. Two plain strings rather than one object, deliberately: this effect's dependencies are
+  // what it reads, and an object rebuilt every render would loop.
+  const thanked = params.get("thanked");
   const [flash, setFlash] = useState<string | null>(null);
+  const [thankYouSent, setThankYouSent] = useState(true);
   const captured = useRef(false);
   useEffect(() => {
     if (captured.current || recorded === null) return;
     captured.current = true;
     setFlash(recorded);
+    // An anonymous gift can never have been thanked, whatever the address bar says, so that case
+    // is decided here rather than trusted to the parameter — a bookmarked or hand-edited URL must
+    // not be able to put the old false sentence back on the screen.
+    setThankYouSent(thanked !== "no" && recorded !== "");
     router.replace("/donations");
-  }, [recorded, router]);
+  }, [recorded, thanked, router]);
 
   return (
     <div className="flex min-h-screen">
@@ -194,7 +205,17 @@ function DonationsView() {
                 autoDismiss
                 title={flash ? `The gift from ${flash} was recorded.` : "The anonymous gift was recorded."}
               >
-                It is in the ledger below, and a thank-you is on its way to the donor.
+                {/* The thank-you half of this used to be said whatever had been typed, and a gift
+                    recorded with a name and no contact details is the ordinary case at the gate —
+                    somebody hands over cash and walks on. Nothing was sent and nothing could be, so
+                    the banner said something that had not happened, on the one screen whose job is
+                    to report what did. The detail page two clicks away has always got this right,
+                    and this now says the same thing in the same words. */}
+                {thankYouSent
+                  ? "It is in the ledger below, and a thank-you is on its way to the donor."
+                  : flash
+                    ? "It is in the ledger below. No thank-you was sent: this gift carries no phone number and no email address, so anything the temple wants to say has to be said in person."
+                    : "It is in the ledger below. No thank-you was sent, because an anonymous gift leaves nobody to send one to."}
               </InlineNotice>
             </div>
           )}

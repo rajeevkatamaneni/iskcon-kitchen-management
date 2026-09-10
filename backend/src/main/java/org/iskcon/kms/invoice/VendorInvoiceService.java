@@ -355,9 +355,30 @@ public class VendorInvoiceService {
 		}
 	}
 
+	/**
+	 * How many bills this vendor already has under this number — <strong>struck ones excluded</strong>.
+	 *
+	 * <p>Rajeev's ruling of 2026-09-10, on being shown that this counted voided invoices: the false
+	 * warning fires on the <em>ordinary correction path</em>. A clerk records a bill, spots a mistake,
+	 * voids it, and re-enters it under the same number — which is the only honest way to correct one,
+	 * because {@link #voidInvoice} is a mark on the row and nothing is ever deleted. The old count saw
+	 * the struck row and warned that the re-entry duplicated a bill the temple had already said was
+	 * never owed. In his words, <em>"a warning that fires when somebody is being careful is one they
+	 * learn to dismiss"</em> — and a soft warning is worth exactly as much as the attention it still
+	 * gets.
+	 *
+	 * <p>A voided bill is not a bill. It is the record of one that should never have been recorded, so
+	 * it cannot be the thing a new invoice duplicates. Two <em>standing</em> bills under one number
+	 * still warn, which is the case this check exists for: vendors reuse numbering schemes
+	 * imperfectly, and being billed twice for one delivery is the money that goes out of the door.
+	 *
+	 * <p>Still soft either way. This decides a flag on the response, never whether the invoice saves —
+	 * see {@link RecordInvoiceResponse}.
+	 */
 	private int countByVendorAndNumber(UUID vendorId, String invoiceNumber) {
 		Integer n = jdbc.queryForObject(
-				"SELECT count(*) FROM vendor_invoices WHERE vendor_id = ? AND invoice_number = ?",
+				"SELECT count(*) FROM vendor_invoices WHERE vendor_id = ? AND invoice_number = ? "
+						+ "AND status <> 'VOIDED'",
 				Integer.class, vendorId, invoiceNumber.trim());
 		return n == null ? 0 : n;
 	}

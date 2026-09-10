@@ -238,6 +238,69 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("re-entering the number of a bill that was struck does not warn")
+	void aVoidedBillIsNotDuplicated() throws Exception {
+		// The ordinary correction path, as Rajeev described it when he ruled on this (2026-09-10):
+		// record a bill, spot a mistake, void it, re-enter it under the same number. Voiding is a
+		// mark on the row and nothing is ever deleted, so the struck bill is still there to be
+		// counted — and counting it warned the clerk that they had duplicated a bill the temple had
+		// just said was never owed. "A warning that fires when somebody is being careful is one they
+		// learn to dismiss."
+		String struck = recordAndReturnId("{\"vendorId\":\"" + vendor
+				+ "\",\"description\":\"keyed as 1200 by mistake\",\"invoiceNumber\":\"GW-77\","
+				+ "\"invoiceDate\":\"2026-08-01\",\"amount\":1200}");
+
+		signIn("uid-admin-a"); // striking a bill is MANAGE_VENDOR_PAYMENTS, which the store keeper has not
+		mvc.perform(authed(post("/api/v1/vendor-invoices/{id}/void", UUID.fromString(struck)))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"Keyed wrong; re-entering it.\"}"))
+				.andExpect(status().isNoContent());
+		signIn("uid-staff-a");
+
+		mvc.perform(invoice("{\"vendorId\":\"" + vendor
+						+ "\",\"description\":\"the same bill, keyed right\",\"invoiceNumber\":\"GW-77\","
+						+ "\"invoiceDate\":\"2026-08-01\",\"amount\":1250}"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.duplicateWarning").value(false));
+
+		// Nothing was hidden to achieve it: both rows are still in the ledger, the struck one still
+		// saying on its face that it was struck. The warning changed, the record did not.
+		mvc.perform(authed(get("/api/v1/vendor-invoices"))).andExpect(jsonPath("$.length()").value(2));
+	}
+
+	@Test
+	@DisplayName("a second standing bill under one number still warns, struck ones aside")
+	void aStandingBillStillWarnsEvenWithAStruckOneBeside() throws Exception {
+		// The other half, and the one that stops the fix being a deletion of the feature: excluding
+		// voided rows must not excuse the case this check exists for — being billed twice for one
+		// delivery, which is money out of the door.
+		String struck = recordAndReturnId("{\"vendorId\":\"" + vendor
+				+ "\",\"description\":\"first attempt\",\"invoiceNumber\":\"GW-88\","
+				+ "\"invoiceDate\":\"2026-08-01\",\"amount\":900}");
+
+		signIn("uid-admin-a");
+		mvc.perform(authed(post("/api/v1/vendor-invoices/{id}/void", UUID.fromString(struck)))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"Never received these goods.\"}"))
+				.andExpect(status().isNoContent());
+		signIn("uid-staff-a");
+
+		// The re-entry: clean, so no warning.
+		mvc.perform(invoice("{\"vendorId\":\"" + vendor
+						+ "\",\"description\":\"re-entered\",\"invoiceNumber\":\"GW-88\","
+						+ "\"invoiceDate\":\"2026-08-02\",\"amount\":900}"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.duplicateWarning").value(false));
+
+		// And a third under the same number, with a standing bill now in the way, warns as it always did.
+		mvc.perform(invoice("{\"vendorId\":\"" + vendor
+						+ "\",\"description\":\"billed for it twice\",\"invoiceNumber\":\"GW-88\","
+						+ "\"invoiceDate\":\"2026-08-03\",\"amount\":900}"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.duplicateWarning").value(true));
+	}
+
+	@Test
 	@DisplayName("an overdue PENDING invoice is flagged and filterable")
 	void overdueIsFlagged() throws Exception {
 		mvc.perform(invoice("{\"vendorId\":\"" + vendor

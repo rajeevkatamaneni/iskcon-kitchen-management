@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { DocumentView, DonationDetail, LedgerRow } from "@/lib/api";
 
 /**
@@ -300,5 +300,92 @@ describe("one donation, its receipt, and what else this donor has given", () => 
         screen.getByText(/Nothing else here looks like it came from this person/i)
       ).toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * The wait between issuing a receipt and being able to download it.
+ *
+ * <p>Driven on staging on 2026-09-09, signed in as the Temple Admin: *Issue the receipt* left
+ * Download disabled under "The receipt is being prepared", and it stayed disabled for ever. The
+ * document's own `readyAt` said the PDF had been written twenty-four seconds later — the page
+ * simply never asked again, and only a hand reload told it. Issuing and rendering are two steps on
+ * purpose, so the fix is not to make issuing wait; it is for the screen to find out.
+ */
+describe("the screen notices when the receipt is ready, without being reloaded", () => {
+  const ISSUED = { ...GIFT, receiptNumber: "R-2026-0001", receiptIssuedAt: "2026-08-16T09:00:00Z" };
+  const PREPARING: DocumentView = { ...READY, status: "PENDING", readyAt: null };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
+    reloadMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("asks again while the PDF is being written, and stops the moment it is ready", () => {
+    withScreen(ISSUED, PREPARING, []);
+    const { rerender } = render(<DonationPage />);
+
+    expect(screen.getByRole("button", { name: /download the receipt/i })).toBeDisabled();
+    expect(screen.getByText(/The receipt is being prepared/i)).toBeInTheDocument();
+    // Nothing is asked before the first interval elapses: the answer that has just arrived is the
+    // answer, and re-asking immediately would only spend a request to hear it again.
+    expect(reloadMock).not.toHaveBeenCalled();
+
+    act(() => void vi.advanceTimersByTime(4000));
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+    act(() => void vi.advanceTimersByTime(8000));
+    expect(reloadMock).toHaveBeenCalledTimes(3);
+
+    // The PDF lands, exactly as it would have on the twenty-fourth second.
+    withScreen(ISSUED, READY, []);
+    rerender(<DonationPage />);
+    expect(screen.getByRole("button", { name: /download the receipt/i })).toBeEnabled();
+    expect(screen.queryByText(/The receipt is being prepared/i)).not.toBeInTheDocument();
+
+    // And it stops asking. A page that goes on polling a question it has the answer to is the
+    // half of this fix that nobody would ever notice was missing.
+    const asked = reloadMock.mock.calls.length;
+    act(() => void vi.advanceTimersByTime(60000));
+    expect(reloadMock).toHaveBeenCalledTimes(asked);
+  });
+
+  it("does not run in a tab nobody is looking at", () => {
+    withScreen(ISSUED, PREPARING, []);
+    render(<DonationPage />);
+
+    act(() => void vi.advanceTimersByTime(4000));
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    act(() => void document.dispatchEvent(new Event("visibilitychange")));
+    act(() => void vi.advanceTimersByTime(60000));
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+
+    // Back in front, and it picks the wait up where it left off.
+    hidden.mockReturnValue(false);
+    act(() => void document.dispatchEvent(new Event("visibilitychange")));
+    act(() => void vi.advanceTimersByTime(4000));
+    expect(reloadMock).toHaveBeenCalledTimes(2);
+    hidden.mockRestore();
+  });
+
+  it("never starts on a gift with no receipt yet, or on one that was struck", () => {
+    // The two states where "being prepared" is not what is on the screen at all. A timer running
+    // behind either of them would be asking the server about a document that does not exist.
+    withScreen(GIFT, null, []);
+    const { unmount } = render(<DonationPage />);
+    act(() => void vi.advanceTimersByTime(60000));
+    expect(reloadMock).not.toHaveBeenCalled();
+    unmount();
+
+    withScreen({ ...ISSUED, voided: true, voidReason: "Entered twice.", canBeReceipted: false }, PREPARING, []);
+    render(<DonationPage />);
+    act(() => void vi.advanceTimersByTime(60000));
+    expect(reloadMock).not.toHaveBeenCalled();
   });
 });

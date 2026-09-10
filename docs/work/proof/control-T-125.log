@@ -1,0 +1,1893 @@
+
+=== the files this control patches, as they stand before it (shasum) ============================================================
+9e119dcb4e513b44654538bcd09f256f83a7223d  frontend/app/inventory/[id]/page.tsx
+261789fa11d856b4318933242f2203a0f76b7adf  frontend/lib/format.ts
+29d944a2b1244e3ed2151ca67e89f13dfbd56b78  frontend/app/donations/[id]/page.tsx
+fa817a973055344f80770a92708ccbecd5fa7815  frontend/app/donations/page.tsx
+cfc9ec88b0fd866ebbdbff801311dc73e15d1506  frontend/app/donations/new/page.tsx
+e10bbafa5b51e084994a89854aad39e3586bf50d  backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+
+=== 1. anchor counts, BEFORE any patch — each must be exactly what is expected ============================================================
+  item 1: the three labels that were missing                 expected 1, found 1
+  item 1: the humanising fallback                            expected 1, found 1
+  item 2: zero said in the item's own unit                   expected 1, found 1
+  item 3: the poll's guard                                   expected 1, found 1
+  item 4: the banner's honest branch                         expected 1, found 1
+  item 4: reachability carried in the redirect               expected 1, found 1
+  item 5: voided bills excluded from the count               expected 1, found 1
+
+=== 2. patching all five fixes back out ============================================================
+  patched frontend/app/inventory/[id]/page.tsx
+  patched frontend/lib/format.ts
+  patched frontend/app/donations/[id]/page.tsx
+  patched frontend/app/donations/page.tsx
+  patched frontend/app/donations/new/page.tsx
+  patched backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+
+=== 3. the tree really did change — this is the patch, not a description of it ============================================================
+ .../iskcon/kms/invoice/VendorInvoiceService.java   | 20 +++++++
+ frontend/app/donations/[id]/page.tsx               | 61 +++++++++++++++++++++-
+ frontend/app/donations/new/page.tsx                | 10 ++++
+ frontend/app/donations/page.tsx                    | 21 +++++++-
+ frontend/app/inventory/[id]/page.tsx               | 39 ++++++++++++--
+ frontend/lib/format.ts                             |  7 +++
+ 6 files changed, 152 insertions(+), 6 deletions(-)
+diff --git a/backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java b/backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+index 2e6ce9c..b7a282d 100644
+--- a/backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
++++ b/backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+@@ -355,6 +355,26 @@ public class VendorInvoiceService {
+ 		}
+ 	}
+ 
++	/**
++	 * How many bills this vendor already has under this number — <strong>struck ones excluded</strong>.
++	 *
++	 * <p>Rajeev's ruling of 2026-09-10, on being shown that this counted voided invoices: the false
++	 * warning fires on the <em>ordinary correction path</em>. A clerk records a bill, spots a mistake,
++	 * voids it, and re-enters it under the same number — which is the only honest way to correct one,
++	 * because {@link #voidInvoice} is a mark on the row and nothing is ever deleted. The old count saw
++	 * the struck row and warned that the re-entry duplicated a bill the temple had already said was
++	 * never owed. In his words, <em>"a warning that fires when somebody is being careful is one they
++	 * learn to dismiss"</em> — and a soft warning is worth exactly as much as the attention it still
++	 * gets.
++	 *
++	 * <p>A voided bill is not a bill. It is the record of one that should never have been recorded, so
++	 * it cannot be the thing a new invoice duplicates. Two <em>standing</em> bills under one number
++	 * still warn, which is the case this check exists for: vendors reuse numbering schemes
++	 * imperfectly, and being billed twice for one delivery is the money that goes out of the door.
++	 *
++	 * <p>Still soft either way. This decides a flag on the response, never whether the invoice saves —
++	 * see {@link RecordInvoiceResponse}.
++	 */
+ 	private int countByVendorAndNumber(UUID vendorId, String invoiceNumber) {
+ 		Integer n = jdbc.queryForObject(
+ 				"SELECT count(*) FROM vendor_invoices WHERE vendor_id = ? AND invoice_number = ?",
+diff --git a/frontend/lib/format.ts b/frontend/lib/format.ts
+index 0c4ddf7..d8463a7 100644
+--- a/frontend/lib/format.ts
++++ b/frontend/lib/format.ts
+@@ -240,6 +240,13 @@ function render(value: number | null | undefined, unit: string, forCooking: bool
+   }
+ 
+   const inBase = value * (BASE_FACTOR[code] ?? 1);
++  // Zero is said in the unit the thing is actually kept in, not in the family's small one. The
++  // step-down rule exists to stop a fraction being printed — 0.6 Kg is 600 gm — and zero has no
++  // fraction to avoid, so all the rule did was change the subject: the curd item, kept in litres
++  // with a reorder level of 15 L, read "0 ml" on hand, which invites the reader to work out how
++  // many millilitres are missing before they notice the answer is fifteen litres. Found on
++  // staging, 2026-09-09. The em dash above is a different case and is untouched — a null is "we
++  // have no figure", a zero is "we have none of it", and the two must go on reading differently.
+   let display = Math.abs(inBase) >= 1000 ? family.large : family.small;
+   let shown = inBase / BASE_FACTOR[display];
+ 
+
+=== 4. the frontend tests, exactly as written, against the un-fixed code ============================================================
+[33mThe CJS build of Vite's Node API is deprecated. See https://vitejs.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.2 /Users/Rajeev/Workspace/kitchen-management-system/frontend
+
+ ❯ __tests__/quantities.test.ts  (12 tests | 1 failed) 28ms
+   × a quantity, said the way a person says it > the ledger form — exact, because somebody reconciles against it > says zero in the unit the thing is kept in
+     → expected '0 ml' to be '0 L' // Object.is equality
+ ❯ __tests__/movement-labels.test.tsx  (6 tests | 4 failed) 69ms
+   × every stock movement kind has a word a person reads > the parse itself is sound — the label map really was read
+     → expected 4 to be greater than or equal to 7
+   × every stock movement kind has a word a person reads > no constant in MovementType.java is missing from the screen's TYPE_LABEL
+     → these stock movement kinds would print as raw constants on the item screen's Type column — add each one to TYPE_LABEL in app/inventory/[id]/page.tsx:
+  ISSUE
+  RETURN_TO_VENDOR
+  USED_BEYOND_RECORDED_STOCK: expected [ 'ISSUE', 'RETURN_TO_VENDOR', …(1) ] to deeply equal []
+   × the Type column, on the screen > shows a word for every kind the ledger can hold, and no stored constant anywhere
+     → ISSUE is on the screen as its stored constant: expected [ <td …(1)></td> ] to have a length of +0 but got 1
+   × the Type column, on the screen > humanises a kind it has never heard of rather than shouting it
+     → Unable to find an element with the text: Spilled in transit. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [...
+ ❯ __tests__/donation-receipt.test.tsx  (14 tests | 2 failed) 151ms
+   × the screen notices when the receipt is ready, without being reloaded > asks again while the PDF is being written, and stops the moment it is ready
+     → expected "spy" to be called 1 times, but got 0 times
+   × the screen notices when the receipt is ready, without being reloaded > does not run in a tab nobody is looking at
+     → expected "spy" to be called 1 times, but got 0 times
+stderr | __tests__/donations.test.tsx > the ledger > exports with the token rather than linking — a link cannot carry one, and 401s
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+    at navigateFetch (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/jsdom/lib/jsdom/living/window/navigation.js:77:3)
+    at exports.navigate (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/jsdom/lib/jsdom/living/window/navigation.js:55:3)
+    at Timeout._onTimeout (/Users/Rajeev/Workspace/kitchen-management-system/frontend/node_modules/jsdom/lib/jsdom/living/nodes/HTMLHyperlinkElementUtils-impl.js:81:7)
+    at listOnTimeout (node:internal/timers:605:17)
+    at processTimers (node:internal/timers:541:7) undefined
+
+ ❯ __tests__/donations.test.tsx  (21 tests | 4 failed) 2449ms
+   × recording a donation > tells the ledger nothing was sent when the gift carries no phone number and no email
+     → expected "spy" to be called with arguments: [ Array(1) ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+-   "/donations?recorded=Govind%20Das&thanked=no",
++   "/donations?recorded=Govind%20Das",
+  ]
+
+
+Number of calls: 1
+
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex min-h-screen"[39m
+      [36m>[39m
+        [36m<nav[39m
+          [33maria-label[39m=[32m"Main"[39m
+          [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+            [36m>[39m
+              [36m<img[39m
+                [33malt[39m=[32m""[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+                [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+              [36m/>[39m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+            [36m>[39m
+              [0mYour temple[0m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-1"[39m
+            [36m>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/today"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+                [36m/>[39m
+                [0mToday[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/calendar"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+                [36m/>[39m
+                [0mVaishnava calendar[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/planner"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+                [36m/>[39m
+                [0mMeal planner[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/planner/reuse"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+                [36m/>[39m
+                [0mReuse a plan[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/my-schedule"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+                [36m/>[39m
+                [0mMy schedule[0m
+              [36m</a>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-1"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+              [36m>[39m
+                [0mOrdering[0m
+              [36m</span>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/shopping-list"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+                [36m/>[39m
+                [0mShopping list[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/orders"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+                [36m/>[39m
+                [0mPurchase orders[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/vendors"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+                [36m/>[39m
+                [0mVendors[0m
+              [36m</a>[39m
+              [36m<a[39m
+   ...
+   × recording a donation > tells the ledger nothing was sent for an anonymous gift
+     → expected "spy" to be called with arguments: [ '/donations?recorded=&thanked=no' ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+-   "/donations?recorded=&thanked=no",
++   "/donations?recorded=",
+  ]
+
+
+Number of calls: 1
+
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex min-h-screen"[39m
+      [36m>[39m
+        [36m<nav[39m
+          [33maria-label[39m=[32m"Main"[39m
+          [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+            [36m>[39m
+              [36m<img[39m
+                [33malt[39m=[32m""[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+                [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+              [36m/>[39m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+            [36m>[39m
+              [0mYour temple[0m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-1"[39m
+            [36m>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/today"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+                [36m/>[39m
+                [0mToday[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/calendar"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+                [36m/>[39m
+                [0mVaishnava calendar[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/planner"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+                [36m/>[39m
+                [0mMeal planner[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/planner/reuse"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+                [36m/>[39m
+                [0mReuse a plan[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/my-schedule"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+                [36m/>[39m
+                [0mMy schedule[0m
+              [36m</a>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-1"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+              [36m>[39m
+                [0mOrdering[0m
+              [36m</span>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/shopping-list"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+                [36m/>[39m
+                [0mShopping list[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/orders"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+                [36m/>[39m
+                [0mPurchase orders[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/vendors"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+                [36m/>[39m
+                [0mVendors[0m
+              [36m</a>[39m
+              [36m<a[39m
+   ...
+   × the ledger > does not promise a thank-you to a donor there is no way to reach
+     → Unable to find an element with the text: /no phone number and no email address/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [...
+   × the ledger > says plainly that an anonymous gift leaves nobody to thank
+     → Unable to find an element with the text: /an anonymous gift leaves nobody to send one to/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [...
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/donation-receipt.test.tsx > the screen notices when the receipt is ready, without being reloaded > asks again while the PDF is being written, and stops the moment it is ready
+AssertionError: expected "spy" to be called 1 times, but got 0 times
+ ❯ __tests__/donation-receipt.test.tsx:340:24
+    338| 
+    339|     act(() => void vi.advanceTimersByTime(4000));
+    340|     expect(reloadMock).toHaveBeenCalledTimes(1);
+       |                        ^
+    341|     act(() => void vi.advanceTimersByTime(8000));
+    342|     expect(reloadMock).toHaveBeenCalledTimes(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  __tests__/donation-receipt.test.tsx > the screen notices when the receipt is ready, without being reloaded > does not run in a tab nobody is looking at
+AssertionError: expected "spy" to be called 1 times, but got 0 times
+ ❯ __tests__/donation-receipt.test.tsx:362:24
+    360| 
+    361|     act(() => void vi.advanceTimersByTime(4000));
+    362|     expect(reloadMock).toHaveBeenCalledTimes(1);
+       |                        ^
+    363| 
+    364|     const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  __tests__/donations.test.tsx > recording a donation > tells the ledger nothing was sent when the gift carries no phone number and no email
+AssertionError: expected "spy" to be called with arguments: [ Array(1) ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+-   "/donations?recorded=Govind%20Das&thanked=no",
++   "/donations?recorded=Govind%20Das",
+  ]
+
+
+Number of calls: 1
+
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex min-h-screen"[39m
+      [36m>[39m
+        [36m<nav[39m
+          [33maria-label[39m=[32m"Main"[39m
+          [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+            [36m>[39m
+              [36m<img[39m
+                [33malt[39m=[32m""[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+                [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+              [36m/>[39m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+            [36m>[39m
+              [0mYour temple[0m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-1"[39m
+            [36m>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/today"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+                [36m/>[39m
+                [0mToday[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/calendar"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+                [36m/>[39m
+                [0mVaishnava calendar[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/planner"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+                [36m/>[39m
+                [0mMeal planner[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/planner/reuse"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+                [36m/>[39m
+                [0mReuse a plan[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/my-schedule"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+                [36m/>[39m
+                [0mMy schedule[0m
+              [36m</a>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-1"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+              [36m>[39m
+                [0mOrdering[0m
+              [36m</span>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/shopping-list"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+                [36m/>[39m
+                [0mShopping list[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/orders"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+                [36m/>[39m
+                [0mPurchase orders[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/vendors"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+                [36m/>[39m
+                [0mVendors[0m
+              [36m</a>[39m
+              [36m<a[39m
+   ...
+ ❯ __tests__/donations.test.tsx:322:24
+    320| 
+    321|     await waitFor(() =>
+    322|       expect(pushMock).toHaveBeenCalledWith("/donations?recorded=Govin…
+       |                        ^
+    323|     );
+    324|   });
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  __tests__/donations.test.tsx > recording a donation > tells the ledger nothing was sent for an anonymous gift
+AssertionError: expected "spy" to be called with arguments: [ '/donations?recorded=&thanked=no' ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+-   "/donations?recorded=&thanked=no",
++   "/donations?recorded=",
+  ]
+
+
+Number of calls: 1
+
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex min-h-screen"[39m
+      [36m>[39m
+        [36m<nav[39m
+          [33maria-label[39m=[32m"Main"[39m
+          [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+            [36m>[39m
+              [36m<img[39m
+                [33malt[39m=[32m""[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+                [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+              [36m/>[39m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+            [36m>[39m
+              [0mYour temple[0m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-1"[39m
+            [36m>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/today"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+                [36m/>[39m
+                [0mToday[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/calendar"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+                [36m/>[39m
+                [0mVaishnava calendar[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/planner"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+                [36m/>[39m
+                [0mMeal planner[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/planner/reuse"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+                [36m/>[39m
+                [0mReuse a plan[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/my-schedule"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+                [36m/>[39m
+                [0mMy schedule[0m
+              [36m</a>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"grid gap-1"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+              [36m>[39m
+                [0mOrdering[0m
+              [36m</span>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/shopping-list"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+                [36m/>[39m
+                [0mShopping list[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/orders"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+                [36m/>[39m
+                [0mPurchase orders[0m
+              [36m</a>[39m
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/vendors"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+                [36m/>[39m
+                [0mVendors[0m
+              [36m</a>[39m
+              [36m<a[39m
+   ...
+ ❯ __tests__/donations.test.tsx:333:42
+    331|     fireEvent.click(screen.getByRole("button", { name: /record donatio…
+    332| 
+    333|     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/donati…
+       |                                          ^
+    334|   });
+    335| });
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  __tests__/donations.test.tsx > the ledger > does not promise a thank-you to a donor there is no way to reach
+TestingLibraryElementError: Unable to find an element with the text: /no phone number and no email address/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [...
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ __tests__/donations.test.tsx:495:19
+    493| 
+    494|     expect(screen.getByText(/The gift from Govind Das was recorded\./i…
+    495|     expect(screen.getByText(/no phone number and no email address/i)).…
+       |                   ^
+    496|     expect(screen.queryByText(/on its way to the donor/i)).not.toBeInT…
+    497|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  __tests__/donations.test.tsx > the ledger > says plainly that an anonymous gift leaves nobody to thank
+TestingLibraryElementError: Unable to find an element with the text: /an anonymous gift leaves nobody to send one to/i. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [...
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ __tests__/donations.test.tsx:507:19
+    505| 
+    506|     expect(screen.getByText(/The anonymous gift was recorded\./i)).toB…
+    507|     expect(screen.getByText(/an anonymous gift leaves nobody to send o…
+       |                   ^
+    508|     expect(screen.queryByText(/on its way to the donor/i)).not.toBeInT…
+    509|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  __tests__/movement-labels.test.tsx > every stock movement kind has a word a person reads > the parse itself is sound — the label map really was read
+AssertionError: expected 4 to be greater than or equal to 7
+ ❯ __tests__/movement-labels.test.tsx:89:29
+     87|     const labelled = labelledTypes();
+     88|     expect(labelled).toContain("PO_RECEIPT");
+     89|     expect(labelled.length).toBeGreaterThanOrEqual(7);
+       |                             ^
+     90|     // REASON_LABEL sits a few lines above TYPE_LABEL with the same sh…
+     91|     // would make this test pass on labels belonging to a different co…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  __tests__/movement-labels.test.tsx > every stock movement kind has a word a person reads > no constant in MovementType.java is missing from the screen's TYPE_LABEL
+AssertionError: these stock movement kinds would print as raw constants on the item screen's Type column — add each one to TYPE_LABEL in app/inventory/[id]/page.tsx:
+  ISSUE
+  RETURN_TO_VENDOR
+  USED_BEYOND_RECORDED_STOCK: expected [ 'ISSUE', 'RETURN_TO_VENDOR', …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- Array []
++ Array [
++   "ISSUE",
++   "RETURN_TO_VENDOR",
++   "USED_BEYOND_RECORDED_STOCK",
++ ]
+
+ ❯ __tests__/movement-labels.test.tsx:101:7
+     99|       `these stock movement kinds would print as raw constants on the …
+    100|         `add each one to TYPE_LABEL in app/inventory/[id]/page.tsx:\n …
+    101|     ).toEqual([]);
+       |       ^
+    102|   });
+    103| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  __tests__/movement-labels.test.tsx > the Type column, on the screen > shows a word for every kind the ledger can hold, and no stored constant anywhere
+AssertionError: ISSUE is on the screen as its stored constant: expected [ <td …(1)></td> ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ __tests__/movement-labels.test.tsx:209:94
+    207|     // The defect exactly as it was seen: the constant itself, on the …
+    208|     for (const kind of kinds) {
+    209|       expect(screen.queryAllByText(kind), `${kind} is on the screen as…
+       |                                                                                              ^
+    210|     }
+    211|     for (const word of ["Received", "Donation", "Cooked", "Adjustment"…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  __tests__/movement-labels.test.tsx > the Type column, on the screen > humanises a kind it has never heard of rather than shouting it
+TestingLibraryElementError: Unable to find an element with the text: Spilled in transit. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex min-h-screen"[39m
+    [36m>[39m
+      [36m<nav[39m
+        [33maria-label[39m=[32m"Main"[39m
+        [33mclass[39m=[32m"sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid justify-items-center gap-1 px-2"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"relative flex items-center justify-center"[39m
+          [36m>[39m
+            [36m<img[39m
+              [33malt[39m=[32m""[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"h-16 w-16 flex-none object-contain"[39m
+              [33msrc[39m=[32m"/brand/iskcon-icon.svg"[39m
+            [36m/>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"[39m
+          [36m>[39m
+            [0mYour temple[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/today"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-sun text-lg"[39m
+              [36m/>[39m
+              [0mToday[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/calendar"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-event text-lg"[39m
+              [36m/>[39m
+              [0mVaishnava calendar[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-month text-lg"[39m
+              [36m/>[39m
+              [0mMeal planner[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/planner/reuse"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-copy text-lg"[39m
+              [36m/>[39m
+              [0mReuse a plan[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/my-schedule"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-calendar-user text-lg"[39m
+              [36m/>[39m
+              [0mMy schedule[0m
+            [36m</a>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-1"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted"[39m
+            [36m>[39m
+              [0mOrdering[0m
+            [36m</span>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/shopping-list"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-clipboard-list text-lg"[39m
+              [36m/>[39m
+              [0mShopping list[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/orders"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-truck-delivery text-lg"[39m
+              [36m/>[39m
+              [0mPurchase orders[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [33mhref[39m=[32m"/vendors"[39m
+            [36m>[39m
+              [36m<i[39m
+                [33maria-hidden[39m=[32m"true"[39m
+                [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+              [36m/>[39m
+              [0mVendors[0m
+            [36m</a>[39m
+            [36m<a[39m
+              [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+              [...
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:109:15
+ ❯ __tests__/movement-labels.test.tsx:224:19
+    222|     await waitFor(() => expect(screen.getAllByText("Gopal Das")).toHav…
+    223| 
+    224|     expect(screen.getAllByText("Spilled in transit").length).toBeGreat…
+       |                   ^
+    225|     expect(screen.queryAllByText("SPILLED_IN_TRANSIT")).toHaveLength(0…
+    226|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  __tests__/quantities.test.ts > a quantity, said the way a person says it > the ledger form — exact, because somebody reconciles against it > says zero in the unit the thing is kept in
+AssertionError: expected '0 ml' to be '0 L' // Object.is equality
+
+Expected: "0 L"
+Received: "0 ml"
+
+ ❯ __tests__/quantities.test.ts:57:32
+     55|       // was change the subject and make the reader convert before the…
+     56|       // figures in front of them.
+     57|       expect(quantity(0, "L")).toBe("0 L");
+       |                                ^
+     58|       expect(quantity(0, "KG")).toBe("0 Kg");
+     59|       expect(quantity(0, "ML")).toBe("0 ml");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+ Test Files  4 failed (4)
+      Tests  11 failed | 42 passed (53)
+   Start at  23:39:12
+   Duration  3.17s (transform 221ms, setup 311ms, collect 501ms, tests 2.70s, environment 1.15s, prepare 219ms)
+
+vitest exit: 1
+
+=== 5. the backend test, with --rerun-tasks so an up-to-date build cannot fake a pass ============================================================
+
+VendorInvoiceIT > re-entering the number of a bill that was struck does not warn FAILED
+    java.lang.AssertionError: JSON path "$.duplicateWarning" expected:<false> but was:<true>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.invoice.VendorInvoiceIT.aVoidedBillIsNotDuplicated(VendorInvoiceIT.java:264)
+
+VendorInvoiceIT > the variance is computed from the order actually on the invoice PASSED
+
+VendorInvoiceIT > an invoice quoting another vendor's purchase order is refused, and nothing is recorded PASSED
+
+VendorInvoiceIT > a credit note against the bill settles the variance it was raised for PASSED
+
+23:39:27.738 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+23:39:27.742 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+23:39:27.744 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    15
+  Passed:   13
+  Failed:   2
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+15 tests completed, 2 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 12s
+5 actionable tasks: 5 executed
+gradle pipeline exit: 1
+
+=== restore (EXIT trap) ============================================================
+diff is silent for all six files: each is byte-for-byte what it was.
+9e119dcb4e513b44654538bcd09f256f83a7223d  frontend/app/inventory/[id]/page.tsx
+261789fa11d856b4318933242f2203a0f76b7adf  frontend/lib/format.ts
+29d944a2b1244e3ed2151ca67e89f13dfbd56b78  frontend/app/donations/[id]/page.tsx
+fa817a973055344f80770a92708ccbecd5fa7815  frontend/app/donations/page.tsx
+cfc9ec88b0fd866ebbdbff801311dc73e15d1506  frontend/app/donations/new/page.tsx
+e10bbafa5b51e084994a89854aad39e3586bf50d  backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+--- git status for the files this control touched (expected: only T-125's own edits) ---
+ M backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+ M frontend/app/donations/[id]/page.tsx
+ M frontend/app/donations/new/page.tsx
+ M frontend/app/donations/page.tsx
+ M frontend/app/inventory/[id]/page.tsx
+ M frontend/lib/format.ts
+(script exiting 0)
+work-lock: 'verify' released; command exited 0
+
+=== leg 2: the backend control again, with nothing truncated =================
+e10bbafa5b51e084994a89854aad39e3586bf50d  backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+anchor "AND status <> 'VOIDED'" — expected 1, found 1
+patched
+--- the tree changed (the SQL, with the fix out) ---
+VendorInvoiceIT > a price mismatch surfaces an informational variance without blocking PASSED
+VendorInvoiceIT > an invoice against a received PO is captured PENDING and joins the payment queue PASSED
+VendorInvoiceIT > the order picker offers one vendor's open orders — never a draft, a cancellation or another vendor's PASSED
+VendorInvoiceIT > a second standing bill under one number still warns, struck ones aside FAILED
+    java.lang.AssertionError: JSON path "$.duplicateWarning" expected:<false> but was:<true>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.iskcon.kms.invoice.VendorInvoiceIT.aStandingBillStillWarnsEvenWithAStruckOneBeside(VendorInvoiceIT.java:293)
+VendorInvoiceIT > a direct invoice without a description is rejected PASSED
+VendorInvoiceIT > a direct (no-PO) invoice is recordable with a description and has no variance PASSED
+VendorInvoiceIT > an order that does not exist at all is still a not-found, not a mismatch PASSED
+VendorInvoiceIT > a partial credit leaves the part of the variance that is still in dispute PASSED
+VendorInvoiceIT > an overdue PENDING invoice is flagged and filterable PASSED
+VendorInvoiceIT > a volunteer cannot capture invoices PASSED
+VendorInvoiceIT > a repeated invoice number for the same vendor warns softly but still records PASSED
+VendorInvoiceIT > re-entering the number of a bill that was struck does not warn FAILED
+    java.lang.AssertionError: JSON path "$.duplicateWarning" expected:<false> but was:<true>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.iskcon.kms.invoice.VendorInvoiceIT.aVoidedBillIsNotDuplicated(VendorInvoiceIT.java:264)
+VendorInvoiceIT > the variance is computed from the order actually on the invoice PASSED
+VendorInvoiceIT > an invoice quoting another vendor's purchase order is refused, and nothing is recorded PASSED
+VendorInvoiceIT > a credit note against the bill settles the variance it was raised for PASSED
+  Total:    15
+  Passed:   13
+  Failed:   2
+  Result:   FAILURE
+BUILD FAILED in 12s
+gradle pipeline exit: 1
+
+=== leg 2: restore (EXIT trap) ==============================================
+restore: diff is silent, the file is byte-for-byte what it was.
+e10bbafa5b51e084994a89854aad39e3586bf50d  /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T/tmp.37qGzU0Num/orig
+e10bbafa5b51e084994a89854aad39e3586bf50d  backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+ M backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+(leg 2 exiting 0)
+work-lock: 'verify' released; command exited 0
+
+=== leg 3: the same patch, diffed against the verified tree rather than HEAD =
+  patched frontend/app/inventory/[id]/page.tsx
+  patched frontend/lib/format.ts
+  patched frontend/app/donations/[id]/page.tsx
+  patched frontend/app/donations/page.tsx
+  patched frontend/app/donations/new/page.tsx
+  patched backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+--- frontend/app/inventory/[id]/page.tsx
+-  ISSUE: "Issued",
+-  RETURN_TO_VENDOR: "Sent back",
+-  // Not "Shortfall", which is what the planner calls a gap between a plan and the shelf. This row
+-  // is the kitchen having already cooked with food the books did not hold, and the books are the
+-  // thing it is a statement about — so it says so.
+-  USED_BEYOND_RECORDED_STOCK: "Used beyond the books",
+-  const known = TYPE_LABEL[type];
+-  if (known) return known;
+-  const words = String(type ?? "").replace(/_/g, " ").trim().toLowerCase();
+-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Movement";
++  return TYPE_LABEL[type] ?? type;
+  NO CHANGE — the patch did not apply to this file
+--- frontend/lib/format.ts
+-  const empty = inBase === 0;
+-  let display = empty ? code : Math.abs(inBase) >= 1000 ? family.large : family.small;
++  let display = Math.abs(inBase) >= 1000 ? family.large : family.small;
+  NO CHANGE — the patch did not apply to this file
+--- frontend/app/donations/[id]/page.tsx
+-    if (!waitingForThePdf) return;
++    if (true) return;
+  NO CHANGE — the patch did not apply to this file
+--- frontend/app/donations/page.tsx
+-                {thankYouSent
+-                  ? "It is in the ledger below, and a thank-you is on its way to the donor."
+-                  : flash
+-                    ? "It is in the ledger below. No thank-you was sent: this gift carries no phone number and no email address, so anything the temple wants to say has to be said in person."
+-                    : "It is in the ledger below. No thank-you was sent, because an anonymous gift leaves nobody to send one to."}
++                It is in the ledger below, and a thank-you is on its way to the donor.
+  NO CHANGE — the patch did not apply to this file
+--- frontend/app/donations/new/page.tsx
+-      router.push(
+-        `/donations?recorded=${encodeURIComponent(who)}${reachable ? "" : "&thanked=no"}`
+-      );
++      router.push(`/donations?recorded=${encodeURIComponent(who)}`);
+  NO CHANGE — the patch did not apply to this file
+--- backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+-				"SELECT count(*) FROM vendor_invoices WHERE vendor_id = ? AND invoice_number = ? "
+-						+ "AND status <> 'VOIDED'",
++				"SELECT count(*) FROM vendor_invoices WHERE vendor_id = ? AND invoice_number = ?",
+  NO CHANGE — the patch did not apply to this file
+
+=== leg 3: restore (EXIT trap) ==============================================
+diff is silent for all six files: each is byte-for-byte what it was.
+9e119dcb4e513b44654538bcd09f256f83a7223d  frontend/app/inventory/[id]/page.tsx
+261789fa11d856b4318933242f2203a0f76b7adf  frontend/lib/format.ts
+29d944a2b1244e3ed2151ca67e89f13dfbd56b78  frontend/app/donations/[id]/page.tsx
+fa817a973055344f80770a92708ccbecd5fa7815  frontend/app/donations/page.tsx
+cfc9ec88b0fd866ebbdbff801311dc73e15d1506  frontend/app/donations/new/page.tsx
+e10bbafa5b51e084994a89854aad39e3586bf50d  backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+(leg 3 exiting 0)
+work-lock: 'verify' released; command exited 0
+
+=== leg 3b: the same again, with leg 3s--- frontend/app/inventory/[id]/page.tsx
+  NO CHANGE — the patch did not apply to this file
+--- frontend/lib/format.ts
+  NO CHANGE — the patch did not apply to this file
+--- frontend/app/donations/[id]/page.tsx
+  NO CHANGE — the patch did not apply to this file
+--- frontend/app/donations/page.tsx
+  NO CHANGE — the patch did not apply to this file
+--- frontend/app/donations/new/page.tsx
+  NO CHANGE — the patch did not apply to this file
+--- backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+  NO CHANGE — the patch did not apply to this file
+
+=== leg 3b: restore (EXIT trap) ==============================================
+diff is silent for all six files: each is byte-for-byte what it was.
+9e119dcb4e513b44654538bcd09f256f83a7223d  frontend/app/inventory/[id]/page.tsx
+261789fa11d856b4318933242f2203a0f76b7adf  frontend/lib/format.ts
+29d944a2b1244e3ed2151ca67e89f13dfbd56b78  frontend/app/donations/[id]/page.tsx
+fa817a973055344f80770a92708ccbecd5fa7815  frontend/app/donations/page.tsx
+cfc9ec88b0fd866ebbdbff801311dc73e15d1506  frontend/app/donations/new/page.tsx
+e10bbafa5b51e084994a89854aad39e3586bf50d  backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+(leg 3b exiting 0)
+work-lock: 'verify' released; command exited 0
+
+=== leg 3c: the same again, with the pipefail bug fixed ======================
+  patched frontend/app/inventory/[id]/page.tsx
+  patched frontend/lib/format.ts
+  patched frontend/app/donations/[id]/page.tsx
+  patched frontend/app/donations/page.tsx
+  patched frontend/app/donations/new/page.tsx
+  patched backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+--- frontend/app/inventory/[id]/page.tsx
+-  ISSUE: "Issued",
+-  RETURN_TO_VENDOR: "Sent back",
+-  // Not "Shortfall", which is what the planner calls a gap between a plan and the shelf. This row
+-  // is the kitchen having already cooked with food the books did not hold, and the books are the
+-  // thing it is a statement about — so it says so.
+-  USED_BEYOND_RECORDED_STOCK: "Used beyond the books",
+-  const known = TYPE_LABEL[type];
+-  if (known) return known;
+-  const words = String(type ?? "").replace(/_/g, " ").trim().toLowerCase();
+-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Movement";
++  return TYPE_LABEL[type] ?? type;
+--- frontend/lib/format.ts
+-  const empty = inBase === 0;
+-  let display = empty ? code : Math.abs(inBase) >= 1000 ? family.large : family.small;
++  let display = Math.abs(inBase) >= 1000 ? family.large : family.small;
+--- frontend/app/donations/[id]/page.tsx
+-    if (!waitingForThePdf) return;
++    if (true) return;
+--- frontend/app/donations/page.tsx
+-                {thankYouSent
+-                  ? "It is in the ledger below, and a thank-you is on its way to the donor."
+-                  : flash
+-                    ? "It is in the ledger below. No thank-you was sent: this gift carries no phone number and no email address, so anything the temple wants to say has to be said in person."
+-                    : "It is in the ledger below. No thank-you was sent, because an anonymous gift leaves nobody to send one to."}
++                It is in the ledger below, and a thank-you is on its way to the donor.
+--- frontend/app/donations/new/page.tsx
+-      router.push(
+-        `/donations?recorded=${encodeURIComponent(who)}${reachable ? "" : "&thanked=no"}`
+-      );
++      router.push(`/donations?recorded=${encodeURIComponent(who)}`);
+--- backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+-				"SELECT count(*) FROM vendor_invoices WHERE vendor_id = ? AND invoice_number = ? "
+-						+ "AND status <> 'VOIDED'",
++				"SELECT count(*) FROM vendor_invoices WHERE vendor_id = ? AND invoice_number = ?",
+
+=== leg 3c: restore (EXIT trap) ==============================================
+diff is silent for all six files: each is byte-for-byte what it was.
+9e119dcb4e513b44654538bcd09f256f83a7223d  frontend/app/inventory/[id]/page.tsx
+261789fa11d856b4318933242f2203a0f76b7adf  frontend/lib/format.ts
+29d944a2b1244e3ed2151ca67e89f13dfbd56b78  frontend/app/donations/[id]/page.tsx
+fa817a973055344f80770a92708ccbecd5fa7815  frontend/app/donations/page.tsx
+cfc9ec88b0fd866ebbdbff801311dc73e15d1506  frontend/app/donations/new/page.tsx
+e10bbafa5b51e084994a89854aad39e3586bf50d  backend/src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java
+(leg 3c exiting 0)
+work-lock: 'verify' released; command exited 0

@@ -34,12 +34,54 @@ const REASON_LABEL: Record<string, string> = {
  */
 const ALREADY_CORRECTED = "KMS-400039";
 
+/**
+ * Every kind of stock movement, in the words the Type column is read in.
+ *
+ * <p><strong>Every constant in `MovementType.java` must have an entry here, and
+ * `__tests__/movement-labels.test.ts` fails the build if one does not.</strong> This map held four
+ * of the seven for months: `ISSUE` shipped with the child-kitchen work, `RETURN_TO_VENDOR` with
+ * T-103 and `USED_BEYOND_RECORDED_STOCK` with T-122, and all three fell through the lookup's
+ * fallback to print the raw constant. Curd's stock page was showing a row that read
+ * `USED_BEYOND_RECORDED_STOCK`, in capitals, between rows saying "Cooked" and "Adjustment" (found
+ * on staging, 2026-09-09). `CLAUDE.md`'s rule that nothing technical reaches the user is enforced
+ * over `ErrorCode.java` by `ErrorCodeTest`; this is the same reader through a second channel, and
+ * until now nothing was watching it.
+ *
+ * <p>Each label is also set mid-sentence, lower-cased, by {@link movementTypeLabel}'s two other
+ * callers — "Correction of the cooked on 23 Aug 2026" — so a label has to survive being said in
+ * the middle of a sentence as well as at the head of a column.
+ */
 const TYPE_LABEL: Record<string, string> = {
   PO_RECEIPT: "Received",
   DONATION_IN_KIND: "Donation",
   CONSUMPTION: "Cooked",
   ADJUSTMENT: "Adjustment",
+  ISSUE: "Issued",
+  RETURN_TO_VENDOR: "Sent back",
+  // Not "Shortfall", which is what the planner calls a gap between a plan and the shelf. This row
+  // is the kitchen having already cooked with food the books did not hold, and the books are the
+  // thing it is a statement about — so it says so.
+  USED_BEYOND_RECORDED_STOCK: "Used beyond the books",
 };
+
+/**
+ * What a movement's type says on screen — a label if we have one, and a humanised form of the
+ * constant if somehow we do not.
+ *
+ * <p>The fallback used to be `?? m.type`, which printed the stored constant verbatim and is how
+ * `USED_BEYOND_RECORDED_STOCK` reached a temple admin's screen. The test above stops the map
+ * falling behind the enum again, but the test is a build-time guard and this is what a person
+ * sees, so the two are worth having separately: a missing label should now cost the reader a
+ * slightly stiff phrase — "Used beyond recorded stock" — rather than shouting an identifier at
+ * them. Nothing here is a substitute for adding the entry; it is what happens on the day somebody
+ * forgets.
+ */
+function movementTypeLabel(type: string): string {
+  const known = TYPE_LABEL[type];
+  if (known) return known;
+  const words = String(type ?? "").replace(/_/g, " ").trim().toLowerCase();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Movement";
+}
 
 export default function InventoryItemPage() {
   return (
@@ -501,7 +543,7 @@ function MovementHistory({
                 return (
                   <tr key={m.id} className={TR}>
                     <td className={`${TD_DATE} text-ink-secondary`}>{moment(m.createdAt)}</td>
-                    <td className={TD_TEXT}>{TYPE_LABEL[m.type] ?? m.type}</td>
+                    <td className={TD_TEXT}>{movementTypeLabel(m.type)}</td>
                     <td className={`${TD_NUM} ${m.quantity < 0 ? "text-danger" : ""}`}>
                       {m.quantity > 0 ? "+" : ""}{quantity(m.quantity, m.unit)}
                     </td>
@@ -518,7 +560,7 @@ function MovementHistory({
                           <span>
                             Correction
                             {reverses
-                              ? ` of the ${(TYPE_LABEL[reverses.type] ?? reverses.type).toLowerCase()} on ${moment(reverses.createdAt)}`
+                              ? ` of the ${movementTypeLabel(reverses.type).toLowerCase()} on ${moment(reverses.createdAt)}`
                               : ""}
                           </span>
                         ) : (
@@ -635,7 +677,7 @@ function CorrectMovement({
    * built, so a call site cannot flatten a formatter's output on its way to the screen.
    */
   const summary =
-    `${(TYPE_LABEL[movement.type] ?? movement.type).toLowerCase()} of ` +
+    `${movementTypeLabel(movement.type).toLowerCase()} of ` +
     `${movement.quantity > 0 ? "+" : ""}${quantity(movement.quantity, movement.unit)} ` +
     `on ${moment(movement.createdAt)}`;
 

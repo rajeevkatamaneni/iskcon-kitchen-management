@@ -114,7 +114,19 @@ function NewDonationView() {
       // is the mistake this screen can actually make, and the ledger it lands in is where it is put
       // right. An anonymous gift has no name to check, so it says so.
       const who = anonymous ? "" : String(f.get("donorName") ?? "").trim();
-      router.push(`/donations?recorded=${encodeURIComponent(who)}`);
+      // And whether anybody was thanked, because the confirmation on the ledger claimed one was on
+      // its way whatever had been typed. A cash gift with a name and no contact details showed
+      // "a thank-you is on its way to the donor" and nothing was sent, because nothing could be:
+      // `DonationIntakeService.sendThankYou` returns without sending when the gift is anonymous or
+      // carries neither a phone number nor an email address, and that is the condition repeated
+      // here. Two copies of one rule is worth a note — if the server's ever changes, this must
+      // change with it, or the banner starts lying in the other direction.
+      const reachable =
+        !anonymous &&
+        (String(f.get("donorPhone") ?? "").trim() !== "" || String(f.get("donorEmail") ?? "").trim() !== "");
+      router.push(
+        `/donations?recorded=${encodeURIComponent(who)}${reachable ? "" : "&thanked=no"}`
+      );
     } catch (e) {
       setError(toApiError(e, "We couldn’t record that donation."));
       setBusy(false);

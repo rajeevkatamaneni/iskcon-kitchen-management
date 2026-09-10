@@ -294,6 +294,44 @@ describe("recording a donation", () => {
     render(<NewDonationPage />);
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });
+
+  /*
+   * Whether anybody was thanked is only knowable here — the ledger the confirmation appears on has
+   * the donor's name and not their phone number — so it travels in the address bar with the name.
+   * The condition is the server's own, in `DonationIntakeService.sendThankYou`.
+   */
+  it("tells the ledger a thank-you went out when the donor can be reached", async () => {
+    render(<NewDonationPage />);
+    const form = screen.getByRole("form", { name: /record a donation/i });
+    fireEvent.change(within(form).getByLabelText(/donor name/i), { target: { value: "Govind Das" } });
+    fireEvent.change(within(form).getByLabelText(/^phone/i), { target: { value: "+919812345678" } });
+    fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "5000" } });
+    fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/donations?recorded=Govind%20Das"));
+  });
+
+  it("tells the ledger nothing was sent when the gift carries no phone number and no email", async () => {
+    render(<NewDonationPage />);
+    const form = screen.getByRole("form", { name: /record a donation/i });
+    fireEvent.change(within(form).getByLabelText(/donor name/i), { target: { value: "Govind Das" } });
+    fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "5000" } });
+    fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
+
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith("/donations?recorded=Govind%20Das&thanked=no")
+    );
+  });
+
+  it("tells the ledger nothing was sent for an anonymous gift", async () => {
+    render(<NewDonationPage />);
+    fireEvent.click(screen.getByLabelText(/anonymous donor/i));
+    const form = screen.getByRole("form", { name: /record a donation/i });
+    fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "500" } });
+    fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/donations?recorded=&thanked=no"));
+  });
 });
 
 describe("the ledger", () => {
@@ -437,6 +475,36 @@ describe("the ledger", () => {
     // against the wrong donor is the mistake this catches, and it is caught by reading the name
     // back. Striking one is a temple admin's job and lives on the ledger below (T-012).
     expect(screen.getByText(/The gift from Govind Das was recorded\./i)).toBeInTheDocument();
+    expect(screen.getByText(/a thank-you is on its way to the donor/i)).toBeInTheDocument();
     expect(replaceMock).toHaveBeenCalledWith("/donations");
+  });
+
+  /*
+   * The banner used to promise a thank-you whatever had been typed. Recording a cash gift with a
+   * donor name and no contact details showed "a thank-you is on its way to the donor" — and nothing
+   * was sent, because there was nothing to send it to: `DonationIntakeService.sendThankYou` returns
+   * without sending when a gift is anonymous or carries neither a phone number nor an email
+   * address. Seen on staging on 2026-09-09. The detail page two clicks away has always said this
+   * correctly, and the banner now says it in the same voice.
+   */
+  it("does not promise a thank-you to a donor there is no way to reach", () => {
+    paramsRef.current = new URLSearchParams("recorded=Govind%20Das&thanked=no");
+    render(<DonationsPage />);
+
+    expect(screen.getByText(/The gift from Govind Das was recorded\./i)).toBeInTheDocument();
+    expect(screen.getByText(/no phone number and no email address/i)).toBeInTheDocument();
+    expect(screen.queryByText(/on its way to the donor/i)).not.toBeInTheDocument();
+  });
+
+  it("says plainly that an anonymous gift leaves nobody to thank", () => {
+    // An anonymous gift is unreachable by definition, and the sentence is decided from the empty
+    // name rather than from the parameter — so it stays true even if somebody arrives on a
+    // hand-edited or bookmarked URL that has lost it.
+    paramsRef.current = new URLSearchParams("recorded=");
+    render(<DonationsPage />);
+
+    expect(screen.getByText(/The anonymous gift was recorded\./i)).toBeInTheDocument();
+    expect(screen.getByText(/an anonymous gift leaves nobody to send one to/i)).toBeInTheDocument();
+    expect(screen.queryByText(/on its way to the donor/i)).not.toBeInTheDocument();
   });
 });

@@ -240,7 +240,15 @@ function render(value: number | null | undefined, unit: string, forCooking: bool
   }
 
   const inBase = value * (BASE_FACTOR[code] ?? 1);
-  let display = Math.abs(inBase) >= 1000 ? family.large : family.small;
+  // Zero is said in the unit the thing is actually kept in, not in the family's small one. The
+  // step-down rule exists to stop a fraction being printed — 0.6 Kg is 600 gm — and zero has no
+  // fraction to avoid, so all the rule did was change the subject: the curd item, kept in litres
+  // with a reorder level of 15 L, read "0 ml" on hand, which invites the reader to work out how
+  // many millilitres are missing before they notice the answer is fifteen litres. Found on
+  // staging, 2026-09-09. The em dash above is a different case and is untouched — a null is "we
+  // have no figure", a zero is "we have none of it", and the two must go on reading differently.
+  const empty = inBase === 0;
+  let display = empty ? code : Math.abs(inBase) >= 1000 ? family.large : family.small;
   let shown = inBase / BASE_FACTOR[display];
 
   if (forCooking) {

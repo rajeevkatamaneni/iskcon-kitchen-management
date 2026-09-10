@@ -47,6 +47,23 @@ describe("a quantity, said the way a person says it", () => {
       expect(quantity(null, "L")).toBe("—");
       expect(quantity(undefined, "KG")).toBe("—");
     });
+
+    it("says zero in the unit the thing is kept in", () => {
+      // Curd's stock page read "0 ml" on hand against a reorder level of 15 L, on an item kept in
+      // litres (staging, 2026-09-09). The step-down rule exists to stop a fraction being printed —
+      // 0.6 Kg is 600 gm — and zero has no fraction to step away from, so all the rule did there
+      // was change the subject and make the reader convert before they could compare the two
+      // figures in front of them.
+      expect(quantity(0, "L")).toBe("0 L");
+      expect(quantity(0, "KG")).toBe("0 Kg");
+      expect(quantity(0, "ML")).toBe("0 ml");
+      expect(quantity(0, "GM")).toBe("0 gm");
+      expect(quantity(0, "PIECES")).toBe("0 pieces");
+      // And the cook's form says it the same way — a job card line of nothing is still nothing of
+      // whatever the recipe measures in.
+      expect(cooksQuantity(0, "L")).toBe("0 L");
+      expect(cooksQuantity(0, "KG")).toBe("0 Kg");
+    });
   });
 
   describe("the cook's form — rounded, because somebody weighs against it", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -90,6 +90,17 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 /**
+ * How often the screen asks again whether the receipt PDF has been written.
+ *
+ * <p>Four seconds. The one measurement we have is a staging receipt that was ready twenty-four
+ * seconds after it was issued, so this asks about six times over a normal wait — often enough that
+ * the button lights up while the person is still looking at it, and far short of anything that
+ * would be described as hammering. It only runs while the tab is in front (see the effect in
+ * {@link TheReceipt}), so an office leaving this page open costs nothing.
+ */
+const RECEIPT_POLL_MS = 4000;
+
+/**
  * The gifts a person would call good.
  *
  * <p>Rajeev, on what this screen should open showing: *"By default, only show donations that were
@@ -135,6 +146,7 @@ function DonationView() {
                   reload();
                   receipt.reload();
                 }}
+                recheckDocument={receipt.reload}
               />
               <WhatElseTheyGave
                 donationId={id}
@@ -250,10 +262,13 @@ function TheReceipt({
   donation,
   document: existing,
   reload,
+  recheckDocument,
 }: {
   donation: DonationDetail;
   document: DocumentView | null;
   reload: () => void;
+  /** Re-reads the receipt document alone, for the wait below. Not `reload`, which re-reads the gift too. */
+  recheckDocument: () => void;
 }) {
   const { getToken } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
@@ -263,6 +278,50 @@ function TheReceipt({
   const issued = donation.receiptNumber !== null;
   const ready = existing?.status === "READY";
   const reachable = !donation.anonymous && (donation.donorPhone !== null || donation.donorEmail !== null);
+
+  /**
+   * While the PDF is being written, ask again — the screen used to wait for ever.
+   *
+   * <p>The defect, driven on staging on 2026-09-09: pressing *Issue the receipt* left Download
+   * disabled under "The receipt is being prepared", and it stayed that way until somebody reloaded
+   * the page by hand. The document was `READY` twenty-four seconds later. Issuing and rendering are
+   * deliberately two steps — the receipt number is allocated in the transaction, the PDF is written
+   * afterwards — so the answer that comes back from `issue()` is genuinely `PENDING`, and the only
+   * thing wrong was that nothing ever asked a second time.
+   *
+   * <p>Two stopping conditions, and no third: it stops the moment the document is ready, and it
+   * does not run while the tab is in the background. A receipt that is being prepared is something
+   * somebody is standing and waiting for; a tab left open on another monitor is not, and polling it
+   * would spend the temple's request budget on a screen nobody is looking at. `visibilitychange`
+   * covers both switching tabs and locking the phone.
+   *
+   * <p>`recheckDocument` is deliberately not in the dependency list: it is rebuilt on every render
+   * of the parent, so depending on it would tear the interval down and start a new one several
+   * times a second. The ref holds the current one without the effect noticing.
+   */
+  const recheck = useRef(recheckDocument);
+  recheck.current = recheckDocument;
+  const waitingForThePdf = issued && !ready && !donation.voided;
+  useEffect(() => {
+    if (!waitingForThePdf) return;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const stop = () => {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+    const start = () => {
+      if (timer === null) timer = setInterval(() => recheck.current(), RECEIPT_POLL_MS);
+    };
+    const onVisibilityChange = () => (window.document.hidden ? stop() : start());
+    if (!window.document.hidden) start();
+    window.document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      stop();
+      window.document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [waitingForThePdf]);
 
   async function issue() {
     setBusy("issuing");
