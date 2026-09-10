@@ -60,6 +60,7 @@ public class DocumentGenerationService {
 	private final PurchaseOrderLabelTranslator labelTranslator;
 	private final JobCardService jobCardService;
 	private final WorkOrderService workOrderService;
+	private final org.iskcon.kms.donation.DonationReceiptService donationReceiptService;
 	private final PdfRenderer pdfRenderer;
 	private final DocumentStorage storage;
 
@@ -68,10 +69,12 @@ public class DocumentGenerationService {
 			PurchaseOrderService purchaseOrderService, GlossaryService glossaryService,
 			TranslationProvider translationProvider, PurchaseOrderLabelTranslator labelTranslator,
 			JobCardService jobCardService, WorkOrderService workOrderService,
+			org.iskcon.kms.donation.DonationReceiptService donationReceiptService,
 			PdfRenderer pdfRenderer, DocumentStorage storage, TempleClock clock) {
 		this.clock = clock;
 		this.jobCardService = jobCardService;
 		this.workOrderService = workOrderService;
+		this.donationReceiptService = donationReceiptService;
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
 		this.translationService = translationService;
@@ -91,7 +94,7 @@ public class DocumentGenerationService {
 		Map<String, Object> doc;
 		try {
 			doc = jdbc.queryForMap("""
-					SELECT kind, recipe_id, po_id, meal_service_id, ingredient_request_id,
+					SELECT kind, recipe_id, po_id, meal_service_id, ingredient_request_id, donation_id,
 						   target_yield, language, status
 					FROM documents WHERE id = ?
 					""", documentId);
@@ -126,6 +129,12 @@ public class DocumentGenerationService {
 			} else if ("WORK_ORDER_PDF".equals(kind)) {
 				html = workOrderService.render((UUID) doc.get("ingredient_request_id"), language);
 				path = "generated/work-orders/" + documentId + ".pdf";
+			} else if ("DONATION_RECEIPT_PDF".equals(kind)) {
+				// No language branch, unlike every kind above it. A receipt is a tax document read in
+				// English by an assessing officer, and its statutory sentence is not something to put
+				// through machine translation — see DonationReceiptTemplate's header.
+				html = donationReceiptService.render((UUID) doc.get("donation_id"));
+				path = "generated/donation-receipts/" + documentId + ".pdf";
 			} else {
 				html = RecipeCardTemplate.render(
 						buildModel((UUID) doc.get("recipe_id"), (BigDecimal) doc.get("target_yield"), language));

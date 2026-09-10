@@ -1,0 +1,37 @@
+anchor counts: C1=1 (want exactly 1), C2=1 (want exactly 1)
+DocumentService.java        sha256 before=a20b91734576afbd after=92b2ee6c16ad24ba
+DonationReceiptService.java sha256 before=da6e7a2bc7087318 after=895d6996c4e4a3c4
+--- git diff --stat, for the tracked file only ---
+ .../org/iskcon/kms/document/DocumentService.java   | 73 +++++++++++++++++++++-
+ 1 file changed, 72 insertions(+), 1 deletion(-)
+(DonationReceiptService.java is untracked, so it is deliberately absent above:
+?? backend/src/main/java/org/iskcon/kms/donation/DonationReceiptService.java
+ — which is why the checksums above are the real guard.)
+--- the suite, with both fixes patched out ---
+gradle exit: 1
+
+=== every FAILED test, with the assertion that failed ===
+DonationReceiptIT > re-sending does not create a second document, and does not change the number FAILED
+DonationReceiptIT > a voided gift cannot have a receipt issued, and none is queued FAILED
+DonationReceiptIT > issuing a receipt is recorded, and so is the PAN it put on paper FAILED
+
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+    java.lang.AssertionError: Status expected:<200> but was:<500>
+    java.lang.AssertionError: Status expected:<409> but was:<200>
+
+=== summary ===
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    16
+  Passed:   13
+  Failed:   3
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+--- restored; byte-for-byte diff against the verified copies ---
+DocumentService.java: identical
+DonationReceiptService.java: identical
+work-lock: 'verify' released; command exited 0

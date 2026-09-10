@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.donation.DonationReceiptService;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.observability.LogContext;
@@ -44,17 +46,19 @@ public class DocumentService {
 	private final ObjectProvider<Scheduler> scheduler;
 	private final JobCardService jobCardService;
 	private final WorkOrderService workOrderService;
+	private final DonationReceiptService donationReceiptService;
 
 	public DocumentService(
 			JdbcTemplate jdbc, RecipeService recipeService, DocumentStorage storage,
 			ObjectProvider<Scheduler> scheduler, JobCardService jobCardService,
-			WorkOrderService workOrderService) {
+			WorkOrderService workOrderService, DonationReceiptService donationReceiptService) {
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
 		this.storage = storage;
 		this.scheduler = scheduler;
 		this.jobCardService = jobCardService;
 		this.workOrderService = workOrderService;
+		this.donationReceiptService = donationReceiptService;
 	}
 
 	@Transactional
@@ -178,6 +182,73 @@ public class DocumentService {
 
 		enqueue(id);
 		return id;
+	}
+
+	/**
+	 * Issues the 80G receipt for one gift (T-110) — or hands back the one that already exists.
+	 *
+	 * <p><strong>This is the method behind "re-sending does not create a second document".</strong>
+	 * Three of the four kinds above are versioned, because each describes a world that moves under
+	 * it. A receipt is the opposite kind of paper: it reports a payment that has already happened,
+	 * and the copy in the donor's file and the copy in the temple's must be the same document, or
+	 * the temple has issued two receipts for one gift. So there is exactly one row per donation,
+	 * enforced by V117's unique index behind this lookup rather than only by this lookup.
+	 *
+	 * <p>A receipt already READY is returned <em>untouched</em> — not re-rendered. That is the sharp
+	 * difference from a recipe card, which overwrites in place quite happily. Re-rendering would
+	 * quietly reissue the document with whatever the donor's details say today, so a donor who
+	 * changed address in June would find their April receipt had changed under them. A row still
+	 * PENDING, or one that FAILED, is re-enqueued: there are no bytes to protect in either case.
+	 *
+	 * <p>{@link DonationReceiptService#issueNumber} runs first and does two jobs — it refuses a
+	 * struck gift, and it issues the permanent number. Refusing before anything is queued keeps a
+	 * clear "this gift was voided" from arriving as a FAILED row somebody has to interpret.
+	 */
+	@Transactional
+	public UUID requestDonationReceiptPdf(UUID donationId, AuthenticatedUser actor) {
+		donationReceiptService.issueNumber(donationId, actor);
+
+		Map<String, Object> existing = jdbc.query("""
+				SELECT id, status FROM documents
+				WHERE donation_id = ? AND kind = 'DONATION_RECEIPT_PDF'
+				""", rs -> rs.next() ? Map.of("id", rs.getObject("id", UUID.class),
+						"status", rs.getString("status")) : null, donationId);
+		if (existing != null) {
+			UUID id = (UUID) existing.get("id");
+			if (!"READY".equals(existing.get("status"))) {
+				jdbc.update("""
+						UPDATE documents SET status = 'PENDING', error = NULL, updated_at = now() WHERE id = ?
+						""", id);
+				enqueue(id);
+			}
+			return id;
+		}
+
+		UUID id = UUID.randomUUID();
+		UUID createdBy = jdbc.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')",
+				UUID.class);
+		jdbc.update("""
+				INSERT INTO documents (id, tenant_id, kind, donation_id, language, status, created_by)
+				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+						'DONATION_RECEIPT_PDF', ?, 'en', 'PENDING', ?)
+				""", id, donationId, createdBy);
+
+		enqueue(id);
+		return id;
+	}
+
+	/**
+	 * The receipt issued for a gift, or null where none has been.
+	 *
+	 * <p>Null rather than a refusal: "has this gift been receipted yet" is the first thing the
+	 * donation screen asks, and on most gifts the honest answer is no. A 404 for the ordinary case
+	 * would make every screen treat an expected answer as an error.
+	 */
+	@Transactional(readOnly = true)
+	public DocumentView receiptFor(UUID donationId) {
+		return jdbc.query(SELECT_COLUMNS + " WHERE donation_id = ? AND kind = 'DONATION_RECEIPT_PDF'",
+				MAPPER, donationId).stream().findFirst().orElse(null);
 	}
 
 	/** Every work order printed for a request, latest version first. */

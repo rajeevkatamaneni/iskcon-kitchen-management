@@ -3399,6 +3399,69 @@ export interface LedgerRow {
 }
 
 
+/**
+ * One gift in full, for `/donations/[id]` (T-110).
+ *
+ * <p>Wider than `LedgerRow` on purpose. The ledger's donor column is anonymity-safe by construction
+ * — a hundred rows on one screen is a hundred chances to leak one — whereas this is a single gift
+ * opened deliberately by somebody about to put the temple's name on a tax document made out to this
+ * person. An anonymous gift still carries nothing: the database's own CHECK guarantees such a row
+ * holds no name, contact, address or PAN.
+ */
+export interface DonationDetail {
+  id: string;
+  type: string;
+  category: string;
+  donatedOn: string;
+  status: string;
+  voided: boolean;
+  voidReason: string | null;
+
+  /**
+   * What the donor paid — and for a gift of goods, the temple's own estimate of worth instead.
+   *
+   * <p>**Never re-derived from the split.** T-081 kept this column meaning one payment precisely so
+   * that one payment produces one receipt, which is why a split gift is one donation row and not two.
+   */
+  amountInr: number | null;
+
+  /**
+   * How much of that payment reached the wish-list item it names, or null where all of it did.
+   *
+   * <p>On this screen for exactly one reason — so a reader understands why the receipt's figure is
+   * larger than the item's progress — and it never reaches the receipt itself.
+   */
+  wishlistApplied: number | null;
+  currency: string | null;
+  paymentMode: string | null;
+  providerRef: string | null;
+  linkedTo: string | null;
+  anonymous: boolean;
+  donorName: string | null;
+  donorPhone: string | null;
+  donorEmail: string | null;
+  donorAddress: string | null;
+  wants80g: boolean;
+  /** Whether a PAN was captured, without carrying it. Revealing it is a separate, audited call. */
+  hasPan: boolean;
+  notes: string | null;
+  acknowledgedAt: string | null;
+  /** The permanent receipt number, or null where no receipt has been issued yet. */
+  receiptNumber: string | null;
+  receiptIssuedAt: string | null;
+  temple80gApproved: boolean;
+  /** False for a struck gift. The screen withholds the control rather than offering one that refuses. */
+  canBeReceipted: boolean;
+}
+
+/** What issuing a receipt answers: the same document id and the same number on every later press. */
+export interface DonationReceiptIssued {
+  documentId: string;
+  status: string;
+  receiptNumber: string | null;
+}
+
+
 /** The four windows the donations ledger can be read over. A financial year is April to March. */
 export type LedgerPeriodKind = "WEEK" | "MONTH" | "FINANCIAL_YEAR" | "YEAR";
 
@@ -5465,6 +5528,79 @@ export const api = {
     return request<LedgerRow[]>(`/api/v1/donations/ledger${query ? `?${query}` : ""}`, { method: "GET", token });
   },
 
+
+  /** One gift in full — the donation screen's own read (T-110), behind VIEW_DONATIONS. */
+  donation: (id: string, token?: string) =>
+    request<DonationDetail>(`/api/v1/donations/${id}`, { method: "GET", token }),
+
+  /**
+   * What else this donor has given.
+   *
+   * <p>**Every gift, whatever became of it** — the server applies no status filter here, unlike the
+   * ledger list, so failed, expired and struck gifts all come back. The screen shows the good ones
+   * by default and reveals the rest on a toggle, which is a filter over rows already in hand rather
+   * than a second request: the toggle is then instant, and nothing has been hidden anywhere but on
+   * the screen.
+   *
+   * <p>The rows are matched on donor account, PAN fingerprint, phone **or** email. That is a
+   * likeness, not a confirmed identity, and the screen says so in as many words.
+   */
+  donorHistory: (donationId: string, token?: string) =>
+    request<LedgerRow[]>(`/api/v1/donations/ledger/donor/${donationId}`, { method: "GET", token }),
+
+  /**
+   * Issues the 80G receipt for a gift, or hands back the one already issued.
+   *
+   * <p>Safe to press twice: the same document id and the same receipt number come back every time.
+   * One payment, one receipt — enforced by a unique index in the database, not only by this call.
+   */
+  issueDonationReceipt: (donationId: string, token?: string) =>
+    request<DonationReceiptIssued>(`/api/v1/donations/${donationId}/receipt`, {
+      method: "POST",
+      token,
+    }),
+
+  /**
+   * The receipt issued for a gift, or null where none has been.
+   *
+   * <p>The server answers "not yet" with 204, because on most gifts that is the ordinary answer and
+   * not a failure. `request` hands back undefined for an empty body, which this narrows to null.
+   */
+  donationReceipt: async (donationId: string, token?: string): Promise<DocumentView | null> => {
+    const document = await request<DocumentView | undefined>(
+      `/api/v1/donations/${donationId}/receipt`,
+      { method: "GET", token }
+    );
+    return document ?? null;
+  },
+
+  /** The receipt itself, fetched with the token and handed to the browser — never a plain link. */
+  downloadDonationReceipt: async (donationId: string, token?: string): Promise<Blob> => {
+    const response = await fetch(`${BASE_URL}/api/v1/donations/${donationId}/receipt/download`, {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw await errorFromBinaryResponse(
+        response,
+        "We couldn't download that receipt.",
+        "Try again in a moment."
+      );
+    }
+    return response.blob();
+  },
+
+  /**
+   * Sends the donor word that their receipt has been issued, as often as they ask.
+   *
+   * <p>`sent: false` is not an error — an anonymous gift, or one taken at the gate with no phone
+   * number and no email address, has nobody to send anything to. It never creates a second document.
+   */
+  sendDonationReceipt: (donationId: string, token?: string) =>
+    request<{ sent: boolean }>(`/api/v1/donations/${donationId}/receipt/send`, {
+      method: "POST",
+      token,
+    }),
 
   /**
    * The tiles for one period, each with what it came to by the same point a year earlier, plus the

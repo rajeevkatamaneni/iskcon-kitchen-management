@@ -457,6 +457,18 @@ public enum AuditAction {
 	/** A monetary donation was confirmed by the payment provider (E7-S2/S3/S6). */
 	DONATION_COMPLETED,
 
+	/**
+	 * A receipt number was issued for a gift, and the temple put its name to a tax document (T-110).
+	 *
+	 * <p>Recorded at the moment of issue and never again: the number is permanent, the PDF may be
+	 * re-rendered and re-sent as often as the donor asks, and this entry answers the only question
+	 * worth keeping — who decided this gift would be receipted, and when. A gift whose receipt was
+	 * issued and whose 80G details were on it also files a {@link #DONOR_PAN_VIEWED}, because a
+	 * receipt is a second way to see a PAN and a reader auditing PII access should not have to know
+	 * that.
+	 */
+	DONATION_RECEIPT_ISSUED,
+
 	/** A payment was recorded against a vendor invoice (E7-S8). */
 	INVOICE_PAYMENT_RECORDED,
 

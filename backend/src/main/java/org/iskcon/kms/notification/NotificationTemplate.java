@@ -166,6 +166,41 @@ public enum NotificationTemplate {
 		}
 	},
 
+	/**
+	 * The donor's 80G receipt has been issued, and can be sent again as often as they ask (T-110).
+	 *
+	 * <p><strong>Separate from {@link #DONATION_THANK_YOU}, and not a replacement for it.</strong>
+	 * The thank-you goes once, unprompted, the moment the money settles, and it is a temple thanking
+	 * a devotee. This one is a tax document being handed over, usually weeks later and usually
+	 * because somebody asked for it in March. Folding the two would mean either thanking a donor
+	 * twice for one gift or making the receipt arrive dressed as a thank-you.
+	 *
+	 * <p>It carries the receipt number rather than the amount. The number is what a donor quotes back
+	 * to the office when they cannot find the paper, and it is the same number for ever — whereas an
+	 * amount in a message a person keeps on their phone is one more figure that can be misread
+	 * against the one on the receipt itself.
+	 *
+	 * <p><strong>The body is registered with Meta under {@code donation_receipt} and must be approved
+	 * before WhatsApp will carry it.</strong> Until it is, a send falls through to SMS and email, as
+	 * every unapproved template does.
+	 */
+	DONATION_RECEIPT("donation_receipt") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Your donation receipt " + value(params, "receiptNumber"),
+					("Dear %s, your receipt %s for the donation you made to %s on %s has been issued. "
+							+ "Please ask at the temple office for a copy. Hare Krishna.").formatted(
+									value(params, "donor"), value(params, "receiptNumber"),
+									value(params, "temple"), value(params, "date")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("donor", "receiptNumber", "temple", "date");
+		}
+	},
+
 	SHIFT_BROADCAST("shift_broadcast") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
@@ -475,6 +510,8 @@ public enum NotificationTemplate {
 			case "location" -> "Main kitchen";
 			case "donor", "name" -> "Radha Devi";
 			case "poNumber" -> "PO-1042";
+			// A donation receipt (T-110), in the shape DonationReceiptService actually issues.
+			case "receiptNumber" -> "R-2026-0042";
 			case "raised" -> "1 Aug 2026";
 			case "neededBy" -> "5 Aug 2026";
 			case "vendor" -> "Sri Balaji Traders";

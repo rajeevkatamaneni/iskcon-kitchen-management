@@ -451,6 +451,12 @@ function DonationsLedger() {
                   </td>
                   <td className={TD_ACTIONS}>
                     <span className={ACTIONS_ROW}>
+                      {/* The list linked nowhere until T-110, so a gift could be read as a row and
+                          never opened — which is why the 80G receipt had nothing to hang on and why
+                          `donorHistory` had gone unrendered since E7-S7. This is that door. */}
+                      <ButtonLink href={`/donations/${r.id}`} variant="ghost" size="sm">
+                        Open
+                      </ButtonLink>
                       {/* Withheld on a gift the row can already see is struck, rather than offered
                           and refused. The server answers a second void with KMS-400134, and this
                           screen is holding the answer already — a person who reads "Voided" beside

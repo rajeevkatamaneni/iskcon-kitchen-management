@@ -108,6 +108,40 @@ public class DonationLedgerService {
 		return new PeriodSummary(window, hasPriorYear, byCategory, financialYearsWithGifts(earliest, today));
 	}
 
+	/**
+	 * One gift in full, for the donation screen (T-110).
+	 *
+	 * <p>Here rather than in {@code DonationReceiptService} because it is a ledger read and nothing
+	 * else — the same rows, the same tenant scoping, the same {@link #CATEGORY_CASE} that keeps the
+	 * tiles and the list from ever disagreeing about what kind of gift this is. A detail screen that
+	 * decided the category for itself would be the second classification on one screen that the
+	 * category filter's comment warns about.
+	 */
+	@Transactional(readOnly = true)
+	public DonationDetail donation(UUID donationId) {
+		List<DonationDetail> found = jdbc.query("""
+				SELECT d.id, d.type, %s AS category, d.donated_on, d.status, d.voided_at, d.void_reason,
+					   COALESCE(d.amount_inr, d.estimated_value_inr) AS amount, d.wishlist_applied_inr,
+					   d.currency, d.payment_mode,
+					   COALESCE(d.provider_payment_id, d.provider_order_id) AS provider_ref,
+					   d.is_anonymous, d.donor_name, d.donor_phone, d.donor_email, d.donor_address,
+					   d.wants_80g, (d.donor_pan_ciphertext IS NOT NULL) AS has_pan,
+					   d.notes, d.acknowledged_at, d.receipt_number, d.receipt_issued_at,
+					   wi.title AS wishlist_title,
+					   t.is_80g_approved
+				FROM donations d
+				LEFT JOIN wishlist_items wi ON wi.id = d.wishlist_item_id
+				JOIN tenants t ON t.id = d.tenant_id
+				WHERE d.id = ?
+				""".formatted(CATEGORY_CASE), DETAIL_MAPPER, donationId);
+		if (found.isEmpty()) {
+			// RLS scopes this to one temple, so a gift belonging to another is genuinely not there
+			// rather than forbidden — which is the answer we want it to give.
+			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("donationId", donationId));
+		}
+		return found.get(0);
+	}
+
 	/** Every gift matching this donation's donor identity (E7-S7): account, else PAN, else exact contact. */
 	@Transactional(readOnly = true)
 	public List<LedgerRow> donorHistory(UUID donationId) {
@@ -328,6 +362,55 @@ public class DonationLedgerService {
 	private static String splitLabel(String title, BigDecimal paid, BigDecimal applied) {
 		return "Wish list: %s (%s) and general kitchen (%s)".formatted(
 				title, Rupees.format(applied), Rupees.format(paid.subtract(applied)));
+	}
+
+	/**
+	 * The detail row. Reuses {@link #MAPPER}'s own decisions where they overlap — the linked-to label
+	 * and the split wording especially — so the one screen and the list beneath it describe a split
+	 * gift with the same sentence.
+	 */
+	private static final RowMapper<DonationDetail> DETAIL_MAPPER = (rs, n) -> {
+		String category = rs.getString("category");
+		BigDecimal applied = rs.getBigDecimal("wishlist_applied_inr");
+		BigDecimal amount = rs.getBigDecimal("amount");
+		String linked = rs.getString("wishlist_title") != null
+				? (applied == null ? "Wish list: " + rs.getString("wishlist_title")
+						: splitLabel(rs.getString("wishlist_title"), amount, applied))
+				: "IN_KIND".equals(category) ? "In-kind intake" : GENERAL;
+		boolean voided = rs.getObject("voided_at") != null;
+		return new DonationDetail(
+				rs.getObject("id", UUID.class),
+				rs.getString("type"),
+				category,
+				rs.getObject("donated_on", LocalDate.class),
+				rs.getString("status"),
+				voided,
+				rs.getString("void_reason"),
+				amount,
+				applied,
+				rs.getString("currency"),
+				rs.getString("payment_mode"),
+				rs.getString("provider_ref"),
+				linked,
+				rs.getBoolean("is_anonymous"),
+				rs.getString("donor_name"),
+				rs.getString("donor_phone"),
+				rs.getString("donor_email"),
+				rs.getString("donor_address"),
+				rs.getBoolean("wants_80g"),
+				rs.getBoolean("has_pan"),
+				rs.getString("notes"),
+				instant(rs.getObject("acknowledged_at", java.time.OffsetDateTime.class)),
+				rs.getString("receipt_number"),
+				instant(rs.getObject("receipt_issued_at", java.time.OffsetDateTime.class)),
+				rs.getBoolean("is_80g_approved"),
+				// The one derived fact the screen must not work out for itself, because the server
+				// refuses on exactly this condition and two independent opinions of it would drift.
+				!voided);
+	};
+
+	private static java.time.Instant instant(java.time.OffsetDateTime value) {
+		return value == null ? null : value.toInstant();
 	}
 
 	private static final RowMapper<LedgerRow> MAPPER = (rs, n) -> {
