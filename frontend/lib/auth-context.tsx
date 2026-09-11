@@ -90,10 +90,50 @@ export type AuthStatus =
    */
   | "disabled";
 
+/**
+ * A refusal the server explained, kept whole rather than reduced to a status.
+ *
+ * <p>`/whoami` answers a refusal with the whole error contract: the reference code, the sentence
+ * `ErrorCode.java` holds against it, and the next step. Until 2026-09-10 this layer read the code,
+ * mapped it through {@link REFUSALS} to a status, and dropped the other two on the floor — so
+ * `KMS-400020`'s sentence had never in the product's life been on a screen, and `KMS-400019`'s
+ * reached its reader only because somebody had retyped it by hand into `AccountDisabled`. Copy kept
+ * in two places is copy that will eventually say two things, and it nearly did: T-114 reworded
+ * `KMS-400020`'s next step on 2026-09-10 and no screen anywhere changed, because no screen anywhere
+ * was reading it.
+ *
+ * <p>`ErrorCodeTest` proves every code *has* words. This is the channel through which they arrive.
+ *
+ * <p><b>Only a code named in {@link REFUSALS} gets one, and that is deliberate rather than
+ * cautious.</b> A 401 the server declined to explain has no body, so `api.ts` synthesises the
+ * envelope it uses for a dropped connection — `KMS-0000`, *"We couldn't reach the server."* That
+ * sentence is false about a refusal and would be a worse thing to show a person than showing them
+ * nothing. An unrecognised refusal therefore keeps its old behaviour exactly: the `no-account`
+ * status, and no words at all.
+ */
+export interface Refusal {
+  /** The permanent `KMS-nnnnnn` code, for quoting. */
+  code: string;
+  /** What happened, in the catalogue's own words. */
+  message: string;
+  /** What to do about it, in the catalogue's own words. */
+  action: string;
+}
+
 interface AuthState {
   user: User | null;
   appUser: WhoAmI | null;
   status: AuthStatus;
+  /**
+   * The server's own explanation of the refusal that produced {@link status}, or null when the
+   * session did not end in one the server named.
+   *
+   * <p>Read it on the screen a refused person actually lands on — {@link AuthStatus} says *where*
+   * they go, this says *what they are told when they get there*. Null is a real and ordinary case
+   * (signed in, signed out, still loading, or refused by a 401 with nothing in it), so every screen
+   * that renders these words needs an answer for having none.
+   */
+  refusal: Refusal | null;
   getToken: () => Promise<string | undefined>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -107,6 +147,7 @@ const AuthContext = createContext<AuthState>({
   user: null,
   appUser: null,
   status: "loading",
+  refusal: null,
   getToken: async () => undefined,
   signInWithGoogle: async () => {},
   signOut: async () => {},
@@ -138,6 +179,13 @@ const NO_ACCOUNT_AT_TEMPLE = "KMS-400020";
  * server carried codes at all. A 401 with no body is the live case: `TokenVerifier` deliberately
  * refuses to say why a token failed, so an expired session still lands here and is still reported
  * as having no account. That is known, and it is the half of this held for Rajeev's decision.
+ *
+ * <p><b>Membership of this table is also what earns a code its words.</b> A code named here has its
+ * message and next step carried through as a {@link Refusal} and rendered on the screen its status
+ * sends the reader to; a code that falls through gets the status and nothing else, because the only
+ * sentence available for it is the wrong one (see {@link Refusal}). So adding a line here is still
+ * adding one line — it now buys the wording as well as the routing, and
+ * `__tests__/refusal-words-reach-the-reader.test.tsx` will hold the new line to it.
  */
 const REFUSALS: Record<string, AuthStatus> = {
   [ACCOUNT_DISABLED]: "disabled",
@@ -148,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<WhoAmI | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
 
   // Telling a sign-in apart from the first answer about who was already signed in.
   const resolved = useRef(false);
@@ -180,13 +229,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // keep a different one.
       setTempleTimeZone(who.timezone);
       setAppUser(who);
+      setRefusal(null);
       setStatus("signed-in");
     }
     catch (caught) {
       const error = toApiError(caught);
       if (!isUnreachable(error)) {
         setAppUser(null);
-        setStatus(REFUSALS[error.code] ?? "no-account");
+        // The server said why. Keep what it said, not just what it meant for the routing: the
+        // status decides which screen this person lands on, and the refusal decides what that
+        // screen is able to tell them once they are there. Only for a code the table names — see
+        // `Refusal` for why an unexplained 401's synthesised sentence must not be shown.
+        const known: AuthStatus | undefined = REFUSALS[error.code];
+        setRefusal(
+          known ? { code: error.code, message: error.message, action: error.action } : null
+        );
+        setStatus(known ?? "no-account");
         return;
       }
       if (attempt < RETRIES) {
@@ -194,6 +252,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return resolveIdentity(user, attempt + 1);
       }
       setAppUser(null);
+      // Not a refusal at all — nobody refused anything, we could not ask. `ServerUnreachable` has
+      // its own words for that and they are deliberately not an error's.
+      setRefusal(null);
       setStatus("unreachable");
     }
   }, []);
@@ -219,6 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!next) {
         setAppUser(null);
+        setRefusal(null);
         setStatus("signed-out");
         return;
       }
@@ -263,14 +325,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAppUser(null);
     setActiveTempleId(null);
     // Signing out leaves no temple, so it leaves no clock either — the next person to sign in on
-    // this browser must not inherit the last one's.
+    // this browser must not inherit the last one's. The same is true of the refusal: the whole
+    // point of the sign-out on the disabled screen is that somebody else can use this browser
+    // next, and they must not be met by the last person's bad news.
     setTempleTimeZone(null);
+    setRefusal(null);
     setStatus("signed-out");
   }, []);
 
   const value = useMemo(
-    () => ({ user, appUser, status, getToken, signInWithGoogle, signOut, refresh, switchTemple }),
-    [user, appUser, status, getToken, signInWithGoogle, signOut, refresh, switchTemple]
+    () => ({
+      user,
+      appUser,
+      status,
+      refusal,
+      getToken,
+      signInWithGoogle,
+      signOut,
+      refresh,
+      switchTemple,
+    }),
+    [user, appUser, status, refusal, getToken, signInWithGoogle, signOut, refresh, switchTemple]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

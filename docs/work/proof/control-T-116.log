@@ -1,0 +1,2069 @@
+=== target sha256 before: fefc5db85e2b7f5eabcb1a2ed36e269ffe072156def01021ca9b185fd125858d
+=== grep -c for the anchor: 1 (expected 1)
+=== patched: the refusal's words are discarded again
+=== grep -c for the anchor after patching: 0 (expected 0)
+=== cmp: the file really changed
+
+=== git diff --stat, proving the tree changed
+ frontend/lib/auth-context.tsx | 81 ++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 77 insertions(+), 4 deletions(-)
+
+=== the patched hunk
+diff --git a/frontend/lib/auth-context.tsx b/frontend/lib/auth-context.tsx
+index efac00b..eebc0fc 100644
+--- a/frontend/lib/auth-context.tsx
++++ b/frontend/lib/auth-context.tsx
+@@ -90,10 +90,50 @@ export type AuthStatus =
+    */
+   | "disabled";
+ 
++/**
++ * A refusal the server explained, kept whole rather than reduced to a status.
++ *
++ * <p>`/whoami` answers a refusal with the whole error contract: the reference code, the sentence
++ * `ErrorCode.java` holds against it, and the next step. Until 2026-09-10 this layer read the code,
++ * mapped it through {@link REFUSALS} to a status, and dropped the other two on the floor — so
++ * `KMS-400020`'s sentence had never in the product's life been on a screen, and `KMS-400019`'s
++ * reached its reader only because somebody had retyped it by hand into `AccountDisabled`. Copy kept
++ * in two places is copy that will eventually say two things, and it nearly did: T-114 reworded
++ * `KMS-400020`'s next step on 2026-09-10 and no screen anywhere changed, because no screen anywhere
++ * was reading it.
++ *
++ * <p>`ErrorCodeTest` proves every code *has* words. This is the channel through which they arrive.
++ *
++ * <p><b>Only a code named in {@link REFUSALS} gets one, and that is deliberate rather than
++ * cautious.</b> A 401 the server declined to explain has no body, so `api.ts` synthesises the
++ * envelope it uses for a dropped connection — `KMS-0000`, *"We couldn't reach the server."* That
++ * sentence is false about a refusal and would be a worse thing to show a person than showing them
++ * nothing. An unrecognised refusal therefore keeps its old behaviour exactly: the `no-account`
++ * status, and no words at all.
++ */
++export interface Refusal {
++  /** The permanent `KMS-nnnnnn` code, for quoting. */
++  code: string;
++  /** What happened, in the catalogue's own words. */
++  message: string;
++  /** What to do about it, in the catalogue's own words. */
++  action: string;
++}
++
+ interface AuthState {
+   user: User | null;
+
+=== tsc --noEmit on the patched tree
+=== tsc exit: 0 (0 means the control compiles; the guard fails on behaviour, not syntax)
+
+=== vitest, on the patched tree (failures expected)
+[33mThe CJS build of Vite's Node API is deprecated. See https://vitejs.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.2 /Users/Rajeev/Workspace/kitchen-management-system/frontend
+
+stderr | __tests__/refusal-words-reach-the-reader.test.tsx > KMS-400019, on the screen its reader actually reaches > says what ErrorCode.java says, on the disabled screen (components/RequireRole.tsx → AccountDisabled)
+Warning: An update to AuthProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at AuthProvider (/Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx:43:25)
+Warning: An update to AuthProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at AuthProvider (/Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx:43:25)
+
+stderr | __tests__/refusal-words-reach-the-reader.test.tsx > KMS-400019, on the screen its reader actually reaches > renders the words that arrived, not a literal that happens to match them
+Warning: An update to AuthProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at AuthProvider (/Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx:43:25)
+Warning: An update to AuthProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at AuthProvider (/Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx:43:25)
+
+stderr | __tests__/refusal-words-reach-the-reader.test.tsx > KMS-400020, on the screen its reader actually reaches > says what ErrorCode.java says, on the temple picker (app/choose-temple/page.tsx)
+Warning: An update to AuthProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at AuthProvider (/Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx:43:25)
+Warning: An update to AuthProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at AuthProvider (/Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx:43:25)
+
+stderr | __tests__/refusal-words-reach-the-reader.test.tsx > KMS-400020, on the screen its reader actually reaches > renders the words that arrived, not a literal that happens to match them
+Warning: An update to AuthProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at AuthProvider (/Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx:43:25)
+Warning: An update to AuthProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at AuthProvider (/Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx:43:25)
+
+stderr | __tests__/refusal-words-reach-the-reader.test.tsx > an unexplained 401 is given no words at all > still lands on the temple picker, and it still says nothing about why
+Warning: An update to AuthProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at AuthProvider (/Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx:43:25)
+Warning: An update to AuthProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at AuthProvider (/Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx:43:25)
+
+ ❯ __tests__/refusal-words-reach-the-reader.test.tsx  (9 tests | 3 failed) 3059ms
+   × KMS-400019, on the screen its reader actually reaches > renders the words that arrived, not a literal that happens to match them
+     → Unable to find an element with the text: T-116 sentinel — this sentence came off the wire and nowhere else.. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto flex min-h-screen max-w-prose flex-col justify-center px-6 py-12"[39m
+    [36m>[39m
+      [36m<h1>[39m
+        [0mAccount disabled[0m
+      [36m</h1>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-2 text-ink"[39m
+      [36m>[39m
+        [0mThis account has been disabled.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-1 text-sm text-ink-secondary"[39m
+      [36m>[39m
+        [0mAsk your temple administrator to restore access.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-6 text-sm text-ink-secondary"[39m
+      [36m>[39m
+        [0mSigned in with the wrong account?[0m
+        [0m [0m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+        [36m>[39m
+          [0mUse a different account[0m
+        [36m</button>[39m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-6 text-xs text-ink-secondary"[39m
+      [36m>[39m
+        [0mIf you need help, quote [0m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-mono font-medium"[39m
+        [36m>[39m
+          [0mKMS-400019[0m
+        [36m</span>[39m
+      [36m</p>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto flex min-h-screen max-w-prose flex-col justify-center px-6 py-12"[39m
+    [36m>[39m
+      [36m<h1>[39m
+        [0mAccount disabled[0m
+      [36m</h1>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-2 text-ink"[39m
+      [36m>[39m
+        [0mThis account has been disabled.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-1 text-sm text-ink-secondary"[39m
+      [36m>[39m
+        [0mAsk your temple administrator to restore access.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-6 text-sm text-ink-secondary"[39m
+      [36m>[39m
+        [0mSigned in with the wrong account?[0m
+        [0m [0m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+        [36m>[39m
+          [0mUse a different account[0m
+        [36m</button>[39m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-6 text-xs text-ink-secondary"[39m
+      [36m>[39m
+        [0mIf you need help, quote [0m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-mono font-medium"[39m
+        [36m>[39m
+          [0mKMS-400019[0m
+        [36m</span>[39m
+      [36m</p>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   × KMS-400020, on the screen its reader actually reaches > says what ErrorCode.java says, on the temple picker (app/choose-temple/page.tsx)
+     → Unable to find an element with the text: You're signed in, but you don't have an account at any temple yet.. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"flex min-h-screen items-center justify-center px-6"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mclass[39m=[32m"flex flex-col items-center gap-3 py-10 text-center "[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [36m<svg[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"h-10 w-10 text-accent"[39m
+          [33mfill[39m=[32m"none"[39m
+          [33mviewBox[39m=[32m"0 0 48 48"[39m
+        [36m>[39m
+          [36m<g[39m
+            [33mopacity[39m=[32m"0.9"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M18 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 0ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M24 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 300ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M30 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 600ms;"[39m
+            [36m/>[39m
+          [36m</g>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"6"[39m
+            [33mrx[39m=[32m"3"[39m
+            [33mwidth[39m=[32m"32"[39m
+            [33mx[39m=[32m"8"[39m
+            [33my[39m=[32m"20"[39m
+          [36m/>[39m
+          [36m<circle[39m
+            [33mcx[39m=[32m"24"[39m
+            [33mcy[39m=[32m"17.5"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mr[39m=[32m"1.8"[39m
+          [36m/>[39m
+          [36m<path[39m
+            [33md[39m=[32m"M11 27h26l-1.6 12.4a2.2 2.2 0 0 1-2.2 1.95H14.8a2.2 2.2 0 0 1-2.2-1.95L11 27Z"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"3.5"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"39"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+        [36m</svg>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mLoading…[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto grid min-h-screen max-w-prose content-start gap-6 px-6 py-14"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"grid gap-2"[39m
+      [36m>[39m
+        [36m<h1[39m
+          [33mclass[39m=[32m"text-2xl font-semibold text-ink"[39m
+        [36m>[39m
+          [0mWhich temple do you serve at?[0m
+        [36m</h1>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-ink-secondary"[39m
+        [36m>[39m
+          [0mSigned in as[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-medium text-ink"[39m
+          [36m>[39m
+            [0mgopal@example.org[0m
+          [36m</span>[39m
+          [0m. You can join more temples later.[0m
+        [36m</p>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mNot the right account?[0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+          [36m>[39m
+            [0mUse a different account[0m
+          [36m</button>[39m
+        [36m</p>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid gap-5"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mSearch for your temple[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mname[39m=[32m"temple-search"[39m
+              [33mplaceholder[39m=[32m"Search by temple, neighbourhood or city"[39m
+              [33mtype[39m=[32m"search"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"justify-self-start text-sm text-accent-text hover:underline disabled:text-ink-muted"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mUse my location to find temples near me[0m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-2"[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3 sm:grid-cols-2"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mFirst name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Gopal"[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mLast name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Das"[39m
+            [36m/>[39m
+          [36m</label>[39m
+        [36m</div>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+          [36m>[39m
+            [0mPhone[0m
+          [36m</span>[39m
+          [36m<input[39m
+            [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+            [33mplaceholder[39m=[32m"+919876543210"[39m
+            [33mtype[39m=[32m"tel"[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-touch px-4 text-base btn btn-primary  disabled:opacity-45"[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0mJoin this temple[0m
+        [36m</button>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"flex min-h-screen items-center justify-center px-6"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mclass[39m=[32m"flex flex-col items-center gap-3 py-10 text-center "[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [36m<svg[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"h-10 w-10 text-accent"[39m
+          [33mfill[39m=[32m"none"[39m
+          [33mviewBox[39m=[32m"0 0 48 48"[39m
+        [36m>[39m
+          [36m<g[39m
+            [33mopacity[39m=[32m"0.9"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M18 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 0ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M24 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 300ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M30 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 600ms;"[39m
+            [36m/>[39m
+          [36m</g>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"6"[39m
+            [33mrx[39m=[32m"3"[39m
+            [33mwidth[39m=[32m"32"[39m
+            [33mx[39m=[32m"8"[39m
+            [33my[39m=[32m"20"[39m
+          [36m/>[39m
+          [36m<circle[39m
+            [33mcx[39m=[32m"24"[39m
+            [33mcy[39m=[32m"17.5"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mr[39m=[32m"1.8"[39m
+          [36m/>[39m
+          [36m<path[39m
+            [33md[39m=[32m"M11 27h26l-1.6 12.4a2.2 2.2 0 0 1-2.2 1.95H14.8a2.2 2.2 0 0 1-2.2-1.95L11 27Z"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"3.5"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"39"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+        [36m</svg>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mLoading…[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto grid min-h-screen max-w-prose content-start gap-6 px-6 py-14"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"grid gap-2"[39m
+      [36m>[39m
+        [36m<h1[39m
+          [33mclass[39m=[32m"text-2xl font-semibold text-ink"[39m
+        [36m>[39m
+          [0mWhich temple do you serve at?[0m
+        [36m</h1>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-ink-secondary"[39m
+        [36m>[39m
+          [0mSigned in as[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-medium text-ink"[39m
+          [36m>[39m
+            [0mgopal@example.org[0m
+          [36m</span>[39m
+          [0m. You can join more temples later.[0m
+        [36m</p>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mNot the right account?[0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+          [36m>[39m
+            [0mUse a different account[0m
+          [36m</button>[39m
+        [36m</p>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid gap-5"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mSearch for your temple[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mname[39m=[32m"temple-search"[39m
+              [33mplaceholder[39m=[32m"Search by temple, neighbourhood or city"[39m
+              [33mtype[39m=[32m"search"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"justify-self-start text-sm text-accent-text hover:underline disabled:text-ink-muted"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mUse my location to find temples near me[0m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-2"[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3 sm:grid-cols-2"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mFirst name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Gopal"[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mLast name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Das"[39m
+            [36m/>[39m
+          [36m</label>[39m
+        [36m</div>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+          [36m>[39m
+            [0mPhone[0m
+          [36m</span>[39m
+          [36m<input[39m
+            [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+            [33mplaceholder[39m=[32m"+919876543210"[39m
+            [33mtype[39m=[32m"tel"[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-touch px-4 text-base btn btn-primary  disabled:opacity-45"[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0mJoin this temple[0m
+        [36m</button>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   × KMS-400020, on the screen its reader actually reaches > renders the words that arrived, not a literal that happens to match them
+     → Unable to find an element with the text: T-116 sentinel — this sentence came off the wire and nowhere else.. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"flex min-h-screen items-center justify-center px-6"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mclass[39m=[32m"flex flex-col items-center gap-3 py-10 text-center "[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [36m<svg[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"h-10 w-10 text-accent"[39m
+          [33mfill[39m=[32m"none"[39m
+          [33mviewBox[39m=[32m"0 0 48 48"[39m
+        [36m>[39m
+          [36m<g[39m
+            [33mopacity[39m=[32m"0.9"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M18 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 0ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M24 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 300ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M30 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 600ms;"[39m
+            [36m/>[39m
+          [36m</g>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"6"[39m
+            [33mrx[39m=[32m"3"[39m
+            [33mwidth[39m=[32m"32"[39m
+            [33mx[39m=[32m"8"[39m
+            [33my[39m=[32m"20"[39m
+          [36m/>[39m
+          [36m<circle[39m
+            [33mcx[39m=[32m"24"[39m
+            [33mcy[39m=[32m"17.5"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mr[39m=[32m"1.8"[39m
+          [36m/>[39m
+          [36m<path[39m
+            [33md[39m=[32m"M11 27h26l-1.6 12.4a2.2 2.2 0 0 1-2.2 1.95H14.8a2.2 2.2 0 0 1-2.2-1.95L11 27Z"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"3.5"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"39"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+        [36m</svg>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mLoading…[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto grid min-h-screen max-w-prose content-start gap-6 px-6 py-14"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"grid gap-2"[39m
+      [36m>[39m
+        [36m<h1[39m
+          [33mclass[39m=[32m"text-2xl font-semibold text-ink"[39m
+        [36m>[39m
+          [0mWhich temple do you serve at?[0m
+        [36m</h1>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-ink-secondary"[39m
+        [36m>[39m
+          [0mSigned in as[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-medium text-ink"[39m
+          [36m>[39m
+            [0mgopal@example.org[0m
+          [36m</span>[39m
+          [0m. You can join more temples later.[0m
+        [36m</p>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mNot the right account?[0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+          [36m>[39m
+            [0mUse a different account[0m
+          [36m</button>[39m
+        [36m</p>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid gap-5"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mSearch for your temple[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mname[39m=[32m"temple-search"[39m
+              [33mplaceholder[39m=[32m"Search by temple, neighbourhood or city"[39m
+              [33mtype[39m=[32m"search"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"justify-self-start text-sm text-accent-text hover:underline disabled:text-ink-muted"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mUse my location to find temples near me[0m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-2"[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3 sm:grid-cols-2"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mFirst name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Gopal"[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mLast name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Das"[39m
+            [36m/>[39m
+          [36m</label>[39m
+        [36m</div>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+          [36m>[39m
+            [0mPhone[0m
+          [36m</span>[39m
+          [36m<input[39m
+            [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+            [33mplaceholder[39m=[32m"+919876543210"[39m
+            [33mtype[39m=[32m"tel"[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-touch px-4 text-base btn btn-primary  disabled:opacity-45"[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0mJoin this temple[0m
+        [36m</button>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"flex min-h-screen items-center justify-center px-6"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mclass[39m=[32m"flex flex-col items-center gap-3 py-10 text-center "[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [36m<svg[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"h-10 w-10 text-accent"[39m
+          [33mfill[39m=[32m"none"[39m
+          [33mviewBox[39m=[32m"0 0 48 48"[39m
+        [36m>[39m
+          [36m<g[39m
+            [33mopacity[39m=[32m"0.9"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M18 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 0ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M24 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 300ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M30 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 600ms;"[39m
+            [36m/>[39m
+          [36m</g>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"6"[39m
+            [33mrx[39m=[32m"3"[39m
+            [33mwidth[39m=[32m"32"[39m
+            [33mx[39m=[32m"8"[39m
+            [33my[39m=[32m"20"[39m
+          [36m/>[39m
+          [36m<circle[39m
+            [33mcx[39m=[32m"24"[39m
+            [33mcy[39m=[32m"17.5"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mr[39m=[32m"1.8"[39m
+          [36m/>[39m
+          [36m<path[39m
+            [33md[39m=[32m"M11 27h26l-1.6 12.4a2.2 2.2 0 0 1-2.2 1.95H14.8a2.2 2.2 0 0 1-2.2-1.95L11 27Z"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"3.5"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"39"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+        [36m</svg>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mLoading…[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto grid min-h-screen max-w-prose content-start gap-6 px-6 py-14"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"grid gap-2"[39m
+      [36m>[39m
+        [36m<h1[39m
+          [33mclass[39m=[32m"text-2xl font-semibold text-ink"[39m
+        [36m>[39m
+          [0mWhich temple do you serve at?[0m
+        [36m</h1>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-ink-secondary"[39m
+        [36m>[39m
+          [0mSigned in as[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-medium text-ink"[39m
+          [36m>[39m
+            [0mgopal@example.org[0m
+          [36m</span>[39m
+          [0m. You can join more temples later.[0m
+        [36m</p>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mNot the right account?[0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+          [36m>[39m
+            [0mUse a different account[0m
+          [36m</button>[39m
+        [36m</p>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid gap-5"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mSearch for your temple[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mname[39m=[32m"temple-search"[39m
+              [33mplaceholder[39m=[32m"Search by temple, neighbourhood or city"[39m
+              [33mtype[39m=[32m"search"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"justify-self-start text-sm text-accent-text hover:underline disabled:text-ink-muted"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mUse my location to find temples near me[0m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-2"[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3 sm:grid-cols-2"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mFirst name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Gopal"[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mLast name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Das"[39m
+            [36m/>[39m
+          [36m</label>[39m
+        [36m</div>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+          [36m>[39m
+            [0mPhone[0m
+          [36m</span>[39m
+          [36m<input[39m
+            [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+            [33mplaceholder[39m=[32m"+919876543210"[39m
+            [33mtype[39m=[32m"tel"[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-touch px-4 text-base btn btn-primary  disabled:opacity-45"[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0mJoin this temple[0m
+        [36m</button>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/refusal-words-reach-the-reader.test.tsx > KMS-400019, on the screen its reader actually reaches > renders the words that arrived, not a literal that happens to match them
+TestingLibraryElementError: Unable to find an element with the text: T-116 sentinel — this sentence came off the wire and nowhere else.. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto flex min-h-screen max-w-prose flex-col justify-center px-6 py-12"[39m
+    [36m>[39m
+      [36m<h1>[39m
+        [0mAccount disabled[0m
+      [36m</h1>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-2 text-ink"[39m
+      [36m>[39m
+        [0mThis account has been disabled.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-1 text-sm text-ink-secondary"[39m
+      [36m>[39m
+        [0mAsk your temple administrator to restore access.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-6 text-sm text-ink-secondary"[39m
+      [36m>[39m
+        [0mSigned in with the wrong account?[0m
+        [0m [0m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+        [36m>[39m
+          [0mUse a different account[0m
+        [36m</button>[39m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-6 text-xs text-ink-secondary"[39m
+      [36m>[39m
+        [0mIf you need help, quote [0m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-mono font-medium"[39m
+        [36m>[39m
+          [0mKMS-400019[0m
+        [36m</span>[39m
+      [36m</p>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto flex min-h-screen max-w-prose flex-col justify-center px-6 py-12"[39m
+    [36m>[39m
+      [36m<h1>[39m
+        [0mAccount disabled[0m
+      [36m</h1>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-2 text-ink"[39m
+      [36m>[39m
+        [0mThis account has been disabled.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-1 text-sm text-ink-secondary"[39m
+      [36m>[39m
+        [0mAsk your temple administrator to restore access.[0m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-6 text-sm text-ink-secondary"[39m
+      [36m>[39m
+        [0mSigned in with the wrong account?[0m
+        [0m [0m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+        [36m>[39m
+          [0mUse a different account[0m
+        [36m</button>[39m
+      [36m</p>[39m
+      [36m<p[39m
+        [33mclass[39m=[32m"mt-6 text-xs text-ink-secondary"[39m
+      [36m>[39m
+        [0mIf you need help, quote [0m
+        [36m<span[39m
+          [33mclass[39m=[32m"font-mono font-medium"[39m
+        [36m>[39m
+          [0mKMS-400019[0m
+        [36m</span>[39m
+      [36m</p>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ waitForWrapper node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ __tests__/refusal-words-reach-the-reader.test.tsx:431:25
+    429|     signIntoFirebase();
+    430| 
+    431|     expect(await screen.findByText(SENTINEL.message)).toBeInTheDocumen…
+       |                         ^
+    432|     if (!exempt) expect(screen.getByText(SENTINEL.action)).toBeInTheDo…
+    433| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  __tests__/refusal-words-reach-the-reader.test.tsx > KMS-400020, on the screen its reader actually reaches > says what ErrorCode.java says, on the temple picker (app/choose-temple/page.tsx)
+TestingLibraryElementError: Unable to find an element with the text: You're signed in, but you don't have an account at any temple yet.. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"flex min-h-screen items-center justify-center px-6"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mclass[39m=[32m"flex flex-col items-center gap-3 py-10 text-center "[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [36m<svg[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"h-10 w-10 text-accent"[39m
+          [33mfill[39m=[32m"none"[39m
+          [33mviewBox[39m=[32m"0 0 48 48"[39m
+        [36m>[39m
+          [36m<g[39m
+            [33mopacity[39m=[32m"0.9"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M18 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 0ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M24 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 300ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M30 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 600ms;"[39m
+            [36m/>[39m
+          [36m</g>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"6"[39m
+            [33mrx[39m=[32m"3"[39m
+            [33mwidth[39m=[32m"32"[39m
+            [33mx[39m=[32m"8"[39m
+            [33my[39m=[32m"20"[39m
+          [36m/>[39m
+          [36m<circle[39m
+            [33mcx[39m=[32m"24"[39m
+            [33mcy[39m=[32m"17.5"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mr[39m=[32m"1.8"[39m
+          [36m/>[39m
+          [36m<path[39m
+            [33md[39m=[32m"M11 27h26l-1.6 12.4a2.2 2.2 0 0 1-2.2 1.95H14.8a2.2 2.2 0 0 1-2.2-1.95L11 27Z"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"3.5"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"39"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+        [36m</svg>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mLoading…[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto grid min-h-screen max-w-prose content-start gap-6 px-6 py-14"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"grid gap-2"[39m
+      [36m>[39m
+        [36m<h1[39m
+          [33mclass[39m=[32m"text-2xl font-semibold text-ink"[39m
+        [36m>[39m
+          [0mWhich temple do you serve at?[0m
+        [36m</h1>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-ink-secondary"[39m
+        [36m>[39m
+          [0mSigned in as[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-medium text-ink"[39m
+          [36m>[39m
+            [0mgopal@example.org[0m
+          [36m</span>[39m
+          [0m. You can join more temples later.[0m
+        [36m</p>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mNot the right account?[0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+          [36m>[39m
+            [0mUse a different account[0m
+          [36m</button>[39m
+        [36m</p>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid gap-5"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mSearch for your temple[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mname[39m=[32m"temple-search"[39m
+              [33mplaceholder[39m=[32m"Search by temple, neighbourhood or city"[39m
+              [33mtype[39m=[32m"search"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"justify-self-start text-sm text-accent-text hover:underline disabled:text-ink-muted"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mUse my location to find temples near me[0m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-2"[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3 sm:grid-cols-2"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mFirst name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Gopal"[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mLast name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Das"[39m
+            [36m/>[39m
+          [36m</label>[39m
+        [36m</div>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+          [36m>[39m
+            [0mPhone[0m
+          [36m</span>[39m
+          [36m<input[39m
+            [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+            [33mplaceholder[39m=[32m"+919876543210"[39m
+            [33mtype[39m=[32m"tel"[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-touch px-4 text-base btn btn-primary  disabled:opacity-45"[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0mJoin this temple[0m
+        [36m</button>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"flex min-h-screen items-center justify-center px-6"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mclass[39m=[32m"flex flex-col items-center gap-3 py-10 text-center "[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [36m<svg[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"h-10 w-10 text-accent"[39m
+          [33mfill[39m=[32m"none"[39m
+          [33mviewBox[39m=[32m"0 0 48 48"[39m
+        [36m>[39m
+          [36m<g[39m
+            [33mopacity[39m=[32m"0.9"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M18 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 0ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M24 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 300ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M30 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 600ms;"[39m
+            [36m/>[39m
+          [36m</g>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"6"[39m
+            [33mrx[39m=[32m"3"[39m
+            [33mwidth[39m=[32m"32"[39m
+            [33mx[39m=[32m"8"[39m
+            [33my[39m=[32m"20"[39m
+          [36m/>[39m
+          [36m<circle[39m
+            [33mcx[39m=[32m"24"[39m
+            [33mcy[39m=[32m"17.5"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mr[39m=[32m"1.8"[39m
+          [36m/>[39m
+          [36m<path[39m
+            [33md[39m=[32m"M11 27h26l-1.6 12.4a2.2 2.2 0 0 1-2.2 1.95H14.8a2.2 2.2 0 0 1-2.2-1.95L11 27Z"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"3.5"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"39"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+        [36m</svg>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mLoading…[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto grid min-h-screen max-w-prose content-start gap-6 px-6 py-14"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"grid gap-2"[39m
+      [36m>[39m
+        [36m<h1[39m
+          [33mclass[39m=[32m"text-2xl font-semibold text-ink"[39m
+        [36m>[39m
+          [0mWhich temple do you serve at?[0m
+        [36m</h1>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-ink-secondary"[39m
+        [36m>[39m
+          [0mSigned in as[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-medium text-ink"[39m
+          [36m>[39m
+            [0mgopal@example.org[0m
+          [36m</span>[39m
+          [0m. You can join more temples later.[0m
+        [36m</p>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mNot the right account?[0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+          [36m>[39m
+            [0mUse a different account[0m
+          [36m</button>[39m
+        [36m</p>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid gap-5"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mSearch for your temple[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mname[39m=[32m"temple-search"[39m
+              [33mplaceholder[39m=[32m"Search by temple, neighbourhood or city"[39m
+              [33mtype[39m=[32m"search"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"justify-self-start text-sm text-accent-text hover:underline disabled:text-ink-muted"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mUse my location to find temples near me[0m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-2"[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3 sm:grid-cols-2"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mFirst name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Gopal"[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mLast name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Das"[39m
+            [36m/>[39m
+          [36m</label>[39m
+        [36m</div>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+          [36m>[39m
+            [0mPhone[0m
+          [36m</span>[39m
+          [36m<input[39m
+            [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+            [33mplaceholder[39m=[32m"+919876543210"[39m
+            [33mtype[39m=[32m"tel"[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-touch px-4 text-base btn btn-primary  disabled:opacity-45"[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0mJoin this temple[0m
+        [36m</button>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ waitForWrapper node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ __tests__/refusal-words-reach-the-reader.test.tsx:394:25
+    392|     signIntoFirebase();
+    393| 
+    394|     expect(await screen.findByText(words.message)).toBeInTheDocument();
+       |                         ^
+    395| 
+    396|     // Body copy, never the heading. A catalogue message is a sentence…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  __tests__/refusal-words-reach-the-reader.test.tsx > KMS-400020, on the screen its reader actually reaches > renders the words that arrived, not a literal that happens to match them
+TestingLibraryElementError: Unable to find an element with the text: T-116 sentinel — this sentence came off the wire and nowhere else.. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"flex min-h-screen items-center justify-center px-6"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mclass[39m=[32m"flex flex-col items-center gap-3 py-10 text-center "[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [36m<svg[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"h-10 w-10 text-accent"[39m
+          [33mfill[39m=[32m"none"[39m
+          [33mviewBox[39m=[32m"0 0 48 48"[39m
+        [36m>[39m
+          [36m<g[39m
+            [33mopacity[39m=[32m"0.9"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M18 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 0ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M24 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 300ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M30 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 600ms;"[39m
+            [36m/>[39m
+          [36m</g>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"6"[39m
+            [33mrx[39m=[32m"3"[39m
+            [33mwidth[39m=[32m"32"[39m
+            [33mx[39m=[32m"8"[39m
+            [33my[39m=[32m"20"[39m
+          [36m/>[39m
+          [36m<circle[39m
+            [33mcx[39m=[32m"24"[39m
+            [33mcy[39m=[32m"17.5"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mr[39m=[32m"1.8"[39m
+          [36m/>[39m
+          [36m<path[39m
+            [33md[39m=[32m"M11 27h26l-1.6 12.4a2.2 2.2 0 0 1-2.2 1.95H14.8a2.2 2.2 0 0 1-2.2-1.95L11 27Z"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"3.5"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"39"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+        [36m</svg>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mLoading…[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto grid min-h-screen max-w-prose content-start gap-6 px-6 py-14"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"grid gap-2"[39m
+      [36m>[39m
+        [36m<h1[39m
+          [33mclass[39m=[32m"text-2xl font-semibold text-ink"[39m
+        [36m>[39m
+          [0mWhich temple do you serve at?[0m
+        [36m</h1>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-ink-secondary"[39m
+        [36m>[39m
+          [0mSigned in as[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-medium text-ink"[39m
+          [36m>[39m
+            [0mgopal@example.org[0m
+          [36m</span>[39m
+          [0m. You can join more temples later.[0m
+        [36m</p>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mNot the right account?[0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+          [36m>[39m
+            [0mUse a different account[0m
+          [36m</button>[39m
+        [36m</p>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid gap-5"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mSearch for your temple[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mname[39m=[32m"temple-search"[39m
+              [33mplaceholder[39m=[32m"Search by temple, neighbourhood or city"[39m
+              [33mtype[39m=[32m"search"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"justify-self-start text-sm text-accent-text hover:underline disabled:text-ink-muted"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mUse my location to find temples near me[0m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-2"[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3 sm:grid-cols-2"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mFirst name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Gopal"[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mLast name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Das"[39m
+            [36m/>[39m
+          [36m</label>[39m
+        [36m</div>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+          [36m>[39m
+            [0mPhone[0m
+          [36m</span>[39m
+          [36m<input[39m
+            [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+            [33mplaceholder[39m=[32m"+919876543210"[39m
+            [33mtype[39m=[32m"tel"[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-touch px-4 text-base btn btn-primary  disabled:opacity-45"[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0mJoin this temple[0m
+        [36m</button>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"flex min-h-screen items-center justify-center px-6"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-live[39m=[32m"polite"[39m
+        [33mclass[39m=[32m"flex flex-col items-center gap-3 py-10 text-center "[39m
+        [33mrole[39m=[32m"status"[39m
+      [36m>[39m
+        [36m<svg[39m
+          [33maria-hidden[39m=[32m"true"[39m
+          [33mclass[39m=[32m"h-10 w-10 text-accent"[39m
+          [33mfill[39m=[32m"none"[39m
+          [33mviewBox[39m=[32m"0 0 48 48"[39m
+        [36m>[39m
+          [36m<g[39m
+            [33mopacity[39m=[32m"0.9"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M18 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 0ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M24 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 300ms;"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33mclass[39m=[32m"kms-steam-wisp"[39m
+              [33md[39m=[32m"M30 17c-2-2-2-4 0-6s2-4 0-6"[39m
+              [33mstyle[39m=[32m"animation-delay: 600ms;"[39m
+            [36m/>[39m
+          [36m</g>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"6"[39m
+            [33mrx[39m=[32m"3"[39m
+            [33mwidth[39m=[32m"32"[39m
+            [33mx[39m=[32m"8"[39m
+            [33my[39m=[32m"20"[39m
+          [36m/>[39m
+          [36m<circle[39m
+            [33mcx[39m=[32m"24"[39m
+            [33mcy[39m=[32m"17.5"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mr[39m=[32m"1.8"[39m
+          [36m/>[39m
+          [36m<path[39m
+            [33md[39m=[32m"M11 27h26l-1.6 12.4a2.2 2.2 0 0 1-2.2 1.95H14.8a2.2 2.2 0 0 1-2.2-1.95L11 27Z"[39m
+            [33mfill[39m=[32m"currentColor"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"3.5"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+          [36m<rect[39m
+            [33mfill[39m=[32m"currentColor"[39m
+            [33mheight[39m=[32m"3.4"[39m
+            [33mrx[39m=[32m"1.7"[39m
+            [33mwidth[39m=[32m"5.5"[39m
+            [33mx[39m=[32m"39"[39m
+            [33my[39m=[32m"28.5"[39m
+          [36m/>[39m
+        [36m</svg>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mLoading…[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+    [36m<main[39m
+      [33mclass[39m=[32m"mx-auto grid min-h-screen max-w-prose content-start gap-6 px-6 py-14"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"grid gap-2"[39m
+      [36m>[39m
+        [36m<h1[39m
+          [33mclass[39m=[32m"text-2xl font-semibold text-ink"[39m
+        [36m>[39m
+          [0mWhich temple do you serve at?[0m
+        [36m</h1>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-ink-secondary"[39m
+        [36m>[39m
+          [0mSigned in as[0m
+          [0m [0m
+          [36m<span[39m
+            [33mclass[39m=[32m"font-medium text-ink"[39m
+          [36m>[39m
+            [0mgopal@example.org[0m
+          [36m</span>[39m
+          [0m. You can join more temples later.[0m
+        [36m</p>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [0mNot the right account?[0m
+          [0m [0m
+          [36m<button[39m
+            [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-9 px-3 text-sm btn btn-secondary  disabled:opacity-45"[39m
+          [36m>[39m
+            [0mUse a different account[0m
+          [36m</button>[39m
+        [36m</p>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"grid gap-5"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mSearch for your temple[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mautocomplete[39m=[32m"off"[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mname[39m=[32m"temple-search"[39m
+              [33mplaceholder[39m=[32m"Search by temple, neighbourhood or city"[39m
+              [33mtype[39m=[32m"search"[39m
+              [33mvalue[39m=[32m""[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"justify-self-start text-sm text-accent-text hover:underline disabled:text-ink-muted"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0mUse my location to find temples near me[0m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-2"[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid gap-3 sm:grid-cols-2"[39m
+        [36m>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mFirst name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Gopal"[39m
+            [36m/>[39m
+          [36m</label>[39m
+          [36m<label[39m
+            [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+            [36m>[39m
+              [0mLast name[0m
+            [36m</span>[39m
+            [36m<input[39m
+              [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+              [33mvalue[39m=[32m"Das"[39m
+            [36m/>[39m
+          [36m</label>[39m
+        [36m</div>[39m
+        [36m<label[39m
+          [33mclass[39m=[32m"grid gap-1 text-sm text-ink-secondary"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"pl-field-inset font-medium text-ink"[39m
+          [36m>[39m
+            [0mPhone[0m
+          [36m</span>[39m
+          [36m<input[39m
+            [33mclass[39m=[32m"min-h-touch rounded-control border border-hairline px-3 text-ink"[39m
+            [33mplaceholder[39m=[32m"+919876543210"[39m
+            [33mtype[39m=[32m"tel"[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 font-medium transition-[transform,background-color,border-color,color] duration-press ease-out active:translate-y-px active:scale-press disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100 min-h-touch px-4 text-base btn btn-primary  disabled:opacity-45"[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0mJoin this temple[0m
+        [36m</button>[39m
+      [36m</div>[39m
+    [36m</main>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ waitForWrapper node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ __tests__/refusal-words-reach-the-reader.test.tsx:431:25
+    429|     signIntoFirebase();
+    430| 
+    431|     expect(await screen.findByText(SENTINEL.message)).toBeInTheDocumen…
+       |                         ^
+    432|     if (!exempt) expect(screen.getByText(SENTINEL.action)).toBeInTheDo…
+    433| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 6 passed (9)
+   Start at  23:23:01
+   Duration  3.50s (transform 71ms, setup 23ms, collect 104ms, tests 3.06s, environment 110ms, prepare 31ms)
+
+=== vitest exit: 1
+
+=== EXIT trap: restoring /Users/Rajeev/Workspace/kitchen-management-system/frontend/lib/auth-context.tsx
+=== target sha256 after : fefc5db85e2b7f5eabcb1a2ed36e269ffe072156def01021ca9b185fd125858d
+=== cmp: restored file is byte-for-byte identical to the backup
+=== sha256 matches the pre-patch file
+
+=== git diff --stat for the target after restore. This is against HEAD, so it still
+=== shows T-116's own work — 79 insertions, not 77. The proof that the CONTROL's
+=== patch is gone is the cmp and the sha256 above, which compare against the file
+=== as it stood one second before the patch. (T-127 called out T-125 for using the
+=== HEAD diff as the restore proof; it is the wrong baseline and it is not used here.)
+ frontend/lib/auth-context.tsx | 83 ++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 79 insertions(+), 4 deletions(-)
+=== (end)
+work-lock: 'verify' released; command exited 0

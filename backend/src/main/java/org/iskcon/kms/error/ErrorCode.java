@@ -168,8 +168,15 @@ public enum ErrorCode {
 	// Found by T-114's builder while fixing a neighbouring case, and it is the same defect class as
 	// KMS-400098, 400129, 400143 and 400146 before it: a next step naming a door that is not the one
 	// the reader meets. See T-095, which exists to sweep for exactly this.
+	// The message is read from here by the temple picker (T-116); the next step is not, and cannot
+	// usefully be. This code sends the reader to a screen headed "Which temple do you serve at?" with
+	// the form underneath, so printing "Choose your temple to join it." above it says the same thing
+	// a third time. It stays as documentation of what the reader is expected to do and is exempt in
+	// the guard test by name. "at any temple" rather than "at this temple" because
+	// AuthenticationFilter:147 raises it for somebody who is a member of nowhere at all — there is no
+	// "this temple" in the request that reaches it.
 	NO_ACCOUNT_AT_TEMPLE(400020, 401,
-			"You're signed in, but you don't have an account at this temple yet.",
+			"You're signed in, but you don't have an account at any temple yet.",
 			"Choose your temple to join it."),
 
 	// --- Authorisation ------------------------------------------------

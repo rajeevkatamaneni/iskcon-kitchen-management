@@ -177,13 +177,39 @@ describe("the session, when whoami fails", () => {
 // ---------------------------------------------------------------------------
 
 /**
+ * The words each code actually arrives with, so the screens below are driven by what the server
+ * really sends.
+ *
+ * <p>They used to be `"no"` and `"no"`, which was honest while the session layer threw the message
+ * and the next step away and read only the code. It no longer does (T-116): `auth-context` carries
+ * them through as a `Refusal` and the disabled screen renders them, so a placeholder here would
+ * make these tests assert that a screen can print the word "no".
+ *
+ * <p>Not the guard, though. That the words on the screen are still the words in `ErrorCode.java`
+ * is enforced by `refusal-words-reach-the-reader.test.tsx`, which reads both sides rather than
+ * trusting a copy typed into a test file — a constant here would drift the same way the screen's
+ * own literals did.
+ */
+const WORDS: Record<string, { message: string; action: string }> = {
+  "KMS-400019": {
+    message: "This account has been disabled.",
+    action: "Ask your temple administrator to restore access.",
+  },
+  "KMS-400020": {
+    message: "You're signed in, but you don't have an account at any temple yet.",
+    action: "Choose your temple to join it.",
+  },
+};
+
+/**
  * A 401 from `/whoami` is three different facts wearing the same number: this account was switched
  * off, this person has no account at any temple, and we would rather not say why the token failed.
  * Only the reference code separates them, which is why nothing below looks at `status`.
  */
 function refuses(code: string) {
+  const words = WORDS[code] ?? { message: "no", action: "no" };
   whoami.mockRejectedValue(
-    new ApiError({ code, message: "no", action: "no", fieldErrors: [] }, 401)
+    new ApiError({ code, message: words.message, action: words.action, fieldErrors: [] }, 401)
   );
 }
 
@@ -257,7 +283,7 @@ describe("what a disabled person is shown", () => {
     signIntoFirebase();
 
     await waitFor(() =>
-      expect(screen.getByText("This account has been disabled")).toBeInTheDocument()
+      expect(screen.getByText("This account has been disabled.")).toBeInTheDocument()
     );
     expect(screen.getByText("Ask your temple administrator to restore access.")).toBeInTheDocument();
     expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
@@ -277,7 +303,7 @@ describe("what a disabled person is shown", () => {
     signIntoFirebase();
 
     await waitFor(() =>
-      expect(screen.getByText("This account has been disabled")).toBeInTheDocument()
+      expect(screen.getByText("This account has been disabled.")).toBeInTheDocument()
     );
     expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
     expect(screen.queryByText("Secret")).not.toBeInTheDocument();
@@ -304,7 +330,7 @@ describe("what a disabled person is shown", () => {
     signIntoFirebase();
 
     await waitFor(() =>
-      expect(screen.getByText("This account has been disabled")).toBeInTheDocument()
+      expect(screen.getByText("This account has been disabled.")).toBeInTheDocument()
     );
     fireEvent.click(screen.getByRole("button", { name: /use a different account/i }));
 

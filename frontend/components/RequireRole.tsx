@@ -62,12 +62,30 @@ import { Sidebar } from "@/components/Sidebar";
 /**
  * What somebody sees when their account here has been switched off.
  *
- * <p>The words are `KMS-400019`'s own — "This account has been disabled." and "Ask your temple
- * administrator to restore access." — so that what a person reads on the screen is what support
+ * <p>The words are `KMS-400019`'s own — so that what a person reads on the screen is what support
  * finds written beside that code, and the code itself is offered quietly for them to quote. It
  * exists because the alternative was worse than saying nothing: before the server sent a code, this
  * arrived as "no account", which sent a volunteer whose access an administrator had just withdrawn
  * to a picker offering to sign them up somewhere.
+ *
+ * <p><b>They are now read from the refusal rather than retyped here (T-116).</b> They used to be
+ * two string literals in the JSX below that happened to match `ErrorCode.java`, which is not a
+ * mechanism — it is a coincidence maintained by hand, and the neighbouring code proves how that
+ * ends: T-114 reworded `KMS-400020`'s next step on 2026-09-10 and no screen moved, because no
+ * screen was reading it. `auth-context` now carries the server's own message and next step through
+ * as a {@link Refusal} and this renders them, so the catalogue and the screen cannot drift apart
+ * again.
+ *
+ * <p>The heading above them is the screen's own and stays a literal: it is a title, not the error's
+ * copy, and it is short and unpunctuated like every other h1 here. That split is what lets the
+ * catalogue's sentence be rendered exactly as it is stored, full stop included, without a heading
+ * anywhere in the application gaining one.
+ *
+ * <p>The literals survive only as a fallback for a `disabled` status reached without a refusal —
+ * which no path produces today, since the status is set from the refusal that carries them. It is
+ * there for the same reason `WrongRole` falls back on `/` below: this is the last screen a broken
+ * session meets, and the last screen in the application is the one that may not itself break. The
+ * heading alone would leave somebody locked out with a two-word title and no idea who can undo it.
  *
  * <p>Still no menu and still no retry — nothing they can do *in this account* on any screen will
  * help until it is given back. The one thing that is not true of is leaving it, so there is a sign
@@ -81,13 +99,36 @@ import { Sidebar } from "@/components/Sidebar";
  * home and is worth moving it to.
  */
 export function AccountDisabled() {
-  const { signOut } = useAuth();
+  const { signOut, refusal } = useAuth();
+
+  // `ErrorCode.java`'s own sentences when the server sent them, which on every live path it did.
+  // The literals are the fallback described above and nothing more; they are not a second copy of
+  // the contract, and nothing but a `disabled` status arriving without a refusal can reach them.
+  const message = refusal?.message ?? "This account has been disabled.";
+  const nextStep = refusal?.action ?? "Ask your temple administrator to restore access.";
+  const code = refusal?.code ?? "KMS-400019";
+
   return (
     <main className="mx-auto flex min-h-screen max-w-prose flex-col justify-center px-6 py-12">
-      <h1>This account has been disabled</h1>
-      <p className="mt-2 text-ink-secondary">
-        Ask your temple administrator to restore access.
-      </p>
+      {/* A short heading, then the catalogue's sentence as body copy under it, then the next step.
+          Three things settle that arrangement:
+
+          The heading is the screen's own title and is not the error's words. It is short and
+          unpunctuated like every other h1 in the application — "We can't reach the server", "Not
+          your page" — and it is deliberately *not* a second rendering of the sentence below, or the
+          reader would meet the same words twice in two sizes.
+
+          The sentence keeps its full stop, because it is the catalogue's and is rendered as
+          written. Trimming the stop to make it fit a heading would put a transformation between the
+          stored text and the text on the screen, which is a smaller version of exactly the gap this
+          change closes — and would leave the guard test having to normalise punctuation to check
+          anything.
+
+          Message above next step, the more prominent of the two, which is `ErrorNotice`'s order for
+          every other failure in the product. */}
+      <h1>Account disabled</h1>
+      <p className="mt-2 text-ink">{message}</p>
+      <p className="mt-1 text-sm text-ink-secondary">{nextStep}</p>
       {/* Deliberately quiet, and deliberately worded as choosing an account rather than as leaving:
           a person who has just been told they are locked out is not looking for the exit, they are
           looking for the account that still works. Same words as the temple picker's, which is the
@@ -99,7 +140,7 @@ export function AccountDisabled() {
         </Button>
       </p>
       <p className="mt-6 text-xs text-ink-secondary">
-        If you need help, quote <span className="font-mono font-medium">KMS-400019</span>
+        If you need help, quote <span className="font-mono font-medium">{code}</span>
       </p>
     </main>
   );

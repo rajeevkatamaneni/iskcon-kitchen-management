@@ -213,7 +213,15 @@ describe("the branches that are bare on purpose", () => {
     authRef.current = { ...authRef.current, status: "disabled", appUser: null };
     render(<DonateRoute />);
 
-    expect(await screen.findByText("This account has been disabled")).toBeInTheDocument();
+    // `useAuth` is stubbed here and carries no `refusal`, so this is the fallback wording in
+    // `AccountDisabled` rather than the server's — which is the case worth exercising from this
+    // file, because this is the one test in the suite that reaches that branch. The words on the
+    // live path come off the wire and are held to `ErrorCode.java` by
+    // `refusal-words-reach-the-reader.test.tsx`. Full stop included, and it is body copy under the
+    // heading rather than the heading itself: the h1 is the screen's own short title and the
+    // catalogue's sentence is rendered as written, so neither has to bend to fit the other (T-116).
+    expect(await screen.findByText("This account has been disabled.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Account disabled" })).toBeInTheDocument();
     expect(menus()).toHaveLength(0);
   });
 
