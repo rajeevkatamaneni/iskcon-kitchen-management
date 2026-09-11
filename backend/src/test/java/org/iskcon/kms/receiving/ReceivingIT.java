@@ -122,8 +122,14 @@ class ReceivingIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
 				.andExpect(jsonPath("$.order.status").value("PARTIALLY_RECEIVED"));
 
-		// The 6 still outstanding re-feed the next generated shopping list, traceable to the PO.
-		mvc.perform(authed(post("/api/v1/shopping-list/regenerate"))).andExpect(status().isOk());
+		// The 6 still outstanding re-feed the shopping list, traceable to the PO. There is no
+		// regeneration to run any more (T-132) — the list is computed as it is read — and this is
+		// also where the two rules about a live order meet without fighting. D-24a takes an
+		// ingredient off the list the moment a DRAFT or SENT order covers it, because the vendor
+		// still owes everything on it and ordering again is ordering twice. A part-delivered order
+		// is different in kind: the truck came, and what it did not bring is evidence of a shortfall
+		// rather than a pending promise. So PARTIALLY_RECEIVED is the one live status that re-feeds,
+		// which is exactly E5-S6 and exactly what is asserted below.
 		mvc.perform(authed(get("/api/v1/shopping-list")))
 				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')]").exists())
 				.andExpect(jsonPath("$[0].suggestedQty").value(6))

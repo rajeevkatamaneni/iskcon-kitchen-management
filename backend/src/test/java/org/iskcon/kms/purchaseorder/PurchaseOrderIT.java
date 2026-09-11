@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashMap;
@@ -97,6 +98,13 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM vendor_supplies");
 		admin.execute("DELETE FROM vendors");
 		admin.execute("DELETE FROM audit_events");
+		// The shopping list is computed rather than stored (T-132), so this fixture builds real
+		// demand — a reorder threshold, a preferred vendor, and where a date is wanted, a planned
+		// meal. All of it holds the ingredient down through a foreign key and has to go first.
+		admin.execute("DELETE FROM meal_plans");
+		admin.execute("DELETE FROM recipe_ingredients");
+		admin.execute("DELETE FROM recipes");
+		admin.execute("DELETE FROM recipe_categories");
 		// Anything that moved through the stock ledger is tracked now, so the item rows exist
 		// even where the test never asked for them, and they hold the ingredient down.
 		admin.execute("DELETE FROM inventory_items");
@@ -574,21 +582,36 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 		assert getDetail(id).get("order").get("neededBy").asText().equals(soon.toString());
 	}
 
+	/**
+	 * <strong>This test used to assert the opposite, and T-130 is why it changed.</strong> The
+	 * shopping list subtracted a two-day delivery buffer from the first meal that wanted an
+	 * ingredient, so a meal planned for tomorrow produced a needed-by of yesterday — and the test
+	 * here recorded that generation accepted it, because refusing a computed date would have broken
+	 * the list rather than protected anything.
+	 *
+	 * <p>That buffer was a guess standing in for a fact the product did not yet have. T-090 recorded
+	 * the real lead time per vendor and ingredient, and it is applied on the other side of the
+	 * question — the last day the temple can ask, not the date it writes on the order. Subtracting
+	 * both meant asking a supplier to deliver two days before the food was needed, and then warning
+	 * on this very screen that the same date gave the supplier too little notice.
+	 *
+	 * <p>So the case that needed excusing no longer exists: the demand query only looks at meals
+	 * from today onwards, and the date is now the meal's own day. What is asserted is that, which is
+	 * a stronger statement than the one it replaces. The floor on a typed date is still real and
+	 * still tested — it belongs to a person choosing a date, not to a computation reporting one.
+	 */
 	@Test
-	@DisplayName("a computed needed-by already in the past still generates — the rule is for typed dates")
-	void generationAcceptsAComputedDateInThePast() throws Exception {
-		// The shopping list subtracts a two-day lead buffer from the first meal that needs the
-		// ingredient, so a meal planned for tomorrow yields a needed-by of yesterday. That is a true
-		// statement about demand, and refusing it here would break the shopping list rather than
-		// protect anything.
-		orderLine(rice, "9", vendorA, "45.00", LocalDate.now(TEMPLE_ZONE).minusDays(1));
+	@DisplayName("a generated needed-by is the meal's own day, and is never in the past")
+	void generationDatesTheOrderForTheMealItself() throws Exception {
+		LocalDate meal = LocalDate.now(TEMPLE_ZONE).plusDays(1);
+		orderLine(rice, "9", vendorA, "45.00", meal);
 
 		String body = mvc.perform(authed(post("/api/v1/purchase-orders/generate")))
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		String id = JSON.readTree(body).get("purchaseOrderIds").get(0).asText();
-		assert getDetail(id).get("order").get("neededBy").asText()
-				.equals(LocalDate.now(TEMPLE_ZONE).minusDays(1).toString());
+		assert getDetail(id).get("order").get("neededBy").asText().equals(meal.toString())
+				: "the order asks for delivery on the day of the meal, not two days before it";
 	}
 
 	@Test
@@ -681,20 +704,71 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 				""", UUID.class, tenant, name);
 	}
 
+	/**
+	 * Puts one line on the shopping list, by giving the temple a reason to want the thing.
+	 *
+	 * <p><strong>This used to insert straight into {@code shopping_list_lines}, and that was the most
+	 * dangerous thing in this file.</strong> The table survived T-132 — it holds human decisions now
+	 * — so those inserts went on succeeding and every test here stayed green while
+	 * {@code generateFromShoppingList} was reading a table that no longer held the list. A suite that
+	 * passes while the product is broken is worse than one that fails, because nothing tells you.
+	 *
+	 * <p>So the fixture builds real demand instead: a reorder threshold the store room has fallen
+	 * below, and a preferred vendor to order from. The suggested quantity is the reorder level × the
+	 * 1.2 safety factor, rounded up, with nothing on hand — so a threshold of 7.5 asks for 9. That
+	 * arithmetic is stated here rather than hidden, because a test that wants a particular number on
+	 * an order has to say where the number came from.
+	 *
+	 * @param qty the quantity the shopping list should end up suggesting, in KG
+	 */
 	private void orderLine(UUID ingredient, String qty, UUID vendor, String lastPrice) {
 		orderLine(ingredient, qty, vendor, lastPrice, null);
 	}
 
+	/**
+	 * As above, and additionally plans a meal on {@code neededBy} that demands the ingredient, so the
+	 * line carries that date. Since T-130 the needed-by date on a line is the day of the earliest
+	 * planned meal that wants it, with nothing subtracted.
+	 */
 	private void orderLine(UUID ingredient, String qty, UUID vendor, String lastPrice, LocalDate neededBy) {
+		// reorder_threshold × 1.2, ceiling, less nothing on hand, is what the list will suggest.
+		BigDecimal threshold = new BigDecimal(qty)
+				.divide(new BigDecimal("1.2"), 6, java.math.RoundingMode.HALF_UP);
 		admin.update("""
-				INSERT INTO shopping_list_lines (
-					tenant_id, ingredient_id, suggested_qty, unit, suggested_vendor_id, needed_by, included)
-				VALUES (?, ?, ?::numeric, 'KG', ?, ?, true)
-				""", tenant, ingredient, qty, vendor, neededBy);
+				INSERT INTO inventory_items (tenant_id, ingredient_id, reorder_threshold)
+				VALUES (?, ?, ?::numeric)
+				""", tenant, ingredient, threshold.toPlainString());
 		admin.update("""
-				INSERT INTO vendor_supplies (tenant_id, vendor_id, ingredient_id, last_price)
-				VALUES (?, ?, ?, ?::numeric)
+				INSERT INTO vendor_supplies (tenant_id, vendor_id, ingredient_id, last_price, preferred)
+				VALUES (?, ?, ?, ?::numeric, true)
 				""", tenant, vendor, ingredient, lastPrice);
+		if (neededBy != null) {
+			planAMealDemanding(ingredient, neededBy);
+		}
+	}
+
+	/**
+	 * A planned meal that wants one gram of the ingredient on a given day — enough to give the line a
+	 * demand date without disturbing the quantity, which the reorder threshold decides.
+	 */
+	private void planAMealDemanding(UUID ingredient, LocalDate on) {
+		UUID category = admin.queryForObject("""
+				INSERT INTO recipe_categories (tenant_id, name) VALUES (?, ?) RETURNING id
+				""", UUID.class, tenant, "Course " + UUID.randomUUID());
+		UUID recipe = admin.queryForObject("""
+				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit)
+				VALUES (?, ?, ?, 100, 'KG') RETURNING id
+				""", UUID.class, tenant, "Dish " + UUID.randomUUID(), category);
+		admin.update("""
+				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
+				VALUES (?, ?, ?, 0.001, 'KG', 0)
+				""", tenant, recipe, ingredient);
+		admin.update("""
+				INSERT INTO meal_plans (
+					tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield, day_type, status, created_by)
+				VALUES (?, ?, 'Lunch', TIME '12:00', ?, 1, 'REGULAR', 'PLANNED',
+					(SELECT id FROM users WHERE tenant_id = ? AND firebase_uid = 'uid-staff-a'))
+				""", tenant, on, recipe, tenant);
 	}
 
 	private void signIn(String uid) {

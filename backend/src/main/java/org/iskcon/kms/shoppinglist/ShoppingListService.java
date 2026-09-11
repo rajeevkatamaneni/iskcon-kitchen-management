@@ -1,45 +1,68 @@
 package org.iskcon.kms.shoppinglist;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.InventoryItemService;
 import org.iskcon.kms.inventory.InventoryUnits;
-import org.iskcon.kms.inventory.StockItemView;
 import org.iskcon.kms.meal.ShortfallItem;
 import org.iskcon.kms.meal.SufficiencyService;
 import org.iskcon.kms.tenancy.TempleClock;
 import org.iskcon.kms.vendor.LeadTimes;
 import org.iskcon.kms.vendor.OrderUrgency;
-import org.iskcon.kms.vendor.VendorService;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The suggested shopping list (E5-S2): procurement that starts from data, not memory.
  *
- * <p>Regeneration merges two demand streams per ingredient — the meal-plan shortfall (E4-S5) and
- * below-threshold stock topped up to its reorder level × a safety factor (E3-S3) — suggests the
- * preferred vendor, a need-by date and, since T-090, the last day the line could be ordered and
- * still arrive, and rounds up to whole purchase units. It is
- * <strong>edit-preserving</strong>: a line the staff has touched survives regeneration unchanged,
- * while unedited lines refresh and lines no longer needed drop off.
+ * <h2>It is derived, and that is the whole of T-132</h2>
+ *
+ * <p>Rajeev asked, on 2026-09-10: <em>"Why do we need the Regenerate shopping list button at all?
+ * Why can't the shopping list auto populate every time the page loads?"</em> — and, of the ordering
+ * flow as a whole, <em>"The issue starts at where the data enters the system. Without addressing
+ * that, everything is a compromised fix."</em>
+ *
+ * <p>Until then this class held a {@code regenerateForCurrentTenant()} that upserted one suggested
+ * row per ingredient and then deleted every unedited row it had not just suggested. It ran from two
+ * places: the button, and a Quartz trigger at 04:30 IST. So the list already populated itself once a
+ * night, and the honest answer to <em>"why the button"</em> was that neither door should exist.
+ *
+ * <p>Now {@link #list()} computes the suggestions on every read and writes nothing.
+ * {@code shopping_list_lines} keeps only what a person decided — an edited quantity, an untick, a
+ * line added by hand — and those are an <strong>overlay</strong> on whatever the read produces. A
+ * decision row on its own renders nothing; the one exception is a hand-added line, which is its own
+ * reason to appear because no stream will ever suggest it.
+ *
+ * <h2>What is suggested, and what a live order takes off the list</h2>
+ *
+ * <p>Three demand streams merge per ingredient: the meal-plan shortfall (E4-S5), stock below its
+ * reorder level topped up to that level × a safety factor (E3-S3), and the balance still outstanding
+ * on an order the vendor part-delivered (E5-S6). The largest of the three wins, rounded up to a
+ * whole purchase unit.
+ *
+ * <p>Against that, D-24a: <strong>an ingredient covered by a live purchase order — draft or sent —
+ * is not suggested at all.</strong> Rajeev's reason for choosing creation over sending as the moment
+ * a line leaves: <em>"IF we take it off on send, they will be there in the shopping list begging to
+ * be ordered, someone else will take pity and generate another PO. Same ingredients, 2 PO's. We
+ * don't need that confusion."</em> Cancelling the order makes the line reappear, with no restore
+ * path needed and none written, because the list is a function of current state and cancellation
+ * changes that state.
  *
  * <p>The threshold stream used to skip any ingredient flagged sattvic-prohibited, on the reasoning
  * that such a thing could only reach the list through a recipe an admin had overridden. D-18 deleted
@@ -52,97 +75,70 @@ public class ShoppingListService {
 
 	private static final BigDecimal SAFETY_FACTOR = new BigDecimal("1.2");
 
-	/**
-	 * How much earlier than the meal the temple wants the goods on the shelf — a <strong>delivery
-	 * buffer</strong>, and not a lead time, whatever its name suggests.
-	 *
-	 * <p>It is subtracted from the earliest meal that demands an ingredient to produce
-	 * {@code needed_by}, which {@code PurchaseOrderService.generate} copies onto the purchase order
-	 * as the date the vendor is asked to deliver by. It therefore answers <em>"what date do we write
-	 * on the order?"</em>.
-	 *
-	 * <p>{@link LeadTimes} answers the different question — <em>"when is the last day we can ask?"</em>
-	 * — from a figure recorded per vendor and ingredient (T-090), and its answer is {@code order_by}
-	 * below. The two are both two days today, which is exactly why they were easy to conflate; a
-	 * recorded lead time supersedes the assumption in {@code LeadTimes} and leaves this one alone,
-	 * because changing this one changes what every generated order asks a supplier for.
-	 */
-	private static final int LEAD_BUFFER_DAYS = 2;
-
-	/**
-	 * Every column a {@link ShoppingListLineView} is built from. Shared by the list and by the
-	 * single-line read that answers a hand-add, so the two can never disagree about what a line is.
-	 */
-	private static final String LINE_SELECT = """
-			SELECT o.ingredient_id, i.name AS ingredient_name, o.current_stock, o.unit,
-				   o.suggested_qty, o.needed_by, o.order_by, o.lead_time_days,
-				   o.suggested_vendor_id, v.name AS vendor_name,
-				   o.provenance, o.included, o.edited
-			FROM shopping_list_lines o
-			JOIN ingredients i ON i.id = o.ingredient_id
-			LEFT JOIN vendors v ON v.id = o.suggested_vendor_id
-			""";
-
 	private final JdbcTemplate jdbc;
-	private final ObjectMapper objectMapper;
 	private final SufficiencyService sufficiencyService;
 	private final InventoryItemService inventoryItemService;
-	private final VendorService vendorService;
 	private final IngredientUnits ingredientUnits;
 	private final LeadTimes leadTimes;
 	private final TempleClock clock;
 
 	public ShoppingListService(
-			JdbcTemplate jdbc, ObjectMapper objectMapper, SufficiencyService sufficiencyService,
-			InventoryItemService inventoryItemService, VendorService vendorService,
-			IngredientUnits ingredientUnits, LeadTimes leadTimes, TempleClock clock) {
+			JdbcTemplate jdbc, SufficiencyService sufficiencyService,
+			InventoryItemService inventoryItemService, IngredientUnits ingredientUnits,
+			LeadTimes leadTimes, TempleClock clock) {
 		this.jdbc = jdbc;
-		this.objectMapper = objectMapper;
 		this.sufficiencyService = sufficiencyService;
-		this.vendorService = vendorService;
 		this.inventoryItemService = inventoryItemService;
 		this.ingredientUnits = ingredientUnits;
 		this.leadTimes = leadTimes;
 		this.clock = clock;
 	}
 
+	/**
+	 * The shopping list as it stands right now: the computed suggestions with this temple's own
+	 * decisions laid over the top.
+	 *
+	 * <p>Ordered by ingredient name, as the stored version was — the sort moved from the database's
+	 * {@code ORDER BY i.name} to a case-insensitive comparator here, which is the same order for
+	 * every name the catalogue actually holds and no longer depends on the database's collation.
+	 */
 	@Transactional(readOnly = true)
 	public List<ShoppingListLineView> list() {
-		return jdbc.query(LINE_SELECT + "ORDER BY i.name", viewMapper());
+		Map<UUID, Decision> decisions = decisions();
+		return list(suggestions(handAdded(decisions)), decisions);
 	}
 
 	/**
 	 * Adds a line by hand (T-027) — something the cook knows is needed that no demand stream
 	 * suggested. Returns the line as the screen will render it.
 	 *
-	 * <p><strong>It is written {@code edited = true}, and that is the whole substance of this
-	 * method.</strong> Regeneration ends by deleting every line it did not just suggest and that no
-	 * human has touched ({@code WHERE edited = false}, below). A hand-added line is by definition one
-	 * no stream suggests, so written {@code edited = false} it would survive exactly until 04:30 the
-	 * next morning and then vanish with no trace and nobody watching — the failure this whole
-	 * edit-preserving design exists to prevent. {@code HandAddedLineIT} asserts it against a real
-	 * regeneration rather than against the column, because the column is only evidence and the
-	 * survival is the fact.
+	 * <p><strong>It is written {@code hand_added = true}, and that is the whole substance of this
+	 * method.</strong> Every other row in this table is an overlay on a line the derivation already
+	 * produced, and renders nothing on its own; nothing will ever suggest a bale of leaf plates, so
+	 * without that column the line would simply not be on the list at the next page load. Before
+	 * T-132 the same job was done by {@code edited = true}, which saved the row from the
+	 * regenerator's delete. The column is different because the mechanism is, and
+	 * {@code HandAddedLineIT} asserts the survival rather than the column, because the column is only
+	 * evidence.
 	 *
-	 * <p><strong>A duplicate is refused, not merged.</strong> {@code shopping_list_lines} is unique
-	 * on {@code (tenant_id, ingredient_id)}, so an ingredient already listed cannot become a second
-	 * row. Of the two honest answers — overwrite the existing line, or say so — this says so
-	 * (KMS-400131): the quantity on the existing line may be one the regenerator computed or one a
-	 * colleague typed, and somebody adding what they think is a new line did not ask for either to be
-	 * replaced. The line they wanted is already on the screen in front of them, with a box to change.
+	 * <p><strong>A duplicate is refused, not merged.</strong> Of the two honest answers — overwrite
+	 * the existing line, or say so — this says so (KMS-400131): the quantity on the existing line may
+	 * be one the derivation computed or one a colleague typed, and somebody adding what they think is
+	 * a new line did not ask for either to be replaced. The line they wanted is already on the screen
+	 * in front of them, with a box to change.
 	 *
-	 * <p>The refusal is read off {@code ON CONFLICT DO NOTHING} rather than a {@code SELECT} first:
-	 * one statement, so two people adding the same thing at once get one line and one clean refusal
-	 * instead of a race and a constraint violation nobody can read. Zero rows here can only mean the
-	 * conflict — an insert barred by row-level security raises rather than silently affecting
-	 * nothing.
+	 * <p>The check reads the <em>derived</em> list rather than the decision table, and that is a real
+	 * change: an ingredient the shortfall stream suggests has no row here at all, so a check against
+	 * the table alone would let somebody add a second Rice beside the one already on their screen.
+	 * {@code ON CONFLICT DO NOTHING} stays underneath it as the race guard — two people adding the
+	 * same thing in the same second get one line and one clean refusal rather than a constraint
+	 * violation nobody can read.
 	 *
-	 * <p>{@code needed_by}, {@code order_by} and {@code lead_time_days} are all left null on purpose.
-	 * Every other line's dates are derived from the meal plan that demanded it; nothing demanded this
-	 * one, so there is no such date to compute and the screen prints an em dash rather than a guess.
-	 * That is deliberately not the same as an order-by date of today — a cook who typed in a bale of
-	 * leaf plates has said nothing at all about when they are wanted, and inventing a deadline for
-	 * them would put a red badge on a line nobody is late for.
+	 * <p>No dates are stored, because none ever were worth storing: nothing demanded this line, so
+	 * {@link #list()} computes no needed-by and no order-by for it and the screen prints an em dash
+	 * rather than a guess. That is deliberately not the same as an order-by date of today — a cook
+	 * who typed in a bale of leaf plates has said nothing at all about when they are wanted, and
+	 * inventing a deadline would put a red badge on a line nobody is late for.
 	 */
 	@Transactional
 	public ShoppingListLineView addLine(AddShoppingListLineRequest request) {
@@ -151,239 +147,342 @@ public class ShoppingListService {
 		// verified token by way of RLS, never from anything in this request body.
 		Unit unit = ingredientUnits.canonicalUnit(request.ingredientId());
 
-		// The vendor regeneration would have suggested, unless the caller named one. Without it the
-		// line is not orderable at all: generation only picks up lines that have a vendor, so
-		// deriving it here is the difference between a line somebody can act on and one that has to
-		// be edited again before it can be.
-		UUID vendorId = request.suggestedVendorId() != null
-				? request.suggestedVendorId()
-				: vendorService.preferredVendorId(request.ingredientId()).orElse(null);
-
-		// The same context figure regeneration writes, for the same reason: the reviewer is deciding
-		// how much to buy and needs to see what is already in the store room.
-		BigDecimal currentStock = InventoryUnits.fromBase(onHandBase(request.ingredientId()), unit);
+		Map<UUID, Decision> before = decisions();
+		if (findIn(list(suggestions(handAdded(before)), before), request.ingredientId()) != null) {
+			throw new ApplicationException(
+					ErrorCode.ALREADY_ON_THE_SHOPPING_LIST, Map.of("ingredientId", request.ingredientId()));
+		}
 
 		int inserted = jdbc.update("""
 				INSERT INTO shopping_list_lines (
-					id, tenant_id, ingredient_id, suggested_qty, unit, current_stock, needed_by,
-					suggested_vendor_id, provenance, included, edited)
+					id, tenant_id, ingredient_id, suggested_qty, unit, included, hand_added)
 				VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-					?, ?, ?, ?, NULL, ?, '{}'::jsonb, true, true)
+					?, ?, ?, true, true)
 				ON CONFLICT (tenant_id, ingredient_id) DO NOTHING
-				""", request.ingredientId(), request.suggestedQty(), unit.name(), currentStock, vendorId);
+				""", request.ingredientId(), request.suggestedQty(), unit.name());
 		if (inserted == 0) {
 			throw new ApplicationException(
 					ErrorCode.ALREADY_ON_THE_SHOPPING_LIST, Map.of("ingredientId", request.ingredientId()));
 		}
-		return findLine(request.ingredientId());
+
+		Map<UUID, Decision> after = decisions();
+		ShoppingListLineView added =
+				findIn(list(suggestions(handAdded(after)), after), request.ingredientId());
+		if (added == null) {
+			// Unreachable in practice — a hand-added row is on the list by construction, unless a
+			// live order already covers the ingredient, and that case was refused above. Kept as a
+			// refusal rather than a null so a later change to the derivation cannot hand the screen
+			// a 201 with nothing in it.
+			throw new ApplicationException(
+					ErrorCode.RESOURCE_NOT_FOUND, Map.of("ingredientId", request.ingredientId()));
+		}
+		return added;
 	}
 
 	/**
-	 * A human edit — marks the line so a later regeneration leaves it alone.
+	 * A human decision about a line: the quantity to buy, and whether to buy it at all.
 	 *
-	 * <p>This is a {@code PATCH}: a field the caller did not mention keeps the value it had. Hence the
-	 * {@code COALESCE} on both nullable columns. The vendor one matters most — the shopping-list screen
-	 * sends only quantity and inclusion when a box is ticked or a quantity typed, and writing the
-	 * absent id straight through nulled the suggested vendor on every such edit. That was invisible on
-	 * the screen (a blank vendor cell either way, and a 204 back) but cost the next step: generation
-	 * only picks up lines that have a vendor, so the line quietly stopped being orderable. Nothing is
-	 * lost by coalescing — no screen offers clearing a vendor, and regeneration writes vendors through
-	 * its own upsert rather than through here. {@code included} stays unconditional on purpose: both
-	 * callers always send it, and it is {@code NOT NULL}, so an omission fails loudly instead of
-	 * destroying a value.
+	 * <p><strong>This is an upsert, and it has to be.</strong> Before T-132 every line on the screen
+	 * had a row behind it, so an edit was an {@code UPDATE}. Now most lines have none — they are
+	 * computed and gone again — so the first edit to a suggested line is what creates its decision
+	 * row. The 404 is still real: it means the ingredient is not on the list at all, which is what a
+	 * stale screen sends after somebody else has ordered the thing.
+	 *
+	 * <p><strong>A quantity is stored only when it differs from the computed one.</strong> Both
+	 * callers on the screen send a quantity whatever they are doing — the tick box sends the figure
+	 * it can see — so writing it through unconditionally would freeze that number on the line for
+	 * ever the first time anybody unticked it, and the list would stop recomputing exactly where the
+	 * person had least intended to say anything about quantity.
+	 *
+	 * <p>The vendor is not accepted any more. It was a column on this table until V121 and pure
+	 * derivation the whole time: both writers set it from the ingredient's preferred vendor, and no
+	 * screen ever sent one. What D-25 wants snapshotted lives on the purchase order —
+	 * {@code purchase_orders.vendor_id}, written at creation and never derived again.
 	 */
 	@Transactional
 	public void updateLine(UUID ingredientId, UpdateShoppingListLineRequest request) {
-		int updated = jdbc.update("""
-				UPDATE shopping_list_lines
-				SET suggested_qty = COALESCE(?, suggested_qty),
-					suggested_vendor_id = COALESCE(?, suggested_vendor_id), included = ?,
-					edited = true, updated_at = now()
-				WHERE ingredient_id = ?
-				""", request.suggestedQty(), request.suggestedVendorId(), request.included(), ingredientId);
-		if (updated == 0) {
+		Map<UUID, Decision> decisions = decisions();
+		Map<UUID, Suggestion> suggestions = suggestions(handAdded(decisions));
+		ShoppingListLineView line = findIn(list(suggestions, decisions), ingredientId);
+		if (line == null) {
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("ingredientId", ingredientId));
 		}
-	}
+		Suggestion suggested = suggestions.get(ingredientId);
+		BigDecimal computed = suggested == null ? null : suggested.quantity();
+		BigDecimal override = request.suggestedQty() == null
+				|| (computed != null && computed.compareTo(request.suggestedQty()) == 0)
+				? null
+				: request.suggestedQty();
 
-	/**
-	 * Regenerates the draft list for the current tenant, merging the two streams and preserving human
-	 * edits. Returns the number of lines the generation produced (fresh suggestions).
-	 */
-	@Transactional
-	public int regenerateForCurrentTenant() {
-		Map<UUID, IngredientRef> refs = ingredientRefs();
-		Map<UUID, BigDecimal> onHandBase = onHandBaseByIngredient();
-		Map<UUID, LocalDate> earliestDemand = earliestDemandByIngredient();
-
-		Map<UUID, Contribution> merged = new LinkedHashMap<>();
-
-		// Stream 1: meal-plan shortfall.
-		for (ShortfallItem s : sufficiencyService.shortfallFeed()) {
-			merged.computeIfAbsent(s.ingredientId(), k -> new Contribution()).shortfall = s.shortBy();
-		}
-
-		// Stream 2: below-threshold stock, topped up to reorder level × safety.
-		for (StockItemView item : inventoryItemService.lowStock()) {
-			IngredientRef ref = refs.get(item.ingredientId());
-			if (ref == null || item.reorderThreshold() == null) {
-				continue;
-			}
-			BigDecimal target = item.reorderThreshold().multiply(SAFETY_FACTOR);
-			BigDecimal topUp = target.subtract(item.onHand());
-			if (topUp.signum() > 0) {
-				merged.computeIfAbsent(item.ingredientId(), k -> new Contribution()).thresholdTopUp = topUp;
-			}
-		}
-
-		// Stream 3: quantities still outstanding on sent / partially-received POs (E5-S6). A short
-		// delivery re-feeds here so what was ordered but never arrived comes round again, traceable
-		// to the PO that fell short.
-		Map<UUID, PoOutstanding> poOutstanding = poOutstandingByIngredient();
-		for (UUID ingredientId : poOutstanding.keySet()) {
-			merged.computeIfAbsent(ingredientId, k -> new Contribution());
-		}
-
-		// One read for the whole catalogue rather than one per line: every ingredient about to be
-		// written wants the lead time of the vendor its order will go to (T-090).
-		Map<UUID, Integer> recordedLeadTimes = leadTimes.recordedByIngredient();
-
-		Set<UUID> fresh = merged.keySet();
-		for (Map.Entry<UUID, Contribution> e : merged.entrySet()) {
-			UUID ingredientId = e.getKey();
-			Contribution c = e.getValue();
-			IngredientRef ref = refs.get(ingredientId);
-			if (ref == null) {
-				continue;
-			}
-			PoOutstanding po = poOutstanding.get(ingredientId);
-			if (po != null) {
-				c.poOutstanding = InventoryUnits.fromBase(po.base(), ref.unit());
-				c.shortPurchaseOrders = po.poNumbers();
-			}
-			BigDecimal qty = c.shortfall.max(c.thresholdTopUp).max(c.poOutstanding)
-					.setScale(0, RoundingMode.CEILING);
-			if (qty.signum() <= 0) {
-				continue;
-			}
-			BigDecimal currentStock = InventoryUnits.fromBase(
-					onHandBase.getOrDefault(ingredientId, BigDecimal.ZERO), ref.unit());
-			LocalDate demandedOn = earliestDemand.get(ingredientId);
-			LocalDate neededBy = demandedOn == null ? null : demandedOn.minusDays(LEAD_BUFFER_DAYS);
-			// The recorded lead time, or null where nobody has recorded one — kept null rather than
-			// defaulted here so the row remembers that its order-by date was our assumption and not
-			// the vendor's word. LeadTimes.orderBy applies the fallback; nothing multiplies a null.
-			Integer leadTimeDays = recordedLeadTimes.get(ingredientId);
-			LocalDate orderBy = demandedOn == null ? null : LeadTimes.orderBy(demandedOn, leadTimeDays);
-			UUID vendorId = vendorService.preferredVendorId(ingredientId).orElse(null);
-			upsertLine(ingredientId, qty, ref.unit().name(), currentStock, neededBy, orderBy,
-					leadTimeDays, vendorId, provenanceJson(c));
-		}
-
-		// Drop unedited lines that are no longer suggested.
-		if (fresh.isEmpty()) {
-			jdbc.update("DELETE FROM shopping_list_lines WHERE edited = false");
-		} else {
-			String placeholders = fresh.stream().map(x -> "?").collect(Collectors.joining(", "));
-			jdbc.update("DELETE FROM shopping_list_lines WHERE edited = false AND ingredient_id NOT IN ("
-					+ placeholders + ")", fresh.toArray());
-		}
-		return fresh.size();
+		jdbc.update("""
+				INSERT INTO shopping_list_lines (
+					id, tenant_id, ingredient_id, suggested_qty, unit, included, hand_added)
+				VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+					?, ?, ?, ?, false)
+				ON CONFLICT (tenant_id, ingredient_id) DO UPDATE SET
+					suggested_qty = EXCLUDED.suggested_qty,
+					included = EXCLUDED.included,
+					updated_at = now()
+				""", ingredientId, override, line.unit(), request.included());
 	}
 
 	// ---------------------------------------------------------------------
 
 	/**
-	 * Writes one suggested line, preserving whatever a person has already changed about it.
-	 *
-	 * <p>{@code order_by} and {@code lead_time_days} refresh unconditionally, like {@code needed_by}
-	 * and {@code current_stock} beside them and unlike the quantity, the vendor and the tick. The
-	 * distinction is not arbitrary: the edit-guarded columns are <em>choices</em> somebody made, and
-	 * overwriting a choice loses work. These are <em>computed facts</em> about the plan and the
-	 * catalogue as they stand this morning — a stale order-by date is not a preserved decision, it is
-	 * a wrong date, and it is wrong in the direction that says there is still time.
+	 * The two halves put together: a suggestion with a decision over it, a suggestion on its own, or
+	 * a hand-added decision that is its own reason to be on the list.
 	 */
-	private void upsertLine(UUID ingredientId, BigDecimal qty, String unit, BigDecimal currentStock,
-			LocalDate neededBy, LocalDate orderBy, Integer leadTimeDays, UUID vendorId,
-			String provenance) {
-		jdbc.update(connection -> {
-			var ps = connection.prepareStatement("""
-					INSERT INTO shopping_list_lines (
-						id, tenant_id, ingredient_id, suggested_qty, unit, current_stock, needed_by,
-						order_by, lead_time_days, suggested_vendor_id, provenance, included, edited)
-					VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, true, false)
-					ON CONFLICT (tenant_id, ingredient_id) DO UPDATE SET
-						suggested_qty = CASE WHEN shopping_list_lines.edited
-							THEN shopping_list_lines.suggested_qty ELSE EXCLUDED.suggested_qty END,
-						suggested_vendor_id = CASE WHEN shopping_list_lines.edited
-							THEN shopping_list_lines.suggested_vendor_id ELSE EXCLUDED.suggested_vendor_id END,
-						included = CASE WHEN shopping_list_lines.edited
-							THEN shopping_list_lines.included ELSE EXCLUDED.included END,
-						unit = EXCLUDED.unit, current_stock = EXCLUDED.current_stock,
-						needed_by = EXCLUDED.needed_by, order_by = EXCLUDED.order_by,
-						lead_time_days = EXCLUDED.lead_time_days,
-						provenance = EXCLUDED.provenance, updated_at = now()
-					""");
-			ps.setObject(1, ingredientId);
-			ps.setBigDecimal(2, qty);
-			ps.setString(3, unit);
-			ps.setBigDecimal(4, currentStock);
-			ps.setObject(5, neededBy);
-			ps.setObject(6, orderBy);
-			ps.setObject(7, leadTimeDays, java.sql.Types.INTEGER);
-			ps.setObject(8, vendorId);
-			ps.setString(9, provenance);
-			return ps;
+	private List<ShoppingListLineView> list(
+			Map<UUID, Suggestion> suggestions, Map<UUID, Decision> decisions) {
+		LocalDate today = LocalDate.now(clock.zone());
+		List<ShoppingListLineView> out = new ArrayList<>();
+
+		for (Map.Entry<UUID, Suggestion> e : suggestions.entrySet()) {
+			UUID ingredientId = e.getKey();
+			Suggestion s = e.getValue();
+			Decision decision = decisions.get(ingredientId);
+
+			// The typed quantity wins over the computed one; where nobody typed one, the computed
+			// figure goes on being recomputed, which is the point of storing an override only when
+			// it differs. A line asking for nothing is not a line — which for a suggestion means the
+			// demand has been met, and for a hand-added row cannot happen, because its quantity is
+			// the number somebody typed and the column refuses a zero.
+			BigDecimal qty = decision != null && decision.quantity() != null
+					? decision.quantity()
+					: s.quantity();
+			if (qty.signum() <= 0) {
+				continue;
+			}
+
+			out.add(new ShoppingListLineView(
+					ingredientId,
+					s.ref().name(),
+					s.currentStock(),
+					s.ref().unit().name(),
+					qty,
+					s.neededBy(),
+					s.orderBy(),
+					s.leadTimeDays(),
+					s.orderBy() == null ? null : OrderUrgency.on(today, s.orderBy()),
+					s.vendorId(),
+					s.vendorName(),
+					s.shortfall(),
+					s.thresholdTopUp(),
+					s.poOutstanding(),
+					s.shortPurchaseOrders(),
+					decision == null || decision.included(),
+					decision != null,
+					// The named mitigation for an untick that persists: a line coming back says when
+					// somebody decided against it, so a stale untick announces itself the moment it
+					// starts costing something. Read off updated_at, which needs no new column.
+					decision != null && !decision.included() ? decision.decidedOn(clock.zone()) : null));
+		}
+
+		out.sort(Comparator.comparing(ShoppingListLineView::ingredientName, String.CASE_INSENSITIVE_ORDER)
+				.thenComparing(ShoppingListLineView::ingredientName));
+		return out;
+	}
+
+	/**
+	 * Everything the temple's own data says it should buy, before anybody has had an opinion about
+	 * it. Nothing here is written down; this is the whole of what T-132 replaced the stored table
+	 * with.
+	 *
+	 * <p><strong>The store room is read once, on the second line, and that one reading is what both
+	 * demand streams are judged against (T-140).</strong> Until then this method summed
+	 * {@code stock_movements} itself and then called two collaborators that each summed it again —
+	 * three passes over a table holding every movement the temple has ever recorded, for one page
+	 * load. T-139 measured that at five years of history: 146,150 rows, read three times over, on
+	 * every opening of the screen.
+	 *
+	 * <p>The reason it is worth doing even where it were free, and the reason a cache was the wrong
+	 * answer: <strong>the three readings could disagree.</strong> They sit inside one
+	 * {@code @Transactional(readOnly = true)}, which is less protection than it looks like — PostgreSQL
+	 * at READ COMMITTED gives each <em>statement</em> its own snapshot, so a delivery recorded between
+	 * the first sum and the third would be counted by one and not the others. The shortfall would then
+	 * be worked out against one figure for the rice with a different figure for the rice printed in the
+	 * <em>current stock</em> column beside it: a wrong line, on a screen somebody orders food from,
+	 * with nothing on it to say anything had happened. One reading cannot do that. A cache with a
+	 * lifetime could do worse, which is why there is no cache here.
+	 */
+	private Map<UUID, Suggestion> suggestions(Set<UUID> handAddedIds) {
+		Map<UUID, IngredientRef> refs = ingredientRefs();
+		Map<UUID, BigDecimal> onHandBase = onHandBaseByIngredient();
+		Map<UUID, LocalDate> earliestDemand = earliestDemandByIngredient();
+		Map<UUID, PreferredVendor> vendors = preferredVendorsByIngredient();
+		Map<UUID, Integer> recordedLeadTimes = leadTimes.recordedByIngredient();
+		Set<UUID> coveredByLiveOrder = ingredientsOnLiveOrders();
+
+		Map<UUID, Contribution> merged = new LinkedHashMap<>();
+
+		// Stream 1: meal-plan shortfall, judged against the stock read above rather than against a
+		// second reading of it (T-140).
+		for (ShortfallItem s : sufficiencyService.shortfallFeed(onHandBase)) {
+			merged.computeIfAbsent(s.ingredientId(), k -> new Contribution()).shortfall = s.shortBy();
+		}
+
+		// Stream 2: below-threshold stock, topped up to reorder level × safety — again against the
+		// one reading.
+		for (InventoryItemService.LowStockLine item : inventoryItemService.lowStock(onHandBase)) {
+			IngredientRef ref = refs.get(item.ingredientId());
+			if (ref == null || item.reorderThreshold() == null) {
+				continue;
+			}
+			BigDecimal topUp = item.reorderThreshold().multiply(SAFETY_FACTOR).subtract(item.onHand());
+			if (topUp.signum() > 0) {
+				merged.computeIfAbsent(item.ingredientId(), k -> new Contribution()).thresholdTopUp = topUp;
+			}
+		}
+
+		// Stream 3: the balance a vendor part-delivered and still owes (E5-S6). A short delivery
+		// re-feeds here so what was ordered but never arrived comes round again, traceable to the PO
+		// that fell short.
+		for (Map.Entry<UUID, PoOutstanding> e : poOutstandingByIngredient().entrySet()) {
+			IngredientRef ref = refs.get(e.getKey());
+			if (ref == null) {
+				continue;
+			}
+			Contribution c = merged.computeIfAbsent(e.getKey(), k -> new Contribution());
+			c.poOutstanding = InventoryUnits.fromBase(e.getValue().base(), ref.unit());
+			c.shortPurchaseOrders = e.getValue().poNumbers();
+		}
+
+		// A hand-added line: no stream drove it, so it contributes nothing and its quantity comes
+		// from the decision row. It is seeded here rather than assembled separately so that it picks
+		// up its preferred vendor and its on-hand figure from exactly the same code as every other
+		// line — a cook adding jaggery still needs to be told which merchant it would be ordered
+		// from, and two paths to one row is how the two come to disagree about what a line is.
+		for (UUID ingredientId : handAddedIds) {
+			merged.computeIfAbsent(ingredientId, k -> new Contribution());
+		}
+
+		Map<UUID, Suggestion> out = new LinkedHashMap<>();
+		for (Map.Entry<UUID, Contribution> e : merged.entrySet()) {
+			UUID ingredientId = e.getKey();
+			IngredientRef ref = refs.get(ingredientId);
+			if (ref == null) {
+				continue;
+			}
+			// D-24a. A live draft or sent order already covers this ingredient, so nothing about it
+			// is suggested — including a hand-added line, which drops out of the list entirely
+			// because `suggestions` is where its dates and vendor would have come from and the
+			// merge below finds nothing to render. Cancelling that order puts it back on the next
+			// read; there is no restore path because there is nothing to restore.
+			if (coveredByLiveOrder.contains(ingredientId)) {
+				continue;
+			}
+			Contribution c = e.getValue();
+			BigDecimal qty = c.shortfall.max(c.thresholdTopUp).max(c.poOutstanding)
+					.setScale(0, RoundingMode.CEILING);
+
+			// T-130. `needed_by` is the date the temple wants the goods on the shelf, and it is the
+			// day of the earliest planned meal that demands them — not two days before it. The two
+			// days that used to be subtracted here were a delivery buffer standing in for a fact the
+			// product did not have; T-090 gave it that fact, per vendor and per ingredient, and it
+			// belongs on the other side of the question — the last day the temple can ask, which is
+			// LeadTimes.orderBy below. Subtracting both meant the temple asked a vendor to deliver
+			// two days before it needed the food, and the order screen then warned that the same date
+			// gave the vendor too little notice: applied on the write, complained about on the read.
+			LocalDate neededBy = earliestDemand.get(ingredientId);
+			// The recorded lead time, or null where nobody has recorded one — kept null rather than
+			// defaulted here so a screen can still say the order-by date was our assumption and not
+			// the vendor's word. LeadTimes.orderBy applies the fallback; nothing multiplies a null.
+			Integer leadTimeDays = recordedLeadTimes.get(ingredientId);
+			PreferredVendor vendor = vendors.get(ingredientId);
+
+			out.put(ingredientId, new Suggestion(
+					ref,
+					qty,
+					InventoryUnits.fromBase(
+							onHandBase.getOrDefault(ingredientId, BigDecimal.ZERO), ref.unit()),
+					neededBy,
+					neededBy == null ? null : LeadTimes.orderBy(neededBy, leadTimeDays),
+					leadTimeDays,
+					vendor == null ? null : vendor.vendorId(),
+					vendor == null ? null : vendor.vendorName(),
+					c.shortfall,
+					c.thresholdTopUp,
+					c.poOutstanding,
+					c.shortPurchaseOrders));
+		}
+		return out;
+	}
+
+	private static ShoppingListLineView findIn(List<ShoppingListLineView> lines, UUID ingredientId) {
+		return lines.stream().filter(l -> l.ingredientId().equals(ingredientId)).findFirst().orElse(null);
+	}
+
+	/** The ingredients somebody typed onto the list, which no demand stream will ever reach. */
+	private static Set<UUID> handAdded(Map<UUID, Decision> decisions) {
+		Set<UUID> ids = new LinkedHashSet<>();
+		decisions.forEach((id, d) -> {
+			if (d.handAdded()) {
+				ids.add(id);
+			}
 		});
+		return ids;
+	}
+
+	/** Every human decision this temple has made about its shopping list, keyed by ingredient. */
+	private Map<UUID, Decision> decisions() {
+		Map<UUID, Decision> map = new LinkedHashMap<>();
+		jdbc.query("""
+				SELECT ingredient_id, suggested_qty, included, hand_added, updated_at
+				FROM shopping_list_lines
+				""", rs -> {
+			map.put(rs.getObject("ingredient_id", UUID.class), new Decision(
+					rs.getBigDecimal("suggested_qty"),
+					rs.getBoolean("included"),
+					rs.getBoolean("hand_added"),
+					rs.getTimestamp("updated_at").toInstant()));
+		});
+		return map;
 	}
 
 	/**
-	 * One line, as the screen renders it — the answer to a hand-add, read back through the same
-	 * projection as the list so what the caller is handed is exactly what a reload would show.
-	 */
-	private ShoppingListLineView findLine(UUID ingredientId) {
-		return jdbc.query(LINE_SELECT + "WHERE o.ingredient_id = ?", viewMapper(), ingredientId)
-				.stream().findFirst()
-				.orElseThrow(() -> new ApplicationException(
-						ErrorCode.RESOURCE_NOT_FOUND, Map.of("ingredientId", ingredientId)));
-	}
-
-	/**
-	 * What is in the store room for one ingredient, in base units. The same sum
-	 * {@link #onHandBaseByIngredient()} takes for every ingredient at once, narrowed to one — a
-	 * hand-add is about a single line and has no reason to read the whole ledger.
+	 * Every ingredient a live purchase order already covers — D-24a, and the one predicate that takes
+	 * a line off this list.
 	 *
-	 * <p>Both go through {@code to_on_hand_qty} (V116, T-122), which is what keeps the two of them —
-	 * and the four elsewhere — saying the same number. See {@link #onHandBaseByIngredient()}.
+	 * <p><strong>Draft counts, and that is Rajeev's ruling rather than an implementation
+	 * detail.</strong> He was asked whether a line should leave on creation or on sending and chose
+	 * creation: <em>"IF we take it off on send, they will be there in the shopping list begging to be
+	 * ordered, someone else will take pity and generate another PO. Same ingredients, 2 PO's."</em>
+	 * Until T-132 nothing here looked at draft orders at all, which is why a freshly generated draft
+	 * left its lines sitting on the list looking unordered — the defect he found while writing D-24.
+	 *
+	 * <p><strong>{@code PARTIALLY_RECEIVED} is deliberately not here, and the two rules do not
+	 * fight.</strong> A draft or a sent order is a promise in full: the vendor still owes everything
+	 * on it, so ordering again is ordering twice. A part-delivered order is different in kind — the
+	 * truck came, and what it did not bring is evidence of a shortfall rather than a pending promise.
+	 * That is E5-S6's short-delivery re-feed, which is stream 3 in {@link #suggestions()}, and it is
+	 * why the two statuses are partitioned between the two methods rather than shared.
+	 *
+	 * <p>Described lines are excluded for the reason given on {@link #poOutstandingByIngredient()}:
+	 * {@code ingredient_id} is null on them, and null is a perfectly valid key.
 	 */
-	private BigDecimal onHandBase(UUID ingredientId) {
-		BigDecimal base = jdbc.queryForObject("""
-				SELECT COALESCE(SUM(to_on_hand_qty(quantity, unit, movement_type)), 0)
-				FROM stock_movements WHERE ingredient_id = ?
-				""", BigDecimal.class, ingredientId);
-		return base == null ? BigDecimal.ZERO : base;
-	}
-
-	private String provenanceJson(Contribution c) {
-		Map<String, Object> p = new LinkedHashMap<>();
-		p.put("shortfall", c.shortfall);
-		p.put("thresholdTopUp", c.thresholdTopUp);
-		p.put("poOutstanding", c.poOutstanding);
-		if (!c.shortPurchaseOrders.isEmpty()) {
-			p.put("shortPurchaseOrders", c.shortPurchaseOrders);
-		}
-		try {
-			return objectMapper.writeValueAsString(p);
-		} catch (JsonProcessingException e) {
-			throw new ApplicationException(ErrorCode.UNEXPECTED_FAILURE, Map.of(), e);
-		}
+	private Set<UUID> ingredientsOnLiveOrders() {
+		Set<UUID> covered = new LinkedHashSet<>();
+		jdbc.query("""
+				SELECT DISTINCT pol.ingredient_id
+				FROM purchase_order_lines pol
+				JOIN purchase_orders po ON po.id = pol.po_id
+				WHERE po.status IN ('DRAFT', 'SENT')
+				  AND pol.ingredient_id IS NOT NULL
+				""", rs -> {
+			covered.add(rs.getObject("ingredient_id", UUID.class));
+		});
+		return covered;
 	}
 
 	/**
-	 * Per ingredient, what is still outstanding across SENT and PARTIALLY_RECEIVED POs — the ordered
-	 * quantity minus everything received so far — summed in base units, with the PO numbers that fell
-	 * short. Rejected goods are not received, so they remain outstanding and come round again.
+	 * Per ingredient, what a vendor part-delivered and still owes — the ordered quantity minus
+	 * everything received so far — summed in base units, with the PO numbers that fell short.
+	 * Rejected goods are not received, so they remain outstanding and come round again.
+	 *
+	 * <p><strong>{@code PARTIALLY_RECEIVED} only, since T-132.</strong> {@code SENT} used to be
+	 * counted here as well, which meant an order nobody had delivered anything against put its whole
+	 * quantity back on the shopping list as though it had never been raised. D-24a makes that a
+	 * suppression instead — see {@link #ingredientsOnLiveOrders()}.
 	 *
 	 * <p><strong>Described PO lines are excluded, and the exclusion is the whole point</strong>
 	 * (T-024). A line may now name something the catalogue has never heard of — four plastic stools
@@ -394,8 +493,8 @@ public class ShoppingListService {
 	 * later asked the map for its outstanding quantity would have got an answer computed from
 	 * furniture. Silent, and wrong in the direction that under-orders food.
 	 *
-	 * <p>Excluded in SQL rather than skipped in the handler so that the intent survives a later
-	 * edit to the loop, and so the reason sits next to the column it is about.
+	 * <p>Excluded in SQL rather than skipped in the handler so that the intent survives a later edit
+	 * to the loop, and so the reason sits next to the column it is about.
 	 */
 	private Map<UUID, PoOutstanding> poOutstandingByIngredient() {
 		Map<UUID, PoOutstanding> map = new LinkedHashMap<>();
@@ -408,7 +507,7 @@ public class ShoppingListService {
 					SELECT po_line_id, SUM(received_qty) AS received
 					FROM goods_receipt_lines GROUP BY po_line_id
 				) r ON r.po_line_id = pol.id
-				WHERE po.status IN ('SENT', 'PARTIALLY_RECEIVED')
+				WHERE po.status = 'PARTIALLY_RECEIVED'
 				  AND pol.ingredient_id IS NOT NULL
 				""", rs -> {
 			BigDecimal outstanding = rs.getBigDecimal("outstanding");
@@ -427,11 +526,34 @@ public class ShoppingListService {
 
 	private Map<UUID, IngredientRef> ingredientRefs() {
 		Map<UUID, IngredientRef> refs = new LinkedHashMap<>();
-		jdbc.query("SELECT id, canonical_unit FROM ingredients", rs -> {
-			refs.put(rs.getObject("id", UUID.class),
-					new IngredientRef(Unit.valueOf(rs.getString("canonical_unit"))));
+		jdbc.query("SELECT id, name, canonical_unit FROM ingredients", rs -> {
+			refs.put(rs.getObject("id", UUID.class), new IngredientRef(
+					rs.getString("name"), Unit.valueOf(rs.getString("canonical_unit"))));
 		});
 		return refs;
+	}
+
+	/**
+	 * The vendor each ingredient's order would go to, and its name.
+	 *
+	 * <p>One query for the whole catalogue rather than {@code VendorService.preferredVendorId} per
+	 * line, which is what the regeneration did. That was tolerable on a button press; this runs on
+	 * every page load, and a list of forty ingredients would have been forty round trips.
+	 * {@code vendor_supplies} is unique on {@code (tenant_id, ingredient_id) WHERE preferred} (V24),
+	 * so no ingredient can appear twice here.
+	 */
+	private Map<UUID, PreferredVendor> preferredVendorsByIngredient() {
+		Map<UUID, PreferredVendor> map = new LinkedHashMap<>();
+		jdbc.query("""
+				SELECT vs.ingredient_id, vs.vendor_id, v.name
+				FROM vendor_supplies vs
+				JOIN vendors v ON v.id = vs.vendor_id
+				WHERE vs.preferred
+				""", rs -> {
+			map.put(rs.getObject("ingredient_id", UUID.class), new PreferredVendor(
+					rs.getObject("vendor_id", UUID.class), rs.getString("name")));
+		});
+		return map;
 	}
 
 	/**
@@ -449,6 +571,19 @@ public class ShoppingListService {
 	 * it may well already have, on the strength of a paperwork failure. The suggestion is now
 	 * computed from a shelf of zero, and the thing that gets chased is the row in the ledger with
 	 * the ingredient's name in it.
+	 *
+	 * <p><strong>It aggregates the whole of {@code stock_movements} with no date bound</strong>, on a
+	 * table that only ever grows, and since T-132 it does so on every page load rather than on a
+	 * button press. T-139 measured it: 71 ms at five years of history, 137 ms at ten, and the cost
+	 * tracks the row count almost exactly. <strong>No index fixes that</strong> — the query has no
+	 * predicate but the tenant and it wants every row — so the thing to control is how often it runs,
+	 * which is what T-140 did. It runs once per page load. Its result is handed to
+	 * {@code SufficiencyService.shortfallFeed} and {@code InventoryItemService.lowStock}, both of which
+	 * used to ask the same question of the database again.
+	 *
+	 * <p><strong>The map it returns is the caller's, and it is handed out.</strong> Nothing here or
+	 * downstream may draw it down in place: the allocation walk in {@code SufficiencyService} does
+	 * exactly that to its own working copy, and takes one deliberately for that reason.
 	 */
 	private Map<UUID, BigDecimal> onHandBaseByIngredient() {
 		Map<UUID, BigDecimal> map = new LinkedHashMap<>();
@@ -476,74 +611,6 @@ public class ShoppingListService {
 		return map;
 	}
 
-	/**
-	 * A stored line as the screen renders it.
-	 *
-	 * <p>Today is read once per call rather than per row, and in the temple's own zone — the same
-	 * clock every date in this application is judged by. A shopping list read from London must not
-	 * say a line is overdue a day before the kitchen would.
-	 */
-	private RowMapper<ShoppingListLineView> viewMapper() {
-		LocalDate today = LocalDate.now(clock.zone());
-		return (rs, n) -> {
-			String provenance = rs.getString("provenance");
-			Map<String, BigDecimal> prov = parseProvenance(provenance);
-			LocalDate orderBy = rs.getObject("order_by", LocalDate.class);
-			return new ShoppingListLineView(
-					rs.getObject("ingredient_id", UUID.class),
-					rs.getString("ingredient_name"),
-					rs.getBigDecimal("current_stock"),
-					rs.getString("unit"),
-					rs.getBigDecimal("suggested_qty"),
-					rs.getObject("needed_by", LocalDate.class),
-					orderBy,
-					// getObject, never getInt: getInt answers 0 for a SQL null, and 0 would say the
-					// vendor delivers the same day rather than that nobody has recorded an answer.
-					rs.getObject("lead_time_days", Integer.class),
-					orderBy == null ? null : OrderUrgency.on(today, orderBy),
-					rs.getObject("suggested_vendor_id", UUID.class),
-					rs.getString("vendor_name"),
-					prov.getOrDefault("shortfall", BigDecimal.ZERO),
-					prov.getOrDefault("thresholdTopUp", BigDecimal.ZERO),
-					prov.getOrDefault("poOutstanding", BigDecimal.ZERO),
-					parseShortPurchaseOrders(provenance),
-					rs.getBoolean("included"),
-					rs.getBoolean("edited"));
-		};
-	}
-
-	private List<String> parseShortPurchaseOrders(String json) {
-		if (json == null || json.isBlank()) {
-			return List.of();
-		}
-		try {
-			Map<String, Object> raw = objectMapper.readValue(json, new TypeReference<>() {
-			});
-			Object list = raw.get("shortPurchaseOrders");
-			if (list instanceof List<?> l) {
-				return l.stream().map(String::valueOf).toList();
-			}
-			return List.of();
-		} catch (JsonProcessingException e) {
-			return List.of();
-		}
-	}
-
-	private Map<String, BigDecimal> parseProvenance(String json) {
-		if (json == null || json.isBlank()) {
-			return Map.of();
-		}
-		try {
-			Map<String, Object> raw = objectMapper.readValue(json, new TypeReference<>() {
-			});
-			return raw.entrySet().stream()
-					.filter(e -> e.getValue() instanceof Number)
-					.collect(Collectors.toMap(Map.Entry::getKey, e -> new BigDecimal(e.getValue().toString())));
-		} catch (JsonProcessingException e) {
-			return Map.of();
-		}
-	}
-
 	private static final class Contribution {
 		BigDecimal shortfall = BigDecimal.ZERO;
 		BigDecimal thresholdTopUp = BigDecimal.ZERO;
@@ -551,10 +618,42 @@ public class ShoppingListService {
 		List<String> shortPurchaseOrders = List.of();
 	}
 
-	private record IngredientRef(Unit unit) {
+	/** One computed line, before anybody has had an opinion about it. */
+	private record Suggestion(
+			IngredientRef ref,
+			BigDecimal quantity,
+			BigDecimal currentStock,
+			LocalDate neededBy,
+			LocalDate orderBy,
+			Integer leadTimeDays,
+			UUID vendorId,
+			String vendorName,
+			BigDecimal shortfall,
+			BigDecimal thresholdTopUp,
+			BigDecimal poOutstanding,
+			List<String> shortPurchaseOrders) {
+	}
+
+	private record IngredientRef(String name, Unit unit) {
+	}
+
+	/** The vendor an ingredient's order would go to, and the name to print beside the line. */
+	private record PreferredVendor(UUID vendorId, String vendorName) {
 	}
 
 	/** Outstanding PO demand for one ingredient: total in base units and the PO numbers behind it. */
 	private record PoOutstanding(BigDecimal base, List<String> poNumbers) {
+	}
+
+	/**
+	 * One temple's decision about one ingredient. A null {@code quantity} means the person said
+	 * nothing about how much — they unticked the line, or typed the figure that was already there.
+	 */
+	private record Decision(BigDecimal quantity, boolean included, boolean handAdded, Instant updatedAt) {
+
+		/** The temple's own day the decision last changed, for "not ordering — since 12 September". */
+		LocalDate decidedOn(ZoneId zone) {
+			return updatedAt.atZone(zone).toLocalDate();
+		}
 	}
 }

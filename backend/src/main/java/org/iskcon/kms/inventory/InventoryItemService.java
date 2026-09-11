@@ -131,6 +131,69 @@ public class InventoryItemService {
 		return list(null, null, null).stream().filter(StockItemView::belowThreshold).toList();
 	}
 
+	/**
+	 * The same "what's low" judgement, made against an on-hand figure the caller has already read
+	 * (T-140).
+	 *
+	 * <p><strong>Why a second method rather than a parameter on the first.</strong> The list above
+	 * sums the ledger <em>by batch</em>, because the stock screen shows which lot expires first. The
+	 * shopping list has no use for a batch and has already summed the ledger by ingredient as the
+	 * first thing it does, so calling {@link #lowStock()} made the database sum the whole of
+	 * {@code stock_movements} a second time to answer a question the caller had the answer to. The two
+	 * sums are arithmetically the same figure — a per-batch total summed across an ingredient's
+	 * batches is that ingredient's total — which is what makes the substitution exact rather than
+	 * approximately right.
+	 *
+	 * <p><strong>And it returns a different type on purpose.</strong> Skipping the batch read means
+	 * there is nothing to say about expiry, and a {@link StockItemView} has fields for it: handing one
+	 * back with {@code expiringSoon = false} and no soonest date would be a view that quietly says
+	 * "nothing expires soon" about every consumable in the temple. {@link LowStockLine} carries the
+	 * three facts this stream actually has and cannot be mistaken for the stock screen's row.
+	 *
+	 * <p>The <em>Low</em> rule itself is not restated here — both methods ask
+	 * {@link #isBelowThreshold}, so the badge on the screen and the line on the shopping list cannot
+	 * come to disagree about what low means.
+	 *
+	 * @param onHandBaseByIngredient on hand in base units, keyed by ingredient, as
+	 *                               {@code SUM(to_on_hand_qty(...)) GROUP BY ingredient_id} returns
+	 *                               it. An ingredient absent from the map holds nothing.
+	 */
+	@Transactional(readOnly = true)
+	public List<LowStockLine> lowStock(Map<UUID, BigDecimal> onHandBaseByIngredient) {
+		List<ItemRow> items = jdbc.query(ITEM_SELECT + " ORDER BY i.name", ITEM_MAPPER);
+		Map<UUID, BigDecimal> committedByIngredient = committedStockService.committedBaseByIngredient();
+
+		List<LowStockLine> low = new ArrayList<>();
+		for (ItemRow item : items) {
+			Unit unit = Unit.valueOf(item.canonicalUnit());
+			BigDecimal onHandBase =
+					onHandBaseByIngredient.getOrDefault(item.ingredientId(), BigDecimal.ZERO);
+			BigDecimal committedBase =
+					committedByIngredient.getOrDefault(item.ingredientId(), BigDecimal.ZERO);
+			// Subtracted in base units and converted once, exactly as toItemView does it, so the two
+			// routes cannot round to different answers on either side of the threshold.
+			BigDecimal available = toCanonical(onHandBase.subtract(committedBase), unit);
+			if (isBelowThreshold(available, item.reorderThreshold())) {
+				low.add(new LowStockLine(
+						item.ingredientId(), toCanonical(onHandBase, unit), item.reorderThreshold()));
+			}
+		}
+		return low;
+	}
+
+	/**
+	 * One consumable the temple is short of, with nothing on it that this read did not establish.
+	 *
+	 * <p>Nested rather than given its own file for the reason {@code CommittedStockService.MealClaim}
+	 * is: it means nothing on its own, and reads as what {@link #lowStock(Map)} returns.
+	 *
+	 * @param onHand in the ingredient's canonical unit, as the screen would show it
+	 * @param reorderThreshold the level the temple set, which may be null — a low line with no
+	 *                         threshold is one that is over-committed rather than under-stocked
+	 */
+	public record LowStockLine(UUID ingredientId, BigDecimal onHand, BigDecimal reorderThreshold) {
+	}
+
 	/** One consumable with its stock broken out by batch, FEFO-ordered. */
 	@Transactional(readOnly = true)
 	public StockDetailView get(UUID itemId, Integer expiringWithinDays) {
@@ -436,21 +499,31 @@ public class InventoryItemService {
 
 		boolean expiringSoon = aggs.stream().anyMatch(a -> isExpiringSoon(a, horizon));
 
-		// Low judges what is left, not what is on the shelf (T-086). Judging on hand is how 415 kg
-		// of ash gourd with 410 kg of it already promised to Sunday's feast read as "Fine" — the
-		// screen agreeing with the store cupboard and disagreeing with the kitchen.
-		//
-		// Negative available is Low whatever the reorder level says, including where no level has
-		// ever been set. There is no reading of "we have promised more of this than we hold" that is
-		// fine, and an item with a null threshold is the commonest case in a temple that has just
-		// started tracking — exactly the one that must not read Fine while over-promised.
-		boolean belowThreshold = available.signum() < 0
-				|| (item.reorderThreshold() != null && available.compareTo(item.reorderThreshold()) < 0);
+		boolean belowThreshold = isBelowThreshold(available, item.reorderThreshold());
 
 		return new StockItemView(
 				item.itemId(), item.ingredientId(), item.ingredientName(), item.category(),
 				item.storageLocation(), item.canonicalUnit(), onHand, committed, available,
 				item.reorderThreshold(), belowThreshold, expiringSoon, soonestExpiry, item.notes());
+	}
+
+	/**
+	 * What the list badges as <em>Low</em>. One rule, asked by both the stock screen and the shopping
+	 * list's threshold stream, because two copies of it would eventually stop agreeing about which
+	 * consumables a temple is short of.
+	 *
+	 * <p>It judges what is left, not what is on the shelf (T-086). Judging on hand is how 415 kg of
+	 * ash gourd with 410 kg of it already promised to Sunday's feast read as "Fine" — the screen
+	 * agreeing with the store cupboard and disagreeing with the kitchen.
+	 *
+	 * <p>Negative available is Low whatever the reorder level says, including where no level has ever
+	 * been set. There is no reading of "we have promised more of this than we hold" that is fine, and
+	 * an item with a null threshold is the commonest case in a temple that has just started tracking —
+	 * exactly the one that must not read Fine while over-promised.
+	 */
+	private static boolean isBelowThreshold(BigDecimal available, BigDecimal reorderThreshold) {
+		return available.signum() < 0
+				|| (reorderThreshold != null && available.compareTo(reorderThreshold) < 0);
 	}
 
 	private boolean isExpiringSoon(BatchAgg a, LocalDate horizon) {

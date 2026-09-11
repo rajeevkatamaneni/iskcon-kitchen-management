@@ -28,17 +28,24 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 /**
  * Adding a line to the shopping list by hand (T-027).
  *
- * <p><strong>The defining test is {@link #handAddedLineSurvivesARealRegeneration()}, and it is
- * written against a real regeneration rather than against the {@code edited} column.</strong> The
- * column is only the mechanism; the fact that has to hold is that the line is still on the list
- * after the job that runs at 04:30 has been through it. Asserting {@code edited == true} would pass
- * just as happily if the delete clause were later changed to ignore the column, and the failure it
- * would miss is silent — a line the cook typed, gone by morning, with nobody watching.
+ * <p><strong>The defining test is {@link #handAddedLineSurvivesAFreshDerivation()}, and it is
+ * written against the list itself rather than against the column behind it.</strong> The column is
+ * only the mechanism; the fact that has to hold is that the line is still on the list the next time
+ * anybody opens the screen. Asserting {@code hand_added == true} would pass just as happily if the
+ * derivation were later changed to ignore the column, and the failure it would miss is silent — a
+ * line the cook typed, gone by morning, with nobody watching.
  *
- * <p>The fixture is built so that nothing here can be a regeneration artefact. Rice has an
- * inventory row below its threshold, so the regenerator suggests it and the run does real work.
- * The gas cylinder and the jaggery have no inventory row, no recipe and no meal plan, so no demand
- * stream can ever reach them: if they are on the list, a person put them there.
+ * <p><strong>What changed in T-132, and why the test reads the same.</strong> The list used to be a
+ * stored table that a nightly job rewrote, deleting every line it had not just suggested and that no
+ * human had touched; a hand-added line was saved by {@code edited = true}. The list is computed on
+ * every read now, so there is no delete to survive — the danger is the opposite one, that a line
+ * nothing suggests is simply never produced. {@code hand_added} is what produces it, and the
+ * assertion is unchanged because the fact is: type it in, come back, it is there.
+ *
+ * <p>The fixture is built so that nothing here can be an artefact of the derivation. Rice has an
+ * inventory row below its threshold, so the list suggests it of its own accord and there is real
+ * work in every read. The gas cylinder and the jaggery have no inventory row, no recipe and no meal
+ * plan, so no demand stream can ever reach them: if they are on the list, a person put them there.
  */
 @AutoConfigureMockMvc
 @Import(HandAddedLineIT.StubVerifierConfiguration.class)
@@ -54,7 +61,7 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 	private UUID tenant;
 	private UUID staffId;
 
-	/** Food. Below its reorder threshold, so regeneration suggests it of its own accord. */
+	/** Food. Below its reorder threshold, so the list suggests it of its own accord. */
 	private UUID rice;
 
 	/**
@@ -67,7 +74,7 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 	 */
 	private UUID gas;
 
-	/** Food the regenerator likewise never suggests, held in grams rather than kilograms. */
+	/** Food no demand stream reaches either, held in grams rather than kilograms. */
 	private UUID jaggery;
 
 	@BeforeEach
@@ -114,6 +121,11 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
+		admin.execute("DELETE FROM po_events");
+		admin.execute("DELETE FROM purchase_order_lines");
+		admin.execute("DELETE FROM purchase_orders");
+		admin.execute("DELETE FROM po_sequence");
+		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM shopping_list_lines");
 		admin.execute("DELETE FROM vendor_supplies");
 		admin.execute("DELETE FROM vendors");
@@ -125,14 +137,14 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a hand-added line is still on the list after a real regeneration has run")
-	void handAddedLineSurvivesARealRegeneration() throws Exception {
-		// Deliberately no assertion on `edited` anywhere in this test. That column is the mechanism,
-		// and a test that checked it here would fail on the mechanism rather than on the consequence
-		// — which is exactly what the first run of this test's negative control did, reporting
-		// "expected true but was false" without ever running the regeneration it exists to survive.
-		// What is asserted below is that the line is still there afterwards. The column is asserted
-		// once, on its own, in theEditedFlagIsWhatSavesIt.
+	@DisplayName("a hand-added line is still on the list the next time it is computed")
+	void handAddedLineSurvivesAFreshDerivation() throws Exception {
+		// Deliberately no assertion on the marker column anywhere in this test. That column is the
+		// mechanism, and a test that checked it here would fail on the mechanism rather than on the
+		// consequence — which is exactly what the first run of this test's negative control did,
+		// reporting "expected true but was false" without ever reaching the list it exists to
+		// appear on. What is asserted below is that the line is still there. The column is asserted
+		// once, on its own, in theMarkerIsWhatPutsItThere.
 		mvc.perform(add(gas, "2"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.ingredientName").value("Cooking gas cylinder"))
@@ -140,10 +152,10 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.unit").value("PIECES"))
 				.andExpect(jsonPath("$.included").value(true));
 
-		// The regeneration the nightly job runs, not a stand-in for it. It suggests one line — rice —
-		// and then deletes every line it did not suggest and no human has touched. The cylinder is in
-		// the first category and must be saved by the second.
-		mvc.perform(regenerate()).andExpect(status().isOk()).andExpect(jsonPath("$.lines").value(1));
+		// A fresh read, which is the only kind there is: the whole list is worked out again, from the
+		// meal plan, the store room and the live orders. Exactly one line comes out of that — rice —
+		// and nothing in it will ever reach a gas cylinder. The cylinder is on the list below
+		// because a person put it there and the derivation carries it in on the strength of that.
 
 		// Ordered by ingredient name: "Cooking gas cylinder" then "Rice".
 		mvc.perform(authed(get("/api/v1/shopping-list")))
@@ -155,11 +167,12 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("the line is marked edited, which is what carries it through the regeneration")
-	void theEditedFlagIsWhatSavesIt() throws Exception {
-		// The mechanism, asserted once and named for what it does. The screen reads the same column
-		// to print its "edited" note beside the ingredient, so it is worth stating on its own —
-		// but the fact that matters is the survival above, not this.
+	@DisplayName("the line comes back marked as a decision, which is what puts it on the list at all")
+	void theMarkerIsWhatPutsItThere() throws Exception {
+		// The mechanism, asserted once and named for what it does. `edited` on the view means "a
+		// person has decided something about this line", which since T-132 is exactly "there is a
+		// row for this ingredient", and the screen reads it to print its "edited" note. The fact
+		// that matters is the survival above, not this.
 		mvc.perform(add(gas, "2"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.edited").value(true));
@@ -185,8 +198,11 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("adding something already on the list is refused with KMS-400131")
 	void alreadyOnTheListIsRefused() throws Exception {
-		mvc.perform(regenerate());   // rice is now on the list, suggested at 9 KG
-
+		// Rice is on the list at 9 KG and there is no row behind it — the derivation put it there.
+		// That is the case this refusal has to catch now, and it is the one a check against the
+		// decision table alone would have missed: the unique index cannot refuse a conflict with a
+		// line that was never written down. Somebody would have got a second Rice beside the one
+		// already on their screen.
 		mvc.perform(add(rice, "4"))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400131"));
@@ -210,11 +226,43 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.code").value("KMS-400131"));
 	}
 
+	/**
+	 * A hand-added line leaves the list when a purchase order covers it, exactly as a suggested one
+	 * does (D-24a). Worth its own test because a hand-added line is the one row that renders on its
+	 * own strength, so it is the one that could plausibly have been left behind — and a cylinder
+	 * still sitting on the list after somebody ordered it is precisely the "same ingredients, 2 PO's"
+	 * confusion the ruling exists to prevent.
+	 */
+	@Test
+	@DisplayName("a hand-added line goes off the list once an order covers it")
+	void aHandAddedLineLeavesOnAnOrder() throws Exception {
+		mvc.perform(add(jaggery, "500")).andExpect(status().isCreated());
+		mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(jsonPath("$[?(@.ingredientName=='Jaggery')]").exists());
+
+		mvc.perform(authed(post("/api/v1/purchase-orders/generate"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"ingredientIds\":[\"" + jaggery + "\"]}"))
+				.andExpect(status().isCreated());
+
+		mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(jsonPath("$[?(@.ingredientName=='Jaggery')]").doesNotExist())
+				// Rice is untouched: it has no preferred vendor here, so no order was raised for it.
+				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')]").exists());
+	}
+
 	@Test
 	@DisplayName("a quantity of zero is refused rather than parked on the list as a placeholder")
 	void zeroQuantityIsRefused() throws Exception {
 		mvc.perform(add(gas, "0")).andExpect(status().isBadRequest());
-		mvc.perform(authed(get("/api/v1/shopping-list"))).andExpect(jsonPath("$.length()").value(0));
+		// The gas is not on the list, which is the fact. It is asserted that way rather than as an
+		// empty list, because the list is no longer empty until somebody builds it: rice is below
+		// its reorder threshold and the derivation says so on every read, with or without this
+		// refusal. Asserting a length of zero here would have been asserting that nothing had been
+		// computed yet, which was true of the stored version and is true of nothing now.
+		mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(jsonPath("$[?(@.ingredientName=='Cooking gas cylinder')]").doesNotExist())
+				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')]").exists());
 	}
 
 	@Test
@@ -236,10 +284,6 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 		return authed(post("/api/v1/shopping-list"))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"ingredientId\":\"" + ingredientId + "\",\"suggestedQty\":" + qty + "}");
-	}
-
-	private MockHttpServletRequestBuilder regenerate() {
-		return authed(post("/api/v1/shopping-list/regenerate"));
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder b) {

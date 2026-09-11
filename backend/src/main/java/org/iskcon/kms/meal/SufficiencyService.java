@@ -118,7 +118,7 @@ public class SufficiencyService {
 	 */
 	@Transactional(readOnly = true)
 	public List<MealSufficiency> sufficiency(LocalDate from, LocalDate to) {
-		Map<UUID, List<IngredientShortfall>> allocated = allocateAcrossWindow();
+		Map<UUID, List<IngredientShortfall>> allocated = allocateAcrossWindow(onHandBaseByIngredient());
 		Map<UUID, Integer> recordedLeadTimes = leadTimes.recordedByIngredient();
 		LocalDate today = LocalDate.now(clock.zone());
 
@@ -181,8 +181,37 @@ public class SufficiencyService {
 	 */
 	@Transactional(readOnly = true)
 	public List<ShortfallItem> shortfallFeed() {
+		return shortfallFeed(onHandBaseByIngredient());
+	}
+
+	/**
+	 * The same feed, computed against an on-hand figure the caller has already read (T-140).
+	 *
+	 * <p><strong>This exists so that one page load sums the ledger once.</strong> The shopping list
+	 * reads {@code stock_movements} as the first thing it does, and then called both this feed and the
+	 * low-stock stream, each of which summed the same unbounded table again — three passes over a
+	 * temple's whole operating history to draw one screen.
+	 *
+	 * <p><strong>And it is a correctness fix before it is a speed one, which is the half worth
+	 * keeping.</strong> Those reads sat inside one {@code @Transactional(readOnly = true)} method, and
+	 * that buys less than it looks like it does: PostgreSQL's default isolation gives every
+	 * <em>statement</em> its own snapshot, so a delivery recorded while the page was loading could be
+	 * counted by one of the three sums and not by the others — the shortfall worked out against one
+	 * figure for the rice and a different figure for the rice printed in the column beside it. Rare,
+	 * invisible, and impossible to reproduce when somebody reports it. One read makes the page
+	 * internally consistent, which no amount of speed would.
+	 *
+	 * <p>The map is in base units, keyed by ingredient, exactly as {@link #onHandBaseByIngredient()}
+	 * returns it — an ingredient absent from it holds nothing. It is copied before the walk below
+	 * draws it down, so the caller's map is still the temple's on-hand figure afterwards rather than
+	 * whatever was left once every planned meal had taken its share.
+	 *
+	 * <p>The no-argument form above is unchanged for every other caller, and reads the ledger itself.
+	 */
+	@Transactional(readOnly = true)
+	public List<ShortfallItem> shortfallFeed(Map<UUID, BigDecimal> onHandBaseByIngredient) {
 		Map<UUID, ShortfallItem> byIngredient = new LinkedHashMap<>();
-		for (List<IngredientShortfall> shortfalls : allocateAcrossWindow().values()) {
+		for (List<IngredientShortfall> shortfalls : allocateAcrossWindow(onHandBaseByIngredient).values()) {
 			for (IngredientShortfall s : shortfalls) {
 				byIngredient.merge(s.ingredientId(),
 						new ShortfallItem(s.ingredientId(), s.ingredientName(), s.shortBy(), s.unit()),
@@ -203,9 +232,17 @@ public class SufficiencyService {
 	 * is two claims, and each has to be charged for the other one only if it is ahead of it. A meal
 	 * with no claim at all is simply absent, and {@link #sufficiency} reads absent as "nothing to
 	 * assess".
+	 *
+	 * <p>The store it allocates is passed in rather than read here, so that a caller which has already
+	 * summed the ledger can hand over what it read instead of making the database sum it again
+	 * (T-140). <strong>The copy on the first line is load-bearing:</strong> the walk draws the map
+	 * down as it goes — that is how a meal is charged for the ones ahead of it — and doing that to the
+	 * caller's own map would leave it holding what was left after the fortnight's plans had taken
+	 * their share, while every line of the shopping list went on calling it the temple's stock.
 	 */
-	private Map<UUID, List<IngredientShortfall>> allocateAcrossWindow() {
-		Map<UUID, BigDecimal> remaining = onHandBaseByIngredient();
+	private Map<UUID, List<IngredientShortfall>> allocateAcrossWindow(
+			Map<UUID, BigDecimal> onHandBaseByIngredient) {
+		Map<UUID, BigDecimal> remaining = new LinkedHashMap<>(onHandBaseByIngredient);
 		Map<UUID, IngRef> refs = ingredientRefs();
 
 		Map<UUID, List<IngredientShortfall>> out = new LinkedHashMap<>();

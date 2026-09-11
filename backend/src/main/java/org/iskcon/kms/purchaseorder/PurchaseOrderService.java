@@ -18,6 +18,8 @@ import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.error.ErrorResponse;
 import org.iskcon.kms.ingredient.IngredientUnits;
+import org.iskcon.kms.shoppinglist.ShoppingListLineView;
+import org.iskcon.kms.shoppinglist.ShoppingListService;
 import org.iskcon.kms.tenancy.TempleClock;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -39,15 +41,18 @@ public class PurchaseOrderService {
 	private final AuditService auditService;
 	private final org.iskcon.kms.document.DocumentService documentService;
 	private final IngredientUnits ingredientUnits;
+	private final ShoppingListService shoppingListService;
 
 	public PurchaseOrderService(JdbcTemplate jdbc, AuditService auditService,
 			org.iskcon.kms.document.DocumentService documentService,
-			IngredientUnits ingredientUnits, TempleClock clock) {
+			IngredientUnits ingredientUnits, ShoppingListService shoppingListService,
+			TempleClock clock) {
 		this.clock = clock;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.documentService = documentService;
 		this.ingredientUnits = ingredientUnits;
+		this.shoppingListService = shoppingListService;
 	}
 
 	// ---- Read -----------------------------------------------------------
@@ -146,35 +151,52 @@ public class PurchaseOrderService {
 		return id;
 	}
 
-	/** One draft PO per distinct vendor from the selected, included shopping-list lines (E5-S3). */
+	/**
+	 * One draft PO per distinct vendor from the selected, included shopping-list lines (E5-S3).
+	 *
+	 * <p><strong>The lines are asked for, not selected.</strong> Until T-132 this read
+	 * {@code shopping_list_lines} directly — {@code WHERE included = true AND suggested_vendor_id IS
+	 * NOT NULL} — because that table held the whole list. It now holds only what a person decided
+	 * about a line: an edited quantity, an untick, something typed in by hand. The same query against
+	 * the same table would therefore raise orders containing the hand-added lines and nothing else —
+	 * no rice, no curd, no oil — and would do it silently, with a 201 and a plausible-looking order.
+	 *
+	 * <p>A database view over the decisions could not have saved that query, and it is worth saying
+	 * why rather than leaving somebody to try it: the shortfall stream is
+	 * {@code SufficiencyService.allocateAcrossWindow()}, a Java walk that allocates the store to every
+	 * claim in the buying window in draw-down order, meal by meal. Reimplementing it in SQL would put
+	 * the temple's most important arithmetic in two places.
+	 *
+	 * <p>So the derivation stays in one place and this asks it for the list. One consequence follows
+	 * immediately and is D-24a working as ruled: the orders created here are drafts, and a draft
+	 * covers its ingredients, so those lines are off the shopping list on the very next read without
+	 * anything being deleted.
+	 *
+	 * <p>The needed-by date on each order is still the <strong>earliest</strong> across that vendor's
+	 * lines — the order is only useful if it arrives in time for the first meal that wants any of it.
+	 * D-25's separate ruling, that the <em>longest</em> lead time governs a multi-line order, is about
+	 * a different quantity: the last day the order can be placed. The two do not conflict and neither
+	 * replaces the other. Stamping that lead time onto the order is T-134's, not this method's.
+	 */
 	@Transactional
 	public List<UUID> generateFromShoppingList(AuthenticatedUser actor, List<UUID> ingredientIds) {
-		StringBuilder sql = new StringBuilder("""
-				SELECT o.ingredient_id, o.suggested_qty, o.unit, o.suggested_vendor_id, o.needed_by,
-					   vs.last_price
-				FROM shopping_list_lines o
-				LEFT JOIN vendor_supplies vs
-					ON vs.vendor_id = o.suggested_vendor_id AND vs.ingredient_id = o.ingredient_id
-				WHERE o.included = true AND o.suggested_vendor_id IS NOT NULL
-				""");
-		List<Object> args = new ArrayList<>();
-		if (ingredientIds != null && !ingredientIds.isEmpty()) {
-			sql.append(" AND o.ingredient_id IN (")
-					.append(String.join(", ", java.util.Collections.nCopies(ingredientIds.size(), "?")))
-					.append(")");
-			args.addAll(ingredientIds);
-		}
-		List<OrderLineRow> rows = jdbc.query(sql.toString(), (rs, n) -> new OrderLineRow(
-				rs.getObject("ingredient_id", UUID.class),
-				rs.getBigDecimal("suggested_qty"),
-				rs.getString("unit"),
-				rs.getObject("suggested_vendor_id", UUID.class),
-				rs.getObject("needed_by", LocalDate.class),
-				(BigDecimal) rs.getObject("last_price")), args.toArray());
+		Map<UUID, Map<UUID, BigDecimal>> lastPrices = lastPricesByVendor();
 
 		Map<UUID, List<OrderLineRow>> byVendor = new LinkedHashMap<>();
-		for (OrderLineRow r : rows) {
-			byVendor.computeIfAbsent(r.vendorId(), k -> new ArrayList<>()).add(r);
+		for (ShoppingListLineView line : shoppingListService.list()) {
+			if (!line.included() || line.suggestedVendorId() == null) {
+				continue;
+			}
+			if (ingredientIds != null && !ingredientIds.isEmpty()
+					&& !ingredientIds.contains(line.ingredientId())) {
+				continue;
+			}
+			BigDecimal lastPrice = lastPrices
+					.getOrDefault(line.suggestedVendorId(), Map.of())
+					.get(line.ingredientId());
+			byVendor.computeIfAbsent(line.suggestedVendorId(), k -> new ArrayList<>())
+					.add(new OrderLineRow(line.ingredientId(), line.suggestedQty(), line.unit(),
+							line.suggestedVendorId(), line.neededBy(), lastPrice));
 		}
 
 		List<UUID> created = new ArrayList<>();
@@ -191,6 +213,23 @@ public class PurchaseOrderService {
 					"Generated from the shopping list", lines));
 		}
 		return created;
+	}
+
+	/**
+	 * What each vendor last charged for each thing it supplies, so a generated line carries a price
+	 * somebody can sanity-check. One read for the catalogue rather than a join onto a list that is no
+	 * longer a table.
+	 */
+	private Map<UUID, Map<UUID, BigDecimal>> lastPricesByVendor() {
+		Map<UUID, Map<UUID, BigDecimal>> map = new LinkedHashMap<>();
+		jdbc.query("""
+				SELECT vendor_id, ingredient_id, last_price
+				FROM vendor_supplies WHERE last_price IS NOT NULL
+				""", rs -> {
+			map.computeIfAbsent(rs.getObject("vendor_id", UUID.class), k -> new LinkedHashMap<>())
+					.put(rs.getObject("ingredient_id", UUID.class), rs.getBigDecimal("last_price"));
+		});
+		return map;
 	}
 
 	private UUID createPo(AuthenticatedUser actor, UUID vendorId, LocalDate neededBy,

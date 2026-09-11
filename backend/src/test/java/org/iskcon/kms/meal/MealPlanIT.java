@@ -134,7 +134,9 @@ class MealPlanIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM audit_events");
-		// A regenerated shopping list also holds the ingredient down (T-122's reader test).
+		// Nothing in this class writes a shopping-list decision any more — T-132 made the list a
+		// computation — but the delete stays: a stray row would hold the ingredient down through
+		// its foreign key and the failure would look like anything but its cause.
 		admin.execute("DELETE FROM shopping_list_lines");
 		// Anything that moved through the stock ledger is tracked now, so the item rows exist
 		// even where the test never asked for them, and they hold the ingredient down.
@@ -684,16 +686,22 @@ class MealPlanIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[0].shortfalls[?(@.ingredientName=='Rice')].available").value(0))
 				.andExpect(jsonPath("$[0].shortfalls[?(@.ingredientName=='Rice')].shortBy").value(5));
 
-		// Readers 5 and 6 — ShoppingListService, both of its sums, through a real regeneration.
-		// The line's `currentStock` is the second of them; the first decided the quantity, which is
-		// now 12 Kg to reach the reorder level rather than 52 to climb out of a hole nobody dug.
-		mvc.perform(post("/api/v1/shopping-list/regenerate")
-						.header("Authorization", "Bearer valid-token"))
-				.andExpect(status().isOk());
+		// Readers 5 and 6 — ShoppingListService, both of its sums, through the list itself. There is
+		// no regeneration to run any more: T-132 made the suggestions a function of the data, so the
+		// GET below computes both sums as it answers. The line's `currentStock` is the second of
+		// them; the first decided the quantity, which is 12 Kg to reach the reorder level rather
+		// than 52 to climb out of a hole nobody dug.
+		//
+		// `0` and `12`, not `0.0` and `12.0`, and the change is worth a sentence because it is a real
+		// one on the wire. Both figures used to be read back out of NUMERIC(14,3) columns, which
+		// padded them to three decimals; they are now the values InventoryUnits.fromBase and the
+		// CEILING actually produce, unpadded — which is what the other five readers of this ledger
+		// have always reported, and this test's whole thesis is that all of them agree. Nothing on
+		// the client can tell the difference: both parse to the same JavaScript number.
 		mvc.perform(get("/api/v1/shopping-list").header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')].currentStock").value(0.0))
-				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')].suggestedQty").value(12.0));
+				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')].currentStock").value(0))
+				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')].suggestedQty").value(12));
 
 		// And the two with no surface of their own, in the expression they share with all six.
 		assertThat(onHand(rice)).isEqualByComparingTo("0");

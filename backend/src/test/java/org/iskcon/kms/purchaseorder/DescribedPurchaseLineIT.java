@@ -488,31 +488,22 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 		String id = describedOnlyOrder();
 		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/send", id))).andExpect(status().isNoContent());
 
-		// A stale suggestion from a previous run that nobody has edited. Regeneration is supposed to
-		// drop it, because nothing suggests it any more.
-		admin.update("""
-				INSERT INTO shopping_list_lines (tenant_id, ingredient_id, suggested_qty, unit, included, edited)
-				VALUES (?, ?, 12, 'KG', true, false)
-				""", tenant, rice);
-
-		mvc.perform(authed(post("/api/v1/shopping-list/regenerate"))).andExpect(status().isOk());
-
-		// Two things are being asserted at once, and the second is the one that would have bitten.
+		// What T-024 guards, restated for a list that is computed rather than stored (T-132).
 		//
-		// The map poOutstandingByIngredient builds is keyed by ingredient_id, and a LinkedHashMap
-		// takes a null key perfectly happily — so every described line on every live order used to
-		// collapse into one bucket under `null`, adding stools to extension cords in base units.
+		// Two of the shopping list's queries key a map by purchase_order_lines.ingredient_id, which
+		// is null on a described line, and a LinkedHashMap takes a null key perfectly happily. Every
+		// described line on every live order would therefore collapse into one bucket under `null`,
+		// adding four plastic stools to a reel of extension cord in base units — and whatever
+		// ingredient row later asked that map for its outstanding quantity would get an answer
+		// computed from furniture. Both queries exclude the null in SQL, and this is the assertion
+		// that says so.
 		//
-		// Worse, that null key then reached regenerateForCurrentTenant's "drop what is no longer
-		// suggested" step, which builds `DELETE ... WHERE edited = false AND ingredient_id NOT IN
-		// (?)`. `NOT IN` with a NULL in the list is never true for any row, so the delete silently
-		// matched nothing and the stale suggestion below would have survived for ever.
-		Integer stale = admin.queryForObject(
-				"SELECT count(*) FROM shopping_list_lines WHERE ingredient_id = ?", Integer.class, rice);
-		assert stale == 0
-				: "the stale unedited suggestion should have been dropped; a null key in the outstanding "
-						+ "map poisons the NOT IN that drops it";
-
+		// The old shape of this test is worth recording, because the defect it caught is gone
+		// along with the mechanism: regeneration used to end with `DELETE ... WHERE edited = false
+		// AND ingredient_id NOT IN (?)`, and `NOT IN` with a NULL in the list is never true for any
+		// row, so a null key silently stopped every stale suggestion from ever being dropped. There
+		// is no delete now, and nothing stale to drop, because the list is recomputed on every read
+		// — which is a stronger answer to the same problem than the fix was.
 		JsonNode lines = JSON.readTree(mvc.perform(authed(get("/api/v1/shopping-list")))
 				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
 		assert lines.isArray() && lines.size() == 0

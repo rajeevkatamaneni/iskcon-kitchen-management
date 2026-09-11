@@ -69,6 +69,7 @@ function line(o: Partial<ShoppingListLineView>): ShoppingListLineView {
     shortPurchaseOrders: [],
     included: true,
     edited: false,
+    excludedSince: null,
     ...o,
   };
 }

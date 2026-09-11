@@ -221,7 +221,12 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 		String doomedDocument = seedTenantJob("generate-document", doomed);
 		String doomedSend = seedTenantJob("send", doomed);
 		String survivorCalendar = seedTenantJob("calendar-precompute", survivor);
-		String nightly = seedGlobalJob("shopping-list-regenerate");
+		// A nightly sweep that belongs to no temple. It was "shopping-list-regenerate" until T-132
+		// deleted that job — the shopping list is computed on read now and has nothing to refresh —
+		// so it names the low-stock digest instead, which plays exactly the same part: one global
+		// job detail, one cron trigger, sweeping every temple in turn. Only the name is load-bearing
+		// here; seedGlobalJob writes its own rows under a UUID-suffixed key.
+		String nightly = seedGlobalJob("low-stock-digest");
 		signInAsSuperAdmin();
 		takeExport(doomed);
 

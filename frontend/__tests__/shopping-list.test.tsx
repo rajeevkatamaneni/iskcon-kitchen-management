@@ -50,6 +50,7 @@ function line(o: Partial<ShoppingListLineView>): ShoppingListLineView {
     shortPurchaseOrders: [],
     included: true,
     edited: false,
+    excludedSince: null,
     ...o,
   };
 }
@@ -62,16 +63,50 @@ describe("shopping list", () => {
     reloadMock.mockReset();
   });
 
-  it("shows suggested lines with provenance and the button that builds them", () => {
+  it("shows suggested lines with their provenance", () => {
     render(<ShoppingListPage />);
     expect(screen.getByRole("heading", { name: /shopping list/i })).toBeInTheDocument();
     expect(screen.getByText("Rice")).toBeInTheDocument();
     expect(screen.getByText(/shortfall 7/i)).toBeInTheDocument();
-    // Named for what it does since 2026-09-05. "Regenerate" was the only thing in the product that
-    // actually built this list, while the planner carried an accent button called "Generate shopping
-    // list" that merely navigated here — so the real action was the one wearing the smaller word.
-    expect(screen.getByRole("button", { name: /^generate shopping list$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generate purchase orders/i })).toBeInTheDocument();
+  });
+
+  // T-132. There is no button that builds this list, because there is nothing to build: the server
+  // works it out from the meal plan, the store room and the live orders every time the page is read.
+  // Rajeev asked why the screen needed one at all — and it turned out there were two doors onto the
+  // same write, the button and a job at 04:30, so the answer was that neither should exist.
+  //
+  // Asserted as an absence AND as a presence, deliberately. `queryByRole` alone would pass just as
+  // happily if the whole header had failed to render, which is exactly the failure a reader would
+  // take this test as ruling out.
+  it("has no button that builds the list, and says the list builds itself", () => {
+    render(<ShoppingListPage />);
+    expect(screen.queryByRole("button", { name: /generate shopping list/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /regenerate/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /generate purchase orders/i })).toBeInTheDocument();
+    expect(screen.getByText(/worked out from the meal plan and the store room/i)).toBeInTheDocument();
+  });
+
+  // The untick persists, and its cost was named rather than hidden: one made in September suppresses
+  // a January shortfall, and in between the line is not on the screen for anybody to notice. This is
+  // the mitigation — when the ingredient is needed again the line comes back saying when somebody
+  // decided against it, so a stale decision announces itself at the moment it starts to matter.
+  it("says when an unticked line was last decided against", () => {
+    queryRef.current = {
+      data: [line({ included: false, excludedSince: "2026-08-20" })],
+      error: null, loading: false,
+    };
+    render(<ShoppingListPage />);
+    expect(screen.getByText(/Not ordering — since 20 Aug 2026/)).toBeInTheDocument();
+  });
+
+  it("says nothing about a date on a line that is still included", () => {
+    queryRef.current = {
+      data: [line({ included: true, excludedSince: null })],
+      error: null, loading: false,
+    };
+    render(<ShoppingListPage />);
+    expect(screen.queryByText(/Not ordering/)).not.toBeInTheDocument();
   });
 
   it("surfaces a short purchase order as provenance", () => {
@@ -89,6 +124,11 @@ describe("shopping list", () => {
     queryRef.current = { data: [], error: null, loading: false };
     render(<ShoppingListPage />);
     expect(screen.getByText(/nothing to order/i)).toBeInTheDocument();
+    // The old copy told the reader to generate the shopping list, which stopped being possible the
+    // moment the button went. An empty state that names an action nobody can take is worse than one
+    // that says nothing.
+    expect(screen.queryByText(/generate the shopping list/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/nothing is running short/i)).toBeInTheDocument();
   });
 
   // T-090. The column that used to say "Needed by" now answers the question somebody reading this

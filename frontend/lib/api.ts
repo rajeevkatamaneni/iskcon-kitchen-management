@@ -2019,7 +2019,8 @@ export interface ShoppingListLineView {
   suggestedQty: number;
   /**
    * The delivery date written on the purchase order — when the temple wants the goods on the shelf.
-   * Not the day the food is cooked, and not an order-by date.
+   * Since T-130 that is the day of the earliest planned meal that demands it, with nothing
+   * subtracted. Not an order-by date.
    */
   neededBy: string | null;
   /**
@@ -2041,7 +2042,14 @@ export interface ShoppingListLineView {
   poOutstanding: number;
   shortPurchaseOrders: string[];
   included: boolean;
+  /** Whether a person has decided anything about this line: a quantity, an untick, or typing it in. */
   edited: boolean;
+  /**
+   * The day somebody unticked this line, and null while it is included. An untick persists, so a
+   * line can come back months later still unticked — this is what lets the screen say so instead of
+   * quietly leaving a shortfall off the list.
+   */
+  excludedSince: string | null;
 }
 
 export type PoStatus =
@@ -4890,12 +4898,9 @@ export const api = {
   listShoppingList: (token?: string) =>
     request<ShoppingListLineView[]>("/api/v1/shopping-list", { method: "GET", token }),
 
-  regenerateShoppingList: (token?: string) =>
-    request<{ lines: number }>("/api/v1/shopping-list/regenerate", { method: "POST", token }),
-
-  // A line added by hand, for something the regenerator did not suggest (T-027). No `unit`: the
-  // ingredient's own canonical_unit is what the regenerator writes (ShoppingListService:169), and
-  // letting a caller pick a different one is how a list ends up asking for 5 litres of rice.
+  // A line added by hand, for something no demand stream suggested (T-027). No `unit`: the server
+  // writes the ingredient's own canonical_unit, and letting a caller pick a different one is how a
+  // list ends up asking for 5 litres of rice.
   addShoppingListLine: (
     input: { ingredientId: string; suggestedQty: number; suggestedVendorId?: string | null },
     token?: string
@@ -4906,9 +4911,12 @@ export const api = {
       token,
     }),
 
+  // No `suggestedVendorId`: the vendor is derived on every read from the ingredient's preferred
+  // supplier, and the column it used to be written to went with T-132. What gets snapshotted is the
+  // vendor on the purchase order itself.
   updateShoppingListLine: (
     ingredientId: string,
-    input: { suggestedQty?: number | null; suggestedVendorId?: string | null; included: boolean },
+    input: { suggestedQty?: number | null; included: boolean },
     token?: string
   ) =>
     request<void>(`/api/v1/shopping-list/${ingredientId}`, {

@@ -1,0 +1,273 @@
+==============================================================================
+ T-140 negative control — put the three reads back and watch the count return
+ Started Thu Sep 10 18:17:11 PDT 2026
+ Scratch: /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T//control-T-140-D5b26X
+==============================================================================
+
+anchor matched 1 time(s): sufficiencyService.shortfallFeed(onHandBase)
+anchor matched 1 time(s): for (InventoryItemService.LowStockLine item : inventoryItemService.lowStock(onHandBase)) {
+
+--- what the control changed (diff against the verified working copy) ---------
+--- /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T//control-T-140-D5b26X/ShoppingListService.java.verified	2026-09-10 18:17:11
++++ /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/shoppinglist/ShoppingListService.java	2026-09-10 18:17:11
+@@ -317,13 +317,13 @@
+ 
+ 		// Stream 1: meal-plan shortfall, judged against the stock read above rather than against a
+ 		// second reading of it (T-140).
+-		for (ShortfallItem s : sufficiencyService.shortfallFeed(onHandBase)) {
++		for (ShortfallItem s : sufficiencyService.shortfallFeed()) {
+ 			merged.computeIfAbsent(s.ingredientId(), k -> new Contribution()).shortfall = s.shortBy();
+ 		}
+ 
+ 		// Stream 2: below-threshold stock, topped up to reorder level × safety — again against the
+ 		// one reading.
+-		for (InventoryItemService.LowStockLine item : inventoryItemService.lowStock(onHandBase)) {
++		for (org.iskcon.kms.inventory.StockItemView item : inventoryItemService.lowStock()) {
+ 			IngredientRef ref = refs.get(item.ingredientId());
+ 			if (ref == null || item.reorderThreshold() == null) {
+ 				continue;
+
+==============================================================================
+ LEG 1 — ShoppingListIT, the guard that runs in the normal suite
+ Expect: theLedgerIsSummedOncePerPageLoad FAILS, expected size 1 but was 3.
+==============================================================================
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources UP-TO-DATE
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources UP-TO-DATE
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+ShoppingListIT > a consumable with no movements at all is still topped up from zero PASSED
+
+ShoppingListIT > unticking a line without changing the number does not freeze that number PASSED
+
+ShoppingListIT > the order-by date counts back from the meal by the vendor's lead time, and says when it was assumed PASSED
+
+ShoppingListIT > what used to be a sattvic-prohibited ingredient now enters via the threshold stream PASSED
+
+ShoppingListIT > a sent order suppresses its ingredients too, not just a draft PASSED
+
+ShoppingListIT > one page load sums the stock ledger once, not once per demand stream FAILED
+    java.lang.AssertionError: [statements against stock_movements for one GET /api/v1/shopping-list, of which there were three until T-140: this service, SufficiencyService's allocation walk, and InventoryItemService's batch read behind lowStock()] 
+    Expected size: 1 but was: 3 in:
+    [Executed[sql=SELECT ingredient_id,
+    	   SUM(to_on_hand_qty(quantity, unit, movement_type)) AS base
+    FROM stock_movements GROUP BY ingredient_id
+    , callers=[shoppinglist.ShoppingListService.onHandBaseByIngredient:590, shoppinglist.ShoppingListService.suggestions:310, shoppinglist.ShoppingListService.list:108, shoppinglist.ShoppingListService$$SpringCGLIB$$0.list:-1, shoppinglist.ShoppingListController.list:43, shoppinglist.ShoppingListController$$SpringCGLIB$$0.list:-1], thread=Test worker],
+        Executed[sql=SELECT ingredient_id,
+    	   SUM(to_on_hand_qty(quantity, unit, movement_type)) AS base
+    FROM stock_movements GROUP BY ingredient_id
+    , callers=[meal.SufficiencyService.onHandBaseByIngredient:300, meal.SufficiencyService.shortfallFeed:184, meal.SufficiencyService$$SpringCGLIB$$0.shortfallFeed:-1, shoppinglist.ShoppingListService.suggestions:320, shoppinglist.ShoppingListService.list:108, shoppinglist.ShoppingListService$$SpringCGLIB$$0.list:-1], thread=Test worker],
+        Executed[sql=SELECT m.ingredient_id, m.batch_id,
+    	   SUM(to_on_hand_qty(m.quantity, m.unit, m.movement_type))
+    		   AS qty_base,
+    	   MAX(m.expiry_date)   AS expiry_date,
+    	   MAX(m.received_date) AS received_date
+    FROM stock_movements m
+     GROUP BY m.ingredient_id, m.batch_id, callers=[inventory.InventoryItemService.loadBatches:466, inventory.InventoryItemService.list:113, inventory.InventoryItemService.lowStock:131, inventory.InventoryItemService$$SpringCGLIB$$0.lowStock:-1, shoppinglist.ShoppingListService.suggestions:326, shoppinglist.ShoppingListService.list:108], thread=Test worker]]
+        at org.iskcon.kms.shoppinglist.ShoppingListIT.theLedgerIsSummedOncePerPageLoad(ShoppingListIT.java:503)
+
+ShoppingListIT > the list merges shortfall + threshold with provenance and suggests the preferred vendor PASSED
+
+ShoppingListIT > a volunteer cannot see the shopping list PASSED
+
+ShoppingListIT > a draft purchase order takes its ingredients off the list, and cancelling gives them back PASSED
+
+ShoppingListIT > there is no regenerate endpoint any more PASSED
+
+ShoppingListIT > the preferred vendor is derived on every read, and an edit cannot disturb it PASSED
+
+ShoppingListIT > an edited quantity and an untick both survive, and the rest of the line still moves PASSED
+
+18:17:27.743 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+18:17:27.749 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+18:17:27.751 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    12
+  Passed:   11
+  Failed:   1
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+12 tests completed, 1 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 16s
+5 actionable tasks: 3 executed, 2 up-to-date
+LEG 1 exit status: 1
+
+==============================================================================
+ LEG 2 — the T-139 harness at 146,150 stock movements
+ Expect: the assertion fails at 3L, and the report's statement table reads 3.
+==============================================================================
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+ShoppingListPerformanceIT > T-139: the shopping list, timed at the API over a temple with years of history FAILED
+    org.opentest4j.AssertionFailedError: [statements against stock_movements for one GET /api/v1/shopping-list] 
+    expected: 1L
+     but was: 3L
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.perf.ShoppingListPerformanceIT.measure(ShoppingListPerformanceIT.java:271)
+
+18:18:06.327 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+18:18:06.334 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+18:18:06.337 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    1
+  Passed:   0
+  Failed:   1
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+1 test completed, 1 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 38s
+5 actionable tasks: 5 executed
+LEG 2 exit status: 1
+
+--- the statement and scan counts, read out of the report the run just wrote ---
+  What ONE page load actually asks the database for (recorded at the JDBC boundary)
+──────────────────────────────────────────────────────────────────────
+  408 statements in total, including the per-connection set_config calls the tenancy wrapper makes.
+
+  table                    statements
+  stock_movements                   3
+  meal_plans                        3
+  recipe_ingredients              181
+  inventory_items                   1
+  purchase_order_lines              2
+  ingredients                     184
+  vendor_supplies                   2
+  shopping_list_lines               1
+  recipes                         182
+
+  Every statement that named stock_movements, and the method that sent it:
+
+  1. SELECT ingredient_id, SUM(to_on_hand_qty(quantity, unit, movement_type)) AS base FROM stock_movements GROUP BY ingredient_id
+        shoppinglist.ShoppingListService.onHandBaseByIngredient:590
+        shoppinglist.ShoppingListService.suggestions:310
+        shoppinglist.ShoppingListService.list:108
+        shoppinglist.ShoppingListService$$SpringCGLIB$$0.list:-1
+        shoppinglist.ShoppingListController.list:43
+        shoppinglist.ShoppingListController$$SpringCGLIB$$0.list:-1
+
+  2. SELECT ingredient_id, SUM(to_on_hand_qty(quantity, unit, movement_type)) AS base FROM stock_movements GROUP BY ingredient_id
+        meal.SufficiencyService.onHandBaseByIngredient:300
+        meal.SufficiencyService.shortfallFeed:184
+        meal.SufficiencyService$$SpringCGLIB$$0.shortfallFeed:-1
+        shoppinglist.ShoppingListService.suggestions:320
+        shoppinglist.ShoppingListService.list:108
+        shoppinglist.ShoppingListService$$SpringCGLIB$$0.list:-1
+
+  3. SELECT m.ingredient_id, m.batch_id, SUM(to_on_hand_qty(m.quantity, m.unit, m.movement_type)) AS qty_base, MAX(m.expiry_date) AS expiry_date, MAX(m.received_date) AS received_date FROM stock_movements m GROUP BY m.ingredient_id, m.batch_id
+        inventory.InventoryItemService.loadBatches:466
+        inventory.InventoryItemService.list:113
+        inventory.InventoryItemService.lowStock:131
+        inventory.InventoryItemService$$SpringCGLIB$$0.lowStock:-1
+        shoppinglist.ShoppingListService.suggestions:326
+        shoppinglist.ShoppingListService.list:108
+
+  The ten methods that sent the most statements of any kind:
+       180  recipe.RecipeService.get:100
+       180  recipe.RecipeService.get:114
+        14  auth.AuthenticationFilter.authenticate:126
+        13  shoppinglist.ShoppingListService$$SpringCGLIB$$0.list:-1
+         2  inventory.CommittedStockService.claims:168
+         2  occasion.OccasionService.list:44
+         2  inventory.CommittedStockService.plannedDishes:224
+         1  inventory.InventoryItemService.horizon:552
+         1  shoppinglist.ShoppingListService.earliestDemandByIngredient:602
+         1  inventory.InventoryItemService.list:112
+
+──────────────────────────────────────────────────────────────────────
+  How often the database says it read each table (pg_stat_all_tables delta)
+──────────────────────────────────────────────────────────────────────
+  Over 20 page loads, not one, and the per-load figure is
+  the division. Two things make a one-request delta here worth less than it looks,
+  and between them they are how T-139 read three statements as nine scans:
+
+    · A backend flushes its counters when a transaction ends and at most about
+      once a second, and it flushes when it is next used. So a snapshot taken
+      after a burst of page loads can still have several of them in flight, and
+      they land in the next window and read as that request's work. Spreading the
+      window over 20 loads makes that a rounding error instead of a multiplier.
+    · A scan is a plan execution, not a statement: one query driving a nested loop
+      over 26 rows registers 26 index scans. So this table answers 'how much work
+      did the plans do', and the statement counts above answer 'how many times did
+      the application ask'. T-140 is about the second question.
+
+  table                   seq scans  idx scans       seq rows       idx rows idx scans/load
+  stock_movements                 0         60              0        8769000          3.0
+  meal_plans                      0         60              0          13600          3.0
+  recipe_ingredients              0      11760              0          94080        588.0
+  inventory_items                 0         20              0           2320          1.0
+  purchase_order_lines            0        520              0           3120         26.0
+  ingredients                     0      28860              0        2026160       1443.0
+  vendor_supplies                 0        180              0          27000          9.0
+
+  stock_movements holds 146,150 rows, and 20 page loads read 8,769,000 of them.
+  That is 3.00 readings of the whole ledger per page load.
+
+──────────────────────────────────────────────────────────────────────
+  EXPLAIN (ANALYZE, BUFFERS) — earliestDemandByIngredient() — meal plans joined to recipe ingredients
+
+Both legs red with the fix removed, which is what this control set out to show.
+
+--- restoring ShoppingListService.java from the verified copy -----------------
+RESTORED, byte-for-byte identical to the copy taken before the patch.
+--- control finished with status 0 --------------------------------------
+work-lock: 'verify' released; command exited 0

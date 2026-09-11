@@ -1,0 +1,120 @@
+anchor count: expected 1 coveredByLiveOrder guard, found 1
+patched: the D-24a coverage guard is now unreachable
+tree changed:
+353c353
+< 			if (coveredByLiveOrder.contains(ingredientId)) {
+---
+> 			if (false && coveredByLiveOrder.contains(ingredientId)) {
+=== running the suite WITHOUT the D-24a predicate ===
+work-lock: waiting for 'verify' — verify (held 11s by pid 39221 — cd /Users/Rajeev/Workspace/kitchen-management-system/backend && JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home KMS_PERF=1 ./gradlew --no-daemon test --tests "*ShoppingListPerformanceIT*")
+work-lock: acquired 'verify' after 10s
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+HandAddedLineIT > a hand-added line goes off the list once an order covers it FAILED
+    java.lang.AssertionError: Expected no value at JSON path "$[?(@.ingredientName=='Jaggery')]" but found: [{"ingredientId":"31104e88-a08f-44bb-9c95-61ef92acc333","ingredientName":"Jaggery","currentStock":0,"unit":"GM","suggestedQty":500.0,"neededBy":null,"orderBy":null,"leadTimeDays":null,"orderUrgency":null,"suggestedVendorId":"435560e9-f86a-403f-adc5-591d43200551","suggestedVendorName":"Govind Wholesale","shortfall":0,"thresholdTopUp":0,"poOutstanding":0,"shortPurchaseOrders":[],"included":true,"edited":true,"excludedSince":null}]
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:37)
+        at org.springframework.test.util.AssertionErrors.assertTrue(AssertionErrors.java:70)
+        at org.springframework.test.util.JsonPathExpectationsHelper.doesNotExist(JsonPathExpectationsHelper.java:211)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$doesNotExist$4(JsonPathResultMatchers.java:134)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.shoppinglist.HandAddedLineIT.aHandAddedLineLeavesOnAnOrder(HandAddedLineIT.java:249)
+
+HandAddedLineIT > a quantity of zero is refused rather than parked on the list as a placeholder PASSED
+
+HandAddedLineIT > the line comes back marked as a decision, which is what puts it on the list at all PASSED
+
+HandAddedLineIT > a hand-added line takes the ingredient's own unit and its preferred vendor PASSED
+
+HandAddedLineIT > a hand-added line is refused a second time even after it was added by hand PASSED
+
+HandAddedLineIT > adding something already on the list is refused with KMS-400131 PASSED
+
+HandAddedLineIT > a volunteer cannot add a line PASSED
+
+HandAddedLineIT > a hand-added line is still on the list the next time it is computed PASSED
+
+HandAddedLineIT > an ingredient that does not exist is refused PASSED
+
+ShoppingListIT > unticking a line without changing the number does not freeze that number PASSED
+
+ShoppingListIT > the order-by date counts back from the meal by the vendor's lead time, and says when it was assumed PASSED
+
+ShoppingListIT > what used to be a sattvic-prohibited ingredient now enters via the threshold stream PASSED
+
+ShoppingListIT > a sent order suppresses its ingredients too, not just a draft FAILED
+    java.lang.AssertionError: JSON path "$.length()" expected:<1> but was:<2>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.shoppinglist.ShoppingListIT.aSentOrderAlsoTakesTheLineOff(ShoppingListIT.java:389)
+
+ShoppingListIT > the list merges shortfall + threshold with provenance and suggests the preferred vendor PASSED
+
+ShoppingListIT > a volunteer cannot see the shopping list PASSED
+
+ShoppingListIT > a draft purchase order takes its ingredients off the list, and cancelling gives them back FAILED
+    java.lang.AssertionError: JSON path "$.length()" expected:<1> but was:<2>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.shoppinglist.ShoppingListIT.aLiveOrderTakesTheLineOffTheList(ShoppingListIT.java:354)
+
+ShoppingListIT > there is no regenerate endpoint any more PASSED
+
+ShoppingListIT > the preferred vendor is derived on every read, and an edit cannot disturb it PASSED
+
+ShoppingListIT > an edited quantity and an untick both survive, and the rest of the line still moves PASSED
+
+11:15:34.423 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+11:15:34.427 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+11:15:34.429 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+11:15:34.432 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+11:15:34.435 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+11:15:34.435 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    19
+  Passed:   16
+  Failed:   3
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+19 tests completed, 3 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 19s
+5 actionable tasks: 5 executed
+work-lock: 'verify' released; command exited 1
+gradle exit: 1
+RESTORED: ShoppingListService.java is byte-for-byte the verified working tree again.

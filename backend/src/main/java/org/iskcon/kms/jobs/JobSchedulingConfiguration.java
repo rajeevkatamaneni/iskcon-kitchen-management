@@ -4,7 +4,6 @@ import java.util.TimeZone;
 import org.iskcon.kms.calendar.CalendarPrecomputeJob;
 import org.iskcon.kms.donation.ExpirePendingDonationsJob;
 import org.iskcon.kms.inventory.LowStockDigestJob;
-import org.iskcon.kms.shoppinglist.ShoppingListRegenerateJob;
 import org.iskcon.kms.wishlist.WishlistArchiveJob;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
@@ -75,30 +74,15 @@ public class JobSchedulingConfiguration {
 				.build();
 	}
 
-	// Renamed from order-list-regenerate when the screen became the shopping list. The scheduler
-	// keeps its jobs in the database, so the old key and its trigger would have been left behind
-	// pointing at a class that no longer exists — V81 deletes them, and this pair is re-registered
-	// under the new key on the worker's next boot (overwrite-existing-jobs).
-	@Bean
-	public JobDetail shoppingListRegenerateJobDetail() {
-		return JobBuilder.newJob(ShoppingListRegenerateJob.class)
-				.withIdentity("shopping-list-regenerate")
-				.withDescription("Nightly regeneration of the suggested shopping list per temple (E5-S2).")
-				.storeDurably()
-				.requestRecovery()
-				.build();
-	}
-
-	@Bean
-	public Trigger shoppingListRegenerateTrigger(JobDetail shoppingListRegenerateJobDetail) {
-		// After the calendar precompute (03:00) so shortfalls reflect the fresh calendar.
-		return TriggerBuilder.newTrigger()
-				.forJob(shoppingListRegenerateJobDetail)
-				.withIdentity("shopping-list-regenerate-nightly")
-				.withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(4, 30)
-						.inTimeZone(TimeZone.getTimeZone("Asia/Kolkata")))
-				.build();
-	}
+	// There is no shopping-list regeneration here any more (T-132, D-24). The pair that used to sit
+	// at this spot ran ShoppingListRegenerateJob at 04:30 IST, sweeping every temple and rewriting
+	// its suggested lines — the same write the "Generate shopping list" button did, on a timer
+	// instead of a press. Rajeev asked why the screen needed the button when the list could populate
+	// itself on load; the answer had a second half, which is that it already populated itself once a
+	// night, and that two doors onto one shared-row write is the problem rather than either door.
+	// The suggestions are computed on every read now and never stored, so there is nothing left to
+	// refresh. V121 deletes the job and trigger rows Quartz kept in the database, which is what stops
+	// the stored trigger firing at 04:30 and failing to load a class that no longer exists.
 
 	@Bean
 	public Trigger lowStockDigestTrigger(JobDetail lowStockDigestJobDetail) {

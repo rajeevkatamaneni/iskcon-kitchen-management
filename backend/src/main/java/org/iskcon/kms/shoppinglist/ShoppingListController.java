@@ -2,7 +2,6 @@ package org.iskcon.kms.shoppinglist;
 
 import jakarta.validation.Valid;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,9 +15,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The suggested shopping list (E5-S2), behind {@code MANAGE_PURCHASE_ORDERS}. Regenerated nightly and on
- * demand here; edits mark a line so regeneration leaves it be, and a line added by hand (T-027) is
- * marked the same way for the same reason.
+ * The suggested shopping list (E5-S2), behind {@code MANAGE_PURCHASE_ORDERS}.
+ *
+ * <p><strong>There are three endpoints here and none of them builds the list.</strong> {@code GET}
+ * computes it from the meal plan, the store room, the vendor catalogue and the live purchase orders,
+ * every time it is called; the other two record a decision about a line — a quantity, an untick, or
+ * something added by hand — which is all this feature stores.
+ *
+ * <p>{@code POST /regenerate} was removed by T-132 along with the nightly job that called the same
+ * method. Rajeev asked why the list needed a button when it could populate itself on load; the answer
+ * was that it already populated itself once a night, and that neither door should exist. Nothing
+ * replaces it, and the screen has no button where it used to be.
  */
 @RestController
 @RequestMapping("/api/v1/shopping-list")
@@ -49,13 +56,6 @@ public class ShoppingListController {
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public ResponseEntity<ShoppingListLineView> add(@Valid @RequestBody AddShoppingListLineRequest request) {
 		return ResponseEntity.status(HttpStatus.CREATED).body(shoppingListService.addLine(request));
-	}
-
-	@PostMapping("/regenerate")
-	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
-	public ResponseEntity<Map<String, Object>> regenerate() {
-		int lines = shoppingListService.regenerateForCurrentTenant();
-		return ResponseEntity.ok(Map.of("lines", lines));
 	}
 
 	@PatchMapping("/{ingredientId}")

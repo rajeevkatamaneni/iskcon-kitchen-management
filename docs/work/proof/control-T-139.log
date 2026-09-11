@@ -1,0 +1,159 @@
+================================================================================
+T-139 — negative control: does the fixture actually produce the data it claims?
+================================================================================
+
+A behaviour task's control removes the fix and watches the tests fail. That shape
+does not apply to a measurement harness, because nothing is being fixed. The
+honest control here is the question that would sink the task if it went unasked:
+
+    a generator that silently wrote a hundred rows instead of a hundred and
+    forty-six thousand would produce a fast, plausible, completely meaningless
+    number, and would pass every other check in the harness.
+
+Four controls answer it. All four are in
+backend/src/test/java/org/iskcon/kms/perf/TempleScaleFixtureControlIT.java.
+
+  1. Every table counted with count(*) and compared against arithmetic that
+     lives in TempleScale, beside the parameters, NOT inside the generator —
+     so the generator cannot agree with itself.
+  2. The size parameter is doubled and the ledger doubles with it. A generator
+     that ignored its parameters passes control 1 and fails this.
+  3. Rows are deleted behind the check's back and the check is shown FAILING.
+     Without this, "the counts matched" has no evidence that anything was
+     capable of not matching.
+  4. Two tenants generated side by side, each counted as the unprivileged
+     application role with app.tenant_id set. CLAUDE.md's first trap is that a
+     fixture seeded as a superuser proves nothing about the query the
+     application runs.
+
+Command:
+
+  export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+  tools/work-lock.sh run verify 'cd backend && KMS_PERF=1 ./gradlew --no-daemon \
+      test --tests "*TempleScaleFixtureControlIT*"'
+
+--------------------------------------------------------------------------------
+GRADLE OUTPUT
+--------------------------------------------------------------------------------
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava UP-TO-DATE
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :compileTestJava UP-TO-DATE
+> Task :processTestResources UP-TO-DATE
+> Task :testClasses UP-TO-DATE
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+TempleScaleFixtureControlIT > doubling the history parameter doubles the ledger it generates PASSED
+
+TempleScaleFixtureControlIT > the fixture produces exactly the rows it claims, counted from the database PASSED
+
+TempleScaleFixtureControlIT > each temple's generated data is invisible to the other, as the application role PASSED
+
+TempleScaleFixtureControlIT > the count check fails when the rows are not there — it is not a formality PASSED
+
+11:13:54.364 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+11:13:54.369 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+11:13:54.370 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+
+> Task :test
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    4
+  Passed:   4
+  Failed:   0
+  Skipped:  0
+  Result:   SUCCESS
+────────────────────────────────────────────────────────
+
+BUILD SUCCESSFUL in 10s
+5 actionable tasks: 1 executed, 4 up-to-date
+work-lock: 'verify' released; command exited 0
+
+--------------------------------------------------------------------------------
+THE CONTROL'S OWN REPORT (backend/build/reports/perf/T-139-control.txt)
+--------------------------------------------------------------------------------
+
+──────────────────────────────────────────────────────────────────────
+  Control 2 — turn the size parameter up, and the data goes up with it
+──────────────────────────────────────────────────────────────────────
+  30 days of history: 2,440 stock movements, 272 cooked meal plans
+  60 days of history: 4,840 stock movements, 544 cooked meal plans
+
+  A generator that ignored its parameters would print the same two lines twice.
+
+──────────────────────────────────────────────────────────────────────
+  Control 1 — what was asked for, and what was counted
+──────────────────────────────────────────────────────────────────────
+  Scale: TempleScale[ingredients=40, inventoryItems=30, recipes=8, ingredientsPerRecipe=5, dishesPerDay=9, eventEveryDays=14, historyDays=30, forwardDays=21, movementsPerDay=80, vendors=3, purchaseOrders=12, linesPerPurchaseOrder=4]
+
+  ingredients              counted       40   expected       40   ok
+  inventory_items          counted       30   expected       30   ok
+  recipes                  counted        8   expected        8   ok
+  recipe_ingredients       counted       40   expected       40   ok
+  meal_plans COOKED        counted      272   expected      272   ok
+  meal_plans PLANNED       counted      190   expected      190   ok
+  stock_movements          counted    2,440   expected    2,440   ok
+  vendors                  counted        3   expected        3   ok
+  vendor_supplies          counted       40   expected       40   ok
+  purchase_orders          counted       12   expected       12   ok
+  purchase_order_lines     counted       48   expected       48   ok
+
+──────────────────────────────────────────────────────────────────────
+  Control 4 — Row-Level Security, from the application role's side
+──────────────────────────────────────────────────────────────────────
+  Temple A asked for 30 days of history and counts 2,440 stock movements.
+  Temple B asked for 5 days of history and counts 440 stock movements.
+
+  Both counts were taken as kms_app — no DDL, no BYPASSRLS — with
+  app.tenant_id set to that temple. Neither can see the other's rows, so the
+  timings are taken against the plan the running application actually gets.
+
+──────────────────────────────────────────────────────────────────────
+  Control 3 — the check, shown failing
+──────────────────────────────────────────────────────────────────────
+  Deleted 1000 stock_movements rows behind the check's back.
+  Counted before: 2440   after: 1440
+    The fixture did not produce what it claimed. A timing taken over this data would be meaningless. Table: counted vs expected —
+      stock_movements: counted 1440, expected 2440 (short by 1000)
+
+  That refusal is what stops a fast, meaningless number reaching the proof file.
+
+--------------------------------------------------------------------------------
+READING IT
+--------------------------------------------------------------------------------
+Control 1: eleven tables, counted from the database, every one equal to what the
+           parameters said. recipe_ingredients = 8 recipes x 5 lines = 40.
+           stock_movements = 40 opening receipts + 30 days x 80 = 2,440.
+           meal_plans COOKED = 30 x 9 dishes + 2 events = 272.
+
+Control 2: 30 days gives 2,440 movements, 60 days gives 4,840. The daily churn
+           doubles exactly (2,400 -> 4,800); the 40 opening receipts do not
+           scale with history and are asserted separately rather than folded
+           into a round 2x that would quietly be wrong.
+
+Control 3: THE ONE THAT MATTERS. 1,000 rows deleted as the superuser — which is
+           also the only role that can, because stock_movements is append-only
+           to the application — and verify() then refuses:
+
+               stock_movements: counted 1440, expected 2440 (short by 1000)
+
+           That refusal is what stops a fast, meaningless number reaching the
+           proof file. It is asserted with assertThatThrownBy, so the control
+           fails if the check ever stops having teeth.
+
+Control 4: Temple A (30 days) counts 2,440 movements and Temple B (5 days)
+           counts 440, each read as kms_app with its own app.tenant_id. If RLS
+           were absent, or the fixture had been seeded as a superuser, both
+           would report 2,880 — the sum of the two temples.
+
+RESULT: 4 tests, 4 passed, 0 failed.

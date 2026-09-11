@@ -67,8 +67,8 @@ function ShoppingListView() {
   }
 
   // The whole of T-027 on this side: one POST, and the list reloads with the new line on it. The
-  // server writes it `edited`, so it is still there after tonight's regeneration — which is the
-  // reason the line is worth typing at all.
+  // server marks it hand-added, which is the only thing that puts a line on this list that no
+  // demand stream will ever reach — and the reason the line is worth typing at all.
   async function addLine(ingredientId: string, suggestedQty: number) {
     return run(
       (t) => api.addShoppingListLine({ ingredientId, suggestedQty }, t),
@@ -96,17 +96,21 @@ function ShoppingListView() {
       <Sidebar activeHref="/shopping-list" />
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
+          {/* There is no "Generate shopping list" button here any more, and its absence is the whole
+              of T-132 on this side. Rajeev asked why the screen needed one at all when the list
+              could populate itself on load — and it turned out there were two doors onto the same
+              write, the button and a job at 04:30, so the answer was that neither should exist. The
+              list is worked out fresh every time this page is read. The sub-heading says so plainly
+              rather than leaving somebody hunting for the button they remember. */}
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1>Shopping list</h1>
               <p className="mt-1 text-ink-secondary">
-                Edit or uncheck a line before generating orders.
+                Worked out from the meal plan and the store room each time you open this page. Edit
+                or uncheck a line before generating orders.
               </p>
             </div>
             <div className="flex gap-3">
-              <button type="button" disabled={busy} onClick={() => run((t) => api.regenerateShoppingList(t), "We couldn’t regenerate the list.")} className="min-h-touch rounded border border-hairline px-5 transition-colors duration-state hover:bg-sunken disabled:opacity-60">
-                Generate shopping list
-              </button>
               <button type="button" disabled={busy || withVendor === 0} onClick={generate} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">
                 Generate purchase orders
               </button>
@@ -122,8 +126,13 @@ function ShoppingListView() {
           ) : lines.length === 0 ? (
             <div className="card px-6 py-14 text-center">
               <p className="text-lg">Nothing to order</p>
+              {/* No instruction here, because there is no longer an action to take: nothing is
+                  short, nothing is below its reorder level, and anything already on a purchase
+                  order is being dealt with. Telling somebody to press a button that is not there
+                  was the old copy, and it was wrong the moment the button went. */}
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Generate the shopping list to check for shortfalls now.
+                Nothing is running short, and anything already on a purchase order is in hand. Add
+                something below if you know of a need this list can’t see.
               </p>
             </div>
           ) : (
@@ -159,6 +168,17 @@ function ShoppingListView() {
                       <td className={`${TD_TEXT} ${WRAP} font-medium`}>
                         {l.ingredientName}
                         {l.edited && <span className="ml-2 text-xs text-ink-muted">edited</span>}
+                        {/* An untick persists, and the cost of that was named rather than hidden: one
+                            made in September suppresses a January shortfall, and in between the line
+                            is not on the screen for anybody to notice. This is the mitigation. When
+                            the ingredient is needed again the line comes back — unticked, and saying
+                            when somebody decided against it, so a stale decision announces itself at
+                            the moment it starts to matter. Re-ticking is the box to the left. */}
+                        {!l.included && l.excludedSince && (
+                          <span className="ml-2 text-xs text-warning">
+                            Not ordering — since {dateWithYear(l.excludedSince)}
+                          </span>
+                        )}
                       </td>
                       <td className={`${TD_NUM} text-ink-secondary`}>{cooksQuantity(l.currentStock, l.unit)}</td>
                       {/* A quantity and its unit are one reading — "55 Kg", never a 55 with a Kg
@@ -241,8 +261,8 @@ function ShoppingListView() {
  *
  * <p><strong>This column replaced "Needed by", and the replacement is the point.</strong> That
  * column showed <code>neededBy</code>, which is the delivery date written on the purchase order —
- * the earliest meal that wants the ingredient, less a two-day delivery buffer. It answers "what date
- * do we put on the order?", which is a question for the order screen. The question somebody reading
+ * since T-130, the day of the earliest meal that wants the ingredient. It answers "what date do we
+ * put on the order?", which is a question for the order screen. The question somebody reading
  * a shopping list is actually asking is "when does this have to go out?", and until now nothing on
  * this screen answered it. Showing both would have put two columns side by side displaying the same
  * date whenever no lead time is recorded, under two names, which is worse than either alone.
@@ -289,10 +309,10 @@ function OrderByCell({ line }: { line: ShoppingListLineView }) {
 /**
  * Adding a line to the shopping list by hand (T-027).
  *
- * <p>Until now this screen could only edit what the regenerator had already computed, so a cook who
- * could see the list was missing something had nowhere to say so. Three demand streams build it — a
- * meal-plan shortfall, stock below its threshold, and a purchase order that came up short — and
- * none of them knows that the gas is nearly out or that Janmashtami needs flowers.
+ * <p>This screen could once only edit what had already been computed, so a cook who could see the
+ * list was missing something had nowhere to say so. Three demand streams build it — a meal-plan
+ * shortfall, stock below its threshold, and a purchase order that came up short — and none of them
+ * knows that the gas is nearly out or that Janmashtami needs flowers.
  *
  * <p>A picker rather than a box to paste an identifier into: nobody knows an ingredient by its id,
  * and the vendor page, the invoice form and the order detail all choose one this way already.
@@ -320,7 +340,9 @@ function AddLine({
   const [qty, setQty] = useState("");
 
   // Something already on the list is changed on its own row, and the server refuses a second line
-  // for it (KMS-400131). Leaving it in the picker would be offering an action that cannot succeed.
+  // for it (KMS-400131) — and it now checks the derived list rather than a table, so an ingredient
+  // the shortfall stream suggested is caught as well. Leaving it in the picker would be offering an
+  // action that cannot succeed.
   const available = ingredients.filter((i) => !alreadyOnList.includes(i.id));
   const ingredient = available.find((i) => i.id === chosen);
 
@@ -345,7 +367,7 @@ function AddLine({
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <HintedField
           label="Item"
-          hint="For anything the list didn’t work out for itself — gas, leaf plates, flowers for a festival. A line you add by hand stays on the list when it is regenerated."
+          hint="For anything the list didn’t work out for itself — gas, leaf plates, flowers for a festival. A line you add by hand stays on the list until it goes onto a purchase order."
         >
           {(fieldId) => (
             <select
