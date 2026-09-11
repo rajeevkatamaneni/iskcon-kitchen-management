@@ -125,28 +125,95 @@ public class RecipeService {
 	/** The recipe scaled to a target yield (E2-S3). Computed on demand — no stored copy per scale. */
 	@Transactional(readOnly = true)
 	public ScaledRecipeView scale(UUID id, BigDecimal targetYield) {
-		if (targetYield == null || targetYield.signum() <= 0) {
-			throw new ApplicationException(
-					ErrorCode.VALIDATION_FAILED, Map.of("field", "targetYield", "value", String.valueOf(targetYield)));
+		return scaleAll(List.of(new ScaleRequest(id, targetYield))).get(0);
+	}
+
+	/**
+	 * Several recipes scaled in one pass — two statements for the whole batch, not two per recipe
+	 * (T-141).
+	 *
+	 * <p><strong>Why this exists.</strong> {@link #scale} reads its recipe through {@link #get},
+	 * which is two statements: the head row, then the ingredient lines. That is the right shape for a
+	 * screen showing one recipe, and the wrong shape for the caller this was written for.
+	 * {@code CommittedStockService} scales <em>every dish the plan intends to cook in the buying
+	 * window</em> — a fortnight of three meals a day, plus whatever festival the horizon reaches — and
+	 * asked one recipe at a time. Measured at the JDBC boundary on a temple with five years behind it,
+	 * one load of the shopping-list screen sent <strong>348 statements from {@code get}</strong> out of
+	 * 392 in total. Each one is cheap and none of that is visible on a local database; behind Cloud Run
+	 * and Cloud SQL it is 348 round trips, and the round trip is the cost.
+	 *
+	 * <p><strong>The batch is over distinct recipes, and the requests are over recipe-and-yield
+	 * pairs</strong>, because those are different sets: a temple cooks the same khichadi most days of
+	 * the week, sometimes at 80 kg and sometimes at 140, and those are two genuinely different answers
+	 * from one reading of the recipe. So the two statements below fetch each recipe once however many
+	 * yields ask for it, and the scaling itself — which is arithmetic, not I/O — happens per request.
+	 *
+	 * <p><strong>{@link #scale} now goes through here rather than beside it.</strong> One recipe is a
+	 * batch of one and costs the same two statements it always did, and there is one definition of
+	 * what scaling a recipe means rather than two that could drift.
+	 *
+	 * @param requests recipe and target yield, one per answer wanted; the returned list is in the same
+	 *                 order, so a caller may zip it back against its own input by position
+	 * @throws ApplicationException {@code VALIDATION_FAILED} for a yield that is absent, not positive
+	 *                              or beyond {@link #MAX_TARGET_YIELD}; {@code RESOURCE_NOT_FOUND} for
+	 *                              a recipe this tenant cannot see. Both are thrown for exactly the
+	 *                              cases {@link #scale} threw them for, and the yields are all checked
+	 *                              before anything is read, so a bad yield is still refused without a
+	 *                              database round trip.
+	 */
+	@Transactional(readOnly = true)
+	public List<ScaledRecipeView> scaleAll(List<ScaleRequest> requests) {
+		for (ScaleRequest request : requests) {
+			BigDecimal targetYield = request.targetYield();
+			if (targetYield == null || targetYield.signum() <= 0) {
+				throw new ApplicationException(
+						ErrorCode.VALIDATION_FAILED,
+						Map.of("field", "targetYield", "value", String.valueOf(targetYield)));
+			}
+			if (targetYield.compareTo(MAX_TARGET_YIELD) > 0) {
+				throw new ApplicationException(
+						ErrorCode.VALIDATION_FAILED,
+						Map.of("field", "targetYield", "max", MAX_TARGET_YIELD.toPlainString()));
+			}
 		}
-		if (targetYield.compareTo(MAX_TARGET_YIELD) > 0) {
-			throw new ApplicationException(
-					ErrorCode.VALIDATION_FAILED,
-					Map.of("field", "targetYield", "max", MAX_TARGET_YIELD.toPlainString()));
+		if (requests.isEmpty()) {
+			return List.of();
 		}
 
-		RecipeView recipe = get(id);
-		BigDecimal ratio = RecipeScaler.ratio(recipe.baseYieldQty(), targetYield);
-
-		List<ScaledLine> scaled = new ArrayList<>();
-		for (RecipeIngredientView line : recipe.ingredients()) {
-			ScaledQuantity q = RecipeScaler.scale(line.quantity(), Unit.valueOf(line.unit()), ratio);
-			scaled.add(new ScaledLine(line.ingredientId(), line.ingredientName(),
-					q.rawQuantity(), q.rawUnit(), q.displayQuantity(), q.displayUnit()));
+		Set<UUID> ids = new LinkedHashSet<>();
+		for (ScaleRequest request : requests) {
+			ids.add(request.recipeId());
 		}
+		Map<UUID, ScalableRecipe> loaded = loadForScaling(ids);
 
-		return new ScaledRecipeView(recipe.id(), recipe.name(), recipe.baseYieldQty(),
-				recipe.baseYieldUnit(), targetYield, ratio, scaled);
+		List<ScaledRecipeView> out = new ArrayList<>(requests.size());
+		for (ScaleRequest request : requests) {
+			ScalableRecipe recipe = loaded.get(request.recipeId());
+			if (recipe == null) {
+				throw notFound(request.recipeId());
+			}
+			BigDecimal ratio = RecipeScaler.ratio(recipe.baseYieldQty(), request.targetYield());
+
+			List<ScaledLine> scaled = new ArrayList<>();
+			for (RecipeIngredientView line : recipe.ingredients()) {
+				ScaledQuantity q = RecipeScaler.scale(line.quantity(), Unit.valueOf(line.unit()), ratio);
+				scaled.add(new ScaledLine(line.ingredientId(), line.ingredientName(),
+						q.rawQuantity(), q.rawUnit(), q.displayQuantity(), q.displayUnit()));
+			}
+
+			out.add(new ScaledRecipeView(recipe.id(), recipe.name(), recipe.baseYieldQty(),
+					recipe.baseYieldUnit(), request.targetYield(), ratio, scaled));
+		}
+		return out;
+	}
+
+	/**
+	 * One recipe to scale, and the yield to scale it to.
+	 *
+	 * <p>Nested rather than given its own file for the reason {@code CommittedStockService.MealClaim}
+	 * is: it says nothing on its own, and reads as an argument to {@link #scaleAll}.
+	 */
+	public record ScaleRequest(UUID recipeId, BigDecimal targetYield) {
 	}
 
 	@Transactional
@@ -291,6 +358,77 @@ public class RecipeService {
 	}
 
 	// ---------------------------------------------------------------------
+
+	/**
+	 * Every named recipe, with its ingredient lines, in two statements — the head rows, then all of
+	 * their lines at once.
+	 *
+	 * <p><strong>Only the columns scaling actually uses.</strong> {@link #get} selects the whole
+	 * recipe because it answers a recipe screen; scaling needs the name, the base yield and the lines,
+	 * and nothing here should be mistaken for a {@link RecipeView} that happens to be missing most of
+	 * itself. Hence its own small type rather than a half-filled one.
+	 *
+	 * <p><strong>{@code = ANY(?)} is still fully RLS-scoped.</strong> The policy on {@code recipes}
+	 * qualifies this read exactly as it qualifies the single-row form, so an id belonging to another
+	 * temple simply does not come back and the caller reads that as not found — which is the same
+	 * answer {@link #get} gives, by the same mechanism.
+	 *
+	 * <p>A recipe with no ingredient lines comes back present and empty rather than absent: it exists,
+	 * it can be scaled, and what it scales to is nothing. That is the same thing {@link #get} says
+	 * about it.
+	 */
+	private Map<UUID, ScalableRecipe> loadForScaling(Set<UUID> ids) {
+		Object[] idArray = ids.toArray();
+
+		Map<UUID, List<RecipeIngredientView>> linesByRecipe = new LinkedHashMap<>();
+		for (UUID id : ids) {
+			linesByRecipe.put(id, new ArrayList<>());
+		}
+
+		// Ordered by recipe and then by line_order, so each recipe's lines arrive in the order the
+		// recipe states them — the order get() returns them in, and the order a job card prints.
+		jdbc.query(connection -> {
+			var ps = connection.prepareStatement("""
+					SELECT ri.recipe_id, ri.ingredient_id, i.name AS ingredient_name, ri.quantity, ri.unit
+					FROM recipe_ingredients ri
+					JOIN ingredients i ON i.id = ri.ingredient_id
+					WHERE ri.recipe_id = ANY(?)
+					ORDER BY ri.recipe_id, ri.line_order
+					""");
+			ps.setArray(1, connection.createArrayOf("uuid", idArray));
+			return ps;
+		}, (rs, rowNum) -> {
+			UUID recipeId = rs.getObject("recipe_id", UUID.class);
+			List<RecipeIngredientView> lines = linesByRecipe.get(recipeId);
+			if (lines != null) {
+				lines.add(LINE_MAPPER.mapRow(rs, rowNum));
+			}
+			return recipeId;
+		});
+
+		Map<UUID, ScalableRecipe> out = new LinkedHashMap<>();
+		jdbc.query(connection -> {
+			var ps = connection.prepareStatement("""
+					SELECT r.id, r.name, r.base_yield_qty, r.base_yield_unit
+					FROM recipes r
+					WHERE r.id = ANY(?)
+					""");
+			ps.setArray(1, connection.createArrayOf("uuid", idArray));
+			return ps;
+		}, (rs, rowNum) -> {
+			UUID id = rs.getObject("id", UUID.class);
+			out.put(id, new ScalableRecipe(id, rs.getString("name"),
+					rs.getBigDecimal("base_yield_qty"), rs.getString("base_yield_unit"),
+					linesByRecipe.getOrDefault(id, List.of())));
+			return id;
+		});
+		return out;
+	}
+
+	/** As much of a recipe as scaling it needs, and deliberately no more. */
+	private record ScalableRecipe(UUID id, String name, BigDecimal baseYieldQty, String baseYieldUnit,
+			List<RecipeIngredientView> ingredients) {
+	}
 
 	private void insertLines(UUID recipeId, List<RecipeIngredientLine> lines) {
 		int order = 0;

@@ -4,8 +4,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.occasion.OccasionService;
@@ -14,9 +16,12 @@ import org.iskcon.kms.recipe.RecipeService;
 import org.iskcon.kms.recipe.ScaledLine;
 import org.iskcon.kms.recipe.ScaledRecipeView;
 import org.iskcon.kms.tenancy.TempleClock;
+import org.iskcon.kms.tenancy.TenantContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * What the saved plan intends to draw out of the store, per ingredient (T-086).
@@ -157,24 +162,88 @@ public class CommittedStockService {
 	// ---------------------------------------------------------------------
 
 	/**
-	 * Every claim the saved plan makes inside the horizon, one row per dish per ingredient.
+	 * Every claim the saved plan makes inside the horizon, one row per dish per ingredient — computed
+	 * at most once per read (T-141).
 	 *
-	 * <p>Scaling is memoised on the recipe and the yield together, not on the recipe alone: a temple
-	 * cooks the same khichadi at the same 100 kg most days of the week, so the same scale is asked
-	 * for repeatedly, and two plans of the same recipe at different yields are genuinely different
-	 * answers. Without it a fortnight of three meals a day is forty-odd recipe reads for one page.
+	 * <h3>Why it is held at all, and what holds it</h3>
+	 *
+	 * <p>All three public methods above are projections of this one list, and a page that wants two of
+	 * them used to walk the plan twice. The shopping-list screen is the clear case: the sufficiency
+	 * walk asks {@link #claimsInHorizon()} and the low-stock read asks
+	 * {@link #committedBaseByIngredient()}, so one page load resolved the festival calendar twice,
+	 * read the planned dishes twice and scaled every recipe in the buying window twice. The stock
+	 * detail screen does the same, asking {@link #committedBaseByIngredient()} and
+	 * {@link #committedFor} for one item.
+	 *
+	 * <p><strong>They want the same answer, and that was checked rather than assumed.</strong> The
+	 * two projections differ only in how they add the rows up — one groups by meal, the other sums by
+	 * ingredient — over an identical set built from one window, one {@code PLANNED} filter and one
+	 * today. That is not a coincidence to be relied on: it is what T-088 deliberately made true, and
+	 * {@link #claimsInHorizon()} says so in its own words ("the same set of claims
+	 * {@link #committedBaseByIngredient()} sums, handed over un-summed"). Two walks could only ever
+	 * differ by disagreeing, which is the defect T-088 existed to remove.
+	 *
+	 * <p><strong>What holds it and when it dies:</strong> the list lives in the current read-only
+	 * database transaction, for the temple it was computed for, and is discarded when that transaction
+	 * completes. All three conditions are enforced, not intended:
+	 *
+	 * <ul>
+	 *   <li><strong>Read-only transaction.</strong> Nothing is held unless
+	 *       {@code isCurrentTransactionReadOnly()}, so no transaction that could itself change a meal
+	 *       plan can be reading a list computed before it did. Every caller today is a read path; one
+	 *       written tomorrow that is not simply recomputes.
+	 *   <li><strong>One transaction.</strong> It is bound as a transaction resource and unbound by a
+	 *       {@code TransactionSynchronization} at completion — and at suspension, so an inner
+	 *       {@code REQUIRES_NEW} starts from nothing. It is not a field, not a static, and not a bare
+	 *       {@code ThreadLocal} that a missing {@code finally} could leak onto the next request that
+	 *       borrows this pooled thread.
+	 *   <li><strong>One temple.</strong> The memo records the tenant it was computed for and is
+	 *       discarded rather than used if that is not the tenant asking. This cannot fire — the tenant
+	 *       is fixed on the thread before the transaction opens and RLS scopes the connection for its
+	 *       whole life — and it is here because "cannot happen" is the wrong amount of care to take
+	 *       over one temple reading another's plan.
+	 * </ul>
+	 *
+	 * <p>It is worth being plain that this is the opposite of the conclusion {@code ShoppingListService}
+	 * reached about the stock ledger, where T-140 wrote that "a cache with a lifetime could do worse,
+	 * which is why there is no cache here". That reasoning is intact and it points the same way here.
+	 * The danger it names is a figure held <em>across</em> reads, so that a screen prints something the
+	 * database no longer says. What is held here is held <em>within</em> one read, which is the same
+	 * thing T-140 did — it read the ledger once and handed that one reading to both streams — arrived
+	 * at from the other end, because the two collaborators that need this one are not this task's to
+	 * change.
 	 */
 	private List<Claim> claims() {
+		List<Claim> held = memoised();
+		if (held != null) {
+			return held;
+		}
+		List<Claim> claims = computeClaims();
+		memoise(claims);
+		return claims;
+	}
+
+	/**
+	 * Walks the plan: every dish in the window, scaled, with its ingredient lines turned into claims.
+	 *
+	 * <p>Every recipe the window needs is scaled in <strong>one</strong> call (T-141). It used to be
+	 * one call per distinct recipe-and-yield, memoised on the pair — which bounded the count but did
+	 * not stop it, because a temple cooking the same dish at a different head count each day has as
+	 * many pairs as it has dishes. Measured on five years of history that was 87 pairs per walk and
+	 * 348 statements per page load out of 392. The pair is still what identifies an answer; it is the
+	 * <em>reading</em> that is now done once, and {@code RecipeService.scaleAll} fetches each distinct
+	 * recipe once however many yields ask for it.
+	 */
+	private List<Claim> computeClaims() {
 		LocalDate today = LocalDate.now(clock.zone());
 		LocalDate horizon = orderingHorizonEnd(today);
 
-		Map<ScaleKey, ScaledRecipeView> scaled = new LinkedHashMap<>();
-		List<Claim> claims = new ArrayList<>();
+		List<PlannedDish> dishes = plannedDishes(today, horizon);
+		Map<ScaleKey, ScaledRecipeView> scaled = scaleEveryDish(dishes);
 
-		for (PlannedDish dish : plannedDishes(today, horizon)) {
-			ScaledRecipeView recipe = scaled.computeIfAbsent(
-					new ScaleKey(dish.recipeId(), dish.targetYield()),
-					key -> recipeService.scale(key.recipeId(), key.targetYield()));
+		List<Claim> claims = new ArrayList<>();
+		for (PlannedDish dish : dishes) {
+			ScaledRecipeView recipe = scaled.get(new ScaleKey(dish.recipeId(), dish.targetYield()));
 
 			// A recipe is allowed to name one ingredient on two lines — a tempering of the same
 			// cumin as the body of the dish — and the claim is what the dish draws in total, so the
@@ -193,6 +262,83 @@ public class CommittedStockService {
 			}
 		}
 		return claims;
+	}
+
+	/**
+	 * Every distinct recipe-and-yield the window asks for, scaled, in one call to the recipe service.
+	 *
+	 * <p>Distinct because the same khichadi at the same 100 kg is planned most days of the week and
+	 * that is one answer, while the same khichadi at 140 kg for Sunday is genuinely a different one —
+	 * so both halves stay in the key, exactly as they did when this was a per-dish memo.
+	 */
+	private Map<ScaleKey, ScaledRecipeView> scaleEveryDish(List<PlannedDish> dishes) {
+		List<ScaleKey> keys = new ArrayList<>(new LinkedHashSet<>(dishes.stream()
+				.map(d -> new ScaleKey(d.recipeId(), d.targetYield()))
+				.toList()));
+
+		List<ScaledRecipeView> views = recipeService.scaleAll(keys.stream()
+				.map(k -> new RecipeService.ScaleRequest(k.recipeId(), k.targetYield()))
+				.toList());
+
+		// Zipped back by position, which is what scaleAll promises: one answer per request, in order.
+		Map<ScaleKey, ScaledRecipeView> scaled = new LinkedHashMap<>();
+		for (int i = 0; i < keys.size(); i++) {
+			scaled.put(keys.get(i), views.get(i));
+		}
+		return scaled;
+	}
+
+	// --- the memo, and the three things that bound it ---------------------
+
+	/**
+	 * What the memo is filed under. A private constant object rather than a string, so nothing outside
+	 * this class can read it or bind over it by guessing a name.
+	 */
+	private static final Object CLAIMS_KEY = new Object();
+
+	/** The claims, and the temple they were computed for — never one without the other. */
+	private record Memo(UUID tenantId, List<Claim> claims) {
+	}
+
+	/** What this transaction already worked out, or null — see {@link #claims()} for the three bounds. */
+	private List<Claim> memoised() {
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			return null;
+		}
+		Memo memo = (Memo) TransactionSynchronizationManager.getResource(CLAIMS_KEY);
+		if (memo == null || !Objects.equals(memo.tenantId(), TenantContext.get().orElse(null))) {
+			return null;
+		}
+		return memo.claims();
+	}
+
+	private void memoise(List<Claim> claims) {
+		if (!TransactionSynchronizationManager.isSynchronizationActive()
+				|| !TransactionSynchronizationManager.isCurrentTransactionReadOnly()) {
+			return;
+		}
+		forget();
+		TransactionSynchronizationManager.bindResource(
+				CLAIMS_KEY, new Memo(TenantContext.get().orElse(null), claims));
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void suspend() {
+				// An inner REQUIRES_NEW gets no inheritance from the transaction it suspended. The
+				// outer one simply recomputes when it resumes, which costs a walk and cannot be wrong.
+				forget();
+			}
+
+			@Override
+			public void afterCompletion(int status) {
+				forget();
+			}
+		});
+	}
+
+	private static void forget() {
+		if (TransactionSynchronizationManager.hasResource(CLAIMS_KEY)) {
+			TransactionSynchronizationManager.unbindResource(CLAIMS_KEY);
+		}
 	}
 
 	/**

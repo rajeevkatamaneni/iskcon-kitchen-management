@@ -243,7 +243,7 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 			report.say("  GET will cost then, on every page load.");
 		}
 
-		long ledgerReads = reportWhichCallsReadTheLedger();
+		Counted counted = reportWhichCallsReadTheLedger();
 		reportHowOftenOnePageLoadReadsEachTable();
 
 		reportExplain("earliestDemandByIngredient() — meal plans joined to recipe ingredients",
@@ -266,9 +266,35 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 		// instead of once per stream that wants it, and a count is the same number on a loaded
 		// machine as on an idle one. It is asserted here rather than left to be read out of the
 		// report because a number in a report is a number nobody notices going back up.
-		assertThat(ledgerReads)
+		assertThat(counted.ledgerReads())
 				.as("statements against stock_movements for one GET /api/v1/shopping-list")
 				.isEqualTo(1);
+
+		// T-141, and the same kind of number for the same kind of reason. Measured on this tree on
+		// 2026-09-11 BEFORE the fix: 392 statements for one page load, of which 348 were RecipeService
+		// reading one recipe at a time, and the whole walk of the plan ran twice — once for the
+		// sufficiency shortfall, once for the low-stock read. Both are projections of one answer.
+		//
+		// The ceilings are ceilings rather than equalities because this class is a report first: it is
+		// meant to survive somebody adding a column to the shopping list. The exact counts are asserted
+		// by ShoppingListStatementCountIT, which runs in the ordinary suite and would go red first.
+		assertThat(counted.recipeReads())
+				.as("statements RecipeService sent for one GET /api/v1/shopping-list — every recipe the"
+						+ " buying window needs is read in one batch (T-141; was 348)")
+				.isLessThanOrEqualTo(4);
+		assertThat(counted.planWalks())
+				.as("walks of the saved plan for one GET /api/v1/shopping-list (T-141; was 2)")
+				.isEqualTo(1);
+	}
+
+	/**
+	 * The three counts the assertions at the end of {@link #measure()} are made against.
+	 *
+	 * <p>Returned together rather than counted twice, because they come from one recording window and
+	 * a second window would be a second page load — which is a different request, and on a fixture
+	 * this size, a slow way to answer a question already answered.
+	 */
+	private record Counted(long ledgerReads, long recipeReads, long planWalks) {
 	}
 
 	// -------------------------------------------------------------------------------------------
@@ -322,9 +348,9 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 	 * the requests before it. Neither of those can be argued with from the report; both are removed
 	 * by counting what the application asked for, at the moment it asked, with its own stack in view.
 	 *
-	 * @return how many statements this page load sent against {@code stock_movements}
+	 * @return the three counts {@link #measure()} asserts on, taken from this one recording window
 	 */
-	private long reportWhichCallsReadTheLedger() {
+	private Counted reportWhichCallsReadTheLedger() {
 		StatementRecorder.start();
 		require200(call(HttpMethod.GET, "/api/v1/shopping-list"), "GET for the statement recording");
 		List<StatementRecorder.Executed> statements = StatementRecorder.stop();
@@ -365,7 +391,22 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 				.limit(10)
 				.forEach(e -> report.say("    %6d  %s".formatted(e.getValue(), e.getKey())));
 
-		return ledgerReads;
+		// T-141's two counts, attributed by the method that sent each statement rather than by the
+		// table it named. plannedDishes issues the one statement at the head of a walk of the plan, so
+		// counting it counts walks; and every statement RecipeService sends for this page comes from
+		// the buying window's recipes, so counting those counts how the window was read.
+		long recipeReads = sentBy(statements, "recipe.RecipeService");
+		long planWalks = sentBy(statements, "inventory.CommittedStockService.plannedDishes");
+		report.blank();
+		report.say("  T-141: RecipeService sent %d statements, and the plan was walked %d time(s)."
+				.formatted(recipeReads, planWalks));
+
+		return new Counted(ledgerReads, recipeReads, planWalks);
+	}
+
+	/** How many recorded statements were sent from inside this class or method. */
+	private static long sentBy(List<StatementRecorder.Executed> statements, String callerPrefix) {
+		return statements.stream().filter(s -> s.caller().startsWith(callerPrefix)).count();
 	}
 
 	private void reportHowOftenOnePageLoadReadsEachTable() {
