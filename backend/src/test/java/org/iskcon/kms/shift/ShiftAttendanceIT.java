@@ -1,6 +1,7 @@
 package org.iskcon.kms.shift;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.TokenVerifier;
+import org.iskcon.kms.notification.NotificationTemplate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -60,12 +62,28 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * is the failure this feature would be worth nothing with, and it is invisible in a green run of
  * everything else: {@code attended} would simply be {@code false} everywhere and every other
  * assertion here would still pass.
+ *
+ * <p>T-080 makes the removal say why, and its block at the foot of this class is mostly about one
+ * thing being in a message and one thing not. Those tests are written against the trap that comes
+ * with asserting an absence: "the note is not in what was sent" passes perfectly well against a
+ * product that sends the removed volunteer nothing at all, which is the defect T-080 exists to fix.
+ * So {@link #removedVolunteerIsToldTheReasonAndNeverTheNote} asserts the message exists first, and
+ * checks the absence three ways afterwards — the raw JSON, the exact key set, and the rendered
+ * body — because a key lookup can only refute the spelling somebody thought of.
  */
 @AutoConfigureMockMvc
 @Import(ShiftAttendanceIT.StubVerifierConfiguration.class)
 class ShiftAttendanceIT extends AbstractIntegrationTest {
 
 	private static final String PAST = "2020-01-01";
+
+	/**
+	 * The coordinator's internal note, written to be the kind of sentence that must never reach the
+	 * person it is about — which is what makes it a useful needle. Every T-080 assertion that the
+	 * note did not leak greps for this exact string, so it is deliberately unlike anything the
+	 * product's own copy would ever produce.
+	 */
+	private static final String NOTE = "She has missed three Sundays without telling anyone.";
 
 	/** The zone the tenant below is seeded with — the one TempleClock resolves for these requests. */
 	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
@@ -614,17 +632,23 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 				""", tenant, shift, vol2);
 
 		signIn("uid-staff");
-		mvc.perform(authed(delete("/api/v1/shifts/{id}/signups/{userId}", shift, vol1)))
-				.andExpect(status().isNoContent());
+		mvc.perform(removal(shift, vol1, "ROTA_CHANGED", NOTE)).andExpect(status().isNoContent());
 
-		// vol1 shows as a release; vol2 has been promoted into the freed spot.
+		// vol1 shows as a release, now with the reason and the note on it; vol2 has been promoted
+		// into the freed spot.
 		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
 				.andExpect(jsonPath("$.signups.length()").value(2))
 				.andExpect(jsonPath("$.signups[0].fullName").value("Vol One"))
 				.andExpect(jsonPath("$.signups[0].releasedAt").exists())
+				.andExpect(jsonPath("$.signups[0].releasedReason").value("ROTA_CHANGED"))
+				.andExpect(jsonPath("$.signups[0].releasedNote").value(NOTE))
 				.andExpect(jsonPath("$.signups[1].fullName").value("Vol Two"))
 				.andExpect(jsonPath("$.signups[1].source").value("PROMOTION"))
 				.andExpect(jsonPath("$.signups[1].releasedAt").doesNotExist())
+				// The promoted volunteer's own row carries neither, which is the other half of what
+				// makes the pair readable: a non-null reason means the temple removed this person.
+				.andExpect(jsonPath("$.signups[1].releasedReason").doesNotExist())
+				.andExpect(jsonPath("$.signups[1].releasedNote").doesNotExist())
 				.andExpect(jsonPath("$.waitlist.length()").value(0));
 
 		signIn("uid-vol-1");
@@ -637,7 +661,7 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
 
 		signIn("uid-staff");
-		mvc.perform(authed(delete("/api/v1/shifts/{id}/signups/{userId}", shift, vol1)))
+		mvc.perform(removal(shift, vol1, "ROTA_CHANGED", NOTE))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400062"));
 	}
@@ -652,9 +676,10 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		// The coordinator's endpoint is gated on MANAGE_VOLUNTEER_SHIFTS, which a volunteer does not
 		// hold. This is the guard that keeps the two releases apart: the volunteer's own endpoint
 		// takes no "whose spot" at all, so this is the only door that could ever have been widened.
+		// T-080 moved this door from DELETE to POST and it has to stay shut on the new verb too — a
+		// permission annotation lost in a rewrite is exactly the kind of thing that goes unnoticed.
 		signIn("uid-vol-1");
-		mvc.perform(authed(delete("/api/v1/shifts/{id}/signups/{userId}", shift, vol2)))
-				.andExpect(status().isForbidden());
+		mvc.perform(removal(shift, vol2, "ROTA_CHANGED", NOTE)).andExpect(status().isForbidden());
 
 		// vol2 is still on the roster — asserted as a presence, so that a widened endpoint fails
 		// here rather than passing vacuously.
@@ -662,6 +687,198 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/my-shifts")))
 				.andExpect(jsonPath("$.length()").value(1))
 				.andExpect(jsonPath("$[0].title").value("Sunday prep"));
+	}
+
+	// ---- T-080: a removal has to say why, twice over --------------------
+
+	@Test
+	@DisplayName("a removal with no reason, or no note, is refused with the field named")
+	void bothFieldsAreRequired() throws Exception {
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
+		signup(shift, vol1);
+		signIn("uid-staff");
+
+		// No reason.
+		mvc.perform(removalBody(shift, vol1, "{\"internalNote\":\"%s\"}".formatted(NOTE)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				.andExpect(jsonPath("$.fieldErrors[*].field").value(hasItem("reason")));
+
+		// No note. This is the half a coordinator in a hurry would drop, and the half Rajeev's ruling
+		// turns on: "a coordinator who has to write a private note is a coordinator who has thought
+		// about it."
+		mvc.perform(removalBody(shift, vol1, "{\"reason\":\"ROTA_CHANGED\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				.andExpect(jsonPath("$.fieldErrors[*].field").value(hasItem("internalNote")));
+
+		// A note of spaces is not a note. @NotBlank rather than @NotEmpty, and this is the assertion
+		// that says which was used.
+		mvc.perform(removal(shift, vol1, "ROTA_CHANGED", "   "))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors[*].field").value(hasItem("internalNote")));
+
+		// And after three refusals the volunteer is still on the shift. Without this, all three pass
+		// against a controller that refused the body and removed them anyway.
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].releasedAt").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("the removed volunteer is told, and told the reason and not the note")
+	void removedVolunteerIsToldTheReasonAndNeverTheNote() throws Exception {
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
+		signup(shift, vol1);
+
+		signIn("uid-staff");
+		mvc.perform(removal(shift, vol1, "ROTA_CHANGED", NOTE)).andExpect(status().isNoContent());
+
+		// The message exists at all. This assertion is load-bearing and comes first on purpose: every
+		// "the note is not in it" check below passes vacuously against a product that sends the
+		// removed volunteer nothing — which is precisely the defect T-080 exists to fix, so a test
+		// suite that could not tell the fix from the defect would be worth nothing here.
+		List<Map<String, Object>> sent = admin.queryForList("""
+				SELECT params::text AS params FROM notifications
+				WHERE recipient_user_id = ? AND template = 'REMOVED_FROM_SHIFT'
+				""", vol1);
+		assertThat(sent).hasSize(1);
+
+		// The reason, in the words the volunteer actually reads.
+		assertThat((String) sent.get(0).get("params")).contains("the rota changed");
+
+		// And the note is not in the row anywhere — not under `internalNote`, not under `note`, not
+		// smuggled into some other parameter. Asserted on the raw JSON text rather than on a named
+		// key, because a key test only refutes the spelling somebody thought of.
+		assertThat((String) sent.get(0).get("params")).doesNotContain(NOTE);
+
+		// The same absence stated the other way round, since the two fail differently: the parameter
+		// map is exactly these six keys and there is no seventh for a note to arrive in. A map with
+		// an extra key fails here even if its value happened to be empty, which is the case a
+		// contains-check cannot see.
+		assertThat(notificationParamKeys(vol1, "REMOVED_FROM_SHIFT"))
+				.containsExactlyInAnyOrder("title", "date", "time", "location", "temple", "reason");
+
+		// Rendering it is the last place the note could appear, and the only one a devotee sees.
+		Map<String, Object> params = Map.of("title", "Sunday prep", "date", "6 December",
+				"time", "08:00–12:00", "location", "Main kitchen", "temple", "Bengaluru Temple",
+				"reason", "the rota changed");
+		String body = NotificationTemplate.REMOVED_FROM_SHIFT.render(params).body();
+		assertThat(body).contains("Sunday prep").contains("the rota changed").doesNotContain(NOTE);
+	}
+
+	@Test
+	@DisplayName("the waitlist promotion message is untouched by any of this")
+	void waitlistPromotionMessageIsUnchanged() throws Exception {
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 1);
+		signup(shift, vol1);
+		admin.update("""
+				INSERT INTO shift_waitlist (tenant_id, shift_id, volunteer_user_id) VALUES (?, ?, ?)
+				""", tenant, shift, vol2);
+
+		signIn("uid-staff");
+		mvc.perform(removal(shift, vol1, "NO_LONGER_NEEDED", NOTE)).andExpect(status().isNoContent());
+
+		// Rajeev's acceptance says this message does not change, so the test says what it is rather
+		// than only that one was sent: same template, same six-parameter map as every other shift
+		// message, and no reason and no note added to it. The promoted volunteer is not a party to
+		// why somebody else came off the roster.
+		assertThat(notificationParamKeys(vol2, "WAITLIST_PROMOTED"))
+				.containsExactlyInAnyOrder("title", "date", "time", "location", "temple");
+		List<Map<String, Object>> promoted = admin.queryForList("""
+				SELECT params::text AS params FROM notifications
+				WHERE recipient_user_id = ? AND template = 'WAITLIST_PROMOTED'
+				""", vol2);
+		assertThat(promoted).hasSize(1);
+		assertThat((String) promoted.get(0).get("params")).doesNotContain(NOTE);
+	}
+
+	@Test
+	@DisplayName("a volunteer's own release still records no reason and no note")
+	void ownReleaseCarriesNoReason() throws Exception {
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
+		signup(shift, vol1);
+
+		// The other half of what makes the pair meaningful. A devotee stepping off their own shift is
+		// not asked to justify it, so both columns stay null — and that is how the roster tells this
+		// act from a coordinator's removal.
+		signIn("uid-vol-1");
+		mvc.perform(authed(post("/api/v1/shifts/{id}/release", shift))).andExpect(status().isNoContent());
+
+		signIn("uid-staff");
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].releasedAt").exists())
+				.andExpect(jsonPath("$.signups[0].releasedReason").doesNotExist())
+				.andExpect(jsonPath("$.signups[0].releasedNote").doesNotExist());
+
+		// And nothing was sent to them about it: a removal message to somebody who removed themselves
+		// would be the new feature leaking into the old path.
+		Integer told = admin.queryForObject("""
+				SELECT count(*) FROM notifications
+				WHERE recipient_user_id = ? AND template = 'REMOVED_FROM_SHIFT'
+				""", Integer.class, vol1);
+		assertThat(told).isZero();
+	}
+
+	@Test
+	@DisplayName("a reason outside the four the product offers is refused")
+	void unknownReasonIsRefused() throws Exception {
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
+		signup(shift, vol1);
+
+		// The vocabulary is closed because this half is SENT. Anything a caller could invent here
+		// would reach a devotee's phone through the message template unreviewed.
+		signIn("uid-staff");
+		mvc.perform(removal(shift, vol1, "SHE_KEPT_MISSING_SHIFTS", NOTE))
+				.andExpect(status().isBadRequest());
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].releasedAt").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("the old DELETE door is gone, not left open beside the new one")
+	void theDeleteVerbIsWithdrawn() throws Exception {
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
+		signup(shift, vol1);
+
+		// T-080 moved the removal to a POST because two required fields cannot travel on a DELETE.
+		// Leaving the DELETE in place "for compatibility" would leave a door through which a
+		// volunteer is still removed with no reason and no note, which is the whole feature's width.
+		// KMS-400030 and a 404 rather than a 405, which is this project's own settled answer to the
+		// right address with the wrong verb (GlobalExceptionHandler#handleWrongMethod): what the
+		// caller asked for is not there. Asserted on the code and not only the status, so that a
+		// route quietly reappearing under some other handler cannot pass this.
+		signIn("uid-staff");
+		mvc.perform(authed(delete("/api/v1/shifts/{id}/signups/{userId}", shift, vol1)))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}/roster", shift)))
+				.andExpect(jsonPath("$.signups[0].releasedAt").doesNotExist());
+	}
+
+	@Test
+	@DisplayName("the internal note is on the temple's audit trail, with the volunteer named")
+	void removalIsOnTheAuditTrailWithTheNote() throws Exception {
+		UUID shift = shift("Sunday prep", tomorrowAtTheTemple(), 3);
+		signup(shift, vol1);
+
+		signIn("uid-staff");
+		mvc.perform(removal(shift, vol1, "ROTA_CHANGED", NOTE)).andExpect(status().isNoContent());
+
+		List<Map<String, Object>> events = admin.queryForList("""
+				SELECT actor_label, reason, before_state::text AS before_state,
+					   after_state::text AS after_state
+				FROM audit_events WHERE action = 'VOLUNTEER_REMOVED_FROM_SHIFT'
+				""");
+		assertThat(events).hasSize(1);
+		// The note is the point of the entry. It is the one durable account of why, and the only
+		// place a temple admin can read what the coordinator actually thought.
+		assertThat((String) events.get(0).get("reason")).isEqualTo(NOTE);
+		// Legible without resolving anybody's id, like ATTENDANCE_CORRECTED beside it.
+		assertThat((String) events.get(0).get("before_state")).contains("Vol One");
+		assertThat((String) events.get(0).get("after_state"))
+				.contains("Vol One").contains("ROTA_CHANGED");
 	}
 
 	// ---------------------------------------------------------------------
@@ -714,6 +931,33 @@ class ShiftAttendanceIT extends AbstractIntegrationTest {
 	private MockHttpServletRequestBuilder attendance(UUID shift, String body) {
 		return authed(post("/api/v1/shifts/{id}/attendance", shift))
 				.contentType(MediaType.APPLICATION_JSON).content(body);
+	}
+
+	/** A coordinator's removal, with the two things T-080 makes it say (POST, not DELETE). */
+	private MockHttpServletRequestBuilder removal(UUID shift, UUID userId, String reason, String note) {
+		return removalBody(shift, userId,
+				"{\"reason\":\"%s\",\"internalNote\":\"%s\"}".formatted(reason, note));
+	}
+
+	/** The same, with the body spelled out — for the payloads that leave a field out. */
+	private MockHttpServletRequestBuilder removalBody(UUID shift, UUID userId, String body) {
+		return authed(post("/api/v1/shifts/{id}/signups/{userId}/release", shift, userId))
+				.contentType(MediaType.APPLICATION_JSON).content(body);
+	}
+
+	/**
+	 * The parameter names a queued message actually carries.
+	 *
+	 * <p>Read as a key set rather than by looking one key up, because what these tests assert is an
+	 * <em>absence</em> — that the coordinator's internal note is not in the message — and a lookup
+	 * can only refute the spelling the test author happened to think of. {@code jsonb_object_keys}
+	 * expands every key there is, so a note arriving under any name at all fails here.
+	 */
+	private List<String> notificationParamKeys(UUID recipient, String template) {
+		return admin.queryForList("""
+				SELECT jsonb_object_keys(params) AS key FROM notifications
+				WHERE recipient_user_id = ? AND template = ?
+				""", String.class, recipient, template);
 	}
 
 	/** One person's mark, set to the answer given (T-079). */

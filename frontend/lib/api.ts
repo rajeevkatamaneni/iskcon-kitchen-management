@@ -3144,12 +3144,30 @@ export interface RosterReminder {
   status: string | null;
 }
 
+/** The four reasons a coordinator may give for taking somebody off a roster (T-080). */
+export type ShiftRemovalReason = "SHIFT_CANCELLED" | "NO_LONGER_NEEDED" | "ROTA_CHANGED" | "OTHER";
+
+export interface RemoveVolunteerInput {
+  /** Safe to show, and what the volunteer is told. */
+  reason: ShiftRemovalReason;
+  /** Mandatory, and never sent — the audit trail and the roster only. */
+  internalNote: string;
+}
+
 export interface RosterSignup {
   userId: string;
   fullName: string;
   source: string;
   signedUpAt: string;
   releasedAt: string | null;
+  /**
+   * Why a coordinator took this volunteer off the roster (T-080), and their own note on it. Both
+   * null on a volunteer's OWN release — nobody is asked to justify withdrawing — so a non-null
+   * reason is how the roster tells the temple's act from the devotee's. `releasedNote` is INTERNAL:
+   * the roster and the audit trail, and nothing that sends.
+   */
+  releasedReason: ShiftRemovalReason | null;
+  releasedNote: string | null;
   /**
    * Whether this volunteer turned up (T-016). Null means nobody has said yet — which is a different
    * fact from `false`, and the reason this is a nullable boolean rather than a plain one: every
@@ -5659,8 +5677,17 @@ export const api = {
    * caller's id and nobody else's — that scoping is the whole of its security and must stay exactly
    * as it is. This one names the person being removed and is gated on managing the roster.
    */
-  releaseVolunteerFromShift: (shiftId: string, userId: string, token?: string) =>
-    request<void>(`/api/v1/shifts/${shiftId}/signups/${userId}`, { method: "DELETE", token }),
+  releaseVolunteerFromShift: (
+    shiftId: string,
+    userId: string,
+    input: RemoveVolunteerInput,
+    token?: string
+  ) =>
+    request<void>(`/api/v1/shifts/${shiftId}/signups/${userId}/release`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
 
   joinWaitlist: (id: string, token?: string) =>
     request<void>(`/api/v1/shifts/${id}/waitlist`, { method: "POST", token }),

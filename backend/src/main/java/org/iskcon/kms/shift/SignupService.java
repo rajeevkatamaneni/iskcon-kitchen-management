@@ -102,24 +102,114 @@ public class SignupService {
 
 	/**
 	 * The coordinator taking a <em>named</em> volunteer off a roster (B7), behind
-	 * {@code MANAGE_VOLUNTEER_SHIFTS}. Until now this could not be done at all: the only release in
+	 * {@code MANAGE_VOLUNTEER_SHIFTS}. Until B7 this could not be done at all: the only release in
 	 * the system acted on the caller's own id, so a coordinator faced with a volunteer who had
 	 * stopped answering had no way to free the spot — and no way to let the waitlist have it.
 	 *
-	 * <p>Identical in effect to a volunteer's own release, and that is the point: the spot is freed,
-	 * the waitlist head is promoted into it, the release shows on the roster with its time, and the
-	 * pending reminders for that signup are cancelled. What differs is who may ask, which is settled
-	 * at the controller by the permission, and the argument that names the person — spelled out here
-	 * rather than left to the argument order of {@link #release}, where {@code volunteerUserId} first
-	 * and {@code shiftId} second is a trap worth not laying.
+	 * <p>Identical in effect to a volunteer's own release in everything the roster does: the spot is
+	 * freed, the waitlist head is promoted into it, the release shows on the roster with its time,
+	 * and the pending reminders for that signup are cancelled. What differs is who may ask, which is
+	 * settled at the controller by the permission, and the argument that names the person — spelled
+	 * out here rather than left to the argument order of {@link #release}, where
+	 * {@code volunteerUserId} first and {@code shiftId} second is a trap worth not laying.
+	 *
+	 * <p><strong>And, since T-080, it has to say why.</strong> Two fields, doing different jobs. The
+	 * structured {@code reason} is safe to show and is what the removed volunteer is told; the
+	 * {@code internalNote} is mandatory, stays inside the temple, and reaches the audit trail and the
+	 * roster. Before this, the waitlisted volunteer promoted into the freed place got a cheerful
+	 * message and the person who lost the shift got silence — so the removal now sends
+	 * {@link NotificationTemplate#REMOVED_FROM_SHIFT}, and {@code WAITLIST_PROMOTED} is untouched.
 	 *
 	 * <p>The started-shift guard is kept, deliberately. Releasing somebody off a shift that has
 	 * already run would rewrite what the roster said at the time it mattered, and attendance (B7) is
 	 * the right way to record that a person on the roster did not come.
+	 *
+	 * @return what was actually stored, for the caller to notify on after the transaction commits
 	 */
 	@Transactional
-	public List<UUID> releaseVolunteer(UUID shiftId, UUID volunteerUserId) {
-		return releaseSignup(shiftId, volunteerUserId);
+	public Removal releaseVolunteer(AuthenticatedUser actor, UUID shiftId, UUID volunteerUserId,
+			RemoveVolunteerRequest request) {
+		LockedShift shift = lockShift(shiftId);
+		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
+		if (!start.isAfter(LocalDateTime.now(clock.zone()))) {
+			throw new ApplicationException(ErrorCode.SHIFT_ALREADY_STARTED, Map.of("shiftId", shiftId));
+		}
+
+		// The volunteer's name, read while they are still actively on the roster, for the audit
+		// entry's before-state. Doubles as the "is this person actually on this shift" check, so the
+		// refusal below names the right failure rather than falling out of an UPDATE touching no rows.
+		List<String> names = jdbc.queryForList("""
+				SELECT u.full_name
+				FROM shift_signups ss JOIN users u ON u.id = ss.volunteer_user_id
+				WHERE ss.shift_id = ? AND ss.volunteer_user_id = ? AND ss.released_at IS NULL
+				""", String.class, shiftId, volunteerUserId);
+		if (names.isEmpty()) {
+			throw new ApplicationException(ErrorCode.NOT_ON_SHIFT,
+					Map.of("shiftId", shiftId, "volunteerUserId", volunteerUserId));
+		}
+		String volunteerName = names.get(0);
+
+		List<UUID> releasedIds = jdbc.query("""
+				UPDATE shift_signups
+				SET released_at = now(), released_reason = ?, released_note = ?
+				WHERE shift_id = ? AND volunteer_user_id = ? AND released_at IS NULL
+				RETURNING id
+				""", (rs, n) -> rs.getObject("id", UUID.class),
+				request.reason().name(), request.internalNote(), shiftId, volunteerUserId);
+		if (releasedIds.isEmpty()) {
+			// Unreachable while the shift row is locked above — every release, signup and promotion
+			// for this shift serialises on it — and kept anyway, because the alternative to a named
+			// refusal here is a silent success that freed nothing.
+			throw new ApplicationException(ErrorCode.NOT_ON_SHIFT,
+					Map.of("shiftId", shiftId, "volunteerUserId", volunteerUserId));
+		}
+
+		// Read back from the row rather than reusing the request, because an audit trail must record
+		// what was STORED and not what was asked for. It is a separate SELECT and not the UPDATE's
+		// own RETURNING on purpose: RETURNING would be near enough here, and the point of writing it
+		// this way is that it stays right if a default, a trigger or a later constraint ever changes
+		// what landing in this row means. One extra query on an act a coordinator performs by hand.
+		Map<String, Object> stored = jdbc.queryForMap("""
+				SELECT released_at, released_reason, released_note FROM shift_signups WHERE id = ?
+				""", releasedIds.get(0));
+
+		// The internal note goes in the `reason` argument — audit_events' own human-context column —
+		// rather than into the after-state, because that is what it is: the coordinator's account of
+		// why, in their own words. The after-state carries the structured answer, which is the part
+		// that was also sent, so a reader can see at a glance which half of the pair the volunteer
+		// got. The entity is the shift, matching ATTENDANCE_CORRECTED, and the volunteer is named in
+		// the states themselves so the entry reads without resolving anybody's id.
+		//
+		// Every value here comes from `stored`, read back from the row above, and not from `request`.
+		// An audit trail records what was stored and not what was asked for, and this is the one
+		// place in this method where the difference could go unnoticed.
+		//
+		// The before-state says the plain thing the after-state contradicts: this person was on the
+		// roster. It reads as a sentence beside the after-state rather than as a field somebody has
+		// to interpret, which is the same choice ATTENDANCE_CORRECTED makes with "not marked".
+		auditService.record(actor, AuditAction.VOLUNTEER_REMOVED_FROM_SHIFT, AuditEntityType.SHIFT,
+				shiftId,
+				Map.of("volunteer", volunteerName, "onRoster", "true"),
+				Map.of("volunteer", volunteerName,
+						"reason", String.valueOf(stored.get("released_reason")),
+						"releasedAt", String.valueOf(stored.get("released_at"))),
+				String.valueOf(stored.get("released_note")));
+
+		reminderScheduler.cancelForSignup(shiftId, releasedIds.get(0));
+		return new Removal(
+				RemoveVolunteerRequest.Reason.valueOf(String.valueOf(stored.get("released_reason"))),
+				promoteWithinLock(shiftId, shift));
+	}
+
+	/**
+	 * What a coordinator's removal actually did, handed back for the caller to send on after commit.
+	 *
+	 * <p>{@code reason} is re-read from the stored row rather than echoed from the request, for the
+	 * same reason the audit entry is: the volunteer is told what the roster now says, not what
+	 * somebody asked it to say. {@code promoted} is 0 or 1 user id and is the existing behaviour
+	 * unchanged — the waitlist message is the one thing T-080 was explicitly told not to touch.
+	 */
+	public record Removal(RemoveVolunteerRequest.Reason reason, List<UUID> promoted) {
 	}
 
 	/**
@@ -409,9 +499,25 @@ public class SignupService {
 				volunteerUserId);
 	}
 
-	/** Best-effort "you're in" notice to a promoted volunteer (E6-S5). */
+	/** Best-effort "you're in" notice to a promoted volunteer (E6-S5). Unchanged by T-080. */
 	public void notifyPromotion(UUID volunteerUserId, UUID shiftId) {
 		notifyShift(volunteerUserId, shiftId, NotificationTemplate.WAITLIST_PROMOTED);
+	}
+
+	/**
+	 * Best-effort "you're no longer on this shift" notice to the volunteer a coordinator removed
+	 * (T-080) — the message whose absence was the whole defect. The promoted volunteer was told a
+	 * spot had opened; the person whose spot it had been was told nothing.
+	 *
+	 * <p><strong>The reason, and never the note.</strong> Only {@code reason.volunteerText()} is put
+	 * in the parameter map, so the internal note has no route to any channel: it is not a parameter
+	 * of {@link NotificationTemplate#REMOVED_FROM_SHIFT}, it is not in the map this builds, and the
+	 * notification row therefore cannot carry it. Said out loud because the proof of it is an
+	 * absence, and an absence is the one thing a green test run does not show you.
+	 */
+	public void notifyRemoval(UUID volunteerUserId, UUID shiftId, RemoveVolunteerRequest.Reason reason) {
+		notifyShift(volunteerUserId, shiftId, NotificationTemplate.REMOVED_FROM_SHIFT,
+				Map.of("reason", reason.volunteerText()));
 	}
 
 	/** Promotes as many waitlist heads as there are free spots. Assumes the shift row is locked. */
@@ -534,17 +640,31 @@ public class SignupService {
 	}
 
 	void notifyShift(UUID volunteerUserId, UUID shiftId, NotificationTemplate template) {
+		notifyShift(volunteerUserId, shiftId, template, Map.of());
+	}
+
+	/**
+	 * The five facts every shift message here carries, plus whatever one template needs beyond them.
+	 *
+	 * <p>{@code extra} exists for T-080's removal reason and is kept deliberately narrow: it is
+	 * merged <em>after</em> the shift's own facts, so a caller could in principle overwrite one of
+	 * them, and nothing does. Anything a template must not send simply is not passed here — the
+	 * parameter map is what lands in {@code notifications.params}, so it is the boundary, not a
+	 * formatting step before one.
+	 */
+	void notifyShift(UUID volunteerUserId, UUID shiftId, NotificationTemplate template,
+			Map<String, Object> extra) {
 		try {
 			Map<String, Object> s = jdbc.queryForMap(
 					"SELECT title, shift_date, start_time, end_time, location FROM shifts WHERE id = ?", shiftId);
 			String temple = templeName();
 			String location = s.get("location") != null ? s.get("location").toString() : temple;
 			String time = s.get("start_time") + "–" + s.get("end_time");
-			notificationService.notify(
-					NotificationRecipient.user(volunteerUserId), template,
-					Map.of("title", str(s.get("title")), "date", str(s.get("shift_date")),
-							"time", time, "location", location, "temple", temple),
-					null);
+			Map<String, Object> params = new java.util.LinkedHashMap<>(Map.of(
+					"title", str(s.get("title")), "date", str(s.get("shift_date")),
+					"time", time, "location", location, "temple", temple));
+			params.putAll(extra);
+			notificationService.notify(NotificationRecipient.user(volunteerUserId), template, params, null);
 		} catch (RuntimeException e) {
 			log.warn("Could not queue {} to {} for shift {}: {}", template, volunteerUserId, shiftId, e.toString());
 		}

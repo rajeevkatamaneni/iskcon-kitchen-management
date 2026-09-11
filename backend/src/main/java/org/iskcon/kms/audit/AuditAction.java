@@ -316,6 +316,17 @@ public enum AuditAction {
 	ATTENDANCE_CORRECTED,
 
 	/**
+	 * A coordinator took a named volunteer off a roster (T-080), with the structured reason the
+	 * volunteer was told and the private note they were not.
+	 *
+	 * <p>Its own action rather than a release event, because a volunteer stepping off their own shift
+	 * is not an auditable act and this is: somebody decided something about somebody else. The note is
+	 * in {@code reason}, which is the only durable account of why — the roster carries a copy, but the
+	 * roster is a row that can be superseded.
+	 */
+	VOLUNTEER_REMOVED_FROM_SHIFT,
+
+	/**
 	 * Someone was hired (E6-S8). Recorded because it is the only act that grants a temple role —
 	 * a hire may be given Temple Admin, and that should never be something only a role column knows.
 	 */

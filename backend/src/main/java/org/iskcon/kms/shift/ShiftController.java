@@ -12,7 +12,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -157,7 +156,7 @@ public class ShiftController {
 
 	/**
 	 * Takes a named volunteer off the roster (B7), freeing the spot and promoting the waitlist head
-	 * into it exactly as the volunteer's own release does.
+	 * into it exactly as the volunteer's own release does — and, since T-080, saying why.
 	 *
 	 * <p><strong>A separate endpoint from the volunteer's release, not a parameter on it.</strong>
 	 * {@code POST /api/v1/shifts/{id}/release} lives on {@code VolunteerShiftController}, is gated on
@@ -165,15 +164,58 @@ public class ShiftController {
 	 * scoping is the whole of its security. Adding a "whose spot" parameter there would have made
 	 * every volunteer able to strike anybody off any roster, gated by a permission that exists to let
 	 * them manage their own. So the coordinator's release is this one, it names the person in the
-	 * path, and it is gated on managing the roster.
+	 * path, and it is gated on managing the roster. T-080 changes the verb and the body below and
+	 * changes neither of those two things.
+	 *
+	 * <p><strong>Why this is now a POST with a body, and the DELETE it replaces is gone.</strong>
+	 * T-080 gives a removal two required fields — the reason the volunteer is told, and the note the
+	 * temple keeps — and a {@code DELETE} has nowhere to put them. Three options were on the table:
+	 *
+	 * <ol>
+	 * <li><em>Give the DELETE a request body.</em> Legal under RFC 9110 and widely supported, but the
+	 *     spec gives it no defined semantics, some proxies and client libraries drop it silently, and
+	 *     a body that vanishes in transit here is a removal recorded with no reason and no note —
+	 *     which is the exact defect this task exists to close, reappearing only in production and
+	 *     only behind somebody's corporate proxy.</li>
+	 * <li><em>Put the reason in query parameters.</em> Rejected outright: the internal note is the
+	 *     coordinator's private sentence about a devotee, and query strings are logged by every
+	 *     proxy, load balancer and access log between here and the browser.</li>
+	 * <li><em>Make it a POST naming the act.</em> Chosen. It is also the more honest description of
+	 *     what happens: the row is not deleted and never was — it keeps its identity, gains
+	 *     {@code released_at}, a reason and a note, and stays on the roster under "Removed" where a
+	 *     coordinator can see what was decided. A thing that records why it happened is an event, and
+	 *     events are posted.</li>
+	 * </ol>
+	 *
+	 * <p>The {@code DELETE} is withdrawn rather than left delegating. It has exactly one caller — this
+	 * repo's own frontend — the product is pre-beta with no third party bound to it, and leaving it
+	 * open would leave a door through which a volunteer can still be removed with no reason and no
+	 * note, which is a hole the size of the whole feature. A stale client gets this project's settled
+	 * answer to the right address with the wrong verb — {@code KMS-400030}, "what you asked for is
+	 * not there" ({@code GlobalExceptionHandler#handleWrongMethod}) — which fails loudly, at the one
+	 * moment somebody can still do something about it.
+	 *
+	 * <p>Both fields are required by Bean Validation, so a missing one is {@code KMS-400001} with
+	 * {@code fieldErrors} naming it. No new error code and no new permission: the coordinator who
+	 * could already remove somebody is the coordinator who must now say why.
 	 */
-	@DeleteMapping("/{id}/signups/{userId}")
+	@PostMapping("/{id}/signups/{userId}/release")
 	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
-	public ResponseEntity<Void> releaseVolunteer(@PathVariable UUID id, @PathVariable UUID userId) {
-		// The promoted volunteer is told, as they are on any other release — the spot opening is news
-		// to them whoever freed it.
-		signupService.releaseVolunteer(id, userId)
-				.forEach(promotedUserId -> signupService.notifyPromotion(promotedUserId, id));
+	public ResponseEntity<Void> releaseVolunteer(
+			@PathVariable UUID id, @PathVariable UUID userId,
+			@Valid @RequestBody RemoveVolunteerRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		SignupService.Removal removal = signupService.releaseVolunteer(actor, id, userId, request);
+
+		// The person who lost the shift is told first, and told the structured reason only (T-080).
+		// Before this they were told nothing at all, while the volunteer promoted into their place
+		// got "a spot opened, you're in" — which is the defect, stated as an ordering.
+		signupService.notifyRemoval(userId, id, removal.reason());
+
+		// And the promoted volunteer, as on any other release — the spot opening is news to them
+		// whoever freed it. Deliberately the same call and the same template as before: T-080 was
+		// explicit that the waitlist promotion message does not change.
+		removal.promoted().forEach(promotedUserId -> signupService.notifyPromotion(promotedUserId, id));
 		return ResponseEntity.noContent().build();
 	}
 

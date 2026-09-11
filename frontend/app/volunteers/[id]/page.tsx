@@ -7,13 +7,38 @@ import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type RosterSignup } from "@/lib/api";
+import { api, toApiError, type ApiError, type ShiftRemovalReason } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
 import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 import { dateWithYear, hhmm, moment, templeDay, templeZone, todayIso } from "@/lib/format";
+
+/**
+ * Why a volunteer is coming off a roster — the four Rajeev named, in the words the coordinator picks
+ * between (T-080). The label is the coordinator's; the sentence the volunteer reads is the server's,
+ * built from the same four codes in `RemoveVolunteerRequest.Reason`, so the two cannot be confused
+ * for one another on the way through.
+ *
+ * <p>A `Record` keyed on `ShiftRemovalReason` rather than a list of pairs, so the compiler holds the
+ * screen and the API together in both directions: a fifth reason added to the type leaves a missing
+ * property here and stops this file compiling, and a value that is not one of the four is rejected
+ * as a key. A list would have caught the second and silently passed the first — a dropdown quietly
+ * missing an option, found by a tester.
+ *
+ * <p>Iterated with `Object.keys`, whose order for non-numeric string keys is insertion order, so the
+ * order below is the order they are offered in. The cast is there because `Object.keys` is typed
+ * `string[]` for every object; this one's keys are the union by construction.
+ */
+const REMOVAL_REASON_LABELS: Record<ShiftRemovalReason, string> = {
+  SHIFT_CANCELLED: "Shift cancelled",
+  NO_LONGER_NEEDED: "No longer needed",
+  ROTA_CHANGED: "Rota changed",
+  OTHER: "Other",
+};
+
+const REMOVAL_REASONS = Object.keys(REMOVAL_REASON_LABELS) as ShiftRemovalReason[];
 
 /**
  * One shift's roster, coordinator side (E6-S4+, and B7).
@@ -45,6 +70,9 @@ function ShiftRosterView() {
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showBroadcast, setShowBroadcast] = useState(false);
+  // Whose removal form is open, by user id — one at a time, so a coordinator cannot have two half
+  // written notes on screen and submit the wrong one (T-080).
+  const [removing, setRemoving] = useState<string | null>(null);
 
   async function broadcast(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -117,13 +145,32 @@ function ShiftRosterView() {
     }
   }
 
-  async function removeVolunteer(userId: string, fullName: string) {
+  /**
+   * Takes a named volunteer off the roster, saying why twice over (T-080).
+   *
+   * <p>A form and not a button, unlike every other action on this screen, and that is the change.
+   * Before this a removal was one press: the waitlisted volunteer promoted into the freed place got
+   * "a spot opened, you're in" and the person who had just lost the shift got nothing at all. The
+   * reason picked here is what they are now told; the note is for the temple and is never sent.
+   */
+  async function removeVolunteer(event: React.FormEvent<HTMLFormElement>, userId: string, fullName: string) {
+    event.preventDefault();
+    const f = new FormData(event.currentTarget);
     setBusy(true);
     setActionError(null);
     setNotice(null);
     try {
-      await api.releaseVolunteerFromShift(id, userId, await getToken());
-      setNotice(`${fullName} was taken off this shift.`);
+      await api.releaseVolunteerFromShift(
+        id,
+        userId,
+        {
+          reason: String(f.get("reason") ?? "") as ShiftRemovalReason,
+          internalNote: String(f.get("internalNote") ?? "").trim(),
+        },
+        await getToken()
+      );
+      setRemoving(null);
+      setNotice(`${fullName} was taken off this shift, and has been told why.`);
       reload();
     } catch (e) {
       setActionError(toApiError(e, "We couldn’t take that volunteer off this shift."));
@@ -361,17 +408,87 @@ function ShiftRosterView() {
                               </td>
                               {shift.status === "OPEN" && (
                                 <td className={TD_ACTIONS}>
-                                  <div className={ACTIONS_ROW}>
-                                    <Button
-                                      type="button"
-                                      variant="danger"
-                                      size="sm"
-                                      disabled={busy}
-                                      onClick={() => removeVolunteer(s.userId, s.fullName)}
-                                    >
-                                      Remove
-                                    </Button>
-                                  </div>
+                                  {removing === s.userId ? (
+                                    /* T-080. The form is on the row rather than in a dialog because
+                                       it has to be read next to the name it is about: the whole
+                                       point of the note is that somebody thought about this
+                                       particular person, and a modal that covers the roster invites
+                                       the opposite. Nested inside the attendance <form> is not
+                                       allowed, so this is a sibling bound by `form=` — see the id
+                                       below. */
+                                    <div className="text-start">
+                                      <p className="mb-2 text-sm text-ink-secondary">
+                                        Take {s.fullName} off this shift
+                                      </p>
+                                      <label className="block text-sm">
+                                        <span className="text-ink-secondary">Reason (they are told this)</span>
+                                        <select
+                                          name="reason"
+                                          form={`remove-${s.userId}`}
+                                          required
+                                          defaultValue=""
+                                          aria-label={`Why ${s.fullName} is coming off the shift`}
+                                          className="mt-1 w-full rounded-control border border-hairline px-3 py-2"
+                                        >
+                                          <option value="" disabled>
+                                            Choose a reason…
+                                          </option>
+                                          {REMOVAL_REASONS.map((r) => (
+                                            <option key={r} value={r}>
+                                              {REMOVAL_REASON_LABELS[r]}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                      <label className="mt-2 block text-sm">
+                                        <span className="text-ink-secondary">
+                                          Note for the temple (they never see this)
+                                        </span>
+                                        <textarea
+                                          name="internalNote"
+                                          form={`remove-${s.userId}`}
+                                          required
+                                          rows={2}
+                                          maxLength={1000}
+                                          aria-label={`Note about taking ${s.fullName} off the shift`}
+                                          placeholder="e.g. Asked to be spared Sundays for a while"
+                                          className="mt-1 w-full rounded-control border border-hairline px-3 py-2"
+                                        />
+                                      </label>
+                                      <div className={`${ACTIONS_ROW} mt-2`}>
+                                        <Button
+                                          type="submit"
+                                          form={`remove-${s.userId}`}
+                                          variant="danger"
+                                          size="sm"
+                                          disabled={busy}
+                                        >
+                                          Take off shift
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          disabled={busy}
+                                          onClick={() => setRemoving(null)}
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className={ACTIONS_ROW}>
+                                      <Button
+                                        type="button"
+                                        variant="danger"
+                                        size="sm"
+                                        disabled={busy}
+                                        onClick={() => setRemoving(s.userId)}
+                                      >
+                                        Remove
+                                      </Button>
+                                    </div>
+                                  )}
                                 </td>
                               )}
                             </tr>
@@ -412,6 +529,24 @@ function ShiftRosterView() {
                     ) : null}
                   </form>
                 )}
+                {/* The removal form's element, deliberately outside the attendance form above and
+                    empty of controls (T-080). HTML forbids a nested form, and the fields on the row
+                    reach this one through their `form=` attribute — which is what `form=` is for,
+                    and the alternative was taking the whole attendance table out of its form to
+                    make room for a second one. One at a time, because `removing` holds one id. */}
+                {removing !== null && (
+                  <form
+                    id={`remove-${removing}`}
+                    aria-label="Take a volunteer off this shift"
+                    onSubmit={(e) =>
+                      removeVolunteer(
+                        e,
+                        removing,
+                        activeSignups.find((s) => s.userId === removing)?.fullName ?? "That volunteer"
+                      )
+                    }
+                  />
+                )}
               </section>
 
               {roster!.waitlist.length > 0 && (
@@ -430,12 +565,33 @@ function ShiftRosterView() {
               {released.length > 0 && (
                 <section className="mb-8">
                   <h2 className="mb-3 text-lg">Released</h2>
-                  <ul className="space-y-1 text-sm text-ink-secondary">
-                    {released.map((s) => (
-                      <li key={s.userId}>
-                        {s.fullName} — released{s.releasedAt ? ` ${moment(s.releasedAt)}` : ""}
-                      </li>
-                    ))}
+                  <ul className="space-y-2 text-sm text-ink-secondary">
+                    {released.map((s) => {
+                      // T-080. A reason means the temple took this person off; its absence means
+                      // they stepped off their own shift, which is not a thing anybody is asked to
+                      // justify. V124's CHECK makes the two columns arrive together, so reading one
+                      // of them settles which act this row records.
+                      const label = s.releasedReason ? REMOVAL_REASON_LABELS[s.releasedReason] : null;
+                      return (
+                        <li key={s.userId}>
+                          <span>
+                            {s.fullName} —{" "}
+                            {s.releasedReason ? "taken off" : "released"}
+                            {s.releasedAt ? ` ${moment(s.releasedAt)}` : ""}
+                            {label ? `: ${label.toLowerCase()}` : ""}
+                          </span>
+                          {/* The coordinator's own words, and one of only two places they appear —
+                              the other being the temple's audit trail. Labelled rather than left
+                              bare, because a coordinator reading this months later has to be able
+                              to tell at a glance which half of the pair the volunteer was told. */}
+                          {s.releasedNote && (
+                            <span className="block text-xs text-ink-muted">
+                              Note (not sent to them): {s.releasedNote}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               )}

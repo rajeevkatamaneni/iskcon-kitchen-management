@@ -105,6 +105,7 @@ public class ShiftService {
 		// correction must not turn the join into an INNER one and drop the row's own mark with it.
 		List<RosterView.Signup> signups = jdbc.query("""
 				SELECT ss.id, ss.volunteer_user_id, u.full_name, ss.source, ss.signed_up_at, ss.released_at,
+					   ss.released_reason, ss.released_note,
 					   ss.attended, ss.attendance_recorded_at, ss.attendance_corrected_at,
 					   c.full_name AS corrected_by_name
 				FROM shift_signups ss
@@ -115,6 +116,11 @@ public class ShiftService {
 				rs.getObject("volunteer_user_id", UUID.class), rs.getString("full_name"),
 				rs.getString("source"), toInstant(rs.getObject("signed_up_at", OffsetDateTime.class)),
 				toInstant(rs.getObject("released_at", OffsetDateTime.class)),
+				// T-080. Null together on a volunteer's own release and present together on a
+				// coordinator's removal — V124 has a CHECK saying they cannot arrive apart — so the
+				// screen reads one of them to know which of the two acts it is looking at. The note is
+				// internal: it goes to this roster and to the audit trail, and to nothing that sends.
+				rs.getString("released_reason"), rs.getString("released_note"),
 				rs.getObject("attended", Boolean.class),
 				toInstant(rs.getObject("attendance_recorded_at", OffsetDateTime.class)),
 				toInstant(rs.getObject("attendance_corrected_at", OffsetDateTime.class)),

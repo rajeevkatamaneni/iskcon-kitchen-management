@@ -13,6 +13,11 @@ import type { RosterSignup, RosterView } from "@/lib/api";
  * <p>The third block is T-079: changing a mark. Its second test is the one that matters most — the
  * volunteer a partial marking left out, who before this could never be marked at all, and who is
  * the case a reader would assume the first test already covered.
+ *
+ * <p>The fourth block is T-080, which turns the removal from one press into a small form. Two of
+ * its tests are negatives and are written to fail rather than pass vacuously: nobody is removed on
+ * an empty form, and the reason list is read off the rendered DOM rather than off the page's own
+ * constant, which would only assert that the page agrees with itself.
  */
 
 const {
@@ -68,6 +73,8 @@ function signup(o: Partial<RosterSignup> = {}): RosterSignup {
     source: "SIGNUP",
     signedUpAt: "2026-11-01T04:00:00Z",
     releasedAt: null,
+    releasedReason: null,
+    releasedNote: null,
     attended: null,
     attendanceRecordedAt: null,
     attendanceCorrectedAt: null,
@@ -90,6 +97,13 @@ function signup(o: Partial<RosterSignup> = {}): RosterSignup {
  * `afterAll`.
  */
 const AFTER_THE_SHIFT_STARTED = new Date("2026-12-06T09:30:00+05:30");
+
+/**
+ * The coordinator's internal note (T-080), written to be the kind of sentence that must never reach
+ * the person it is about. It is asserted as present on the roster and absent from everything the
+ * page would send, so it is deliberately unlike any copy the product itself produces.
+ */
+const NOTE = "He has missed three Sundays without telling anyone.";
 
 function roster(signups: RosterSignup[], status: "OPEN" | "CANCELLED" = "OPEN"): RosterView {
   return {
@@ -501,15 +515,63 @@ describe("taking a volunteer off a roster", () => {
     };
   });
 
-  it("names the person being removed, and says so afterwards", async () => {
+  /** Opens the removal form on one person's row and fills it in (T-080). */
+  async function openRemovalFor(name: RegExp, reason: string, note: string) {
+    const rows = screen.getAllByRole("button", { name: /^remove$/i });
+    fireEvent.click(rows[name.test("Gopal Das") ? 1 : 0]);
+    fireEvent.change(await screen.findByLabelText(/why .* is coming off the shift/i), {
+      target: { value: reason },
+    });
+    fireEvent.change(screen.getByLabelText(/note about taking .* off the shift/i), {
+      target: { value: note },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: /take a volunteer off this shift/i }));
+  }
+
+  it("names the person being removed, and sends the reason and the note with it", async () => {
     render(<ShiftRosterPage />);
-    fireEvent.click(screen.getAllByRole("button", { name: /remove/i })[1]);
+    await openRemovalFor(/Gopal Das/, "ROTA_CHANGED", NOTE);
 
     await waitFor(() => expect(releaseVolunteerMock).toHaveBeenCalled());
     expect(releaseVolunteerMock.mock.calls[0][0]).toBe("shift-1");
     expect(releaseVolunteerMock.mock.calls[0][1]).toBe("u2");
+    expect(releaseVolunteerMock.mock.calls[0][2]).toEqual({
+      reason: "ROTA_CHANGED",
+      internalNote: NOTE,
+    });
     await waitFor(() => expect(reloadMock).toHaveBeenCalled());
-    expect(await screen.findByText(/gopal das was taken off this shift/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/gopal das was taken off this shift, and has been told why/i)
+    ).toBeInTheDocument();
+  });
+
+  it("will not remove anyone until both halves are given", async () => {
+    render(<ShiftRosterPage />);
+    fireEvent.click(screen.getAllByRole("button", { name: /^remove$/i })[1]);
+
+    // Pressed, with the form untouched — the button and not a synthetic submit event, because both
+    // fields are `required` and it is the browser's constraint validation that has to stop this. A
+    // `fireEvent.submit` would skip that step and prove nothing about what a coordinator's press
+    // actually does. The assertion that matters is the negative one: a screen that removed somebody
+    // on an empty note would be the defect this task exists to fix, wearing a passing test.
+    fireEvent.click(screen.getByRole("button", { name: /take off shift/i }));
+    await waitFor(() => expect(reloadMock).not.toHaveBeenCalled());
+    expect(releaseVolunteerMock).not.toHaveBeenCalled();
+  });
+
+  it("offers the four reasons Rajeev named, and no free text among them", async () => {
+    render(<ShiftRosterPage />);
+    fireEvent.click(screen.getAllByRole("button", { name: /^remove$/i })[0]);
+
+    const select = await screen.findByLabelText(/why .* is coming off the shift/i);
+    // The placeholder is disabled and is not one of the four, so the options a coordinator can
+    // actually pick are exactly Rajeev's list. Read off the DOM rather than off the constant the
+    // page exports, or the test would agree with whatever the page happened to contain.
+    const choosable = within(select)
+      .getAllByRole("option")
+      .filter((o) => !(o as HTMLOptionElement).disabled)
+      .map((o) => (o as HTMLOptionElement).value);
+    expect(choosable).toEqual(["SHIFT_CANCELLED", "NO_LONGER_NEEDED", "ROTA_CHANGED", "OTHER"]);
   });
 
   it("shows a released volunteer under Released, with no attendance tick", () => {
@@ -524,8 +586,38 @@ describe("taking a volunteer off a roster", () => {
     render(<ShiftRosterPage />);
 
     expect(screen.getByRole("heading", { name: /released/i })).toBeInTheDocument();
+    // No reason on this row, so it reads as the volunteer's own release — they stepped off, and
+    // nobody is asked to justify that.
     expect(screen.getByText(/gopal das — released/i)).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /gopal das came/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the reason and the internal note against someone the temple took off", () => {
+    queryRef.current = {
+      data: roster([
+        signup(),
+        signup({
+          userId: "u2",
+          fullName: "Gopal Das",
+          releasedAt: "2026-11-20T06:00:00Z",
+          releasedReason: "ROTA_CHANGED",
+          releasedNote: NOTE,
+        }),
+      ]),
+      error: null,
+      loading: false,
+    };
+    render(<ShiftRosterPage />);
+
+    // "taken off" and not "released": the presence of a reason is how this screen tells the
+    // temple's act from the devotee's, and saying "released" for both was the ambiguity T-080
+    // removes on the way past.
+    expect(screen.getByText(/gopal das — taken off/i)).toBeInTheDocument();
+    expect(screen.getByText(/rota changed/i)).toBeInTheDocument();
+    // The note is on the roster, and is labelled as the half the volunteer was not told — a
+    // coordinator reading this months later must not have to remember which of the two was sent.
+    expect(screen.getByText(/not sent to them/i)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(NOTE, "i"))).toBeInTheDocument();
   });
 
   it("offers no removal on a cancelled shift", () => {

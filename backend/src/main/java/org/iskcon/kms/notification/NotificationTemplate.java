@@ -263,6 +263,50 @@ public enum NotificationTemplate {
 		}
 	},
 
+	/**
+	 * The volunteer a coordinator has taken off a roster, told so (T-080).
+	 *
+	 * <p>The sibling of {@link #WAITLIST_PROMOTED} and the reason this exists: a removal promoted the
+	 * head of the waitlist into the freed spot and sent <em>them</em> "a spot opened, you're in",
+	 * while the person who had just lost the shift was sent nothing at all and found out by looking.
+	 * {@code WAITLIST_PROMOTED} is deliberately unchanged — the promotion is still good news and
+	 * still reads like it.
+	 *
+	 * <p><strong>{@code reason} is the structured half, and never the coordinator's note.</strong>
+	 * T-080 records two things against a removal: four fixed answers the coordinator picks, and a
+	 * mandatory free-text note kept internal. Only the first reaches this template, already rendered
+	 * into a plain clause by {@code RemoveVolunteerRequest.Reason}. The note has no route to any
+	 * channel, which is the whole design: the coordinator must say why either way, and the volunteer
+	 * gets the version that does not sting.
+	 *
+	 * <p>One template with a hole rather than four, which is the opposite of the call made for the
+	 * three leave decisions below — and the difference is what the hole can do to the sentence.
+	 * There, the hole would have flipped an approval into a refusal, and the three messages did not
+	 * say the same thing past their first clause. Here all four say one thing — you are no longer on
+	 * this shift — and differ only in a because-clause; none of them turns the news good. The four
+	 * values are constants in our own code and cannot be typed by anybody, so Meta is being shown a
+	 * genuinely fixed body with a genuinely small set of fillings.
+	 *
+	 * <p>The copy is written for somebody who may have been let down rather than let go. It thanks
+	 * them, points them somewhere, and carries no hint that the reason might be about them.
+	 */
+	REMOVED_FROM_SHIFT("removed_from_shift") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"A change to your shift: " + value(params, "title"),
+					"Hare Krishna. You're no longer on the %s shift on %s, %s at %s. Reason: %s. Thank you for offering to serve — please check the app for other shifts."
+							.formatted(value(params, "title"), value(params, "date"),
+									value(params, "time"), value(params, "location"),
+									value(params, "reason")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("title", "date", "time", "location", "reason");
+		}
+	},
+
 	SHIFT_CANCELLED("shift_cancelled") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
@@ -517,6 +561,10 @@ public enum NotificationTemplate {
 			case "vendor" -> "Sri Balaji Traders";
 			case "summary" -> "25 kg rice, 10 kg dal";
 			case "message" -> "Please arrive fifteen minutes early";
+			// Why a volunteer came off a roster (T-080). One of exactly four clauses, and the sample
+			// is one of them verbatim rather than an invented sentence — Meta's reviewer is being
+			// shown the real range of this hole, which is the argument for it being one template.
+			case "reason" -> "the rota changed";
 			case "count" -> "3";
 			case "items" -> "rice, toor dal, ghee";
 			case "subject" -> "Janmashtami at the temple";

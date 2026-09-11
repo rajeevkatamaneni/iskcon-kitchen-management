@@ -29,6 +29,14 @@ public record RosterView(
 	 * corrector by name rather than id follows {@code RosterView.Broadcast#sentByName} in the same
 	 * file — the screen has no reason to resolve an id, and a departed coordinator's row still says
 	 * only "corrected", with no name, once the column goes {@code SET NULL}.
+	 *
+	 * <p>{@code releasedReason} / {@code releasedNote} (T-080) are both null on a volunteer's own
+	 * release and both present on a coordinator's removal, which is how this screen tells the two
+	 * apart — a devotee stepping off their own shift is not asked to justify it, and a coordinator
+	 * taking somebody off must. The reason is one of four fixed codes and is the half the volunteer
+	 * was also told; <strong>the note is internal and this roster is one of the only two places it
+	 * appears</strong>, the other being the temple's audit trail. It reaches no message, which is
+	 * enforced where it matters — at the parameter map handed to the notification — rather than here.
 	 */
 	public record Signup(
 			UUID userId,
@@ -36,6 +44,8 @@ public record RosterView(
 			String source,
 			Instant signedUpAt,
 			Instant releasedAt,
+			String releasedReason,
+			String releasedNote,
 			Boolean attended,
 			Instant attendanceRecordedAt,
 			Instant attendanceCorrectedAt,
