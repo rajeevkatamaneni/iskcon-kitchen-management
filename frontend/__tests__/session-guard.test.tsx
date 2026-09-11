@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
-import { fireEvent } from "@testing-library/dom";
+// fireEvent comes from /react, not /dom: the React binding wraps the dispatch in act(), so a state
+// update caused by the event is flushed before the next line reads the DOM. The /dom binding does
+// not, and this file drives the idle timer with fake timers, which is exactly where an unflushed
+// update turns into a test that passes or fails depending on the tick it lands on. (T-076)
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 // The guard reads the signed-in state and the sign-out action from the auth context. Both are
 // driven from a mutable ref so a test can change the state without a Firebase session.

@@ -83,6 +83,15 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # Before the type check, because it is the cheaper of the two and because what it catches is
+      # a test that passes without proving anything — which makes every green result below it
+      # worth less. The rule set is deliberately tiny and argued for, rule by rule, in
+      # frontend/eslint.config.mjs. `npm run lint` is `eslint . --max-warnings=0`; it is not
+      # `next lint`, which needs an .eslintrc this project does not have and would lint nothing.
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
       - name: Type check
         working-directory: frontend
         run: npx tsc --noEmit

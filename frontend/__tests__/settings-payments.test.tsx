@@ -163,10 +163,11 @@ describe("the payment gateway settings", () => {
     expect(screen.getByText(/never shown again/)).toBeInTheDocument();
     // No password field in this section until an admin asks to replace the key secret. Scoped: the
     // WhatsApp section below has its own, and an unconnected temple shows them straight away.
-    expect(
-      screen.getByRole("region", { name: "Payment gateway" })
-        .querySelector('input[type="password"]')
-    ).toBeNull();
+    // The region lookup is its own statement so that what is being asserted as absent is the
+    // password input, not the section. Written as one expression it reads to both a linter and a
+    // human as "assert this getBy* found nothing", which is the one thing a getBy* can never do.
+    const section = screen.getByRole("region", { name: "Payment gateway" });
+    expect(section.querySelector('input[type="password"]')).toBeNull();
   });
 
   it("lets the key id be corrected without retyping a secret nobody can see", async () => {
