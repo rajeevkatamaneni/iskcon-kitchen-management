@@ -980,6 +980,73 @@ several of the features this run built.
 
 ---
 
+## ⚖️ RAJEEV'S RULINGS ON THE RUN PLAN'S OPEN ITEMS — 2026-09-11
+
+Four of the things the run plan handed back are now settled. **His words, and what was done.**
+
+### 1. Blank required fields — RULED, and it is a task now rather than a question
+
+> *"Required fields should carry `required` on the element and if left unfilled, we should at least
+> show 'Required' in red on form submit. Ideally, we should say 'Quantity is required' OR 'Note is
+> required'."*
+
+**So `required` stays on the element, which settles the accessibility half**, and every form needs
+`noValidate` so the browser's bubble does not preempt our own message.
+
+**The measurement that decides the rest, taken 2026-09-11:**
+
+- `components/Field.tsx` **already renders a red error under the box** (`FIELD_ERROR` is
+  `text-danger`), already wires `aria-invalid` and `aria-describedby`, and **already receives the
+  field's label**. Nothing populates its `error` for a blank box — only server `fieldErrors` do.
+- **Only 10 of the 50 files with required inputs use `Field`.** The other 42 hand-roll their controls.
+- **Only 6 of those 42 use `htmlFor`**; the rest name their inputs with `aria-label` or an implicit
+  wrapping label.
+
+**Therefore the per-field wording is the free half.** `Field` has the label already, so
+*"Quantity is required"* costs nothing over *"Required"*. **The cost is submit-time state in 42 forms
+that do not use the shared component**, and it is identical whichever wording is chosen.
+
+**Recommended build: one shared form wrapper**, not 42 conversions. It sets `noValidate`, and on
+submit reads the browser's own `validity.valueMissing` plus each control's accessible name — via
+`aria-label`, `el.labels[0]`, then `name` — and renders *"<name> is required"* through the existing
+`Field` error styling. That reaches the 42 without rewriting them, and the 10 keep working unchanged.
+
+### 2. `DESIGN_SYSTEM.md` — APPROVED AND DONE
+
+> *"Update the design system md file and close this one. I approve the change."*
+
+**Done, at v1.7.** §3's `danger` row read *"Overdue invoice, rejected delivery, sattvic violation"*;
+the last example has been false since D-18 removed the flag. Replaced with *"a purchase order past
+its order-by date"* — the red badge T-137 shipped the same day, and the same severity of thing as the
+two beside it. **Nothing else in the file changed**: no token, no value, no rule. Snapshot at
+`docs/versions/DESIGN_SYSTEM_v1.7.md`, changelog entry written. **T-058 item 2 is closed.**
+
+### 3. The expired session — CLOSED AS WORKING AS DESIGNED
+
+> *"Your logic is sound but I dont know how it looks on a screen and how the user experience is
+> without seeing it. Given that it is a security critical item, let us leave it as it is and close it
+> as working as designed. No further action needed for this one."*
+
+**Closed. Do not reopen it as a defect.** `KMS-400018 SESSION_EXPIRED` stays declared and unraised on
+purpose: expired and forged tokens are refused by the same path, and explaining expiry hands an
+attacker a bit they do not otherwise have. The consequence he accepted is that a session which
+expires lands on `/choose-temple` rather than being told it expired.
+
+**If it is ever revisited, it is a UX question and needs a screen to judge**, which is his reason for
+leaving it — not a disagreement with the analysis.
+
+### 4. The two reversible decisions — RATIFIED
+
+> *"Sounds good to me."*
+
+Both stand, both still one line to undo:
+
+- **DRAFT and CANCELLED orders excluded** from the donor-facing *"where last month's money went"*.
+- **A hand-raised order prints a rate column and an estimated total** on the vendor's sheet, where it
+  printed neither.
+
+---
+
 ## ✅ THE RUN PLAN IS FINISHED — closed 2026-09-11. Do not execute the section below.
 
 **Every wave, A through F, is built, merged-tree verified, committed by named path, green on CI,

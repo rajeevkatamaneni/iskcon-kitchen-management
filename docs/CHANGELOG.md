@@ -3689,6 +3689,25 @@ three concurrent builders could not share a dev server. Commandment 5 wants a pa
 
 ---
 
+## DESIGN_SYSTEM v1.7 — 2026-09-11
+
+**The `danger` row stopped naming a feature that no longer exists.** §3's *"Meaning here"* cell read
+*"Overdue invoice, rejected delivery, sattvic violation"*. The sattvic flag was removed by **D-18**
+and withdrawn from the locked documents by **D-20**; this one illustrative example was missed and had
+been false since.
+
+**Replaced with a real current use of the colour:** *"Overdue invoice, rejected delivery, a purchase
+order past its order-by date"* — the red badge T-137 shipped on 2026-09-11, which is the same
+severity of thing as the two beside it.
+
+**Approved by Rajeev, 2026-09-11**, on being shown the exact one-cell change. Found by T-058's
+builder, which correctly refused to edit a locked document and reported it instead.
+
+**Nothing else in the file changed.** No token, no value, no rule — the colour, its fill and its text
+are untouched. Snapshot in `docs/versions/DESIGN_SYSTEM_v1.7.md`.
+
+---
+
 ## Versioning convention
 
 - Version bumps to a **locked** document require the user's explicit approval, per the Ten Commandments (never silently edit an approved decision).
