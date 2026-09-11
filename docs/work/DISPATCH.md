@@ -77,10 +77,13 @@ the rebuild**. None of them blocks UAT and the rebuild does.
 **Parked for Phase 2 by Rajeev:** T-091, secondary preferred vendor. **Do not resurrect it
 opportunistically.**
 
-**The tail — `docs/work/THE-REST.md`.** **That file is the answer when Rajeev asks "what else is
-left?"** — he asked for it to be a file rather than a fresh sweep of this ledger every time. Twelve
-items, none blocking, and his standing judgement on them is *"the rest I'd genuinely leave. Your
-testers will rank them for you, and several will turn out not to matter at all."*
+**The tail — `docs/work/THE-REST.md`, and it is Wave F.** **That file is the answer when Rajeev
+asks "what else is left?"** — he asked for it to be a file rather than a fresh sweep of this ledger
+every time. Twelve items, none blocking. **He ruled on 2026-09-10 that the run-plan session picks
+it up immediately after Wave E**, which supersedes his earlier *"the rest I'd genuinely leave. Your
+testers will rank them for you, and several will turn out not to matter at all."* The quote is kept
+in that file because it still sets what the items are worth: **drop one that turns out not to be a
+real problem, with a sentence saying why.**
 
 **What it holds, in one line each:** *"1 pieces"* printing across the app, a language picker that
 would silently read English for ever, three reconciliation rows, three test-infrastructure rows, a
@@ -124,7 +127,7 @@ without a decision only he can make — and then keep going with everything else
 
 ### The waves, in order
 
-**Wave A — three agents in parallel. No collisions.**
+**Wave A — four agents in parallel. No collisions.**
 
 - **T-135 + T-136, merged into one task.** Both are about which buttons exist on the purchase-order
   screen — the order of the bank, *Edit lines* → *Edit*, edit mode showing only Save and Cancel,
@@ -139,7 +142,7 @@ without a decision only he can make — and then keep going with everything else
   blamed on us, and the person is told nothing they can act on. Backend `error/` package, isolated
   from everything else in this wave.
 
-**Wave B — two agents in parallel.**
+**Wave B — four agents in parallel.**
 
 - **T-134** — a tile per vendor, and the order written in a panel over the shopping list. **Needs
   Wave A's orders screen.** *The panel and the edit screen are the same thing; if they are built
@@ -164,13 +167,19 @@ without a decision only he can make — and then keep going with everything else
 - **T-142** — D-26's closing flow. **Same files as T-137**, which is why it follows rather than runs
   beside it.
 
-> **Everything not in these waves lives in `docs/work/THE-REST.md`** — twelve items, none of them
-> blocking, and that file is what to read out when Rajeev asks what is left.
+> **Everything not in these waves lives in `docs/work/THE-REST.md`** — twelve items, and that file
+> is what to read out when Rajeev asks what is left.
+>
+> **⚠ Wave F is that file. Rajeev ruled on 2026-09-10 that the next session picks it up
+> *immediately* after finishing Wave E** — not after UAT, and not only if a tester asks for it.
+> **This supersedes his earlier judgement that the tail should be left for testers to rank**, which
+> is still quoted inside that file as the reason it was separated out.
 >
 > **Why three small items are in this plan at all.** Rajeev picked them out of a tail of fifteen on
 > 2026-09-10 as *"the shape of thing a tester finds in the first hour and writes up as three separate
-> bugs"* — T-105, T-118 and T-080. **The rest of the tail is deliberately left for the testers to
-> rank**, because several of them will turn out not to matter.
+> bugs"* — T-105, T-118 and T-080. **The rest of the tail is not dropped, it is Wave F** — worked
+> after Wave E, with anything that turns out not to be a real problem closed with a sentence saying
+> why.
 
 **Wave E — one agent, last.**
 

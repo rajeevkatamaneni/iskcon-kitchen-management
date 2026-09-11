@@ -13,9 +13,23 @@ sweep of the ledger every time.
 **Every row below has a full entry in `DISPATCH.md`** with its evidence, its reasoning and its
 traps. This file is the index, not the detail.
 
-**His standing judgement on this list, 2026-09-10:** *"The rest I'd genuinely leave. Your testers
-will rank them for you, and several will turn out not to matter at all."* **Treat that as the
-default.** Do not schedule these ahead of what testers report.
+## ⚠ This is Wave F. It is work, not a parking lot.
+
+**Rajeev ruled later the same day that the session working the run plan picks this list up
+immediately after finishing Wave E** — not after UAT, and not only if somebody asks for it. **Work
+it the same way as every other wave:** unit tests until green, verify the merged tree, commit by
+named path, push, CI green, deploy, and drive it in a browser.
+
+**This supersedes what he said an hour earlier**, which is kept because it explains why the file
+exists at all and what he thinks these items are worth:
+
+> *"The rest I'd genuinely leave. Your testers will rank them for you, and several will turn out not
+> to matter at all."*
+
+**Both things can be true.** He does not rate them highly — so **an item that turns out not to be a
+real problem is dropped with a sentence saying why**, exactly as T-058 is briefed. Low confidence
+that they matter is not a reason to leave them undone; it is a reason to be willing to close them
+cheaply.
 
 ---
 
