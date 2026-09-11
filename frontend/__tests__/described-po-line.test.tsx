@@ -369,11 +369,12 @@ describe("a purchase-order line that isn't in the catalogue", () => {
     expect(screen.getByRole("form", { name: /record what arrived/i })).toBeInTheDocument();
   });
 
-  it("says one piece and four pieces, not one pieces (T-107)", () => {
-    // "1 pieces" on the arrivals panel and on the order table. `quantity()` names its unit from a
-    // single label per unit, so a count of one disagrees with its noun everywhere in the
-    // application; `quantitySaid` on this screen is the local repair, and the shared one is a task
-    // of its own (see docs/work/proof/T-107.md).
+  it("says one piece and four pieces, not one pieces (T-107, T-108)", () => {
+    // "1 pieces" on the arrivals panel and on the order table. `quantity()` named its unit from a
+    // single label per unit, so a count of one disagreed with its noun everywhere in the
+    // application. T-107 repaired this screen with a local `quantitySaid`; T-108 moved the rule
+    // into `lib/format.ts`, so the local helper is gone and this screen is back on the shared
+    // formatter. The assertions below are unchanged, which is the point of them being here.
     withDetail({
       ...MIXED,
       lines: [

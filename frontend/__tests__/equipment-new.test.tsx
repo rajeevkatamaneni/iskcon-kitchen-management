@@ -102,8 +102,8 @@ describe("registering equipment", () => {
     expect(scheduleMock.mock.calls[0][1]).toEqual({
       intervalCount: 1,
       intervalUnit: "YEARS",
-      // T-120: a newly registered thing is never flagged. Registering says nothing about
-      // whether it will ever need servicing; the tick box lives on the item's own page.
+      // Un-ticked, so still the honest "nobody has said" (T-143 put the box on this screen; it
+      // reports what somebody actually ticked, and nothing was ticked here).
       neverNeedsServicing: false,
       // Text, and nothing behind it: the managed list this replaced was removed on 2026-09-04.
       serviceCompany: "Bengaluru Kitchen Engineering",
@@ -145,11 +145,98 @@ describe("registering equipment", () => {
     expect(scheduleMock.mock.calls[0][1]).toEqual({
       intervalCount: null,
       intervalUnit: null,
-      // T-120: a newly registered thing is never flagged. Registering says nothing about
-      // whether it will ever need servicing; the tick box lives on the item's own page.
+      // Un-ticked, so still the honest "nobody has said" (T-143 put the box on this screen; it
+      // reports what somebody actually ticked, and nothing was ticked here).
       neverNeedsServicing: false,
       serviceCompany: "Iyer Repairs",
       serviceCompanyPhone: null,
+    });
+  });
+
+  /**
+   * The tick box for the things that will never need servicing (T-143).
+   *
+   * <p>T-120 built it on the item's own page only, so a temple registering sixty stools had to
+   * register them and then open sixty pages to say the one thing that was true of all of them.
+   * Rajeev: *"So declaring sixty stools un-serviced means sixty visits to sixty pages."*
+   *
+   * <p>These drive the real registration screen, not the form component on its own, because the
+   * screen is where the flag could be collected and then quietly dropped — the schedule request is
+   * sent only when somebody has said something about servicing, and a ladder says it with the tick
+   * and nothing else. T-090 shipped fully green with exactly that gap.
+   */
+  describe("something that will never need servicing", () => {
+    it("sends the flag from the registration screen, with no interval beside it", async () => {
+      render(<NewEquipmentPage />);
+
+      fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Step ladder 6ft" } });
+      fireEvent.click(screen.getByRole("checkbox", { name: /never needs servicing/i }));
+      fireEvent.click(screen.getByRole("button", { name: /register it/i }));
+
+      // The register itself is unchanged: the flag belongs to the servicing endpoint, which is a
+      // different permission and therefore a second request.
+      await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+      expect(createMock.mock.calls[0][0]).toMatchObject({ name: "Step ladder 6ft" });
+
+      // The half that T-090's defect would have skipped: with no interval and no company typed,
+      // the tick has to be enough on its own to make the second request happen at all.
+      await waitFor(() => expect(scheduleMock).toHaveBeenCalledTimes(1));
+      expect(scheduleMock.mock.calls[0][0]).toBe("eq-new");
+      expect(scheduleMock.mock.calls[0][1]).toEqual({
+        // Never both: the database refuses "never needs servicing, every six months" outright, so
+        // the screen must not post a request it already knows will be turned away.
+        intervalCount: null,
+        intervalUnit: null,
+        neverNeedsServicing: true,
+        serviceCompany: null,
+        serviceCompanyPhone: null,
+      });
+    });
+
+    it("clears the interval and makes it uneditable, exactly as it does on the item's page", () => {
+      // Rajeev's ruling of 2026-09-10: "a check box for equipment that don't need service like a
+      // ladder. When checked, the Service interval box is cleared out and uneditable." Cleared as
+      // well as disabled — a number sitting greyed out in a dead field reads as a value still in
+      // force.
+      render(<NewEquipmentPage />);
+
+      const count = screen.getByLabelText(/how often/i);
+      const unit = screen.getByLabelText(/interval unit/i);
+      fireEvent.change(count, { target: { value: "6" } });
+      expect(count).toHaveValue(6);
+
+      fireEvent.click(screen.getByRole("checkbox", { name: /never needs servicing/i }));
+
+      expect(count).toHaveValue(null);
+      expect(count).toBeDisabled();
+      expect(unit).toBeDisabled();
+      // A disabled empty box on its own explains nothing.
+      expect(screen.getByText(/does not need servicing, so there is no interval to set/i)).toBeInTheDocument();
+    });
+
+    it("drops an interval somebody typed before ticking, rather than sending both", async () => {
+      render(<NewEquipmentPage />);
+
+      fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Trestle table" } });
+      fireEvent.change(screen.getByLabelText(/how often/i), { target: { value: "6" } });
+      fireEvent.click(screen.getByRole("checkbox", { name: /never needs servicing/i }));
+      fireEvent.click(screen.getByRole("button", { name: /register it/i }));
+
+      await waitFor(() => expect(scheduleMock).toHaveBeenCalledTimes(1));
+      expect(scheduleMock.mock.calls[0][1]).toMatchObject({
+        intervalCount: null,
+        intervalUnit: null,
+        neverNeedsServicing: true,
+      });
+    });
+
+    it("is not offered to kitchen staff, because the schedule is not theirs", () => {
+      // MANAGE_EQUIPMENT_SERVICING is the temple admin's alone (E3-S10 D10), and the flag is part
+      // of the schedule.
+      authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+      render(<NewEquipmentPage />);
+
+      expect(screen.queryByRole("checkbox", { name: /never needs servicing/i })).not.toBeInTheDocument();
     });
   });
 

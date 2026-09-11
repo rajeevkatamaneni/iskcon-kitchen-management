@@ -43,29 +43,14 @@ function reasonLabel(reason: string): string {
   return reason.replace(/_/g, " ").toLowerCase();
 }
 
-/**
- * A quantity, with the unit agreeing with the number in front of it (T-107).
- *
- * <p>`quantity()` names its unit from `UNIT_LABEL`, which holds one label per unit — so one plastic
- * stool reads "1 pieces" on every screen in the application. `PIECES` is the only unit in that
- * table this can happen to: the other four are a mass or a volume, and "1 Kg" and "1 ml" are what a
- * person says. A count is the only one with a singular to get wrong.
- *
- * <p>The number is compared rather than the rendered string, because the rendered string is not
- * this file's to predict — `quantity()` promotes 0.6 Kg to 600 gm and may promote more later.
- * `PIECES` is the one unit it can never promote (there is no larger sibling to count into), so a
- * value of exactly 1 in that unit is the whole of the case.
- *
- * <p>Local to this screen deliberately, and it should not stay that way. The defect is in the
- * shared helper and every screen that prints a count carries it — stock, receipts, recipes. T-107's
- * path contract is this page and its three tests, and editing `lib/format.ts` would be editing a
- * file read by roughly half the application without being able to run its tests. Raised in
- * `docs/work/proof/T-107.md` so the real fix can be scheduled as its own task.
+/*
+ * `quantitySaid` used to live here. T-107 found that one plastic stool read "1 pieces" on this
+ * screen, repaired it locally, and said in its own comment that it should not stay that way — the
+ * defect was in the shared formatter and every screen that prints a count carried it. T-108 moved
+ * the rule into `lib/format.ts`, so `quantity()` and `cooksQuantity()` now agree with the number in
+ * front of them everywhere, and this page calls them directly again. Nothing about what this screen
+ * prints has changed; there is simply one fewer place for it to be got right.
  */
-function quantitySaid(value: number | null | undefined, unit: string): string {
-  if (value === 1 && (unit ?? "").toUpperCase() === "PIECES") return "1 piece";
-  return quantity(value, unit);
-}
 
 /**
  * "2 days’ notice" — a lead time in the words a person would say it in.
@@ -939,8 +924,8 @@ function PurchaseOrderDetailView() {
                                 and not the receipts against it and a fully delivered line reads as
                                 over-delivered. "Received so far" was printing a bare number with no
                                 unit at all, which is the same defect one step further on. */}
-                            <td className={TD_NUM}>{quantitySaid(l.quantity, l.unit)}</td>
-                            <td className={`${TD_NUM} text-ink-secondary`}>{quantitySaid(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
+                            <td className={TD_NUM}>{quantity(l.quantity, l.unit)}</td>
+                            <td className={`${TD_NUM} text-ink-secondary`}>{quantity(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
                             <td className={TD_NUM}><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${subjectOf(l)}`} className="w-24 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
                             <td className={TD_NUM}><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${subjectOf(l)}`} className="w-20 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
                             <td className={TD_TEXT}>
@@ -1035,7 +1020,7 @@ function PurchaseOrderDetailView() {
                             <span>
                               {subjectOf(l)}{" "}
                               <span className="text-ink-secondary tabular-nums">
-                                {quantitySaid(l.quantity, l.unit)}
+                                {quantity(l.quantity, l.unit)}
                               </span>
                             </span>
                           </label>
@@ -1116,7 +1101,7 @@ function PurchaseOrderDetailView() {
                         {/* The order as issued, beside what it is expected to cost — the figure
                             the delivery above and the vendor's invoice are both checked against, so
                             it is exact and agrees line for line with the receiving table. */}
-                        <td className={TD_NUM}>{quantitySaid(l.quantity, l.unit)}</td>
+                        <td className={TD_NUM}>{quantity(l.quantity, l.unit)}</td>
                         {showPrices && <td className={TD_NUM}>{money(l.expectedPrice, "INR")}</td>}
                       </tr>
                     ))}
@@ -1157,10 +1142,10 @@ function PurchaseOrderDetailView() {
                                 {/* Ledger form throughout, as in the receiving table above: these
                                     figures are checked against each other and against the order, so
                                     a rounded one would read as a discrepancy that is not there. */}
-                                <td className={TD_NUM}>{quantitySaid(l.receivedQty, l.unit)}</td>
+                                <td className={TD_NUM}>{quantity(l.receivedQty, l.unit)}</td>
                                 <td className={`${TD_NUM} text-ink-secondary`}>
                                   {l.rejectedQty > 0
-                                    ? `${quantitySaid(l.rejectedQty, l.unit)} · ${reasonLabel(l.rejectReason ?? "")}`
+                                    ? `${quantity(l.rejectedQty, l.unit)} · ${reasonLabel(l.rejectReason ?? "")}`
                                     : "—"}
                                 </td>
                                 {/* The receipt itself is never edited, so this is not a column of
@@ -1168,7 +1153,7 @@ function PurchaseOrderDetailView() {
                                     line nothing has gone back on reads as a dash rather than 0, so
                                     the exceptions are the only things the eye stops on. */}
                                 <td className={TD_NUM}>
-                                  {l.returnedQty > 0 ? quantitySaid(l.returnedQty, l.unit) : "—"}
+                                  {l.returnedQty > 0 ? quantity(l.returnedQty, l.unit) : "—"}
                                 </td>
                                 <td className={TD_ACTIONS}>
                                   {/* Offered only where there is something left to send back.
@@ -1205,7 +1190,7 @@ function PurchaseOrderDetailView() {
                       (KMS-400140) — and a cap nobody can see until they press the button is how a
                       person ends up guessing. */}
                   <p className="mt-1 text-sm text-ink-secondary">
-                    {quantitySaid(returning.line.receivedQty - returning.line.returnedQty, returning.line.unit)} of
+                    {quantity(returning.line.receivedQty - returning.line.returnedQty, returning.line.unit)} of
                     this delivery can still go back. This takes the goods out of stock. The delivery
                     record stays exactly as it was signed for.
                   </p>

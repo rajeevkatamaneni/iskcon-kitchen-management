@@ -62,12 +62,19 @@ function NewEquipmentView() {
         },
         token
       );
-      // Only when there is something to say. A machine with no interval and no company named is a
-      // machine nobody has decided about, and sending an empty schedule would be this screen
-      // asserting a decision on the temple's behalf.
+      // Only when there is something to say. A machine with no interval, no company named and an
+      // un-ticked box is a machine nobody has decided about, and sending an empty schedule would be
+      // this screen asserting a decision on the temple's behalf.
+      //
+      // The ticked box is a decision and so it counts as something to say (T-143) — and it is the
+      // only one of the four that can be the *whole* of what somebody said. A ladder has no
+      // interval and no service company by definition, so without it in this condition the tick
+      // would be collected by the form and then silently dropped on the way out, which is the shape
+      // of defect T-090 shipped green.
       if (
         isAdmin &&
         (input.intervalCount != null ||
+          input.neverNeedsServicing ||
           input.serviceCompany != null ||
           input.serviceCompanyPhone != null)
       ) {
@@ -76,14 +83,15 @@ function NewEquipmentView() {
           {
             intervalCount: input.intervalCount,
             intervalUnit: input.intervalUnit,
-            // Always false from here, and that is the honest answer rather than a gap (T-120).
-            // Registering a thing says nothing about whether it will ever need servicing, and this
-            // screen only reaches the schedule endpoint at all when somebody has typed an interval
-            // or a company — which is the opposite claim. The tick box lives on the item's own
-            // page, where the decision is made; sending anything else here would be this screen
-            // asserting a decision on the temple's behalf, which is the rule the block above
-            // already follows.
-            neverNeedsServicing: false,
+            // Whatever the person ticked, and false when they did not — which is still nobody
+            // asserting anything, because this endpoint is reached at all only when somebody has
+            // said something about servicing.
+            //
+            // It was hard-coded false until T-143. T-120 put the tick box only on the item's own
+            // page, so a temple registering sixty stools had to register them and then open sixty
+            // pages to say the one thing that was true of all of them. Rajeev: "So declaring sixty
+            // stools un-serviced means sixty visits to sixty pages."
+            neverNeedsServicing: input.neverNeedsServicing,
             serviceCompany: input.serviceCompany,
             serviceCompanyPhone: input.serviceCompanyPhone,
           },

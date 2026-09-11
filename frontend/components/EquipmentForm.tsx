@@ -45,9 +45,17 @@ export interface NewEquipment {
   serialNumber: string | null;
   purchaseCostInr: number | null;
   warrantyExpiry: string | null;
-  /** Null together where no schedule is being set — a trestle table needs no servicing. */
+  /** Null together where no schedule is being set — nobody has decided yet, or it never needs one. */
   intervalCount: number | null;
   intervalUnit: ServiceIntervalUnit | null;
+  /**
+   * Whether this is a thing nobody will ever service (T-120, T-143).
+   *
+   * <p>Not the same fact as a null interval, which is the whole of T-120: an empty interval means
+   * nobody has decided, and this means there is nothing to decide. The two can never both be true,
+   * and the database refuses the pairing outright, so a ticked box sends no interval at all.
+   */
+  neverNeedsServicing: boolean;
   serviceCompany: string | null;
   serviceCompanyPhone: string | null;
 }
@@ -85,8 +93,18 @@ export function EquipmentForm({
 }) {
   const [intervalCount, setIntervalCount] = useState("");
   const [intervalUnit, setIntervalUnit] = useState<ServiceIntervalUnit>("MONTHS");
+  const [never, setNever] = useState(false);
   const [company, setCompany] = useState("");
   const [companyPhone, setCompanyPhone] = useState("");
+
+  // Ticking clears the count in the form as well as in what is sent, because Rajeev's ruling says
+  // the box is cleared out and not merely ignored: a number left sitting greyed out in a disabled
+  // field reads as a value that is still in force. The same function, for the same reason, as the
+  // one on the item's own page — this is one behaviour built once and shown in two places.
+  function toggleNever(ticked: boolean) {
+    setNever(ticked);
+    if (ticked) setIntervalCount("");
+  }
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -106,8 +124,13 @@ export function EquipmentForm({
       warrantyExpiry: emptyToNull(String(f.get("warrantyExpiry") ?? "")),
       // Both halves together or neither: a day count with no unit cannot be shown back in the words
       // it was entered in, and a unit with no count is not an interval.
-      intervalCount: isAdmin && count !== "" ? Number(count) : null,
-      intervalUnit: isAdmin && count !== "" ? intervalUnit : null,
+      //
+      // Ticked sends no interval at all, and not because the box happens to have been cleared: the
+      // server refuses "never needs servicing, every six months" outright, so the screen must never
+      // post a request it already knows will be turned away.
+      intervalCount: isAdmin && !never && count !== "" ? Number(count) : null,
+      intervalUnit: isAdmin && !never && count !== "" ? intervalUnit : null,
+      neverNeedsServicing: isAdmin && never,
       serviceCompany: isAdmin ? emptyToNull(company) : null,
       serviceCompanyPhone: isAdmin ? emptyToNull(companyPhone) : null,
     });
@@ -207,11 +230,40 @@ export function EquipmentForm({
         <section className="card px-6 py-5" aria-label="Servicing">
           <h2 className="text-lg">Servicing</h2>
           <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-            How often this has to be looked at, and by whom. Leave it empty for something that needs
-            no servicing — a trestle table is not overdue, it is not scheduled.
+            How often this has to be looked at, and by whom. Leave it empty if nobody has decided
+            yet, and tick the box below for something that will never need it at all.
           </p>
 
           <div className="mt-4 grid grid-cols-2 gap-4">
+            {/*
+              The same tick box as the item's own page, here as well, because a temple registering
+              sixty stools should be able to say so as it registers them (T-143). It was only on the
+              servicing form until now, which made declaring sixty things un-serviced sixty visits
+              to sixty pages.
+
+              The behaviour is Rajeev's ruling of 2026-09-10 and is deliberately identical to the
+              one T-120 built there — "a check box for equipment that don't need service like a
+              ladder. When checked, the Service interval box is cleared out and uneditable" — down
+              to the words, because an approved behaviour built twice is a behaviour that drifts.
+            */}
+            <div className="col-span-2">
+              <label className="flex items-start gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  name="neverNeedsServicing"
+                  checked={never}
+                  onChange={(e) => toggleNever(e.target.checked)}
+                  className="mt-1 h-4 w-4 shrink-0 accent-accent"
+                />
+                <span>This never needs servicing</span>
+              </label>
+              <p className="mt-1 max-w-[60ch] pl-6 text-sm text-ink-secondary">
+                A ladder, a trestle table, a stack of stools — the temple owns it and nobody will
+                ever service it. Leave it un-ticked for anything that just has not been scheduled
+                yet.
+              </p>
+            </div>
+
             <div className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset flex items-center gap-1.5 font-medium text-ink">
                 {/* Not a HintedField: this label sits over a pair of controls, a count and a unit,
@@ -230,14 +282,16 @@ export function EquipmentForm({
                   min="1"
                   max="100"
                   value={intervalCount}
+                  disabled={never}
                   onChange={(e) => setIntervalCount(e.target.value)}
-                  className={`${FIELD} ${COUNT_FIELD}`}
+                  className={`${FIELD} ${COUNT_FIELD} disabled:bg-sunken disabled:text-ink-muted`}
                 />
                 <select
                   aria-label="Interval unit"
                   value={intervalUnit}
+                  disabled={never}
                   onChange={(e) => setIntervalUnit(e.target.value as ServiceIntervalUnit)}
-                  className={`${FIELD} ${UNIT_FIELD}`}
+                  className={`${FIELD} ${UNIT_FIELD} disabled:bg-sunken disabled:text-ink-muted`}
                 >
                   {INTERVAL_UNITS.map((u) => (
                     <option key={u} value={u}>
@@ -246,6 +300,14 @@ export function EquipmentForm({
                   ))}
                 </select>
               </div>
+              {never && (
+                /* A disabled empty box on its own explains nothing, and the reader is entitled to
+                   know why they cannot type in it. The field stays visible rather than vanishing,
+                   which would make them wonder what they had just broken. */
+                <span className="max-w-[60ch] text-sm text-ink-secondary">
+                  This equipment does not need servicing, so there is no interval to set.
+                </span>
+              )}
             </div>
 
             {/* Two text boxes, and nothing behind them. There was a managed list here with an

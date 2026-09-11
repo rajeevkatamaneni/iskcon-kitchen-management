@@ -135,6 +135,49 @@ export function unitLabel(unit: string | null | undefined): string {
 }
 
 /**
+ * The units that read differently when there is exactly one of the thing (T-108).
+ *
+ * <p>Only a **count** has a singular to get wrong. `Kg`, `gm`, `L` and `ml` are abbreviations of a
+ * mass or a volume, and an abbreviation does not take an "s" in Indian English any more than in
+ * British: one kilo of rice is written "1 Kg", never "1 Kgs". `PIECES` is the one unit in the
+ * vocabulary that names the things themselves rather than how much of something there is, and one
+ * of those is a piece.
+ *
+ * <p>A map rather than a two-line `if`, because the next counted unit somebody adds — crates,
+ * sacks, bundles — should be one line beside this one rather than a second place to remember a
+ * rule. Anything absent from it is written the same at every number, which is the common case and
+ * therefore the default.
+ */
+const UNIT_SINGULAR: Record<string, string> = {
+  PIECES: "piece",
+};
+
+/**
+ * The unit label agreeing with the number printed in front of it — "1 piece", but "3 pieces" and
+ * "1 Kg".
+ *
+ * <p>This is the repair for **"1 pieces"**, which Rajeev saw on a purchase order and which every
+ * screen in the application printed, because {@link UNIT_LABEL} holds one label per unit and a
+ * label cannot agree with a number it has never been shown. The count is therefore a **required**
+ * argument and not an optional one: an optional count is a count the next caller forgets, and the
+ * forgotten case renders exactly the defect this exists to remove.
+ *
+ * <p>Use it wherever a figure and a unit are printed as one phrase but are rendered apart — a
+ * number in one element and the unit in another. Where the whole phrase comes from
+ * {@link quantity} or {@link cooksQuantity} there is nothing to do: they call this themselves.
+ * Where the unit is named with **no** number beside it — a column heading, a dropdown option, the
+ * adornment on a box somebody types into — {@link unitLabel} is still the right one, and "pieces"
+ * is still what it should say.
+ *
+ * <p>Compared on the absolute value, so a reversal of one stool reads "−1 piece".
+ */
+export function unitLabelFor(value: number, unit: string | null | undefined): string {
+  if (!unit) return "";
+  const singular = UNIT_SINGULAR[unit.toUpperCase()];
+  return Math.abs(value) === 1 && singular ? singular : unitLabel(unit);
+}
+
+/**
  * The one vocabulary (E11-S2), and the part of it that can be true in each place.
  *
  * <p>An ingredient, a stock level, a donation and a purchase-order line are all quantities of food,
@@ -188,8 +231,13 @@ function roundAsAPersonWould(value: number): number {
   return Number((Math.round(value / step) * step).toFixed(3));
 }
 
+// The number and its unit, as one phrase. It goes through unitLabelFor rather than reading
+// UNIT_LABEL directly for two reasons: the label has to agree with the number in front of it
+// (T-108 — "1 piece", not "1 pieces"), and this used to hold its own fallback for a unit the map
+// has never heard of, which printed the shouted enum name where unitLabel() would have printed a
+// word. One renderer, one fallback.
 function say(value: number, unit: string, maxDecimals: number): string {
-  return `${value.toLocaleString("en-IN", { maximumFractionDigits: maxDecimals })} ${UNIT_LABEL[unit] ?? unit}`;
+  return `${value.toLocaleString("en-IN", { maximumFractionDigits: maxDecimals })} ${unitLabelFor(value, unit)}`;
 }
 
 /**

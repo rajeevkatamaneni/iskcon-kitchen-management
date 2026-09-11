@@ -441,6 +441,27 @@ describe("E11 — one unit vocabulary, said one way", () => {
     ).toEqual([]);
   });
 
+  it("never prints a number with a label that cannot agree with it", () => {
+    // "1 pieces", which Rajeev saw on a purchase order (T-108). quantity() and cooksQuantity()
+    // render the figure and its unit together and now agree with the number in front of them, but
+    // a screen that renders the two apart — the figure in one element and unitLabel() in the next —
+    // rebuilds the phrase by hand and gets the plural back. Two rows of the meal-recording screen
+    // did exactly that. Where the figure and the unit are one phrase, the label has to be chosen
+    // with the number in hand: unitLabelFor(value, unit).
+    //
+    // Only an adjacent pair is flagged. unitLabel() on its own is right and stays right — a column
+    // heading, a dropdown option and the adornment on a box somebody types into all name the unit
+    // with no number anywhere near them, and there "pieces" is the word.
+    const NUMBER_THEN_BARE_LABEL = /\}[ \t]*\$?\{unitLabel\(/;
+
+    const offenders = FILES.filter(({ text }) => NUMBER_THEN_BARE_LABEL.test(text)).map((f) => f.file);
+
+    expect(
+      offenders,
+      "these print a value and a bare unit label side by side — use unitLabelFor(value, unit) so one of something reads in the singular",
+    ).toEqual([]);
+  });
+
   it("has no hand-typed unit array outside the one vocabulary", () => {
     // Six screens each carried their own ["KG","GM","L","ML","PIECES"]. Adding a unit meant finding
     // all six, and forgetting one meant a dropdown that silently offered less than the others.

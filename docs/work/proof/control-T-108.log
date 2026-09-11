@@ -1,0 +1,187 @@
+anchor OK: [unitLabelFor(value, unit)}`;] x1 in format.ts
+anchor OK: [const UNIT_SINGULAR: Record<string, string> = {] x1 in format.ts
+anchor OK: [unitLabelFor(entry.planned, unit(entry.mealPlanId))] x1 in MealServices.tsx
+anchor OK: [input.neverNeedsServicing ||] x1 in page.tsx
+anchor OK: [neverNeedsServicing: input.neverNeedsServicing,] x1 in page.tsx
+anchor OK: [if (ticked) setIntervalCount("");] x1 in EquipmentForm.tsx
+anchor OK: [disabled={never}] x2 in EquipmentForm.tsx
+anchor OK: [const [picked, setPicked] = useState<string | null>(null);] x1 in LanguageSection.tsx
+anchor OK: [const language = picked ?? (initial ?? "en-IN").split("-")[0];] x1 in LanguageSection.tsx
+
+=== the tree really did change ===
+ frontend/app/equipment/new/page.tsx          | 29 +++++++----
+ frontend/components/EquipmentForm.tsx        | 75 +++++++++++++++++++++++++---
+ frontend/components/planner/MealServices.tsx |  4 +-
+ frontend/lib/format.ts                       | 48 ++++++++++++++++++
+ 4 files changed, 136 insertions(+), 20 deletions(-)
+(components/LanguageSection.tsx is new and untracked, so it has no diff line; shown instead:)
+52:  const [language, setPicked] = useState((initial ?? "en-IN").split("-")[0]);
+
+=== T-108 — the shared quantity formatter — expecting RED ===
+
+ RUN  v2.1.2 /Users/Rajeev/Workspace/kitchen-management-system/frontend
+
+ ❯ __tests__/quantities.test.ts  (16 tests | 1 failed) 11ms
+   × a quantity, said the way a person says it > the ledger form — exact, because somebody reconciles against it > says one of a counted thing in the singular (T-108)
+     → expected '1 pieces' to be '1 piece' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/quantities.test.ts > a quantity, said the way a person says it > the ledger form — exact, because somebody reconciles against it > says one of a counted thing in the singular (T-108)
+AssertionError: expected '1 pieces' to be '1 piece' // Object.is equality
+
+Expected: "1 piece"
+Received: "1 pieces"
+
+ ❯ __tests__/quantities.test.ts:43:37
+     41|       // every screen in the application at once, because the unit lab…
+     42|       // being shown the number it was going to sit beside.
+     43|       expect(quantity(1, "PIECES")).toBe("1 piece");
+       |                                     ^
+     44|       expect(cooksQuantity(1, "PIECES")).toBe("1 piece");
+     45|       // Rounded down to one, which is the case a job card actually hi…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+   Start at  04:37:44
+   Duration  375ms (transform 40ms, setup 26ms, collect 38ms, tests 11ms, environment 115ms, prepare 35ms)
+
+=== T-108 — the shared quantity formatter was red, as it must be ===
+
+=== T-108 — the hand-built phrase guard — expecting RED ===
+     → these print a value and a bare unit label side by side — use unitLabelFor(value, unit) so one of something reads in the singular: expected [ Array(1) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/design-system.test.ts > E11 — one unit vocabulary, said one way > never prints a number with a label that cannot agree with it
+AssertionError: these print a value and a bare unit label side by side — use unitLabelFor(value, unit) so one of something reads in the singular: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- Array []
++ Array [
++   "components/planner/MealServices.tsx",
++ ]
+
+ ❯ __tests__/design-system.test.ts:462:7
+    460|       offenders,
+    461|       "these print a value and a bare unit label side by side — use un…
+    462|     ).toEqual([]);
+       |       ^
+    463|   });
+    464| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 20 passed (21)
+   Start at  04:37:44
+   Duration  393ms (transform 19ms, setup 23ms, collect 54ms, tests 82ms, environment 109ms, prepare 34ms)
+
+=== T-108 — the hand-built phrase guard was red, as it must be ===
+
+=== T-108 — the purchase order screen — expecting RED ===
+        [36m</span>[39m
+      [36m</label>[39m
+    [36m</li>[39m
+  [36m</ul>[39m
+  [36m<button[39m
+    [33mclass[39m=[32m"btn btn-primary mt-4 min-h-touch px-5 transition-colors duration-state disabled:opacity-60"[39m
+    [33mtype[39m=[32m"submit"[39m
+  [36m>[39m
+    [0mRecord as arrived[0m
+  [36m</button>[39m
+[36m</form>[39m
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ __tests__/described-po-line.test.tsx:389:21
+    387| 
+    388|     const arrivals = within(screen.getByRole("form", { name: /record w…
+    389|     expect(arrivals.getByText("1 piece")).toBeInTheDocument();
+       |                     ^
+    390|     expect(arrivals.getByText("4 pieces")).toBeInTheDocument();
+    391|     expect(arrivals.queryByText("1 pieces")).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+   Start at  04:37:45
+   Duration  580ms (transform 91ms, setup 24ms, collect 128ms, tests 179ms, environment 113ms, prepare 29ms)
+
+=== T-108 — the purchase order screen was red, as it must be ===
+
+=== T-143 — registering something never serviced — expecting RED ===
+              [36m<a[39m
+                [33mclass[39m=[32m"flex min-h-touch items-center gap-3 rounded px-3 text-base transition-[transform,box-shadow,background-color,color] duration-state ease-out text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift"[39m
+                [33mhref[39m=[32m"/vendors"[39m
+              [36m>[39m
+                [36m<i[39m
+                  [33maria-hidden[39m=[32m"true"[39m
+                  [33mclass[39m=[32m"ti ti-building-store text-lg"[39m
+                [36m/>[39m
+                [0mVendors[0m
+              [36m</a>[39m
+              [36m<a[39m
+   ...
+ ❯ __tests__/equipment-new.test.tsx:225:48
+    223|       fireEvent.click(screen.getByRole("button", { name: /register it/…
+    224| 
+    225|       await waitFor(() => expect(scheduleMock).toHaveBeenCalledTimes(1…
+       |                                                ^
+    226|       expect(scheduleMock.mock.calls[0][1]).toMatchObject({
+    227|         intervalCount: null,
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 11 passed (14)
+   Start at  04:37:46
+   Duration  2.84s (transform 69ms, setup 23ms, collect 102ms, tests 2.48s, environment 110ms, prepare 29ms)
+
+=== T-143 — registering something never serviced was red, as it must be ===
+
+=== T-077 — the language picker — expecting RED ===
+     40|     // The prop changes — the server has answered. Nothing remounts.
+     41|     rerender(<LanguageSection initial="kn-IN" getToken={async () => "t…
+     42|     expect(picker()).toHaveValue("kn");
+       |                      ^
+     43|   });
+     44| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  __tests__/settings-language.test.tsx > the temple's language > saves the temple's own language, not the English it opened on
+AssertionError: expected 'en' to be 'kn' // Object.is equality
+
+Expected: "kn"
+Received: "en"
+
+ ❯ __tests__/settings-language.test.tsx:53:48
+     51|     await waitFor(() => expect(setTempleLanguage).toHaveBeenCalledTime…
+     52|     // The bug's real cost: this argument would have been "en", quietl…
+     53|     expect(setTempleLanguage.mock.calls[0][0]).toBe("kn");
+       |                                                ^
+     54|   });
+     55| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  04:37:49
+   Duration  385ms (transform 46ms, setup 23ms, collect 65ms, tests 57ms, environment 111ms, prepare 32ms)
+
+=== T-077 — the language picker was red, as it must be ===
+
+ALL ARMS WERE RED. The control is evidence.
+--- restored from the snapshot ---
+work-lock: 'verify' released; command exited 0

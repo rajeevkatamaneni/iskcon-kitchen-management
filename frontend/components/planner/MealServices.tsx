@@ -26,7 +26,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { generateAndDownload } from "@/lib/document-download";
-import { cooksQuantity, hhmm, shortDate, templeDay, unitLabel } from "@/lib/format";
+import { cooksQuantity, hhmm, shortDate, templeDay, unitLabelFor } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 
 /**
@@ -844,7 +844,7 @@ function RecordMeal({
             the inputs it describes, it agrees with them (E11-S3 D5).
           */}
           <span className="w-24 text-right tabular-nums text-ink-secondary">
-            {entry.planned.toLocaleString("en-IN")} {unitLabel(unit(entry.mealPlanId))}
+            {entry.planned.toLocaleString("en-IN")} {unitLabelFor(entry.planned, unit(entry.mealPlanId))}
           </span>
 
           <label className="flex items-center gap-2">
@@ -1068,7 +1068,7 @@ function CorrectMeal({
           <span className="w-24 text-right tabular-nums text-ink-secondary">
             {entry.recorded == null
               ? "—"
-              : `${entry.recorded.toLocaleString("en-IN")} ${unitLabel(unit(entry.mealPlanId))}`}
+              : `${entry.recorded.toLocaleString("en-IN")} ${unitLabelFor(entry.recorded, unit(entry.mealPlanId))}`}
           </span>
 
           <label className="flex items-center gap-2">

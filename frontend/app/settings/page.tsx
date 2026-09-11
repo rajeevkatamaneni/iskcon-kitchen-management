@@ -7,9 +7,9 @@ import { HintedField } from "@/components/ds/InfoHint";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { Loading } from "@/components/Loading";
+import { LanguageSection } from "@/components/LanguageSection";
 import { ThemeMiniature } from "@/components/ThemeMiniature";
 import { useAuth } from "@/lib/auth-context";
-import { ALL_LANGUAGES } from "@/lib/languages";
 import { moment } from "@/lib/format";
 import {
   applyPalette,
@@ -1369,97 +1369,6 @@ function asBroadcastLimit(raw: string): number | null {
     return null;
   }
   return n;
-}
-
-// ---- Language --------------------------------------------------------------
-
-/**
- * The language the temple works in.
- *
- * <p>Its one job today is the job card: the sheet goes to the kitchen, so it prints in the temple's
- * own language unless the person at the printer chooses otherwise (build brief §3). The setting has
- * existed on the temple record since the first migration and has never been writable, so every
- * temple has quietly been English — which mattered to nobody until something started reading it.
- */
-function LanguageSection({
-  initial,
-  getToken,
-}: {
-  initial: string | null;
-  getToken: () => Promise<string | undefined>;
-}) {
-  // Stored region-qualified ("kn-IN"); chosen as a bare language, which is what a person picks.
-  const [language, setLanguage] = useState((initial ?? "en-IN").split("-")[0]);
-  const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  async function save() {
-    setBusy(true);
-    setError(null);
-    setSaved(false);
-    try {
-      await api.setTempleLanguage(language, await getToken());
-      setSaved(true);
-    } catch (e) {
-      setError(toApiError(e, "We couldn’t save that."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="card mt-6 px-7 py-7" aria-label="Language">
-      <h2 className="text-lg font-semibold text-ink">Language</h2>
-      <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
-        The language your kitchen reads. Job cards print in it by default.
-      </p>
-
-      {/* The scope of the setting — what it does and does not reach — which is exactly the thing
-          somebody wants once, at the moment they are choosing. */}
-      <div className="mt-6 max-w-md">
-        <HintedField
-          label="Your temple’s language"
-          hint="This changes what is printed, not what this screen is written in."
-        >
-          {(id) => (
-            <select
-              id={id}
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
-            >
-              {ALL_LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-          )}
-        </HintedField>
-      </div>
-
-      {error && (
-        <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
-          <p className="font-medium">{error.message}</p>
-          <p className="mt-0.5">{error.action}</p>
-        </div>
-      )}
-      {saved && !error && <p className="mt-6 text-sm text-success">Saved.</p>}
-
-      <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
-        <span className="flex-1" />
-        <button
-          type="button"
-          onClick={save}
-          disabled={busy}
-          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
-        >
-          {busy ? "Saving…" : "Save"}
-        </button>
-      </div>
-    </section>
-  );
 }
 
 /** The bounds the request record and the database both carry. Kept here so the box says so too. */

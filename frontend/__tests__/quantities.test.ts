@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cooksQuantity, quantity } from "@/lib/format";
+import { cooksQuantity, quantity, unitLabel, unitLabelFor } from "@/lib/format";
 
 /**
  * The vector table for the one display rule (E11-S3).
@@ -34,6 +34,30 @@ describe("a quantity, said the way a person says it", () => {
 
     it("leaves a count alone — it is a whole thing measured in itself", () => {
       expect(quantity(3, "PIECES")).toBe("3 pieces");
+    });
+
+    it("says one of a counted thing in the singular (T-108)", () => {
+      // What Rajeev saw on a purchase order: one plastic stool, printed "1 pieces". It was on
+      // every screen in the application at once, because the unit label was chosen without ever
+      // being shown the number it was going to sit beside.
+      expect(quantity(1, "PIECES")).toBe("1 piece");
+      expect(cooksQuantity(1, "PIECES")).toBe("1 piece");
+      // Rounded down to one, which is the case a job card actually hits.
+      expect(cooksQuantity(1.2, "PIECES")).toBe("1 piece");
+      // And a reversal of the single stool that was received in error.
+      expect(quantity(-1, "PIECES")).toBe("-1 piece");
+    });
+
+    it("pluralises nothing else, because nothing else is counted", () => {
+      // "1 Kgs" is not English and neither is "1 mls". A mass and a volume are written the same
+      // at every number; only a unit that names the things themselves has a singular to get wrong.
+      expect(quantity(1, "KG")).toBe("1 Kg");
+      expect(quantity(1, "GM")).toBe("1 gm");
+      expect(quantity(1, "L")).toBe("1 L");
+      expect(quantity(1, "ML")).toBe("1 ml");
+      // Including when the promotion is what produced the one: 1000 gm is one kilo.
+      expect(quantity(1000, "GM")).toBe("1 Kg");
+      expect(cooksQuantity(999.6, "GM")).toBe("1 Kg");
     });
 
     it("keeps the exact figure, so inventory rows still add up to the balance", () => {
@@ -116,5 +140,26 @@ describe("a quantity, said the way a person says it", () => {
       expect(cooksQuantity(lines[2], "KG")).toBe("5 gm");
       expect(lines.reduce((a, b) => a + b, 0)).toBe(exactTotal);
     });
+  });
+});
+
+describe("the label beside a number, and the label on its own", () => {
+  // Two different questions, and the reason both functions exist. A screen that renders the figure
+  // and the unit as separate elements is still printing one phrase and needs the agreeing label;
+  // a column heading, a dropdown option or the adornment on a box somebody types into is naming
+  // the unit with no number anywhere near it, and there "pieces" is right.
+  it("agrees with the number when there is a number", () => {
+    expect(unitLabelFor(1, "PIECES")).toBe("piece");
+    expect(unitLabelFor(2, "PIECES")).toBe("pieces");
+    expect(unitLabelFor(0, "PIECES")).toBe("pieces");
+    expect(unitLabelFor(1.5, "PIECES")).toBe("pieces");
+    expect(unitLabelFor(1, "KG")).toBe("Kg");
+    expect(unitLabelFor(1, null)).toBe("");
+  });
+
+  it("stays plural where the unit is being named rather than counted", () => {
+    expect(unitLabel("PIECES")).toBe("pieces");
+    expect(unitLabel("KG")).toBe("Kg");
+    expect(unitLabel(null)).toBe("");
   });
 });
