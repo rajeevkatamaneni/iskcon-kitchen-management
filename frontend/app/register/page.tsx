@@ -27,7 +27,7 @@ import {
   type ApiError,
   type TempleSummary,
 } from "@/lib/api";
-import { googleProvider, useAuth } from "@/lib/auth-context";
+import { googleProvider, rememberChosenTemple, useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth } from "@/lib/firebase";
 
 /**
@@ -137,6 +137,15 @@ export default function RegisterPage() {
       const firebase = readableFirebaseError(e, temple.name);
       if (firebase) setMessage(firebase);
       else setError(toApiError(e, "We couldn’t complete your registration."));
+
+      // The one failure that ends with the person leaving this screen for another one (T-118).
+      // `emailAlreadyInUse` below has just told them to go and sign in, and that the sign-in will
+      // ask which temple they serve at — so the answer they gave at the top of this form is carried
+      // to the screen that asks, instead of being thrown away at the door. Only here: every other
+      // failure leaves them on this form with the temple still in it, and a note left behind by
+      // somebody who simply mistyped a password would be a guess waiting in the next tab.
+      if (isEmailAlreadyInUse(e)) rememberChosenTemple(temple);
+
       setBusy(false);
     }
   }
@@ -464,11 +473,20 @@ function readableFirebaseError(e: unknown, templeName: string | null): string | 
  * lands on `/choose-temple` (`auth-context.tsx`, `app/page.tsx`), which asks *"Which temple do you
  * serve at?"* and carries `JoinTempleForm`, so they join themselves and nothing here is retyped.
  *
- * <p>Deliberately **not** `KMS-400020`'s own wording, though it names the same situation. Its next
- * step is *"Ask your temple administrator to add you"*, and that is not what happens on the screen
- * this person actually reaches: they can join without asking anybody. (That sentence is also
- * rendered nowhere today — `auth-context` reads the code and keeps only the status — so reusing it
- * here would not be reuniting a person with a wording they had already met.)
+ * <p>Deliberately not `KMS-400020`'s own wording, though it names the same situation — and the
+ * reason has changed under this comment twice, so it is worth writing down properly rather than
+ * leaving the old one to rot. **It used to be that the catalogue contradicted this screen**: when
+ * this sentence was written, `KMS-400020`'s next step told the reader to ask a temple administrator
+ * to add them, which is a second dead end for somebody who can join themselves. That is no longer
+ * true. T-114 reworded it on 2026-09-10 and T-116 put its message on `/choose-temple` on
+ * 2026-09-11, so the catalogue now says the right thing and the reader meets it.
+ *
+ * <p>**What keeps the two sentences separate is who reads them and when.** This one is read signed
+ * out, by somebody who may simply have forgotten they already have an account, and it has to name
+ * the temple they chose three fields above it. The catalogue's is read after signing in, by
+ * somebody the server has actually refused. Neither is a copy of the other and neither should
+ * become one — `KMS-400020`'s words reach their reader through the refusal (`lib/auth-context.tsx`)
+ * and are never retyped, here or anywhere.
  */
 function emailAlreadyInUse(templeName: string | null): string {
   const list = templeName ? `${templeName}’s list` : "the temple’s list";

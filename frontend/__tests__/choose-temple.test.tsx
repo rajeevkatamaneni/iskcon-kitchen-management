@@ -54,7 +54,13 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock("@/lib/auth-context", () => ({ useAuth: () => authRef.current }));
+vi.mock("@/lib/auth-context", () => ({
+  useAuth: () => authRef.current,
+  // Nobody in this file arrived from the register form, so there is no temple to offer back
+  // (T-118) and every screen below is the screen as somebody reaching it by any other road sees
+  // it. The arrival that does carry one is `temple-carried-from-register.test.tsx`.
+  takeChosenTemple: () => null,
+}));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();

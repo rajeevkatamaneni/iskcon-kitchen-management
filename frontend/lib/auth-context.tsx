@@ -192,6 +192,114 @@ const REFUSALS: Record<string, AuthStatus> = {
   [NO_ACCOUNT_AT_TEMPLE]: "no-account",
 };
 
+// ---------------------------------------------------------------------------
+// The temple somebody named before they had an account to name it with (T-118).
+// ---------------------------------------------------------------------------
+
+/**
+ * Where `/register` leaves the temple it has already been told, for `/choose-temple` to offer back.
+ *
+ * <p><b>The chore this removes.</b> Somebody fills in the register form — temple first, it is the
+ * top field — presses the button, and Firebase says that email already has an account. The screen
+ * tells them to sign in instead, which is right; they sign in, `/whoami` refuses them with
+ * `KMS-400020` because they belong to no temple, and they land on the picker being asked the one
+ * question they have already answered. Nothing was wrong with any screen in that sequence. The
+ * answer was simply thrown away between two of them.
+ *
+ * <p><b>Why it lives in the session layer rather than beside the pages that use it.</b> Because
+ * {@link AuthProvider}'s `signOut` has to be able to forget it, and for the same reason it forgets
+ * the refusal: the way off the picker for somebody who picked the wrong Google account is "Use a
+ * different account", and the next person to use that browser must not find the last one's temple
+ * waiting for them. A note two screens keep between themselves and the sign-out cannot reach is a
+ * note that outlives the person who left it.
+ *
+ * <p><b>`sessionStorage`, deliberately, and not `localStorage`.</b> The idle-clock note next door
+ * uses `localStorage` because every tab has to share one clock. This is the opposite: it belongs to
+ * one journey in one tab, it is meaningless in any other, and it should not survive the tab being
+ * closed. `sessionStorage` is exactly that lifetime and needs no code to enforce it.
+ */
+const CHOSEN_TEMPLE_KEY = "kms.templeChosenWhileRegistering";
+
+/**
+ * How long the note is worth reading, on top of the tab's own lifetime.
+ *
+ * <p>Half an hour, which is long for what should take a minute: the gap between the two screens is
+ * a sign-in, and a sign-in can turn into finding a password, resetting it, and waiting for the
+ * email. Shorter than the idle-clock's five-minute note (which explains a sign-out that has just
+ * happened) and much shorter than the tab, so a browser left open overnight does not greet somebody
+ * in the morning with a decision they made yesterday.
+ */
+const CHOSEN_TEMPLE_VALID_FOR_MS = 30 * 60 * 1000;
+
+/**
+ * Which temple was chosen — and, deliberately, not what it was called.
+ *
+ * <p>The id is the fact. The name is kept only as the term to find that temple with again, and is
+ * never put on a screen: a temple can be renamed, closed to new devotees or withdrawn altogether
+ * between the two screens, and a remembered name rendered as though it were current would be the
+ * application quietly asserting something nobody had checked. `/choose-temple` looks the id up in
+ * the same list the picker offers and shows whatever the server says today, or asks the question
+ * plainly if the id is not in it.
+ */
+export interface ChosenTemple {
+  id: string;
+  /** What it was called when they picked it: a search term, not a label. */
+  name: string;
+}
+
+/**
+ * Remember the temple this person has just told us they serve at.
+ *
+ * <p>Written only where the register screen gives up and sends them to sign in — see its
+ * `emailAlreadyInUse`. Not on every pick: a temple chosen on a form that was then abandoned is not
+ * an answer anybody gave us, and would be a guess waiting in the next tab.
+ */
+export function rememberChosenTemple(temple: ChosenTemple, at: number = Date.now()): void {
+  try {
+    window.sessionStorage.setItem(
+      CHOSEN_TEMPLE_KEY,
+      JSON.stringify({ id: temple.id, name: temple.name, at })
+    );
+  } catch {
+    // Private mode, a quota, an embedded browser. Without the note the picker simply asks, which
+    // is what it did before any of this — so there is nothing here worth telling anybody about.
+  }
+}
+
+/**
+ * Read that note and clear it, so it answers one arrival at the picker and not the next.
+ *
+ * <p>Read-once matches the sign-out note next door, and for the same reason: a note that is still
+ * there on the second visit is a note explaining a journey that finished. The cost is that
+ * reloading `/choose-temple` loses the pre-selection and the person picks by hand, which is the
+ * behaviour of the screen as it shipped and not a new failure.
+ *
+ * <p>Anything absent, unreadable or older than {@link CHOSEN_TEMPLE_VALID_FOR_MS} is nothing.
+ */
+export function takeChosenTemple(now: number = Date.now()): ChosenTemple | null {
+  try {
+    const raw = window.sessionStorage.getItem(CHOSEN_TEMPLE_KEY);
+    if (raw === null) return null;
+    window.sessionStorage.removeItem(CHOSEN_TEMPLE_KEY);
+
+    const note = JSON.parse(raw) as { id?: unknown; name?: unknown; at?: unknown };
+    if (typeof note.id !== "string" || typeof note.name !== "string") return null;
+    if (typeof note.at !== "number" || now - note.at >= CHOSEN_TEMPLE_VALID_FOR_MS) return null;
+    return { id: note.id, name: note.name };
+  } catch {
+    return null;
+  }
+}
+
+/** Drop it unread — for a sign-out, which ends the journey it belonged to. */
+export function forgetChosenTemple(): void {
+  try {
+    window.sessionStorage.removeItem(CHOSEN_TEMPLE_KEY);
+  } catch {
+    // See `rememberChosenTemple`: storage that cannot be written cannot be holding a note either.
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<WhoAmI | null>(null);
@@ -330,6 +438,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // next, and they must not be met by the last person's bad news.
     setTempleTimeZone(null);
     setRefusal(null);
+    // And the temple somebody picked on their way in (T-118), for exactly the reason above: the
+    // sign-out on the picker screen is there so a person who chose the wrong Google account can
+    // start again, and starting again must not mean arriving at the same question already answered
+    // by whoever was here before.
+    forgetChosenTemple();
     setStatus("signed-out");
   }, []);
 

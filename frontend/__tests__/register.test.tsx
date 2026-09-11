@@ -35,6 +35,7 @@ const {
   setActiveTempleId,
   replaceMock,
   refreshMock,
+  rememberChosenTemple,
   authState,
 } = vi.hoisted(() => ({
   createUserWithEmailAndPassword: vi.fn(),
@@ -47,6 +48,7 @@ const {
   setActiveTempleId: vi.fn(),
   replaceMock: vi.fn(),
   refreshMock: vi.fn(async () => {}),
+  rememberChosenTemple: vi.fn(),
   // Firebase's own session, which outlives a page reload — and so is where a credential whose join
   // was refused is still to be found. Mutable, because two tests below turn it into evidence.
   authState: { currentUser: null as Record<string, unknown> | null },
@@ -74,6 +76,10 @@ vi.mock("@/lib/firebase", () => ({
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ refresh: refreshMock }),
   googleProvider: () => ({ id: "google-provider" }),
+  // Where the screen leaves the temple it has already been told, when it sends somebody off to
+  // sign in (T-118). Stubbed here because this file is about the form; that the note is written,
+  // and read by the picker at the other end, is `temple-carried-from-register.test.tsx`.
+  rememberChosenTemple,
 }));
 
 vi.mock("next/navigation", () => ({

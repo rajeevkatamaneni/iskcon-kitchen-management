@@ -20,14 +20,25 @@ export function JoinTempleForm({
   onJoined,
   submitLabel = "Join this temple",
   pickerLabel,
+  initialTemple = null,
 }: {
   onJoined: () => void;
   submitLabel?: string;
   pickerLabel?: string;
+  /**
+   * A temple to open with already chosen, for a caller that has been told which one and has
+   * checked it is still real (T-118).
+   *
+   * <p>Read once, when the form is first mounted, and nothing here keeps it after that: the
+   * picker's "Change" is the whole point of pre-selecting rather than pre-deciding, and a prop that
+   * kept re-asserting itself would take the change back. Callers that learn the answer after
+   * mounting must therefore not mount this form until they have it.
+   */
+  initialTemple?: TempleSummary | null;
 }) {
   const { user, getToken, refresh } = useAuth();
 
-  const [temple, setTemple] = useState<TempleSummary | null>(null);
+  const [temple, setTemple] = useState<TempleSummary | null>(initialTemple);
   const [firstName, setFirstName] = useState(guessFirst(user?.displayName));
   const [lastName, setLastName] = useState(guessLast(user?.displayName));
   const [phone, setPhone] = useState(user?.phoneNumber ?? "");
