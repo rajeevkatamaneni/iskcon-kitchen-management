@@ -95,6 +95,77 @@ added had no way in.
 
 **Drive the app. It is not optional and it is not slower.**
 
+## ▶ THE RUN PLAN — ordered by Rajeev 2026-09-10, for the session that picks this up
+
+**His instruction, in his words:** *"Assign these tasks to Subagents and run them parallelly whenever
+possible. For each task, run unit tests till green, then git push, then watch CI for green, then
+cloud deploy and on browser verification. Keep going till it is done with all of them. ONLY park
+tasks that it is truly blocked on and needs me to help."*
+
+**So: do not come back to him between waves.** Park a task only when you genuinely cannot proceed
+without a decision only he can make — and then keep going with everything else rather than stopping.
+
+### The cycle, per wave — all five steps, every time
+
+1. **Build and unit test until green** — backend under `tools/work-lock.sh run verify`, Gradle
+   `--no-daemon` (this machine has run out of memory with several daemons alive).
+2. **Verify the merged tree**, not each builder's own run. Agents working in parallel have never been
+   tested against each other; that is what a wave is for.
+3. **Commit by named path and push.** Never `git add -A`. Only the `release` agent commits.
+4. **Watch CI to completion**, then `infra/deploy.sh iskcon-kms-2026 staging`, and confirm any
+   migration from the API's own startup log — not from the deploy's exit code.
+5. **Drive it in a browser as the role it was written for.** This is not optional and it is the step
+   that finds things: see `uat-readiness-plan` in the session memory directory for why. A wave that
+   skipped it is not finished.
+
+### The waves, in order
+
+**Wave A — three agents in parallel. No collisions.**
+
+- **T-135 + T-136, merged into one task.** Both are about which buttons exist on the purchase-order
+  screen — the order of the bank, *Edit lines* → *Edit*, edit mode showing only Save and Cancel,
+  Cancel-this-PO moved to the bottom of both screens, and *Send on WhatsApp* appearing only for a
+  temple that has actually got a message through. **Same file, same question; two agents there would
+  collide.** **And it must go before T-134**, because T-134 reuses that screen as its panel — fix the
+  screen, then reuse the fixed one.
+- **T-116** — the auth layer keeps an error's code and discards its words. Isolated to
+  `frontend/lib/auth-context.tsx` and a new guard.
+- **T-076** — the lint script that cannot run. Isolated to frontend tooling and CI config.
+
+**Wave B — two agents in parallel.**
+
+- **T-134** — a tile per vendor, and the order written in a panel over the shopping list. **Needs
+  Wave A's orders screen.** *The panel and the edit screen are the same thing; if they are built
+  twice they will drift.*
+- **T-141** — 404 SQL statements per page load, 360 of them recipe lookups, and the whole pass runs
+  twice. Backend only, and disjoint from T-134's frontend work.
+
+**Wave C — one agent, alone. The largest task in the set.**
+
+- **T-137** — the lead time as one promise, enforced everywhere it shows. Touches `purchaseorder/`,
+  `vendor/`, `jobs/`, the Today dashboard, the scorecard and `api.ts`. **Nothing can run beside it.**
+
+**Wave D — one agent, immediately after Wave C.**
+
+- **T-142** — D-26's closing flow. **Same files as T-137**, which is why it follows rather than runs
+  beside it.
+
+**Wave E — one agent, last.**
+
+- **T-058** — the ten held cleanups. Scattered across the tree, so it collides with everything and
+  goes when nothing else is running. **Drop any item that turns out not to be a real problem, with a
+  sentence saying why. Bring back anything that needs a ruling** — and ship the other nine.
+
+### Two standing rules for this run
+
+**Migration numbers: staging is at `V122`.** The next is `V123`. **A reserved number that goes unused
+goes straight back to the pool** — this project has lost a deploy to a gap before.
+
+**`ErrorCode.java` is coordinator-only.** A builder names the code it wants, with its exact message
+and next step, and leaves the file alone.
+
+---
+
 ### ~~The one thing blocked on an access grant~~ — **closed 2026-09-08**
 
 **Geocoding was added to `kms-staging-maps-api-key`'s restriction list and the regression is
@@ -13088,6 +13159,45 @@ there is nothing to delete. It is one predicate."* **Merged.**
 - **proof:** `docs/work/proof/T-132.md` (the refusal, then the build below it) · **shipped:**
   `27a39f8`, 2026-09-10, wave 21 — *feat: the shopping list is worked out every time it is read, and
   never written down*
+
+### T-142 — closing a part-delivered order, and the score nobody may edit
+
+- **id:** T-142 · **state:** ready to build. **Wave D — immediately after T-137, never beside it.**
+- **source:** **[[D-26]], Rajeev 2026-09-10.** Read that decision in full before briefing this; it is
+  a walk through a real delivery and the reasoning matters more than the list of controls.
+- **why it follows T-137 rather than running with it:** the same files — `purchaseorder/`,
+  the vendor scorecard, the order screen. Two agents there would collide.
+
+**What it builds:**
+
+- **Closing an order that was part-delivered.** 500 kg ordered, 300 arrived, 200 never will. The
+  remainder stays on the order while it is open — *"the clock keeps ticking"* — and is **released back
+  to the shopping list when the order is closed.** That is a third door onto the same mechanism
+  [[D-24a]] already gives cancellation.
+- **Two named outcomes at closing**, which are his two scenarios:
+  - *The vendor let us down* — counts against them. The one who went silent and never rang back.
+  - *They fell short but made it right* — the order is **excluded** from their score, with the reason
+    recorded. The one who apologised, blamed the weather and offered a discount.
+  - Neither: scored as computed.
+  - **Anything other than "as computed" requires a sentence.**
+- **The computed score is shown at closing — and is never editable.** He proposed letting an admin
+  adjust it and then **ruled against his own proposal**: *"Let us not let the admin adjust the score.
+  Just show it to them."* The four costs that decided it are in D-26 and should be read before
+  anybody proposes it again.
+- **The exclusions must be visible on the scorecard** — a count beside the percentage, the same
+  standard already set for late-submitted and abandoned orders. **A number whose exclusions are
+  invisible cannot be checked.**
+
+**Two things already true that this must not break:**
+
+- **The arithmetic needs nothing new.** T-124 scores on-time by quantity, so 300 kg of 500 inside the
+  window is **60%**, computed already. What was missing was never the sum — it was the ways an order
+  can end.
+- **Auto-cancel must never touch a part-delivered order** — agreed by him explicitly. A draft nobody
+  sent can be swept away by a scheduled job; an order with 300 kg of real rice against it and a
+  vendor relationship behind it needs a human.
+
+- **proof:** — · **shipped:** —
 
 ### T-140 — the shopping list works the stock out once, not nine times
 
