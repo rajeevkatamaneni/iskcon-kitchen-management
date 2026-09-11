@@ -922,6 +922,64 @@ to stop.**
 
 ---
 
+## 🔎 WAVE F — DRIVEN ON STAGING 2026-09-11, and the run plan is finished
+
+Seven commits `0337924`, `acda88c`, `792e3e1`, `5048a66`, `6ac4959`, `31be129`, `9833837`. CI run
+**34601474107** green on the first run, no retries. Staging is
+**`kms-staging-api-00152-vjt` / `web-00140-f7h` / `worker-00134-wcl`**, schema **`V126`**, confirmed
+applied-nothing from the API's own startup log: *"Successfully validated 123 migrations … Current
+version of schema "public": 126 … Schema "public" is up to date. No migration necessary."*
+
+**The new hygiene step ran and did real work** rather than no-opping:
+*"terraform.tfvars.example matches variables.tf: all 19 declared variables present, none extra."*
+That is Ubuntu's `mawk` agreeing with the container test the builder ran before shipping it.
+
+**And one check nobody asked for, which is the best kind:** the release agent compared **the JS chunk
+hashes staging is actually serving** (`2117-8c94d2a54e021bfd.js`, `fd9d1056-62f4104b631d166e.js`)
+against its own clean-directory `next build` of `HEAD`. **They match**, so the bytes live are the
+bytes from that commit — not a stale image running under new environment variables. A digest change
+proves a new image; this proves it is *the* image.
+
+### Driven as the Temple Admin
+
+**"1 piece", both halves.** `PO-2026-0046` was raised with a described line — *Plastic stool*,
+quantity **exactly 1**, counted in pieces, the case that used to read *"1 pieces"*.
+
+- **On the screen:** `Plastic stool  1 piece`. `"1 pieces"` appears nowhere.
+- **On the printed sheet the vendor is handed** (`GET /purchase-orders/{id}/print`, 200, 2,392
+  bytes): `Plastic stool 1 piece`. **This is the half T-144 existed for**, and the one with an
+  outside audience — the screen was T-108's.
+
+**T-143, and it matches T-120's ruling rather than reinterpreting it.** `/equipment/new` now carries
+**"This never needs servicing"**. Ticking it **disables both interval controls** — the number and the
+MONTHS/WEEKS select — and the form says *"…servicing, so there is no interval to set."* That is
+Rajeev's *"when checked, the Service interval box is cleared out and uneditable"*, on the
+registration form where sixty stools can be declared without sixty visits to sixty pages.
+
+**T-070's fix, on the donor-facing figure.** `/api/v1/donations/page` now returns
+`spendShares: [{Dairy, 100%}]` and `costPerPlateInr: 16`. **Of the 23 purchase orders on this tenant,
+13 are DRAFT or CANCELLED** — every one of which counted as money the temple had spent before this
+commit, on a page whose own comment says *"a made-up number here would be quoted back at them by a
+donor."*
+
+### Test data left on staging, labelled, for Rajeev's own pass
+
+- **`PO-2026-0046`** — Jayanagar Hardware Store, *Plastic stool*, **1 piece**, needed 30 Sept. It is
+  the worked example of T-108/T-144; its notes say so.
+- **`PO-2026-0045`** — **CLOSED**, Heritage Fresh Dairy, 10 L Curd ordered / 6 L received, **sent
+  late on purpose**, closed as *The vendor let us down*. It is the only worked example of the whole
+  **D-25 → D-26** chain and it is what makes `ordersSentLate: 1` visible on the scorecard.
+- **`PO-2026-0044`** — raised through T-134's new vendor-tile panel.
+- **Shift `VERIFY T-080 — coordinator test 2026-09-11`**, 25 Sept, with one released volunteer
+  carrying a structured reason and an internal note, and one still signed up so the removal form can
+  be opened again.
+- **`PO-2026-0041`, `-0038`, `-0030` cancelled**, each naming this verification in its reason.
+
+**Leave all of it until he has looked.** Between them they are the only instances on staging of
+several of the features this run built.
+
+---
+
 ## ▶ THE RUN PLAN — ordered by Rajeev 2026-09-10, for the session that picks this up
 
 **His instruction, in his words:** *"Assign these tasks to Subagents and run them parallelly whenever
