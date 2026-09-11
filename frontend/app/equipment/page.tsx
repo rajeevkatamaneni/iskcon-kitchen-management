@@ -284,7 +284,21 @@ function EquipmentList() {
                         <ConditionBadge condition={i.condition} />
                       </td>
                       <td className={TD_TEXT}>
-                        <ServiceState item={i} />
+                        {/* T-120. "Not scheduled" against sixty stools for ever teaches the reader
+                            that the phrase means nothing, and then it means nothing when a boiler
+                            is wearing it. A thing somebody has said will never need servicing says
+                            so instead, and the two states are now distinct in the row as well as
+                            in this cell.
+
+                            The branch is here rather than inside ServiceState because that lives
+                            in components/EquipmentWords.tsx, which is outside this task's path
+                            contract. It is the right home for the phrase and it is flagged in the
+                            proof — see docs/work/proof/T-120.md. */}
+                        {i.neverNeedsServicing ? (
+                          <span className="text-sm text-ink-muted">Does not need servicing</span>
+                        ) : (
+                          <ServiceState item={i} />
+                        )}
                       </td>
                       <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
                         {i.serviceCompany ?? "—"}

@@ -76,7 +76,7 @@ class ServiceIntervalTest {
 		@DisplayName("a serviced machine counts from its newest service, and says so")
 		void countsFromTheNewestService() {
 			var derived = EquipmentService.derive(
-					EquipmentCondition.GOOD, 180, LocalDate.of(2026, 8, 1), LocalDate.of(2020, 1, 1),
+					EquipmentCondition.GOOD, false, 180, LocalDate.of(2026, 8, 1), LocalDate.of(2020, 1, 1),
 					TODAY, HORIZON);
 
 			assertThat(derived.nextServiceOn()).isEqualTo(LocalDate.of(2027, 1, 28));
@@ -90,7 +90,7 @@ class ServiceIntervalTest {
 			// The distinction the screen prints in as many words — "due 12 Mar 2027, from purchase,
 			// never serviced" — so nobody reads a derived date as a service that happened.
 			var derived = EquipmentService.derive(
-					EquipmentCondition.GOOD, 365, null, LocalDate.of(2026, 3, 12), TODAY, HORIZON);
+					EquipmentCondition.GOOD, false, 365, null, LocalDate.of(2026, 3, 12), TODAY, HORIZON);
 
 			assertThat(derived.nextServiceOn()).isEqualTo(LocalDate.of(2027, 3, 12));
 			assertThat(derived.basis()).isEqualTo(NextServiceBasis.PURCHASED);
@@ -100,7 +100,7 @@ class ServiceIntervalTest {
 		@DisplayName("a machine with an interval but no date to count from is not scheduled")
 		void neitherServiceNorPurchase() {
 			var derived = EquipmentService.derive(
-					EquipmentCondition.GOOD, 180, null, null, TODAY, HORIZON);
+					EquipmentCondition.GOOD, false, 180, null, null, TODAY, HORIZON);
 
 			assertThat(derived.nextServiceOn()).isNull();
 			assertThat(derived.basis()).isEqualTo(NextServiceBasis.NONE);
@@ -112,7 +112,7 @@ class ServiceIntervalTest {
 		void noInterval() {
 			// The honest state for a trestle table. Not scheduled is not the same as late.
 			var derived = EquipmentService.derive(
-					EquipmentCondition.GOOD, null, LocalDate.of(2019, 1, 1), LocalDate.of(2018, 1, 1),
+					EquipmentCondition.GOOD, false, null, LocalDate.of(2019, 1, 1), LocalDate.of(2018, 1, 1),
 					TODAY, HORIZON);
 
 			assertThat(derived.status()).isEqualTo(ServiceStatus.NOT_SCHEDULED);
@@ -136,7 +136,7 @@ class ServiceIntervalTest {
 		void statusAgainstTheHorizon(LocalDate nextDue, ServiceStatus expected) {
 			// Worked backwards: an interval of one day off a service the day before nextDue.
 			var derived = EquipmentService.derive(
-					EquipmentCondition.GOOD, 1, nextDue.minusDays(1), null, TODAY, HORIZON);
+					EquipmentCondition.GOOD, false, 1, nextDue.minusDays(1), null, TODAY, HORIZON);
 
 			assertThat(derived.nextServiceOn()).isEqualTo(nextDue);
 			assertThat(derived.status()).isEqualTo(expected);
@@ -149,11 +149,11 @@ class ServiceIntervalTest {
 			int interval = 60; // due 2026-10-31, fifty-seven days off
 
 			assertThat(EquipmentService.derive(
-					EquipmentCondition.GOOD, interval, lastServiced, null, TODAY, 30).status())
+					EquipmentCondition.GOOD, false, interval, lastServiced, null, TODAY, 30).status())
 					.isEqualTo(ServiceStatus.OK);
 
 			assertThat(EquipmentService.derive(
-					EquipmentCondition.GOOD, interval, lastServiced, null, TODAY, 90).status())
+					EquipmentCondition.GOOD, false, interval, lastServiced, null, TODAY, 90).status())
 					.isEqualTo(ServiceStatus.DUE_SOON);
 		}
 
@@ -164,12 +164,59 @@ class ServiceIntervalTest {
 			// teaches its reader to ignore it, and then it is worth nothing when a real one
 			// comes due. These dates would be years overdue on any other machine.
 			var derived = EquipmentService.derive(
-					EquipmentCondition.SCRAPPED, 30, LocalDate.of(2019, 1, 1), LocalDate.of(2018, 1, 1),
+					EquipmentCondition.SCRAPPED, false, 30, LocalDate.of(2019, 1, 1), LocalDate.of(2018, 1, 1),
 					TODAY, HORIZON);
 
 			assertThat(derived.status()).isEqualTo(ServiceStatus.NOT_SCHEDULED);
 			assertThat(derived.nextServiceOn()).isNull();
 			assertThat(derived.basis()).isEqualTo(NextServiceBasis.NONE);
+		}
+
+		@Test
+		@DisplayName("a thing that never needs servicing reads NOT_SERVICED, not NOT_SCHEDULED")
+		void neverNeedsServicingIsItsOwnState() {
+			// T-120. The whole point: these two rows used to be indistinguishable, and only one of
+			// them is a job somebody still has to do.
+			var ladder = EquipmentService.derive(
+					EquipmentCondition.GOOD, true, null, null, LocalDate.of(2018, 1, 1), TODAY, HORIZON);
+			var boilerNobodyScheduled = EquipmentService.derive(
+					EquipmentCondition.GOOD, false, null, null, LocalDate.of(2018, 1, 1), TODAY, HORIZON);
+
+			assertThat(ladder.status()).isEqualTo(ServiceStatus.NOT_SERVICED);
+			assertThat(boilerNobodyScheduled.status()).isEqualTo(ServiceStatus.NOT_SCHEDULED);
+			assertThat(ladder.status()).isNotEqualTo(boilerNobodyScheduled.status());
+
+			// Neither has a date, and neither claims one was counted from anything.
+			assertThat(ladder.nextServiceOn()).isNull();
+			assertThat(ladder.basis()).isEqualTo(NextServiceBasis.NONE);
+		}
+
+		@Test
+		@DisplayName("the flag is asked before scrapping, so a scrapped ladder is still a ladder")
+		void theFlagOutranksScrapping() {
+			// Both would be invisible to every warning count either way, so this is about words
+			// rather than about nagging: "not scheduled" on a thrown-away ladder invites somebody
+			// to go and schedule it, which is the one thing this state exists to stop.
+			var derived = EquipmentService.derive(
+					EquipmentCondition.SCRAPPED, true, null, LocalDate.of(2019, 1, 1),
+					LocalDate.of(2018, 1, 1), TODAY, HORIZON);
+
+			assertThat(derived.status()).isEqualTo(ServiceStatus.NOT_SERVICED);
+		}
+
+		@Test
+		@DisplayName("a flagged thing is out of scope for overdue, never infinitely overdue")
+		void aFlaggedThingIsNeverOverdue() {
+			// The reader this protects is TodayService's nudge, which counts
+			// list(false, null, OVERDUE). Dates that would be seven years overdue on any other
+			// machine, and the answer is still that nobody is late.
+			var derived = EquipmentService.derive(
+					EquipmentCondition.GOOD, true, null, LocalDate.of(2019, 1, 1),
+					LocalDate.of(2018, 1, 1), TODAY, HORIZON);
+
+			assertThat(derived.status()).isNotEqualTo(ServiceStatus.OVERDUE);
+			assertThat(derived.status()).isNotEqualTo(ServiceStatus.DUE_SOON);
+			assertThat(derived.status()).isEqualTo(ServiceStatus.NOT_SERVICED);
 		}
 
 		@Test
@@ -181,7 +228,7 @@ class ServiceIntervalTest {
 				EquipmentCondition.GOOD, EquipmentCondition.NEEDS_REPAIR, EquipmentCondition.IN_REPAIR}) {
 
 				assertThat(EquipmentService.derive(
-						condition, 30, LocalDate.of(2026, 1, 1), null, TODAY, HORIZON).status())
+						condition, false, 30, LocalDate.of(2026, 1, 1), null, TODAY, HORIZON).status())
 						.as("%s should still be calculated", condition)
 						.isEqualTo(ServiceStatus.OVERDUE);
 			}

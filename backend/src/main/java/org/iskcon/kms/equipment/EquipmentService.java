@@ -251,8 +251,19 @@ public class EquipmentService {
 	 * <p>The count and the unit arrive separately and are stored as a day total plus the unit, so
 	 * that "every six months" and "every ninety days" are both sayable and both come back in the
 	 * words they were entered in. One without the other is refused: a day count with no unit cannot
-	 * be shown back, and a unit with no count is not an interval. Both absent clears the schedule,
-	 * which a temple that has decided a trestle table needs no servicing is entitled to say.
+	 * be shown back, and a unit with no count is not an interval. Both absent clears the schedule.
+	 *
+	 * <p><strong>This is also where a thing is marked as never needing servicing</strong> (T-120),
+	 * because that is the same decision made by the same person at the same moment: it is the answer
+	 * to "how often does this need looking at", and the answer is "never". Until V122 the only way to
+	 * say it was to leave the interval empty, which is also what an unscheduled boiler looks like, so
+	 * a ladder sat on the register for ever as a job nobody had done.
+	 *
+	 * <p>Ticking it <strong>clears any interval that was already there</strong> rather than refusing
+	 * the request — somebody correcting a schedule set in error should not have to empty a box first
+	 * and then tick another. What is refused is being <em>sent</em> both at once, which is a caller
+	 * asserting a contradiction rather than changing its mind. The database refuses the same pairing
+	 * through V122's CHECK; this refusal exists so nobody meets that constraint as an error message.
 	 *
 	 * <p>The company and its number are written straight onto the machine as typed. They were a
 	 * reference into {@code service_providers} until V90, which is the shape Rajeev reversed on
@@ -271,6 +282,19 @@ public class EquipmentService {
 					"reason", "an interval is a number and a unit, or neither"));
 		}
 
+		// Sent both at once. Not an ambiguity to resolve in the caller's favour — "this never needs
+		// servicing, service it every six months" has no reading — so it is refused on the field
+		// that made it a contradiction, exactly as the half-interval above is.
+		if (request.neverNeedsServicing() && hasCount) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of(
+					"field", "neverNeedsServicing",
+					"reason", "a thing that never needs servicing cannot also have an interval"));
+		}
+
+		// Past that guard, ticked implies no count was sent, so intervalDays is null and the UPDATE
+		// below clears whatever interval the row was carrying. That is the ruling's "the Service
+		// interval box is cleared out" arriving in the database rather than only on the screen: a
+		// machine wrongly scheduled and then declared a ladder keeps no orphaned interval behind it.
 		Integer intervalDays = hasCount ? request.intervalUnit().toDays(request.intervalCount()) : null;
 		String unit = hasUnit ? request.intervalUnit().name() : null;
 		String company = trimToNull(request.serviceCompany());
@@ -278,16 +302,17 @@ public class EquipmentService {
 
 		jdbc.update("""
 				UPDATE equipment_items
-				SET service_interval_days = ?, service_interval_unit = ?, service_company = ?,
-					service_company_phone = ?, updated_at = now()
+				SET never_needs_servicing = ?, service_interval_days = ?, service_interval_unit = ?,
+					service_company = ?, service_company_phone = ?, updated_at = now()
 				WHERE id = ?
-				""", intervalDays, unit, company, companyPhone, id);
+				""", request.neverNeedsServicing(), intervalDays, unit, company, companyPhone, id);
 
 		auditService.record(actor, AuditAction.EQUIPMENT_SERVICE_SCHEDULE_SET, AuditEntityType.EQUIPMENT,
 				id,
-				scheduleSnapshot(before.name(), before.serviceIntervalDays(), before.serviceIntervalUnit(),
-						before.serviceCompany()),
-				scheduleSnapshot(before.name(), intervalDays, request.intervalUnit(), company),
+				scheduleSnapshot(before.name(), before.neverNeedsServicing(), before.serviceIntervalDays(),
+						before.serviceIntervalUnit(), before.serviceCompany()),
+				scheduleSnapshot(before.name(), request.neverNeedsServicing(), intervalDays,
+						request.intervalUnit(), company),
 				null);
 	}
 
@@ -438,9 +463,14 @@ public class EquipmentService {
 	}
 
 	private Map<String, Object> scheduleSnapshot(
-			String name, Integer intervalDays, ServiceInterval unit, String company) {
+			String name, boolean neverNeedsServicing, Integer intervalDays, ServiceInterval unit,
+			String company) {
 		Map<String, Object> s = new LinkedHashMap<>();
 		s.put("name", name);
+		// In the trail from the day the flag existed, because "the interval was cleared" and "this
+		// was declared never to need one" are the two acts this snapshot has to be able to tell
+		// apart — which is the whole of T-120, restated for whoever reads the audit log.
+		s.put("neverNeedsServicing", neverNeedsServicing);
 		s.put("serviceIntervalDays", intervalDays);
 		s.put("serviceIntervalUnit", unit == null ? null : unit.name());
 		s.put("serviceCompany", company);
@@ -473,14 +503,21 @@ public class EquipmentService {
 	/**
 	 * Where a machine stands, worked out from what is stored and nothing else.
 	 *
-	 * <p>Four states and one order of questions, and the order is the specification:
+	 * <p>Five states and one order of questions, and the order is the specification:
 	 *
 	 * <ol>
+	 *   <li>A thing somebody has said never needs servicing is NOT_SERVICED, and that is asked
+	 *       first — before scrapping, before the interval, before anything (T-120). It is asked
+	 *       first because it is a statement about what the thing <em>is</em> rather than about what
+	 *       state it happens to be in, and it stays true after the ladder is thrown away. Asking it
+	 *       second would leave a scrapped ladder reading "not scheduled", which is an invitation to
+	 *       go and schedule it — the one thing this state exists to stop.
 	 *   <li>SCRAPPED is never scheduled, whatever its dates say. A dashboard that nags every
 	 *       morning about a grinder thrown away last year teaches its reader to ignore it, and
 	 *       then it is worth nothing when a real one comes due (D6).
-	 *   <li>No interval means nobody has decided how often this needs looking at, which is the
-	 *       honest state for a trestle table. Not scheduled — not overdue.
+	 *   <li>No interval means <em>nobody has decided yet</em> how often this needs looking at —
+	 *       and since V122 that is all it means, because the thing that will never need deciding
+	 *       about was taken out of this state above. Not scheduled — not overdue.
 	 *   <li>Newest service plus the interval, said to be counted from the service.
 	 *   <li>Failing that, acquisition date plus the interval, said to be counted from the purchase
 	 *       — so the screen can print "due 12 Mar 2027, from purchase, never serviced" and nobody
@@ -494,8 +531,12 @@ public class EquipmentService {
 	 * alarm D5 exists to avoid.
 	 */
 	static Derived derive(
-			EquipmentCondition condition, Integer intervalDays, LocalDate lastServicedOn,
-			LocalDate acquisitionDate, LocalDate today, int warningDays) {
+			EquipmentCondition condition, boolean neverNeedsServicing, Integer intervalDays,
+			LocalDate lastServicedOn, LocalDate acquisitionDate, LocalDate today, int warningDays) {
+
+		if (neverNeedsServicing) {
+			return new Derived(null, NextServiceBasis.NONE, ServiceStatus.NOT_SERVICED);
+		}
 
 		if (condition == EquipmentCondition.SCRAPPED || intervalDays == null) {
 			return new Derived(null, NextServiceBasis.NONE, ServiceStatus.NOT_SCHEDULED);
@@ -543,6 +584,7 @@ public class EquipmentService {
 
 		return (rs, n) -> {
 			EquipmentCondition itemCondition = EquipmentCondition.valueOf(rs.getString("condition"));
+			boolean neverNeedsServicing = rs.getBoolean("never_needs_servicing");
 			Integer intervalDays = (Integer) rs.getObject("service_interval_days");
 			String unitName = rs.getString("service_interval_unit");
 			ServiceInterval unit = unitName == null ? null : ServiceInterval.valueOf(unitName);
@@ -550,7 +592,8 @@ public class EquipmentService {
 			LocalDate acquisition = rs.getObject("acquisition_date", LocalDate.class);
 
 			Derived derived = derive(
-					itemCondition, intervalDays, lastServiced, acquisition, today, warningDays);
+					itemCondition, neverNeedsServicing, intervalDays, lastServiced, acquisition, today,
+					warningDays);
 
 			return new EquipmentView(
 					rs.getObject("id", UUID.class),
@@ -564,6 +607,7 @@ public class EquipmentService {
 					rs.getString("serial_number"),
 					rs.getBigDecimal("purchase_cost_inr"),
 					rs.getObject("warranty_expiry", LocalDate.class),
+					neverNeedsServicing,
 					intervalDays,
 					unit,
 					intervalDays == null || unit == null ? null : unit.countIn(intervalDays),
@@ -585,7 +629,8 @@ public class EquipmentService {
 	private static final String SELECT = """
 			SELECT e.id, e.name, e.storage_location, e.condition, e.acquisition_date,
 				   e.source, e.notes, e.created_at, e.serial_number, e.purchase_cost_inr,
-				   e.warranty_expiry, e.service_interval_days, e.service_interval_unit,
+				   e.warranty_expiry, e.never_needs_servicing,
+				   e.service_interval_days, e.service_interval_unit,
 				   e.service_company, e.service_company_phone,
 				   (SELECT max(s.serviced_on) FROM equipment_services s
 					 WHERE s.equipment_id = e.id) AS last_serviced_on

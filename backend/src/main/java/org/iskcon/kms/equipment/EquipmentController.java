@@ -134,6 +134,11 @@ public class EquipmentController {
 	 * is the administrator's decision and the edit form is everybody's. Sending neither a count nor
 	 * a unit clears the schedule; sending a blank company clears that.
 	 *
+	 * <p>{@code neverNeedsServicing} rides here too (T-120), because deciding that a ladder will
+	 * never need looking at is the same decision as deciding a grinder needs it every six months,
+	 * made by the same person on the same form. It is refused alongside a count — that pairing is a
+	 * contradiction, and V122's CHECK refuses it in the database as well.
+	 *
 	 * <p>The company is two plain text fields, a name and a number, and has been since V90 —
 	 * D7's managed list was reversed on 2026-09-04 for being more machinery than the fact deserved.
 	 * There is no longer a {@code /api/v1/service-providers} to keep beside this.

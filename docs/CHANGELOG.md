@@ -1182,6 +1182,78 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-10 — The shopping list stops being stored, a ladder can say it never needs servicing, and the stock ledger is summed once instead of three times (wave 21; tasks T-132, T-140, T-139, T-120)
+
+**The largest single change this project has shipped, and two migrations in one push.** Four tasks
+built by four different agents over several hours, none of which had been run against the other
+three. The merged tree was archived out of `HEAD` into a clean directory and the whole suite run
+there before anything was pushed.
+
+**There was never one door onto the shopping list's write. There were two.** Rajeev asked why the
+screen needed a *"Generate shopping list"* button when the list could populate itself on load. The
+button was the visible door; `ShoppingListRegenerateJob`, on a 04:30 IST cron trigger, was the other,
+and both did the same thing — upsert a suggested line per ingredient, then delete every unedited line
+no longer suggested. The list already populated itself once a night. The honest answer to *"why the
+button"* is that neither should exist.
+
+`shopping_list_lines` was a cache pretending to be a table, stale between writes with nothing on the
+screen saying so: two people opening the list at the same moment could be shown different answers
+depending on which of them had last pressed the button. The suggestions are now computed on every
+read — meal-plan shortfall, stock below its reorder level, short deliveries, and the live purchase
+orders that already cover an ingredient — and never written. What is left in the table is only what a
+person decided: an edited quantity, an untick, a line typed in by hand. `V121` drops the seven
+computed columns, adds `hand_added`, makes `suggested_qty` nullable, and runs per tenant under RLS
+because the migration role holds no `BYPASSRLS` and a bare `UPDATE` would match nothing through the
+policy's `NULLIF` and report success having changed nothing anywhere.
+
+**The job lives in the database as well as in Java**, so `V121` deletes its Quartz rows too. Without
+that, 04:30 arrives, the stored trigger fires, fails to load a class no longer on the worker's
+classpath, and goes to `ERROR` — a shape of failure no test in this repository would have caught.
+
+**An untick persists, and the cost is named rather than designed around.** One made in September will
+suppress a January shortfall, and between those dates the line is not on the screen for anybody to
+notice. Expiring it would need either a write on a read — the single thing this change exists to stop
+— or an invented validity window. The screen says how long ago a line was unticked instead, so a
+stale decision announces itself when the ingredient is needed again.
+
+**The page load used to sum the whole stock ledger three times, once per demand stream.** It sums it
+once now and hands the map down: 445 ms to 126 ms median against a five-year fixture.
+`ShoppingListIT.theLedgerIsSummedOncePerPageLoad` counts the statements one request issues and runs in
+the ordinary suite, so a later change cannot quietly put the other two scans back. **The "nine reads"
+figure quoted in the performance proof was wrong** — it was three, inflated threefold by
+`pg_stat_user_tables` counters lagging the transaction that produced them.
+
+That five-year fixture is itself new: a temple generated at staging's counts with every parameter
+overridable from the environment. **It does not join the default suite.** Both classes are tagged
+`perf` and gated on `KMS_PERF`, verified with the variable unset, where they skip without starting a
+container.
+
+**And a ladder is no longer a boiler nobody got round to scheduling.** A null servicing interval
+carried two facts at once, and only one of them was a problem worth chasing. `V122` adds
+`never_needs_servicing` with a `CHECK` forbidding it alongside an interval, so *"this never needs
+servicing, and it needs servicing every six months"* is unrepresentable rather than merely refused;
+the two columns carry three states between them and none of them is a null with two meanings. A
+flagged item reads *"It does not need servicing"*, leaves the overdue banner, the *Overdue* filter and
+Today's overdue count, and it is the second tier — owned, not serviced — that an earlier task was
+asked for and shipped without.
+
+**No existing row was flagged by the migration.** Nothing stored anywhere can tell a ladder from an
+unscheduled boiler — that is the defect being fixed — and guessing from the name would write a
+permanent claim about the temple's own equipment on the strength of a string match.
+
+**Not done.** Neither screen has been seen working by Rajeev. On the shopping list: open it and
+confirm it populates with no button, tick and untick a line, and check that a line an open order
+already covers has left the list. On the equipment register: open a ladder, press *Change the
+schedule*, tick *This never needs servicing*, and confirm the interval box empties and greys; then
+flag a machine that is genuinely overdue and confirm it leaves the red banner and Today's count.
+**The tick box is not on the registration form** — it lives on the item's own page, so declaring sixty
+stools un-serviced is sixty visits. That form was outside the task's contract and the follow-up is
+small. One more thing the work found and deliberately left alone: a single shopping-list page load
+issues **404 SQL statements** and asks for 360 recipes to do it, because the whole pass runs twice.
+That is queued as its own task and is not fixed here.
+
+---
+
 ### 2026-09-10 — A field error is written for a person now, and the vendor no-show box needs an order that was actually sent (wave 20; tasks T-098, T-129)
 
 **Two tasks built in separate trees and, for the first time in this project, verified only after they

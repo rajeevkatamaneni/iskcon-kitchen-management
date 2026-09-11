@@ -77,6 +77,7 @@ function machine(o: Partial<EquipmentView> = {}): EquipmentView {
     serialNumber: "WG-4471",
     purchaseCostInr: 48000,
     warrantyExpiry: "2027-01-10",
+    neverNeedsServicing: false,
     serviceIntervalDays: 180,
     serviceIntervalUnit: "MONTHS",
     serviceIntervalCount: 6,

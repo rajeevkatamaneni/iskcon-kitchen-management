@@ -856,8 +856,20 @@ export type ServiceIntervalUnit = "DAYS" | "WEEKS" | "MONTHS" | "YEARS";
  */
 export type NextServiceBasis = "SERVICED" | "PURCHASED" | "NONE";
 
-/** Where a machine stands against its next service. Derived on every read, stored nowhere. */
-export type EquipmentServiceStatus = "OK" | "DUE_SOON" | "OVERDUE" | "NOT_SCHEDULED";
+/**
+ * Where a machine stands against its next service. Derived on every read, stored nowhere.
+ *
+ * <p>`NOT_SCHEDULED` and `NOT_SERVICED` are the two halves of one state that used to be one value
+ * (T-120): nobody has decided how often this needs looking at, and somebody has decided it never
+ * will. Both are invisible to every warning count, so neither nags — but one of them is a job
+ * somebody still has to do, and until V122 a ladder and an unscheduled boiler were the same row.
+ */
+export type EquipmentServiceStatus =
+  | "OK"
+  | "DUE_SOON"
+  | "OVERDUE"
+  | "NOT_SCHEDULED"
+  | "NOT_SERVICED";
 
 export interface EquipmentView {
   id: string;
@@ -873,7 +885,15 @@ export interface EquipmentView {
   purchaseCostInr: number | null;
   warrantyExpiry: string | null;
 
-  /** The interval in days, which is what the arithmetic runs on. Null where none is set. */
+  /**
+   * True for a thing that will never need servicing — a ladder, a trestle table (T-120). Never both
+   * this and an interval: V122's CHECK constraint makes that pairing unrepresentable in the row.
+   */
+  neverNeedsServicing: boolean;
+  /**
+   * The interval in days, which is what the arithmetic runs on. Null where none is set — which
+   * since V122 means only that nobody has decided yet, and no longer doubles as "never".
+   */
   serviceIntervalDays: number | null;
   serviceIntervalUnit: ServiceIntervalUnit | null;
   /** The count in that unit — the six of "every six months". Null with no interval. */
@@ -969,6 +989,12 @@ export interface UpdateEquipmentInput {
 export interface ServiceScheduleInput {
   intervalCount: number | null;
   intervalUnit: ServiceIntervalUnit | null;
+  /**
+   * The tick box for a thing that will never need servicing (T-120). Required and not optional, so
+   * a caller cannot omit it and silently un-flag a ladder: this endpoint replaces the whole
+   * schedule. Sending it true alongside a count is a contradiction and is refused with KMS-400001.
+   */
+  neverNeedsServicing: boolean;
   /** Plain text, and blank clears it. The managed list this replaced was reversed on 2026-09-04. */
   serviceCompany: string | null;
   serviceCompanyPhone: string | null;

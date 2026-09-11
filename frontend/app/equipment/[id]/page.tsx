@@ -400,14 +400,23 @@ function Record({ item }: { item: EquipmentView }) {
           {item.warrantyExpiry ? dateWithYear(item.warrantyExpiry) : "—"}
         </Fact>
         <Fact label="Serial number">{item.serialNumber ?? "—"}</Fact>
+        {/* T-120. A ladder is owned, not serviced, and until V122 the register had one state for
+            that and for a boiler nobody had got round to — both of them an em-dash here. Saying it
+            in words is the whole visible half of the change: an empty cell says neither. */}
         <Fact label="Serviced every">
-          {intervalWords(item.serviceIntervalCount, item.serviceIntervalUnit) ?? "—"}
+          {item.neverNeedsServicing
+            ? "It does not need servicing"
+            : (intervalWords(item.serviceIntervalCount, item.serviceIntervalUnit) ?? "—")}
         </Fact>
         <Fact label="Last serviced">
           {item.lastServicedOn ? dateWithYear(item.lastServicedOn) : "Never"}
         </Fact>
         <Fact label="Next service">
-          <ServiceState item={item} />
+          {item.neverNeedsServicing ? (
+            <span className="text-sm text-ink-muted">Not needed</span>
+          ) : (
+            <ServiceState item={item} />
+          )}
         </Fact>
         <Fact label="Service company">
           {item.serviceCompany ?? "—"}
@@ -810,6 +819,17 @@ function RecordServiceForm({
  * <p>Here as well as on the register form, because a temple signs a maintenance contract long after
  * it unpacks the machine, and a schedule that could only ever be set in the minute the thing was
  * registered would be a schedule most machines never got. Sending an empty count clears it.
+ *
+ * <p><strong>And a tick box for the things that will never need one</strong> (T-120), which is
+ * Rajeev's ruling of 2026-09-10 built as he described it: <em>"a check box for equipment that don't
+ * need service like a ladder. When checked, the Service interval box is cleared out and
+ * uneditable."</em> An empty interval used to mean both "nobody has decided" and "never", so a
+ * ladder and an unscheduled boiler looked identical and neither could be chased.
+ *
+ * <p>The disabled box is deliberately still there rather than removed, and it is deliberately not
+ * left to stand alone: a greyed-out empty field explains nothing, so the sentence underneath says
+ * what the state is. A field that vanishes when a box is ticked makes the reader wonder what they
+ * broke.
  */
 function ScheduleForm({
   item,
@@ -823,16 +843,26 @@ function ScheduleForm({
   onSubmit: (input: {
     intervalCount: number | null;
     intervalUnit: ServiceIntervalUnit | null;
+    neverNeedsServicing: boolean;
     serviceCompany: string | null;
     serviceCompanyPhone: string | null;
   }) => void;
 }) {
+  const [never, setNever] = useState(item.neverNeedsServicing);
   const [count, setCount] = useState(
     item.serviceIntervalCount == null ? "" : String(item.serviceIntervalCount)
   );
   const [unit, setUnit] = useState<ServiceIntervalUnit>(item.serviceIntervalUnit ?? "MONTHS");
   const [company, setCompany] = useState(item.serviceCompany ?? "");
   const [companyPhone, setCompanyPhone] = useState(item.serviceCompanyPhone ?? "");
+
+  // Ticking clears the count in the form as well as in what is sent, because the ruling says the
+  // box is cleared out — not merely ignored. A number left sitting greyed out in a disabled field
+  // reads as a value that is still in force.
+  function toggleNever(ticked: boolean) {
+    setNever(ticked);
+    if (ticked) setCount("");
+  }
 
   return (
     <section className="card mb-8 px-6 py-5" aria-labelledby="schedule-heading">
@@ -841,9 +871,27 @@ function ScheduleForm({
       </h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         The next service date is worked out from this and the newest service, so changing it moves
-        the date straight away. Empty it and the machine reads as not scheduled.
+        the date straight away. Empty it and the machine reads as not scheduled — meaning nobody has
+        decided yet, and somebody still has to.
       </p>
       <div className="mt-4 grid grid-cols-2 gap-4">
+        <div className="col-span-2">
+          <label className="flex items-start gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              name="neverNeedsServicing"
+              checked={never}
+              onChange={(e) => toggleNever(e.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 accent-accent"
+            />
+            <span>This never needs servicing</span>
+          </label>
+          <p className="mt-1 max-w-[60ch] pl-6 text-sm text-ink-secondary">
+            A ladder, a trestle table, a stack of stools — the temple owns it and nobody will ever
+            service it. Leave it un-ticked for anything that just has not been scheduled yet.
+          </p>
+        </div>
+
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Service it every</span>
           <div className="flex gap-2">
@@ -853,14 +901,16 @@ function ScheduleForm({
               min="1"
               max="100"
               value={count}
+              disabled={never}
               onChange={(e) => setCount(e.target.value)}
-              className={`${FIELD} ${COUNT_FIELD}`}
+              className={`${FIELD} ${COUNT_FIELD} disabled:bg-sunken disabled:text-ink-muted`}
             />
             <select
               aria-label="Interval unit"
               value={unit}
+              disabled={never}
               onChange={(e) => setUnit(e.target.value as ServiceIntervalUnit)}
-              className={`${FIELD} ${UNIT_FIELD}`}
+              className={`${FIELD} ${UNIT_FIELD} disabled:bg-sunken disabled:text-ink-muted`}
             >
               {INTERVAL_UNITS.map((u) => (
                 <option key={u} value={u}>
@@ -869,6 +919,13 @@ function ScheduleForm({
               ))}
             </select>
           </div>
+          {never && (
+            /* The sentence the brief insisted on: a disabled empty box on its own explains
+               nothing, and the reader is entitled to know why they cannot type in it. */
+            <span className="max-w-[60ch] text-sm text-ink-secondary">
+              This equipment does not need servicing, so there is no interval to set.
+            </span>
+          )}
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -897,8 +954,12 @@ function ScheduleForm({
             disabled={busy}
             onClick={() =>
               onSubmit({
-                intervalCount: count.trim() === "" ? null : Number(count),
-                intervalUnit: count.trim() === "" ? null : unit,
+                // Ticked sends no interval at all, and not because the box happens to be empty:
+                // the server refuses the pairing outright, so the screen must never post a
+                // request it knows will be turned away.
+                intervalCount: never || count.trim() === "" ? null : Number(count),
+                intervalUnit: never || count.trim() === "" ? null : unit,
+                neverNeedsServicing: never,
                 serviceCompany: company.trim() === "" ? null : company.trim(),
                 serviceCompanyPhone: companyPhone.trim() === "" ? null : companyPhone.trim(),
               })

@@ -76,6 +76,14 @@ function NewEquipmentView() {
           {
             intervalCount: input.intervalCount,
             intervalUnit: input.intervalUnit,
+            // Always false from here, and that is the honest answer rather than a gap (T-120).
+            // Registering a thing says nothing about whether it will ever need servicing, and this
+            // screen only reaches the schedule endpoint at all when somebody has typed an interval
+            // or a company — which is the opposite claim. The tick box lives on the item's own
+            // page, where the decision is made; sending anything else here would be this screen
+            // asserting a decision on the temple's behalf, which is the rule the block above
+            // already follows.
+            neverNeedsServicing: false,
             serviceCompany: input.serviceCompany,
             serviceCompanyPhone: input.serviceCompanyPhone,
           },

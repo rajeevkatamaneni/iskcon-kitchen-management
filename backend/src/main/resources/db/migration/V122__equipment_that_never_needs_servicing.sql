@@ -1,0 +1,137 @@
+-- =====================================================================
+-- V122 — "nobody set an interval" and "this never needs one" stop being
+--        the same state (T-120)
+--
+-- Rajeev's ruling, 2026-09-10:
+--
+--     "They should be two different things. Maybe a check box for
+--      equipment that don't need service like a ladder. When checked,
+--      the Service interval box is cleared out and uneditable."
+--
+-- V87 gave equipment_items a nullable service_interval_days and made NULL
+-- carry two meanings at once. Its own comment says so plainly — "NULL
+-- where nobody has said" — and that is the honest reading of a boiler
+-- somebody forgot to schedule. It is not the honest reading of a ladder,
+-- which nobody will ever schedule because there is nothing to schedule.
+-- One state, two facts, and only one of them is a problem worth chasing.
+--
+-- This also finally builds the second tier T-089 was asked for and
+-- shipped without: "Equipment gains a second tier — owned, not serviced —
+-- so the servicing view stays about the mixer and the boiler rather than
+-- sixty stools." There has never been a flag in the schema saying so.
+-- This is it.
+--
+-- ---------------------------------------------------------------------
+-- 1. A column, and NOT NULL DEFAULT FALSE rather than a third null
+--
+-- The obvious-looking shape is a nullable BOOLEAN where NULL means
+-- "nobody has said", TRUE means "never needs servicing" and FALSE means
+-- "it does". That is three-valued logic standing in for exactly the
+-- ambiguity this migration exists to remove, and it would leave the next
+-- reader asking the same question one column further along.
+--
+-- So: NOT NULL, DEFAULT FALSE, and the pair of columns carries the three
+-- states between them without any of them being a null with two meanings.
+--
+--     never_needs_servicing = TRUE                     -> a ladder. Never
+--                                                         scheduled, on
+--                                                         purpose, and
+--                                                         nothing to chase.
+--     FALSE, service_interval_days IS NULL             -> nobody has said
+--                                                         yet. Chaseable.
+--     FALSE, service_interval_days IS NOT NULL         -> scheduled.
+--
+-- FALSE is also the safe direction, for the reason V118 gave at length
+-- about vendor_abandoned: an un-ticked box records nothing about anything,
+-- and two defects this month came from boxes that arrived already ticked.
+--
+-- ---------------------------------------------------------------------
+-- 2. The CHECK, and why this one belongs in the schema
+--
+-- Two precedents point in opposite directions and the difference between
+-- them is the whole question.
+--
+-- V118 put purchase_orders_abandoned_is_a_cancellation in the schema. Its
+-- reasoning: the two columns are written by one UPDATE, and no decision
+-- about the product could ever make the forbidden pairing meaningful. It
+-- is a coherence rule about a row's state.
+--
+-- T-120's sibling task T-129 deliberately did NOT add
+-- CHECK (vendor_abandoned = FALSE OR sent_at IS NOT NULL), and its proof
+-- gives the reason: that rule is a POLICY about what a person is allowed
+-- to assert, chosen from three defensible options on one day, and the two
+-- columns are written minutes or days apart by different people. Policy
+-- that may be revisited belongs where reverting it costs an edit to one
+-- method.
+--
+-- This one is V118's kind, not T-129's:
+--
+--   * "This never needs servicing, and it needs servicing every six
+--     months" is not a policy anybody could revisit into meaning
+--     something. It is a contradiction, in any product, for ever.
+--   * Both columns are written by the same single UPDATE in
+--     EquipmentService.setServiceSchedule. There is no window in which a
+--     half-applied pairing is a legitimate intermediate state.
+--   * The derivation depends on it. EquipmentService.derive reads the
+--     flag first and returns NOT_SERVICED, so a row carrying both would
+--     have an interval that nothing on earth ever reads — a stored fact
+--     with no reader, which is how a register starts lying.
+--
+-- So the nonsense is made unrepresentable rather than merely discouraged.
+-- The application refuses the pairing too, with a validation failure on
+-- the field the caller got wrong, because a constraint violation is not a
+-- sentence anybody should have to read.
+--
+-- Note the CHECK names only service_interval_days and not the unit. It
+-- does not need to: equipment_service_interval_paired (V87) already ties
+-- the unit to the day count, so clearing one clears the other by
+-- construction. Naming both here would be a second statement of a rule
+-- that is already true, and the two could drift.
+--
+-- ---------------------------------------------------------------------
+-- 3. Every existing row is left unflagged, and that is a decision
+--
+-- Every ladder in the database today is null-interval and unflagged, and
+-- so is every boiler nobody has got round to scheduling. They are
+-- indistinguishable — that is the defect being fixed — and NOTHING STORED
+-- ANYWHERE CAN TELL THEM APART. Not the name: "Ladder, 8ft" is a guess
+-- and "Steam Boiler" is a guess, and a migration that guessed would write
+-- a permanent claim about the temple's own equipment on the strength of a
+-- string match.
+--
+-- So this migration flags nothing. Every existing row comes out FALSE,
+-- meaning "nobody has said" — which is the true statement about all of
+-- them, and leaves the temple to tick the box on the things it knows are
+-- ladders. The register gets no worse and no less honest than it is
+-- today, and it becomes chaseable for the first time.
+--
+-- ---------------------------------------------------------------------
+-- 4. No tenant loop, because no rows are touched
+--
+-- equipment_items carries enable_tenant_rls() (V16) and migrations run as
+-- the unprivileged role, so any UPDATE here would run with app.tenant_id
+-- unset, match nothing through the policy's NULLIF, and report success —
+-- which is why every migration in this project that touches rows adopts
+-- each tenant in turn.
+--
+-- This one touches none. ADD COLUMN and ADD CONSTRAINT are DDL and run as
+-- the table owner, which the policy does not apply to, and ADD CONSTRAINT
+-- genuinely validates every tenant's existing rows for the same reason
+-- rather than silently validating none of them. The absence of a loop
+-- here is deliberate, exactly as it was in V118.
+--
+-- No index. The flag is FALSE on almost every row of a table with tens of
+-- rows per temple, which is the classic index that never gets used, and
+-- the servicing filter is applied in Java over an already-fetched list
+-- (E3-S10 D4) rather than in SQL at all.
+-- =====================================================================
+
+ALTER TABLE equipment_items
+    ADD COLUMN never_needs_servicing BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMENT ON COLUMN equipment_items.never_needs_servicing IS
+    'TRUE for a thing that will never need servicing — a ladder, a trestle table, a stack of stools (T-120). Ticked by the Temple Admin on the schedule form, which then clears the interval and will not let one be typed. FALSE is the ordinary state and means only that nobody has said: a FALSE row with no interval is a machine somebody still has to decide about, which is exactly the distinction this column exists to make. Such a row reads NOT_SERVICED and appears in no warning count, no due-soon filter and no overdue nudge.';
+
+ALTER TABLE equipment_items
+    ADD CONSTRAINT equipment_never_serviced_has_no_interval
+    CHECK (never_needs_servicing = FALSE OR service_interval_days IS NULL);

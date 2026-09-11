@@ -1,0 +1,388 @@
+baseline taken from the verified working tree, not HEAD:
+total 168
+-rw-r--r--@ 1 Rajeev  wheel  30490 Sep 10 11:29 EquipmentService.java
+-rw-r--r--@ 1 Rajeev  wheel  41359 Sep 10 11:29 page.tsx
+-rw-r--r--@ 1 Rajeev  wheel   7788 Sep 10 11:29 V122.sql
+anchor OK: [if (neverNeedsServicing) {] x1 in EquipmentService.java
+anchor OK: [equipment_never_serviced_has_no_interval] x1 in V122__equipment_that_never_needs_servicing.sql
+anchor OK: [disabled={never}] x2 in page.tsx
+anchor OK: [neverNeedsServicing: never,] x1 in page.tsx
+anchor OK: [if (request.neverNeedsServicing() && hasCount) {] x1 in EquipmentService.java
+all four arms applied
+
+=== diff against the verified copy: the tree really changed ===
+--- /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T-120-baseline/EquipmentService.java	2026-09-10 11:29:51
++++ /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/java/org/iskcon/kms/equipment/EquipmentService.java	2026-09-10 11:29:51
+@@ -285,12 +285,6 @@
+ 		// Sent both at once. Not an ambiguity to resolve in the caller's favour — "this never needs
+ 		// servicing, service it every six months" has no reading — so it is refused on the field
+ 		// that made it a contradiction, exactly as the half-interval above is.
+-		if (request.neverNeedsServicing() && hasCount) {
+-			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of(
+-					"field", "neverNeedsServicing",
+-					"reason", "a thing that never needs servicing cannot also have an interval"));
+-		}
+-
+ 		// Past that guard, ticked implies no count was sent, so intervalDays is null and the UPDATE
+ 		// below clears whatever interval the row was carrying. That is the ruling's "the Service
+ 		// interval box is cleared out" arriving in the database rather than only on the screen: a
+@@ -533,10 +527,6 @@
+ 	static Derived derive(
+ 			EquipmentCondition condition, boolean neverNeedsServicing, Integer intervalDays,
+ 			LocalDate lastServicedOn, LocalDate acquisitionDate, LocalDate today, int warningDays) {
+-
+-		if (neverNeedsServicing) {
+-			return new Derived(null, NextServiceBasis.NONE, ServiceStatus.NOT_SERVICED);
+-		}
+ 
+ 		if (condition == EquipmentCondition.SCRAPPED || intervalDays == null) {
+ 			return new Derived(null, NextServiceBasis.NONE, ServiceStatus.NOT_SCHEDULED);
+--- /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T-120-baseline/V122.sql	2026-09-10 11:29:51
++++ /Users/Rajeev/Workspace/kitchen-management-system/backend/src/main/resources/db/migration/V122__equipment_that_never_needs_servicing.sql	2026-09-10 11:29:51
+@@ -131,7 +131,3 @@
+ 
+ COMMENT ON COLUMN equipment_items.never_needs_servicing IS
+     'TRUE for a thing that will never need servicing — a ladder, a trestle table, a stack of stools (T-120). Ticked by the Temple Admin on the schedule form, which then clears the interval and will not let one be typed. FALSE is the ordinary state and means only that nobody has said: a FALSE row with no interval is a machine somebody still has to decide about, which is exactly the distinction this column exists to make. Such a row reads NOT_SERVICED and appears in no warning count, no due-soon filter and no overdue nudge.';
+-
+-ALTER TABLE equipment_items
+-    ADD CONSTRAINT equipment_never_serviced_has_no_interval
+-    CHECK (never_needs_servicing = FALSE OR service_interval_days IS NULL);
+--- /private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/d8a15814-5daf-4b1d-ac53-4d3dcc17162c/scratchpad/T-120-baseline/page.tsx	2026-09-10 11:29:51
++++ /Users/Rajeev/Workspace/kitchen-management-system/frontend/app/equipment/[id]/page.tsx	2026-09-10 11:29:51
+@@ -901,14 +901,14 @@
+               min="1"
+               max="100"
+               value={count}
+-              disabled={never}
++              disabled={false}
+               onChange={(e) => setCount(e.target.value)}
+               className={`${FIELD} ${COUNT_FIELD} disabled:bg-sunken disabled:text-ink-muted`}
+             />
+             <select
+               aria-label="Interval unit"
+               value={unit}
+-              disabled={never}
++              disabled={false}
+               onChange={(e) => setUnit(e.target.value as ServiceIntervalUnit)}
+               className={`${FIELD} ${UNIT_FIELD} disabled:bg-sunken disabled:text-ink-muted`}
+             >
+@@ -959,7 +959,6 @@
+                 // request it knows will be turned away.
+                 intervalCount: never || count.trim() === "" ? null : Number(count),
+                 intervalUnit: never || count.trim() === "" ? null : unit,
+-                neverNeedsServicing: never,
+                 serviceCompany: company.trim() === "" ? null : company.trim(),
+                 serviceCompanyPhone: companyPhone.trim() === "" ? null : companyPhone.trim(),
+               })
+
+=== BACKEND, derivation + CHECK + endpoint guard removed ===
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources
+> Task :testClasses
+
+> Task :test
+Test JVM heap ceiling: 2g (Gradle's default, when unset, is 512m)
+
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :test
+
+EquipmentServicingIT > another temple > another temple's services do not count towards this one's last serviced PASSED
+
+EquipmentServicingIT > another temple > cannot see or write this temple's equipment or services PASSED
+
+EquipmentServicingIT > a thing that never needs servicing > every existing row starts un-flagged, because nothing can say which is which PASSED
+
+EquipmentServicingIT > a thing that never needs servicing > is the Temple Admin's to decide, like every other servicing act PASSED
+
+EquipmentServicingIT > a thing that never needs servicing > is a different state from one nobody has got round to scheduling FAILED
+    java.lang.AssertionError: JSON path "$.equipment.serviceStatus" expected:<NOT_SERVICED> but was:<NOT_SCHEDULED>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.equipment.EquipmentServicingIT$NeverNeedsServicing.theTwoNullsAreDistinguishable(EquipmentServicingIT.java:628)
+
+EquipmentServicingIT > a thing that never needs servicing > can be un-ticked, and the machine goes back to being unscheduled PASSED
+
+EquipmentServicingIT > a thing that never needs servicing > drops out of every servicing view rather than sitting there for ever FAILED
+    java.lang.AssertionError: JSON path "$.equipment.serviceStatus" expected:<NOT_SERVICED> but was:<NOT_SCHEDULED>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.util.JsonPathExpectationsHelper.assertValue(JsonPathExpectationsHelper.java:123)
+        at org.springframework.test.web.servlet.result.JsonPathResultMatchers.lambda$value$2(JsonPathResultMatchers.java:111)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.equipment.EquipmentServicingIT$NeverNeedsServicing.aFlaggedThingIsOutOfScope(EquipmentServicingIT.java:667)
+
+EquipmentServicingIT > a thing that never needs servicing > cannot be claimed alongside an interval, and the refusal names the field FAILED
+    java.lang.AssertionError: Status expected:<400> but was:<204>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+        at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:637)
+        at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+        at org.iskcon.kms.equipment.EquipmentServicingIT$NeverNeedsServicing.bothAtOnceIsRefused(EquipmentServicingIT.java:692)
+
+EquipmentServicingIT > a thing that never needs servicing > cannot be paired with an interval by anybody writing SQL either FAILED
+    java.lang.AssertionError: 
+    Expecting code to raise a throwable.
+        at org.iskcon.kms.equipment.EquipmentServicingIT$NeverNeedsServicing.lambda$theDatabaseRefusesThePairingToo$2(EquipmentServicingIT.java:713)
+        at org.iskcon.kms.equipment.EquipmentServicingIT.asApplication(EquipmentServicingIT.java:937)
+        at org.iskcon.kms.equipment.EquipmentServicingIT$NeverNeedsServicing.theDatabaseRefusesThePairingToo(EquipmentServicingIT.java:712)
+
+EquipmentServicingIT > a thing that never needs servicing > is distinguishable in the row itself, not only in the answer PASSED
+
+EquipmentServicingIT > a thing that never needs servicing > is written into the audit trail as its own fact PASSED
+
+EquipmentServicingIT > the permission split > kitchen staff cannot set an interval or record a service PASSED
+
+EquipmentServicingIT > the permission split > a kitchen manager cannot either PASSED
+
+EquipmentServicingIT > the permission split > kitchen staff register equipment and change its condition PASSED
+
+EquipmentServicingIT > the permission split > staff still read the derived service fields, because reading is not an act PASSED
+
+EquipmentServicingIT > the service company > clears when it is emptied, and is never required PASSED
+
+EquipmentServicingIT > the service company > is remembered on the visit, and does not move when the machine's company does PASSED
+
+EquipmentServicingIT > the service company > is text on the machine, and there is no list behind it PASSED
+
+EquipmentServicingIT > serial numbers > another temple may use the same serial PASSED
+
+EquipmentServicingIT > serial numbers > a duplicate serial is refused with KMS-400015, on create and on edit PASSED
+
+EquipmentServicingIT > serial numbers > a blank serial is allowed on any number of rows PASSED
+
+EquipmentServicingIT > the next service date > six months and ninety days both produce the right next date PASSED
+
+EquipmentServicingIT > the next service date > the horizons are saved all three or not at all PASSED
+
+EquipmentServicingIT > the next service date > changing the temple's horizon changes which machines are amber PASSED
+
+EquipmentServicingIT > the next service date > a machine nobody has set an interval for is not scheduled, not overdue PASSED
+
+EquipmentServicingIT > the next service date > past the date is overdue, and the list filter finds exactly those PASSED
+
+EquipmentServicingIT > the next service date > a machine never serviced counts from its purchase date and says so PASSED
+
+EquipmentServicingIT > the next service date > a scrapped machine is in no service calculation and no overdue count PASSED
+
+EquipmentServicingIT > the next service date > a machine with neither a service nor a purchase date reads not scheduled PASSED
+
+EquipmentServicingIT > recording a service > last serviced is the newest row, whatever order the rows were entered in PASSED
+
+EquipmentServicingIT > recording a service > a service dated in the future is refused with KMS-400016 PASSED
+
+EquipmentServicingIT > recording a service > there is no way to set last serviced directly PASSED
+
+EquipmentServicingIT > recording a service > the row cannot afterwards be edited or deleted, even with the app's own credentials PASSED
+
+EquipmentServicingIT > recording a service > writes a row carrying who recorded it, and shows in the item's history PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > a flagged thing is out of scope for overdue, never infinitely overdue FAILED
+    org.opentest4j.AssertionFailedError: 
+    expected: NOT_SERVICED
+     but was: NOT_SCHEDULED
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.equipment.ServiceIntervalTest$Derivation.aFlaggedThingIsNeverOverdue(ServiceIntervalTest.java:219)
+
+ServiceIntervalTest > the next service date is derived, never stored > changing the temple's horizon changes which machines are amber PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > a serviced machine counts from its newest service, and says so PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > statusAgainstTheHorizon(LocalDate, ServiceStatus) > 2026-09-03 is OVERDUE PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > statusAgainstTheHorizon(LocalDate, ServiceStatus) > 2025-01-01 is OVERDUE PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > statusAgainstTheHorizon(LocalDate, ServiceStatus) > 2026-09-04 is DUE_SOON PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > statusAgainstTheHorizon(LocalDate, ServiceStatus) > 2026-10-04 is DUE_SOON PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > statusAgainstTheHorizon(LocalDate, ServiceStatus) > 2026-10-05 is OK PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > statusAgainstTheHorizon(LocalDate, ServiceStatus) > 2027-06-01 is OK PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > a thing that never needs servicing reads NOT_SERVICED, not NOT_SCHEDULED FAILED
+    org.opentest4j.AssertionFailedError: 
+    expected: NOT_SERVICED
+     but was: NOT_SCHEDULED
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.equipment.ServiceIntervalTest$Derivation.neverNeedsServicingIsItsOwnState(ServiceIntervalTest.java:185)
+
+ServiceIntervalTest > the next service date is derived, never stored > a machine with an interval but no date to count from is not scheduled PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > every other condition is still calculated PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > the flag is asked before scrapping, so a scrapped ladder is still a ladder FAILED
+    org.opentest4j.AssertionFailedError: 
+    expected: NOT_SERVICED
+     but was: NOT_SCHEDULED
+        at java.base@21.0.12/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+        at java.base@21.0.12/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+        at app//org.iskcon.kms.equipment.ServiceIntervalTest$Derivation.theFlagOutranksScrapping(ServiceIntervalTest.java:204)
+
+ServiceIntervalTest > the next service date is derived, never stored > a scrapped machine is in no service calculation, whatever its dates say PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > a machine never serviced counts from its purchase date, and says that instead PASSED
+
+ServiceIntervalTest > the next service date is derived, never stored > a machine nobody has set an interval for is not scheduled, not overdue PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > countConvertsToDays(int, ServiceInterval, int) > every 6 MONTHS is 180 days PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > countConvertsToDays(int, ServiceInterval, int) > every 90 DAYS is 90 days PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > countConvertsToDays(int, ServiceInterval, int) > every 1 DAYS is 1 days PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > countConvertsToDays(int, ServiceInterval, int) > every 2 WEEKS is 14 days PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > countConvertsToDays(int, ServiceInterval, int) > every 1 MONTHS is 30 days PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > countConvertsToDays(int, ServiceInterval, int) > every 1 YEARS is 365 days PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > countConvertsToDays(int, ServiceInterval, int) > every 3 YEARS is 1095 days PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > six months and ninety days are different intervals and stay different PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > the count a person typed survives the round trip through days > [1] unit=DAYS PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > the count a person typed survives the round trip through days > [2] unit=WEEKS PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > the count a person typed survives the round trip through days > [3] unit=MONTHS PASSED
+
+ServiceIntervalTest > an interval is a number and a unit, held in days > the count a person typed survives the round trip through days > [4] unit=YEARS PASSED
+
+11:30:09.931 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+11:30:09.934 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+11:30:09.936 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+11:30:09.940 INFO  [req=] o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+11:30:09.941 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+11:30:09.942 INFO  [req=] com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+
+> Task :test FAILED
+
+────────────────────────────────────────────────────────
+  Test summary
+────────────────────────────────────────────────────────
+  Total:    62
+  Passed:   55
+  Failed:   7
+  Skipped:  0
+  Result:   FAILURE
+────────────────────────────────────────────────────────
+
+62 tests completed, 7 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///Users/Rajeev/Workspace/kitchen-management-system/backend/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 18s
+5 actionable tasks: 5 executed
+backend exited 1
+
+=== FRONTEND, the box no longer clears or sends anything ===
+[33mThe CJS build of Vite's Node API is deprecated. See https://vitejs.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.2 /Users/Rajeev/Workspace/kitchen-management-system/frontend
+
+ ❯ __tests__/equipment-never-serviced.test.tsx  (9 tests | 4 failed) 145ms
+   × marking a thing as never needing servicing > clears the interval and makes it uneditable when ticked, and says why
+     → expected false to be true // Object.is equality
+   × marking a thing as never needing servicing > sends the flag with no interval at all, never both
+     → expected [ 'intervalCount', …(3) ] to include 'neverNeedsServicing'
+   × marking a thing as never needing servicing > sends the flag as false, not as absent, on an ordinary schedule
+     → expected [ 'intervalCount', …(3) ] to include 'neverNeedsServicing'
+   × marking a thing as never needing servicing > comes back ticked on a thing already marked
+     → expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/equipment-never-serviced.test.tsx > marking a thing as never needing servicing > clears the interval and makes it uneditable when ticked, and says why
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ __tests__/equipment-never-serviced.test.tsx:151:33
+    149|     // "the Service interval box is cleared out and uneditable" — both…
+    150|     expect(theCount().value).toBe("");
+    151|     expect(theCount().disabled).toBe(true);
+       |                                 ^
+    152|     expect((screen.getByLabelText("Interval unit") as HTMLSelectElemen…
+    153| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  __tests__/equipment-never-serviced.test.tsx > marking a thing as never needing servicing > sends the flag with no interval at all, never both
+AssertionError: expected [ 'intervalCount', …(3) ] to include 'neverNeedsServicing'
+ ❯ __tests__/equipment-never-serviced.test.tsx:189:31
+    187|     // false read identically to that matcher, and "the flag was never…
+    188|     // failure this test exists to catch.
+    189|     expect(Object.keys(sent)).toContain("neverNeedsServicing");
+       |                               ^
+    190|     expect(sent.neverNeedsServicing).toBe(true);
+    191|     expect(sent.intervalCount).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  __tests__/equipment-never-serviced.test.tsx > marking a thing as never needing servicing > sends the flag as false, not as absent, on an ordinary schedule
+AssertionError: expected [ 'intervalCount', …(3) ] to include 'neverNeedsServicing'
+ ❯ __tests__/equipment-never-serviced.test.tsx:204:31
+    202|     const sent = scheduleMock.mock.calls[0][1];
+    203| 
+    204|     expect(Object.keys(sent)).toContain("neverNeedsServicing");
+       |                               ^
+    205|     expect(sent.neverNeedsServicing).toBe(false);
+    206|     expect(sent.intervalCount).toBe(6);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  __tests__/equipment-never-serviced.test.tsx > marking a thing as never needing servicing > comes back ticked on a thing already marked
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ __tests__/equipment-never-serviced.test.tsx:216:33
+    214| 
+    215|     expect(theBox().checked).toBe(true);
+    216|     expect(theCount().disabled).toBe(true);
+       |                                 ^
+    217|   });
+    218| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 5 passed (9)
+   Start at  11:30:10
+   Duration  723ms (transform 90ms, setup 55ms, collect 138ms, tests 145ms, environment 207ms, prepare 64ms)
+
+vitest exited 1
+
+both legs red, as a control should be
+
+=== restored through the EXIT trap; byte-for-byte against the verified copy ===
+IDENTICAL  EquipmentService.java
+IDENTICAL  V122__equipment_that_never_needs_servicing.sql
+IDENTICAL  app/equipment/[id]/page.tsx
+work-lock: 'verify' released; command exited 0

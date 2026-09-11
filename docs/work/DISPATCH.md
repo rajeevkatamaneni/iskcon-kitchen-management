@@ -4,42 +4,78 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
-## Picking this up in a fresh session — written 2026-09-08
+## Picking this up in a fresh session — rewritten 2026-09-10
 
-**Read this block, then `docs/work/README.md`, then the foot of this file.** Everything below is
-current; the per-wave blocks further down are historical.
+**Read this block, then `docs/work/README.md`, then `docs/work/DECISIONS.md` from D-24 onwards.**
+The per-wave blocks further down are historical and several of their summaries are stale — this
+block is the one that is maintained.
+
+> **The block that used to be here was written on 2026-09-08 and was read as current for eleven
+> waves.** It still listed seven shipped features as *"still to build"*. **If you are reading this
+> more than a day after 2026-09-10, check it against `git log` before you trust a number in it.**
 
 ### Where the work stands
 
-**52 tasks shipped.** Eight waves ran overnight (4e-2, 5-1, 5-2, 5-3, 6, 7, 7b, 7c) and **wave 10
-released 2026-09-08** — T-005, T-071, T-072 and T-078. `main` is green, staging carries all of it,
-schema is `V104` and wave 10 adds no migration.
+**Staging is `kms-staging-api-00145` / `kms-staging-web-00133`, schema `V120`.** Waves 15 to 20 all
+shipped on 2026-09-10.
 
-**Next migration number is `V121`.** *(Was `V106` when this block was written on 2026-09-08 and went
-on being read as current for eleven waves — corrected 2026-09-10, wave 18; `V120` shipped in wave 20
-and this line was moved on with it.)* **`V120` is the highest applied to staging**, applied on top of
-`V119` in wave 20's deploy. Three numbers are deliberate gaps and none is a missing file: `V105` was
-allocated conditionally to T-014 and went unused, and `V108` and `V109` are absent for the same
-reason. **`ls` on the migration directory cannot tell you the next number** — take it from the
-deployed schema history, as V119's own header explains.
+**Migration numbers: `V121` and `V122` both shipped in wave 21** (T-132 and T-120), so the schema is
+at **`V122`** and the next free number is **`V123`** — but **take it from the deployed schema history,
+not from `ls`.**
+Three numbers are deliberate gaps and none is a missing file: `V105`, `V108` and `V109` were
+allocated conditionally and went unused. **A reserved number that goes unused goes straight back to
+the pool** — T-091 reserved `V120`, refused its brief and built nothing, so T-129's `V121` was
+renumbered down to `V120` before wave 20 shipped. Leaving that gap would have handed the next task a
+number Flyway would later refuse to boot under, which is exactly how this project lost a deploy with
+`V108` sitting below an applied `V110`.
 
-**A reserved number that goes unused goes straight back to the pool.** T-091 reserved `V120`, refused
-its brief and built nothing; T-129's builder had written `V121`, and the coordinator renumbered the
-file, its comments, its test and its proof down to `V120` before wave 20 was committed. Leaving the
-gap would have handed the next task a number Flyway would later refuse to boot under — which is
-exactly how this project lost a deploy with `V108` sitting below an applied `V110`.
+### What is actually left
 
-**Still to build — 7 real features:** T-007, T-013, T-015, T-016, T-019, T-020, T-021.
+**Wave 21 shipped all four of the tasks that were in flight here — T-132, T-139, T-140 and T-120 —
+on 2026-09-10.** The root of the ordering rebuild has landed: the shopping list is derived on every
+read and never stored. **T-134, T-135, T-136 and T-137 are no longer blocked.** T-141 is queued and
+undispatched.
 
-**T-005 is built and released** (wave 10, 2026-09-08). `/settings/meal-kinds` exists, Temple Admin
-only, and **a temple can rename "Lunch" to "Raj Bhog"** — the docket's headline ask. T-038's cascade
-had shipped with no caller anywhere in the frontend and now has one. Both reservations were re-made:
-`deleteMealKind` in `api.ts`, and the `nav.ts` row beside *Festival occasions*.
+**The ordering rebuild, and it is the only thing standing between here and UAT.** Governed by
+**D-24, D-24a and D-25** — Rajeev dictated the whole journey on 2026-09-10 after stopping a queue of
+small fixes to those screens: *"The issue starts at where the data enters the system. Without
+addressing that, everything is a compromised fix."*
 
-**Also queued, small, found along the way:** T-063, T-070, T-074, T-077. **T-071 and T-072 released
-in wave 10.**
-**Tooling:** T-064 and T-065 (the CI heap cause), T-076 (a lint script that cannot run), T-058 (the
-held cleanup batch — Rajeev asked for it in one run at the end, do not scatter it).
+- **T-132** — the root. **Landed, wave 21.** Everything below it is now startable.
+- **T-134** — a tile per vendor, and the order written in a panel over the list. After T-132.
+- **T-137** — the lead time as a promise, enforced everywhere it shows. After T-132. **The largest,
+  and deliberately one task**: Rajeev's instruction when told the same arithmetic was wanted on three
+  screens was *"write it as 1 task and give it to 1 worker and build it in 1 go."*
+- **T-135** (the order screen's button bank) and **T-136** (Send on WhatsApp only where WhatsApp
+  works) can run **beside** anything.
+
+**Scoped and ready, not blocked on anybody:** T-116 (an error's words discarded by the auth layer —
+fix the mechanism, not the instance) and T-076 (a lint script that cannot run — correctness rules
+only, no style rules).
+
+**Scheduled last, on purpose:** T-058, the ten held cleanups. One wave, one builder, all ten, **after
+the rebuild**. None of them blocks UAT and the rebuild does.
+
+**Parked for Phase 2 by Rajeev:** T-091, secondary preferred vendor. **Do not resurrect it
+opportunistically.**
+
+**The tail — roughly thirteen small items, none blocking:** *"1 pieces"* printing across the app, a
+typo in a request body answering *"something went wrong"*, the temple forgotten between registering
+and signing in, telling a volunteer they were taken off a roster, a language picker that would
+silently read English for ever, three reconciliation rows, three test-infrastructure rows, a
+Terraform check, an unbounded donor history, and one query run once per recipient.
+
+### Read this before planning the next stretch
+
+**`uat-readiness-plan` in the session memory directory** holds Rajeev's five settled decisions with
+what each still needs, and the four-step plan for the time before UAT. **It carries the evidence for
+the thing most likely to be got wrong here: a green suite says nothing about what a tester will
+find.** Wave 15 shipped with 2,126 backend tests, green CI, a verified deploy and a clean
+`next build` — and one hour of driving the app afterwards found five defects, four of them about what
+a person reads on a screen. T-090 then shipped fully green and was **unusable**, because the field it
+added had no way in.
+
+**Drive the app. It is not optional and it is not slower.**
 
 ### ~~The one thing blocked on an access grant~~ — **closed 2026-09-08**
 
@@ -6063,7 +6099,7 @@ remains burnt.
 
 - **source:** docket **B5** (INTAKE B5).
 - **wave:** 9
-- **state:** **queued — UNBLOCKED 2026-09-10. Ready to brief.**
+- **state:** **CLOSED 2026-09-10 — built as T-110 and shipped `cf0d334`.** This row and T-110 were the same screen; the duplicate stayed open a day after the code was live.
 
 > **Rajeev's decision, 2026-09-10: build the donation detail page and put the receipt on it.** He was
 > given three options — build the page (most work, but probably wanted anyway); put a receipt action
@@ -8548,7 +8584,14 @@ comparing the two should know which word is not.
 - **source:** found while building and verifying waves 1–4e. **Rajeev, 2026-09-08:** *"You can note
   them down as cleanups which can do in a single run once we are happy with the everything."*
 - **wave:** none. **HELD BY INSTRUCTION** until the batch is finished and he is happy with it.
-- **state:** **held — ten items, reduced from twelve on 2026-09-10.** Rajeev agreed to split out the
+- **state:** **SCHEDULED by the coordinator 2026-09-10 on Rajeev's instruction** — *"Do it your way.
+  I have no clue what they are and don't have the time to do another line by line sweep with you."*
+- **how it will be run, so nobody re-opens the question:** **one wave, after the ordering rebuild**,
+  one builder, all ten. **Any item that turns out not to be a real problem is dropped with a
+  sentence saying why** — that is a finding, not a failure. **Any item that turns out to need a
+  ruling comes back to Rajeev rather than being guessed**, and the wave ships the other nine.
+- **it is deliberately last:** none of the ten blocks UAT, and the rebuild does.
+- **the original state:** **held — ten items, reduced from twelve on 2026-09-10.** Rajeev agreed to split out the
   two that are not tidying: **T-114** (a stranded session gets wrong advice) and **T-115** (no
   `terraform plan` is ever empty). **The remaining ten stay held under his original instruction** —
   *"cleanups which can do in a single run once we are happy with the everything."*
@@ -10621,7 +10664,7 @@ today and three of them were wrong. Grep it on every future change.
 
 - **id:** T-073
 - **source:** wave 7b's third-reader sweep, 2026-09-08.
-- **state:** **RULED 2026-09-10. Splits into two pieces of work — see below.**
+- **state:** **CLOSED 2026-09-10. Both halves shipped:** Question 1 (voided invoices ignored in the duplicate warning) as part of **T-125**, wave 16; Question 2 (the donor-history screen and its good-gifts-by-default toggle) as **T-110**, wave 15.
 
 > **Question 1 — the duplicate-invoice warning. Rajeev's decision: ignore voided invoices.** He was
 > offered leave-it or exclude-voided, and took the second on the argument that the false warning
@@ -11091,7 +11134,15 @@ Third wave running in which the sharpest correction came from the builder rather
 - **id:** T-076
 - **source:** T-075's builder, 2026-09-08, offered as a counter-proposal to a suggestion it declined.
   Confirmed independently by the work manager at dispatch close.
-- **state:** **queued.** Nobody is looking at it. Needs Rajeev's word before it is scheduled.
+- **state:** **APPROVED by the coordinator 2026-09-10 on Rajeev's instruction** — *"Do it your
+  way."* **Build it, with the scope below.**
+- **the ruling on scope, because this is where a linter goes wrong:** add ESLint with
+  `eslint-plugin-testing-library` and **only the rules that catch correctness**, wire it into CI so it
+  cannot rot the way the unrunnable script did — and **turn on no style rules.** A thousand-line
+  formatting diff across 106 test files would bury the two racy sites this exists to catch and would
+  be reverted by whoever hits the merge conflict.
+- **fix what the enabled rules flag, and nothing else.** If a rule flags more than a wave's worth,
+  report it rather than widening the task.
 - **what:** `frontend/package.json:9` defines `"lint": "next lint"`, and there is **no ESLint config
   file and no ESLint dependency anywhere in `frontend/`**. So the script cannot run, CI does not run
   it, and nothing has noticed. The proposal is to add ESLint with `eslint-plugin-testing-library`,
@@ -12674,7 +12725,15 @@ one receipt for the whole payment.
 - **source:** **T-114's builder, 2026-09-10**, which went to read `KMS-400020` before writing new
   copy — exactly as its brief asked — and found the sentence it was about to reuse **has never been
   on a screen.**
-- **state:** queued. **Needs a scope decision before it is briefed.**
+- **state:** **SCOPED by the coordinator 2026-09-10 on Rajeev's instruction** — *"Do it your way. I
+  have no clue what they are and don't have the time."*
+- **the scope, ruled: fix the mechanism, not the instance.** Every code routed through `REFUSALS` in
+  `auth-context.tsx`, not `KMS-400020` alone. **This is the third unpoliced channel to the same
+  reader found this week** — after `fieldErrors` (T-098) and the movement-type labels (T-125) — and
+  each time the instance was the smaller half of the problem.
+- **and it wants T-098's shape of guard:** `ErrorCodeTest` proves the words exist; something must
+  prove they arrive. A test that a code routed through the auth layer still renders its message and
+  its next step. Without that, this recurs the first time somebody adds a refusal.
 - **what:** `frontend/lib/auth-context.tsx:131` receives the error, **keeps the code**, maps it
   through `REFUSALS` to an internal status, and **discards the message and the action.** So
   `KMS-400020`'s carefully written sentence — and any other routed the same way — is never rendered.
@@ -12779,7 +12838,14 @@ so that is all it says.
 - **id:** T-120
 - **source:** **T-089's builder, 2026-09-10**, which was asked to build Equipment's second tier,
   found the harm already prevented, and **scoped the real gap instead of building the named one.**
-- **state:** **queued — wants a word from Rajeev**, because it adds a state to a derived enum with
+- **state:** **RULED by Rajeev 2026-09-10, ready to build.** *"They should be two different things.
+  Maybe a check box for equipment that don't need service like a ladder. When checked, the Service
+  interval box is cleared out and uneditable."*
+- **and it delivers a ruling that was never built:** T-089's *"Equipment gains a second tier — owned,
+  not serviced — so the servicing view stays about the mixer and the boiler rather than sixty
+  stools."* **There is no such flag in the schema today** — T-089 shipped with no migration. This
+  checkbox is that tier.
+- **the original state:** **queued — wanted a word from Rajeev**, because it adds a state to a derived enum with
   ten readers and `V91` threw out a closed vocabulary on this same table four days ago.
 - **why the tier as ruled is not needed:** Rajeev's concern was that *"the servicing view stays about
   the mixer and the boiler rather than sixty stools."* **That is already true.** Servicing exists
@@ -12794,7 +12860,19 @@ so that is all it says.
 - **why it needs Rajeev and not just a builder:** `TodayService`'s overdue count is one of the ten
   readers, and this project's standing lesson is that a count goes on compiling perfectly when the
   meaning of a row changes underneath it. **Adding a state to a derived enum is exactly that shape.**
-- **proof:** — · **shipped:** —
+- **what was built, and it is not the `serviced BOOLEAN` sketched above:** `V122` adds
+  `never_needs_servicing NOT NULL DEFAULT FALSE` with a `CHECK` forbidding it alongside an interval,
+  so the nonsense is unrepresentable rather than merely discouraged. The two columns carry three
+  states between them and none of them is a null with two meanings. `NOT_SERVICED` is the fifth
+  `ServiceStatus`, read first in `derive`. **No existing row is flagged** — nothing stored anywhere
+  can tell a ladder from a boiler nobody got round to scheduling, and a migration that guessed from
+  the name would write a permanent claim about the temple's own equipment on a string match.
+- **the limitation, named:** the box is on the item's own page, not the registration form
+  (`EquipmentForm.tsx` was outside the contract), so declaring sixty stools un-serviced is sixty
+  visits. A small, clean follow-up if Rajeev wants it.
+- **state:** **SHIPPED, wave 21, 2026-09-10. Awaiting Rajeev's test.**
+- **proof:** `docs/work/proof/T-120.md` · **shipped:** wave 21, 2026-09-10, in the same push as
+  `27a39f8`
 
 # Six tasks shipped with no ledger row, and this is them — written 2026-09-10
 
@@ -12920,52 +12998,213 @@ with each other; T-135 and T-136 are the two that can run beside something else.
 
 ---
 
-### T-132 — the shopping list stops being stored
+### T-132 — the shopping list stops being stored, and an order takes its lines off it
 
-- **state:** ready to build. **The root. Nothing else in this set starts until it lands.**
-- **what:** the suggested lines are **computed when the page is read** and not written down. Only a
-  human's decisions persist — an edited quantity, an untick, a hand-added ingredient, an uncatalogued
-  item. The `POST /shopping-list/regenerate` endpoint and the button both go.
-- **his question, which is what started this:** *"Why do we need the Regenerate shopping list button
-  at all? Why can't the shopping list auto populate every time the page loads?"*
-- **why it could not simply be moved to page load:** that endpoint is a **write** — it upserts
-  suggestions and `DELETE`s unedited lines that are no longer suggested. Running it on a `GET` means
-  opening a screen mutates shared rows: two people opening it at once both recalculate, and a
-  refresh can delete a row a colleague is editing on another device.
-- **provenance was checked before this was chosen, at his instruction.** All four stored values —
-  `shortfall`, `thresholdTopUp`, `poOutstanding`, `shortPurchaseOrders` — are **functions of current
-  state**, recomputable at read time. Nothing in there is a historical fact that cannot be
-  re-derived. **The table is a cache pretending to be a table**, and it already knows it: it deletes
-  `edited = false` rows freely and preserves the rest.
-- **three things to decide while building, none of them inferable:**
-  - **An edited line's provenance.** It is stored, so it freezes. Recomputing it shows today's
-    reasons beside yesterday's hand-typed quantity; leaving it shows stale ones. Pick and say why.
-  - **The untick.** Today `included` is a stored column. An untick is a human decision and must
-    persist even though the line around it no longer does.
-  - **`suggested_vendor_id` on the line loses its purpose.** It is a snapshot kept so a human's
-    choice survives regeneration — and with nothing stored, there is nothing to survive.
-    **Its real home is the purchase order**, which D-25 already requires to snapshot the lead time
-    for the same reason. Move it, do not delete it.
+- **state:** **DISPATCHED 2026-09-10 AND REFUSED. Re-briefed wider, with T-133 merged in.**
+  **T-133 no longer exists as its own row.**
+- **the design was not the problem — the contract was.** The builder built nothing, produced no green
+  run, and said so rather than shipping something it could not verify. Right call.
+
+**The decisive finding, and the coordinator did not know it: there is a nightly job.**
+`ShoppingListRegenerateJob` is registered in `jobs/JobSchedulingConfiguration.java:84` and
+**regenerates every temple's suggested list on a cron trigger.** Removing the write means removing
+`regenerateForCurrentTenant()`, whose call chain runs `Runner.sweep` → `ShoppingListRegenerateJob` →
+that configuration file — **outside the contract.** Delete the job and the tree does not compile;
+keep it and **the same shared-row mutation D-24 removes carries on nightly, just on a timer.**
+
+**So Rajeev's question had a second half nobody had noticed.** He asked why the list needs a button
+when it could populate itself. It already populates itself once a night — the button and the job are
+two doors onto one write, and **the answer to "why the button" is that neither should exist.**
+
+**Two more blockers, both real:**
+
+- **`PurchaseOrderService.generateFromShoppingList:151`** selects
+  `suggested_qty, unit, suggested_vendor_id, needed_by FROM shopping_list_lines WHERE included = true`.
+  Once those rows are only human decisions, **"Generate purchase orders" would raise orders
+  containing the hand-added lines and nothing else.** The builder checked whether a database view
+  could keep that query working untouched — **it cannot**: the shortfall stream is
+  `SufficiencyService.allocateAcrossWindow()`, a Java claim-allocation walk, not SQL.
+- **Four tests outside the contract**, three of which POST to the endpoint that goes and would 404
+  (`MealPlanIT:690`, `DescribedPurchaseLineIT:498`, `ReceivingIT:126`). **The fourth is the
+  dangerous one:** `PurchaseOrderIT:688` seeds the table by hand, so it would stay **green while the
+  product is broken.**
+
+**The brief was wrong about the vendor snapshot, and the correction is worth keeping.**
+`suggested_vendor_id` on the line does **not** need moving to the order — **`purchase_orders.vendor_id`
+already is that snapshot.** On the line the column is pure derivation: both writers call
+`vendorService.preferredVendorId(...)`, and `updateLine` accepts a vendor **no screen ever sends**,
+which its own javadoc admits. It gets dropped. **What D-25 needs stamped on the order is the lead
+time, not the vendor** — and that belongs to T-134, not here. *(This is the second time in two days
+that a coordinator note about `suggested_vendor_id` has been wrong in the opposite direction — see
+T-091. The column attracts confident guesses. Read it before writing about it.)*
+
+**The three open decisions, answered by the builder and adopted:**
+
+1. **Provenance recomputes and the column is dropped.** `upsertLine` already refreshes `order_by`,
+   `needed_by` and `current_stock` on edited lines and its comment gives the rule — **computed facts
+   refresh, choices do not.** A recomputed provenance disagreeing with a hand-typed quantity is
+   information, not staleness.
+2. **The untick persists as a decision row**, because expiring it needs either a write on a read or
+   an invented window. **The honest cost, named rather than hidden:** a September untick suppresses a
+   January shortfall unseen. **Mitigation, in the same task:** when the line reappears, show when it
+   was unticked, off `updated_at`.
+3. **The vendor snapshot** — see above.
+
+**T-130 is absorbed here and is two lines** — `neededBy = demandedOn`, and delete `LEAD_BUFFER_DAYS`
+— but sits inside the method being rewritten. **Two traps:** `ShoppingListIT:173` asserts the old
+arithmetic, and `PurchaseOrderService:180` takes the **min** `needed_by` per vendor, which interacts
+with D-25's ruling that the **longest** lead time governs a multi-line order. Those are not the same
+choice and both must be stated.
+
+**And T-133 is not separable from this, which the ledger itself already said.** D-24a's *"a line
+leaves when an order is created"* is implemented by **not counting an ingredient a live draft already
+covers** — a change to the derivation, in the same method. T-133's own row read *"with T-132 done
+there is nothing to delete. It is one predicate."* **Merged.**
+
+- **`V121` was reserved, unused by the first dispatch, and was taken by the second.**
+- **state, final:** **SHIPPED, wave 21, 2026-09-10.** Re-briefed wider and built. The suggestions are
+  derived on every read and never written; the button, the endpoint, the nightly job and its two
+  beans are gone; `V121` drops seven computed columns, adds `hand_added`, makes `suggested_qty`
+  nullable, deletes the Quartz rows for the removed job and backfills per tenant under RLS. T-130's
+  two-day subtraction went with it. **Awaiting Rajeev's test.**
+- **proof:** `docs/work/proof/T-132.md` (the refusal, then the build below it) · **shipped:**
+  `27a39f8`, 2026-09-10, wave 21 — *feat: the shopping list is worked out every time it is read, and
+  never written down*
+
+### T-140 — the shopping list works the stock out once, not nine times
+
+- **id:** T-140 · **state:** dispatched 2026-09-10, on Rajeev's word after he asked for the mechanism
+  to be explained to him first.
+- **source:** **T-139's measurement**, which is the whole point of having built it.
+- **what it measured:** one `GET /api/v1/shopping-list` against five years of history reads the stock
+  ledger **nine times** — 1,315,350 rows, exactly 9 × 146,150 — plus 4,185 index scans against a
+  **150-row** `ingredients` table. 141 ms at one year, **425 ms at five**, 795 ms at ten, on a local
+  container with everything in shared buffers. **The real figure behind Cloud Run and Cloud SQL is
+  worse.**
+
+**It is a correctness fix as much as a speed one, and that is the half that would have been missed.**
+The nine reads sit inside one `@Transactional(readOnly = true)` method — but PostgreSQL's default
+isolation gives **each statement its own snapshot.** A delivery recorded while the page loads can
+leave the shortfall computed against one stock figure and a different one printed in the *current
+stock* column beside it. **Rare, invisible, and unreproducible when reported.**
+
+**Two things Rajeev decided after asking for the explanation, and both are his:**
+
+- **A stored running total was his own proposal and he withdrew it** once the cost was put to him:
+  the total is not a plain sum but goes through `to_on_hand_qty`, which interprets each movement by
+  type and unit — **and that function changed this week** (V116/T-122, on-hand stopping at zero). A
+  derived total picked that change up for free; **every stored balance would have been silently wrong
+  the moment it shipped.** His words: *"You convinced me."*
+- **The snapshot idea is written down rather than built.** If a single pass ever hurts — 71 ms at
+  five years, 137 ms at ten — the safe shape is a **periodic opening balance** (*"rice was 240 kg on
+  1 January"*) plus the movements since, **not a live-updated column**: a snapshot is itself derived
+  and can be rebuilt from scratch, so it cannot drift, and a live balance cannot be checked that way.
+  **Not needed for years, and by then the product will know how temples actually use it.**
+
+**Also ruled into the brief: pass the map in, do not cache it.** A request-scoped cache has a
+lifetime, and getting it wrong means something reads stale stock — a bad class of bug to invite in an
+app where every screen depends on stock being right. **If the parameter spreads past four or five
+call sites, that is the signal to do the shared version deliberately**, and the builder was told to
+stop and report rather than improvise it.
+
+**And the proof must be the scan count, not a stopwatch.** T-139's harness already asks
+`pg_stat_all_tables` how many times a request touched the table. **A timing number varies with the
+machine and flatters itself; the count is exact.** The control is to revert the change and watch the
+number climb back to nine.
+
+- **honest scope note in the brief:** **only three of the nine are traceable in the code** —
+  `suggestions()`, `shortfallFeed()` → `allocateAcrossWindow()`, and `lowStock()`. The other six are
+  inside those calls and nobody has traced them. **An honest six-of-nine with a reason beats a number
+  that flatters itself.**
+
+**BUILT 2026-09-10 — and the headline number in this row was wrong. It was three, not nine.**
+
+**There were no untraced six.** The three visible in the code were all of them. **T-139's nine was an
+artefact of the instrument:** PostgreSQL flushes a backend's statistics at transaction end and at
+most once a second, so after ten 430 ms page loads that backend is two requests behind and the
+backlog lands inside the next window. Three statements × three loads of backlog = nine. **The same
+factor of three inflated every other row of that table** — `meal_plans` 9 was 3, and `ingredients`
+4,185 was ~1,443.
+
+> **⚠ The lesson, and it is bigger than this task.** T-139 was built *because* nobody had a number,
+> and its number was wrong by 3× in the alarming direction. **A measurement is a claim and needs a
+> control like any other.** The coordinator repeated "nine times, 1.3 million rows" to Rajeev several
+> times and built an argument on it. The conclusion survived; the magnitude did not.
+
+**Before and after**, each measured twice by instruments on opposite sides of the connection, agreeing
+exactly:
+
+| | statements (JDBC) | whole-ledger readings per load | median GET |
+|---|---|---|---|
+| before | 3 | 3.00 | **445 ms** |
+| after | **1** | **1.00** | **126 ms** |
+
+**The better instrument is the durable part.** A test-side `StatementRecorder` wraps the app's own
+`DataSource` — the same seam `TenancyConfiguration` uses — and records every statement with the
+`org.iskcon.kms` frames that sent it. It removes both flaws in the `pg_stat` reading: the lag, and
+the unit (`idx_scan` counts **plan executions**, so one statement driving a nested loop over 26
+purchase orders registers 26 scans). The `pg_stat` reading is kept, but now brackets twenty loads so
+lag is a rounding error.
+
+**And a guard runs in the ordinary suite, not behind `KMS_PERF`** —
+`ShoppingListIT.theLedgerIsSummedOncePerPageLoad`. Without it the count could climb back to three and
+CI would stay green.
+
+**Two things that could have gone quietly wrong and did not:** the allocation walk draws its map down
+as it goes, **so it takes a copy** — otherwise every line would have printed post-allocation stock as
+*current stock*; and `lowStock(Map)` returns a new type rather than a `StockItemView`, because
+skipping the per-batch read leaves nothing true to say about expiry.
+
+- **the count was three, not nine.** T-139's proof and every note taken from it say the ledger is
+  read **nine** times per page load. It was **three** — one per demand stream. The nine came from
+  `pg_stat_user_tables`, whose counters lag the transaction that produced them, so a reading taken
+  straight after the request caught rows from the run before and inflated the figure 3×.
+  `StatementRecorder` counts the statements the request itself issues and does not lag.
+- **state:** **SHIPPED, wave 21, 2026-09-10.** The ledger is summed once and the map handed down —
+  445 ms to 126 ms median on the five-year fixture, and
+  `ShoppingListIT.theLedgerIsSummedOncePerPageLoad` runs in the **ordinary** suite so a later change
+  cannot quietly put the other two scans back.
+- **proof:** `docs/work/proof/T-140.md` · **shipped:** `27a39f8`, 2026-09-10, wave 21
+
+### T-141 — the page runs its whole pass twice, and asks for 360 recipes to do it
+
+- **id:** T-141 · **state:** queued. **Not dispatched** — Rajeev asked for no further dispatches
+  before the handover, and T-140's builder stopped at exactly the line the brief told it to.
+- **source:** **T-140's `StatementRecorder`**, which counted what nobody had counted before: **404
+  statements for one shopping-list page load.**
+- **what:** **360 of the 404 are `RecipeService.get`**, called once per distinct recipe-and-yield in
+  the buying window. **And the whole pass runs twice**, because `CommittedStockService.claims()` is
+  computed once for the sufficiency walk and again for the low-stock read.
+- **why it was left:** both files are outside T-140's contract, and fixing it means **a second
+  parameter threaded down the same path** — which is the point the brief named as the signal to stop
+  and report rather than improvise a shared cache.
+- **why it may matter more than the ledger sum did:** each statement is cheap, but **404 round trips
+  are not**, and a local container hides round-trip cost almost entirely. **This is likely to be
+  worse behind Cloud Run and Cloud SQL than the thing T-140 just fixed.**
+- **and it is the honest next question about the derived list:** T-132 made the page a computation;
+  T-140 made it compute the ledger once. **Nobody has yet asked what else it does 360 times.**
 - **proof:** — · **shipped:** —
 
-### T-133 — an order takes its lines off the list, and cancelling gives them back
 
-- **state:** ready to build, **after T-132**.
-- **ruled in [[D-24a]]:** a line leaves **the moment an order is created, draft or not**, and a
-  cancellation — draft or sent — **returns it**.
-- **his reason, which is the whole decision:** *"IF we take it off on send, they will be there in the
-  shopping list begging to be ordered, someone else will take pity and generate another PO. Same
-  ingredients, 2 PO's."*
-- **what is actually wrong today:** `poOutstandingByIngredient` counts only `SENT` and
-  `PARTIALLY_RECEIVED`. A freshly generated draft is invisible to it, which is why the lines sit
-  there looking unordered. **This is not a missing `DELETE`** — with T-132 done there is nothing to
-  delete. It is one predicate.
-- **and with the list derived, the return path costs nothing:** a cancelled order stops covering its
-  ingredients, so they reappear on the next read. **No restore logic, nothing to get stale** — which
-  is the simplification Rajeev reached for when he suggested recalculating.
-- **uncatalogued lines cannot come back** — there is nothing to recompute them from. **Say so on the
-  cancellation screen** rather than letting them vanish quietly.
-- **proof:** — · **shipped:** —
+
+### T-139 — nobody can measure the shopping list, because there is no data to measure it on
+
+- **id:** T-139 · **state:** queued. **A prerequisite for judging T-132, not for building it.**
+- **source:** T-132's builder, asked for a performance number and **saying plainly it had none**
+  rather than producing a reassuring one: *"no number, and I say so."* There is no staging-sized
+  fixture in the repository.
+- **the two it would measure first**, both read on every page load once the list is derived:
+  `earliestDemandByIngredient()` — meal plans joined to recipe ingredients — and
+  `onHandBaseByIngredient()`, which **aggregates the whole of `stock_movements` with no date bound,
+  on a table that only ever grows.**
+- **why it matters more after T-132 than before:** today that work happens on a button press and once
+  a night. Afterwards it happens every time somebody opens the screen.
+- **state:** **SHIPPED, wave 21, 2026-09-10.** Six new files under
+  `backend/src/test/java/org/iskcon/kms/perf/`. **It does not join the default suite** — both classes
+  are tagged `perf` and gated on `KMS_PERF`, verified with the variable unset and `--rerun-tasks`,
+  where all five skip in eight seconds without starting a container. **Its "nine ledger reads" is
+  wrong and is corrected in T-140's row above: the number is three.**
+- **proof:** `docs/work/proof/T-139.md` · **shipped:** `27a39f8`, 2026-09-10, wave 21
 
 ### T-134 — a tile per vendor, and the order is written in a panel over the list
 
@@ -13156,7 +13395,7 @@ tell them apart.
 
 ### T-130 — the two days a vendor gets are counted twice
 
-- **id:** T-130
+- **id:** T-130 · **ABSORBED into T-132 2026-09-10.** The subtraction is two lines inside the method T-132 rewrites, and D-25 replaces the guess it stood in for. Not a task of its own.
 - **source:** **T-090's builder, 2026-09-10**, found while building lead times and **deliberately not
   fixed** — the fix changes what every generated order asks a supplier for, and `purchaseorder/**`
   was outside its contract that night. Correct call.
@@ -14025,7 +14264,12 @@ DDL — see [[migrations-are-subject-to-rls]].
 > guess and put it to Rajeev.**
 
 - **`V120` was never used and goes back to the pool.**
-- **state:** back to waiting on Rajeev.
+- **state:** **PARKED FOR PHASE 2 by Rajeev, 2026-09-10.** His words: *"there is a lot of
+  complication in this one. Needs to be thought through carefully. Can't be done all silly nilly."*
+  **Do not resurrect it opportunistically.** The design work in this row — `preference_rank` over two
+  booleans, and the four candidate triggers for when a fallback fires — is kept precisely so Phase 2
+  starts from it rather than re-deriving it. **Reopen only if somebody insists**, and then start with
+  the trigger question, not the schema.
 - **proof:** `docs/work/proof/T-091.md` · **shipped:** —
 
 ---

@@ -1236,3 +1236,79 @@ is held against the vendor** — T-129's rule already sees to that, without a sp
 room, on a shared record. It needs to be as legible after the fact as a human cancellation is — the
 reason is dictated above, and the order's trail should show it was the system that acted.
 
+
+---
+
+## D-26 · A part-delivered order, and who is allowed to move a vendor's score
+
+**Rajeev, 2026-09-10**, walking through a real delivery rather than answering the question as posed —
+and the walk-through produced a better answer than any of the three options put to him.
+
+### The scenario, in his words
+
+500 kg of rice ordered. The vendor has 300 on hand and **sends it immediately so the kitchen can
+cook**, expecting stock in two days for the remaining 200.
+
+> *"The 200 KG should still be tied to the PO that raised and sent the 500KG rice order and it
+> should sit in a partially delivered state and the clock keeps ticking."*
+
+**So the remainder does not go back to the shopping list.** The vendor still owes it and the order is
+still live. **It is released to the list when the admin closes the purchase order** — the same
+mechanism as a cancellation, through a different door.
+
+**This answers the question the coordinator asked and removes the objection to it.** Suppressing the
+remainder was rejected on the grounds that a temple short of rice would see nothing telling them so.
+Under this model they see **a purchase order past due, on the clock, asking for a decision** — which
+is better than a shopping-list line, because it names the vendor who owes it.
+
+**And the arithmetic already works.** T-124 scores on-time by quantity, so 300 kg of 500 arriving
+inside the window is **60%**, computed with nothing new. What was missing was not the sum but the two
+ways an order can end.
+
+### The two endings, both his
+
+- **The vendor rings, apologises, blames the weather, offers a discount next time and says buy it
+  elsewhere.** The admin closes the order part-delivered and **can waive the black mark**, because
+  the vendor behaved well.
+- **The vendor goes silent and does not answer repeated calls.** The admin closes it part-delivered
+  and **marks the missed delivery**, which shows on their score.
+
+### The score is shown, and never edited
+
+He first proposed letting the admin adjust the computed score up or down at closing time —
+*"there is SO MUCH human interaction that no machine or app can capture"* — which is a real problem
+and correctly identified. **He then ruled against his own proposal** when the costs were put to him:
+
+> *"Let us not let the admin adjust the score. Just show it to them."*
+
+**The four costs that decided it, kept because this idea will occur to somebody again:**
+
+1. **An adjustable score is not a measurement.** It stops meaning *what this vendor did* and starts
+   meaning *what somebody felt about what they did*, so comparing two vendors becomes comparing two
+   admins' generosity.
+2. **Nobody adjusts downward.** Kindness accumulates in one direction until every vendor reads well
+   and the scorecard says nothing.
+3. **It cannot be defended.** *"An admin changed it"* is not an answer to a vendor who disputes their
+   score.
+4. **It reopens what D-25 and T-129 closed the same day.** Requiring an order to have been sent, and
+   excusing a vendor for an order we placed late, exist to make the number defensible. A free-hand
+   dial undoes all of it with one control.
+
+**So: the computed score is shown at closing — that transparency was the good half of his idea and it
+stays — and the admin's influence is expressed as a named outcome instead of a number.** *The vendor
+let us down* counts against them; *they fell short but made it right* excludes the order from the
+score; otherwise it scores as computed. **Anything other than "as computed" requires a sentence.**
+
+**And the exclusions must be visible on the scorecard**, as a count beside the percentage — the same
+standard already set for orders we submitted late and for abandoned ones. A number whose exclusions
+are invisible cannot be checked.
+
+### One rule that follows
+
+**Auto-cancel must never touch a partially-delivered order** — agreed by him explicitly. A draft
+nobody sent can be swept away by a scheduled job. An order with 300 kg of real rice against it and a
+vendor relationship behind it needs the human decision described above.
+
+**Related:** [[D-24a]] (a line leaves on creation and returns on cancellation — closing is the third
+door), [[D-25]], T-124, T-129, T-137.
+

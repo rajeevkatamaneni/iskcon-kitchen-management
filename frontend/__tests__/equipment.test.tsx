@@ -66,6 +66,7 @@ function machine(o: Partial<EquipmentView>): EquipmentView {
     serialNumber: "WG-4471",
     purchaseCostInr: 48000,
     warrantyExpiry: null,
+    neverNeedsServicing: false,
     serviceIntervalDays: 180,
     serviceIntervalUnit: "MONTHS",
     serviceIntervalCount: 6,
@@ -141,6 +142,59 @@ describe("the equipment list", () => {
     render(<EquipmentPage />);
 
     expect(screen.getByText("Not scheduled")).toBeInTheDocument();
+  });
+
+  it("says a ladder does not need servicing, and never calls it not scheduled", () => {
+    // T-120. Before V122 these were one state, so a ladder and a boiler nobody had got round to
+    // both read "Not scheduled" for ever and neither could be chased. Rajeev, 2026-09-10: "They
+    // should be two different things."
+    queryRef.current = {
+      data: [
+        machine({
+          name: "Ladder, 8ft",
+          neverNeedsServicing: true,
+          serviceStatus: "NOT_SERVICED",
+          nextServiceOn: null,
+          nextServiceBasis: "NONE",
+          serviceIntervalDays: null,
+          serviceIntervalCount: null,
+          serviceIntervalUnit: null,
+          serviceCompany: null,
+        }),
+      ],
+      error: null,
+      loading: false,
+    };
+    render(<EquipmentPage />);
+
+    expect(screen.getByText("Does not need servicing")).toBeInTheDocument();
+    expect(screen.queryByText("Not scheduled")).not.toBeInTheDocument();
+  });
+
+  it("keeps a flagged thing out of the overdue banner and the overdue filter", () => {
+    // The banner counts machines past their service date. A ladder is not late, and no arithmetic
+    // anywhere should ever make it so — the interval it would need is unrepresentable in the row.
+    queryRef.current = {
+      data: [
+        machine({
+          id: "ladder",
+          name: "Ladder, 8ft",
+          neverNeedsServicing: true,
+          serviceStatus: "NOT_SERVICED",
+          nextServiceOn: null,
+          nextServiceBasis: "NONE",
+          serviceIntervalDays: null,
+          serviceIntervalCount: null,
+          serviceIntervalUnit: null,
+        }),
+      ],
+      error: null,
+      loading: false,
+    };
+    render(<EquipmentPage />);
+
+    expect(screen.queryByText(/past its service date/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/past their service date/i)).not.toBeInTheDocument();
   });
 
   it("says a derived date came from the purchase, so it never reads as a service that happened", () => {

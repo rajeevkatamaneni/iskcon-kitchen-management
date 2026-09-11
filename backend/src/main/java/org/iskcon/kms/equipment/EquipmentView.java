@@ -30,6 +30,11 @@ public record EquipmentView(
 		LocalDate warrantyExpiry,
 
 		// --- The service schedule, as the temple set it (E3-S10 D3, D7) ---
+
+		// TRUE for a thing that will never need servicing — a ladder, a trestle table (T-120).
+		// Never both this and an interval: V122's CHECK makes that pairing unrepresentable, so a
+		// reader may treat the two as mutually exclusive without checking.
+		boolean neverNeedsServicing,
 		Integer serviceIntervalDays,
 		ServiceInterval serviceIntervalUnit,
 		// The count in the unit above — the six of "every six months". Null with no interval.

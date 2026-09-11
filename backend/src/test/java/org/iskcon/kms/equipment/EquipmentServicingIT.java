@@ -597,6 +597,208 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 		}
 	}
 
+	// ---- Things that never need servicing (T-120, V122) -------------------
+
+	/**
+	 * Rajeev, 2026-09-10: <em>"They should be two different things. Maybe a check box for equipment
+	 * that don't need service like a ladder. When checked, the Service interval box is cleared out
+	 * and uneditable."</em>
+	 *
+	 * <p>What is proved here rather than beside {@link ServiceIntervalTest} is the half that only a
+	 * real database can answer: that the two states are distinguishable <strong>in the row</strong>
+	 * and not merely on the screen, and that V122's CHECK makes the contradictory pairing
+	 * unrepresentable even to somebody writing SQL directly as the application role.
+	 */
+	@Nested
+	@DisplayName("a thing that never needs servicing")
+	class NeverNeedsServicing {
+
+		@Test
+		@DisplayName("is a different state from one nobody has got round to scheduling")
+		void theTwoNullsAreDistinguishable() throws Exception {
+			UUID ladder = createEquipment("Ladder, 8ft", TODAY.minusYears(3));
+			UUID boiler = createEquipment("Steam Boiler", TODAY.minusYears(3));
+
+			markNeverNeedsServicing(ladder).andExpect(status().isNoContent());
+
+			// Both carry no interval. Before V122 that made them the same row.
+			mvc.perform(authed(get("/api/v1/equipment/{id}", ladder)))
+					.andExpect(jsonPath("$.equipment.neverNeedsServicing").value(true))
+					.andExpect(jsonPath("$.equipment.serviceIntervalDays").doesNotExist())
+					.andExpect(jsonPath("$.equipment.serviceStatus").value("NOT_SERVICED"));
+
+			mvc.perform(authed(get("/api/v1/equipment/{id}", boiler)))
+					.andExpect(jsonPath("$.equipment.neverNeedsServicing").value(false))
+					.andExpect(jsonPath("$.equipment.serviceIntervalDays").doesNotExist())
+					.andExpect(jsonPath("$.equipment.serviceStatus").value("NOT_SCHEDULED"));
+		}
+
+		@Test
+		@DisplayName("is distinguishable in the row itself, not only in the answer")
+		void theDistinctionIsStoredAndNotDerived() throws Exception {
+			UUID ladder = createEquipment("Ladder, 8ft", TODAY.minusYears(3));
+			UUID boiler = createEquipment("Steam Boiler", TODAY.minusYears(3));
+			markNeverNeedsServicing(ladder).andExpect(status().isNoContent());
+
+			// Read straight off the table. A view that computed this from a name or a guess would
+			// pass the assertions above and fail here.
+			assertThat(admin.queryForObject(
+					"SELECT never_needs_servicing FROM equipment_items WHERE id = ?", Boolean.class,
+					ladder)).isTrue();
+			assertThat(admin.queryForObject(
+					"SELECT never_needs_servicing FROM equipment_items WHERE id = ?", Boolean.class,
+					boiler)).isFalse();
+		}
+
+		@Test
+		@DisplayName("drops out of every servicing view rather than sitting there for ever")
+		void aFlaggedThingIsOutOfScope() throws Exception {
+			// A ladder bought ten years ago with a schedule set on it in error. Once flagged it is
+			// in no warning count, no due-soon filter and no overdue nudge — and the interval that
+			// would have made it years overdue is gone from the row rather than merely ignored.
+			UUID ladder = createEquipment("Ladder, 8ft", TODAY.minusYears(10));
+			setSchedule(ladder, 30, "DAYS", null).andExpect(status().isNoContent());
+			mvc.perform(authed(get("/api/v1/equipment/{id}", ladder)))
+					.andExpect(jsonPath("$.equipment.serviceStatus").value("OVERDUE"));
+
+			markNeverNeedsServicing(ladder).andExpect(status().isNoContent());
+
+			mvc.perform(authed(get("/api/v1/equipment/{id}", ladder)))
+					.andExpect(jsonPath("$.equipment.serviceStatus").value("NOT_SERVICED"))
+					.andExpect(jsonPath("$.equipment.serviceIntervalDays").doesNotExist())
+					.andExpect(jsonPath("$.equipment.serviceIntervalUnit").doesNotExist())
+					.andExpect(jsonPath("$.equipment.nextServiceOn").doesNotExist());
+
+			mvc.perform(authed(get("/api/v1/equipment")).param("serviceStatus", "OVERDUE"))
+					.andExpect(jsonPath("$.length()").value(0));
+			mvc.perform(authed(get("/api/v1/equipment")).param("serviceStatus", "DUE_SOON"))
+					.andExpect(jsonPath("$.length()").value(0));
+
+			// The interval really is cleared in the row, not just absent from the answer.
+			assertThat(admin.queryForObject(
+					"SELECT service_interval_days FROM equipment_items WHERE id = ?", Integer.class,
+					ladder)).isNull();
+		}
+
+		@Test
+		@DisplayName("cannot be claimed alongside an interval, and the refusal names the field")
+		void bothAtOnceIsRefused() throws Exception {
+			UUID ladder = createEquipment("Ladder, 8ft", TODAY.minusYears(3));
+
+			mvc.perform(authed(put("/api/v1/equipment/{id}/service-schedule", ladder))
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("""
+									{"intervalCount":6,"intervalUnit":"MONTHS","neverNeedsServicing":true}"""))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("KMS-400001"));
+
+			// And nothing was half-applied: the row is untouched by the refused request.
+			mvc.perform(authed(get("/api/v1/equipment/{id}", ladder)))
+					.andExpect(jsonPath("$.equipment.neverNeedsServicing").value(false))
+					.andExpect(jsonPath("$.equipment.serviceIntervalDays").doesNotExist())
+					.andExpect(jsonPath("$.equipment.serviceStatus").value("NOT_SCHEDULED"));
+		}
+
+		@Test
+		@DisplayName("cannot be paired with an interval by anybody writing SQL either")
+		void theDatabaseRefusesThePairingToo() throws Exception {
+			UUID ladder = createEquipment("Ladder, 8ft", TODAY.minusYears(3));
+			markNeverNeedsServicing(ladder).andExpect(status().isNoContent());
+
+			// The service guard is a courtesy so nobody meets a constraint violation as an error
+			// message. THIS is what makes the nonsense unrepresentable — the same statement V118
+			// made about vendor_abandoned, and the reason this task took a CHECK where T-129
+			// deliberately did not.
+			asApplication(templeA, app -> {
+				assertThatThrownBy(() -> app.update("""
+						UPDATE equipment_items
+						SET service_interval_days = 180, service_interval_unit = 'MONTHS'
+						WHERE id = ?
+						""", ladder))
+						.as("V122: never_needs_servicing and an interval must not coexist")
+						.hasStackTraceContaining("equipment_never_serviced_has_no_interval");
+
+				assertThatThrownBy(() -> app.update("""
+						INSERT INTO equipment_items
+							(tenant_id, name, condition, never_needs_servicing,
+							 service_interval_days, service_interval_unit)
+						VALUES (?, 'Impossible Ladder', 'GOOD', true, 180, 'MONTHS')
+						""", templeA))
+						.as("V122: and not on the way in either")
+						.hasStackTraceContaining("equipment_never_serviced_has_no_interval");
+			});
+		}
+
+		@Test
+		@DisplayName("can be un-ticked, and the machine goes back to being unscheduled")
+		void theFlagCanBeTakenBack() throws Exception {
+			UUID boiler = createEquipment("Steam Boiler", TODAY.minusYears(3));
+			markNeverNeedsServicing(boiler).andExpect(status().isNoContent());
+
+			// Somebody ticked the wrong row. Un-ticking returns it to "nobody has said", which is
+			// where it started — and NOT to a schedule it never had.
+			setSchedule(boiler, null, null, null).andExpect(status().isNoContent());
+
+			mvc.perform(authed(get("/api/v1/equipment/{id}", boiler)))
+					.andExpect(jsonPath("$.equipment.neverNeedsServicing").value(false))
+					.andExpect(jsonPath("$.equipment.serviceStatus").value("NOT_SCHEDULED"));
+
+			// And then scheduled properly.
+			setSchedule(boiler, 6, "MONTHS", null).andExpect(status().isNoContent());
+			mvc.perform(authed(get("/api/v1/equipment/{id}", boiler)))
+					.andExpect(jsonPath("$.equipment.neverNeedsServicing").value(false))
+					.andExpect(jsonPath("$.equipment.serviceIntervalDays").value(180));
+		}
+
+		@Test
+		@DisplayName("is the Temple Admin's to decide, like every other servicing act")
+		void kitchenStaffMayNotDecideIt() throws Exception {
+			UUID ladder = createEquipment("Ladder, 8ft", TODAY.minusYears(3));
+
+			signIn("uid-staff-a");
+			markNeverNeedsServicing(ladder).andExpect(status().isForbidden());
+
+			signIn("uid-manager-a");
+			markNeverNeedsServicing(ladder).andExpect(status().isForbidden());
+		}
+
+		@Test
+		@DisplayName("is written into the audit trail as its own fact")
+		void theTrailSaysWhichActItWas() throws Exception {
+			UUID ladder = createEquipment("Ladder, 8ft", TODAY.minusYears(3));
+			markNeverNeedsServicing(ladder).andExpect(status().isNoContent());
+
+			// "The interval was cleared" and "this was declared never to need one" are two
+			// different acts, and an audit trail that cannot tell them apart is the defect this
+			// task exists to fix, restated one table along.
+			String after = admin.queryForObject("""
+					SELECT after_state::text FROM audit_events
+					WHERE action = 'EQUIPMENT_SERVICE_SCHEDULE_SET'
+					ORDER BY created_at DESC LIMIT 1
+					""", String.class);
+			assertThat(after).contains("\"neverNeedsServicing\": true");
+		}
+
+		@Test
+		@DisplayName("every existing row starts un-flagged, because nothing can say which is which")
+		void v122FlagsNothing() {
+			// The migration's own decision, asserted rather than left to the header: a ladder and
+			// an unscheduled boiler were indistinguishable before V122, so it flags neither. The
+			// register gets no less honest, and the ticking is left to the temple.
+			//
+			// createEquipment goes through the API, which never sends the flag, so these rows are
+			// exactly what an existing row looks like after the migration.
+			asApplication(templeA, app -> app.update("""
+					INSERT INTO equipment_items (tenant_id, name, condition)
+					VALUES (?, 'Pre-existing Ladder', 'GOOD')
+					""", templeA));
+
+			assertThat(admin.queryForObject("""
+					SELECT bool_and(never_needs_servicing = false) FROM equipment_items
+					""", Boolean.class)).isTrue();
+		}
+	}
+
 	// ---- Isolation --------------------------------------------------------
 
 	@Nested
@@ -681,6 +883,18 @@ class EquipmentServicingIT extends AbstractIntegrationTest {
 				+ "}";
 		return mvc.perform(authed(put("/api/v1/equipment/{id}/service-schedule", equipmentId))
 				.contentType(MediaType.APPLICATION_JSON).content(json));
+	}
+
+	/**
+	 * Ticks the box, the way the screen does it (T-120): the flag on its own, no interval, because
+	 * the two together are a contradiction the endpoint refuses.
+	 */
+	private org.springframework.test.web.servlet.ResultActions markNeverNeedsServicing(UUID equipmentId)
+			throws Exception {
+
+		return mvc.perform(authed(put("/api/v1/equipment/{id}/service-schedule", equipmentId))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"neverNeedsServicing\":true,\"serviceCompany\":null}"));
 	}
 
 	private org.springframework.test.web.servlet.ResultActions recordService(

@@ -102,6 +102,9 @@ describe("registering equipment", () => {
     expect(scheduleMock.mock.calls[0][1]).toEqual({
       intervalCount: 1,
       intervalUnit: "YEARS",
+      // T-120: a newly registered thing is never flagged. Registering says nothing about
+      // whether it will ever need servicing; the tick box lives on the item's own page.
+      neverNeedsServicing: false,
       // Text, and nothing behind it: the managed list this replaced was removed on 2026-09-04.
       serviceCompany: "Bengaluru Kitchen Engineering",
       serviceCompanyPhone: "+91 98450 12345",
@@ -142,6 +145,9 @@ describe("registering equipment", () => {
     expect(scheduleMock.mock.calls[0][1]).toEqual({
       intervalCount: null,
       intervalUnit: null,
+      // T-120: a newly registered thing is never flagged. Registering says nothing about
+      // whether it will ever need servicing; the tick box lives on the item's own page.
+      neverNeedsServicing: false,
       serviceCompany: "Iyer Repairs",
       serviceCompanyPhone: null,
     });
