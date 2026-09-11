@@ -980,6 +980,27 @@ several of the features this run built.
 
 ---
 
+## ✅ THE RUN PLAN IS FINISHED — closed 2026-09-11. Do not execute the section below.
+
+**Every wave, A through F, is built, merged-tree verified, committed by named path, green on CI,
+deployed to staging and driven in a browser as the role it was written for.** The blocks above this
+one are the record of each; read them, not the plan.
+
+**This banner exists because of this file's own worst habit.** A handoff paragraph here was written
+on 2026-09-08 and **read as current for eleven waves**, still listing seven shipped features as
+"still to build". The instructions below are now in exactly that position: they are correct about
+what *was* to be done and wrong about what *is*. **A cold session reading them would re-dispatch
+work that has shipped.**
+
+**What is actually left is in two places and neither is below:** the five decisions waiting on
+Rajeev, and the queued items — both listed in the Wave E and Wave F blocks above, and summarised in
+`next-work-items` in the session memory directory.
+
+**Kept unedited below because it is the instruction Rajeev gave**, and the standing rule is that his
+words are not rewritten to match the outcome.
+
+---
+
 ## ▶ THE RUN PLAN — ordered by Rajeev 2026-09-10, for the session that picks this up
 
 **His instruction, in his words:** *"Assign these tasks to Subagents and run them parallelly whenever
