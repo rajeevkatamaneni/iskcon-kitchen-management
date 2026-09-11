@@ -1,0 +1,37 @@
+== 1. the anchors, counted before anything is touched ==
+   java files in staff/:                    9
+   with an @Import of their own stub config: 9
+   with a nested StubVerifierConfiguration:  9
+
+== 2. before: how many contexts does this package build today? ==
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+  contexts built so far:        9
+  distinct cache keys:          9
+  the same, ignoring @Import:   9   <- if every @Import named one shared class and nothing else changed
+  ...and ignoring nested @TestConfiguration too: 1   <- if the nested stub configurations were deleted as well
+
+== 3. snapshot, then collapse ==
+rewrote 9 files
+   proof the tree actually changed:
+ .../java/org/iskcon/kms/staff/CrewCoverageIT.java  | 33 ++--------------------
+ .../java/org/iskcon/kms/staff/HalfDayLeaveIT.java  | 33 ++--------------------
+ .../org/iskcon/kms/staff/OwnScheduleLeaveIT.java   | 33 ++--------------------
+ .../org/iskcon/kms/staff/StaffConductNoteIT.java   | 33 ++--------------------
+ .../org/iskcon/kms/staff/StaffEmploymentIT.java    | 33 ++--------------------
+ .../java/org/iskcon/kms/staff/StaffLeaveIT.java    | 33 ++--------------------
+ .../test/java/org/iskcon/kms/staff/StaffPayIT.java | 33 ++--------------------
+ .../org/iskcon/kms/staff/StaffReinstatementIT.java | 33 ++--------------------
+ .../java/org/iskcon/kms/staff/StaffScheduleIT.java | 33 ++--------------------
+ 9 files changed, 27 insertions(+), 270 deletions(-)
+
+== 4. after: the same package, collapsed ==
+  contexts built so far:        1
+  distinct cache keys:          1
+  the same, ignoring @Import:   1   <- if every @Import named one shared class and nothing else changed
+  ...and ignoring nested @TestConfiguration too: 1   <- if the nested stub configurations were deleted as well
+   gradle exit status: 0
+
+== 5. restore from the snapshot, and prove the tree is back ==
+   git diff --stat for staff/ after restore (must be empty):
+   git status --porcelain for the touched paths (must be empty):
+   done.

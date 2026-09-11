@@ -1,0 +1,5 @@
+# Test-source-set only. The factory contributes nothing unless -Dkms.context.census=true is set on
+# the test JVM, so an ordinary run's context cache keys are byte-for-byte what they were before this
+# file existed. See ContextCensusCustomizerFactory for why that distinction matters.
+org.springframework.test.context.ContextCustomizerFactory=\
+  org.iskcon.kms.diag.ContextCensusCustomizerFactory

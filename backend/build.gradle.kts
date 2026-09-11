@@ -95,26 +95,70 @@ tasks.withType<Test> {
 	useJUnitPlatform()
 
 	// ---------------------------------------------------------------------------
+	// Two switches for measuring this suite, both off unless asked for.
+	//
+	//   ./gradlew test -PcontextCensus
+	//       Counts the Spring application contexts the run builds, and how many are still
+	//       reachable once it finishes — the two numbers the heap comment below rests on.
+	//       Writes build/reports/context-census.txt. See ContextCensus in the test sources;
+	//       with the switch off it contributes no ContextCustomizer at all, so the context
+	//       cache keys of an ordinary run are exactly what they were before it existed.
+	//
+	//   ./gradlew test -PtestJvmArgs="-XX:StartFlightRecording=..."
+	//       Extra JVM arguments for the test worker, space-separated. For the flight
+	//       recording or heap dump an investigation needs once and no run needs twice.
+	//
+	// They are switches rather than defaults because every other task in this repository is
+	// verified by this suite, and an instrument left switched on is an instrument that is
+	// changing what everyone else measures against.
+	// ---------------------------------------------------------------------------
+	if (project.hasProperty("contextCensus")) {
+		systemProperty("kms.context.census", "true")
+	}
+	if (project.hasProperty("testJvmArgs")) {
+		jvmArgs((project.property("testJvmArgs") as String).split(" ").filter { it.isNotBlank() })
+	}
+
+	// ---------------------------------------------------------------------------
 	// The test JVM's heap, stated rather than inherited.
 	//
 	// Gradle hands a test worker 512 MB when the build says nothing, and this build said
 	// nothing. That default is sized for unit tests. This is not a unit-test suite, and the
 	// measurements below are from a full run of it on 2026-09-08 (1830 tests).
 	//
-	// It creates about a hundred distinct Spring application contexts. Nearly every
-	// integration class declares its own nested `StubVerifierConfiguration` and `@Import`s
-	// it, and an imported configuration class forms part of the TestContext framework's
-	// cache key — so each such class asks for a context of its own. A full run opens 106
-	// Hikari pools, one per context.
+	// It creates about a hundred distinct Spring application contexts — *119* on
+	// 2026-09-11, counted two ways that agree: the suite's own census (`-PcontextCensus`,
+	// see ContextCensus in the test sources) and Spring's own `missCount`. 99 of the 128
+	// integration classes declare a nested `StubVerifierConfiguration`, 97 of them
+	// byte-for-byte identical, and each one asks for a context of its own.
 	//
-	// Spring caches 32 of those and evicts the rest, but evicting is not releasing. A class
-	// histogram taken from the live worker (jcmd GC.class_histogram, which compacts first,
-	// so these are survivors) three quarters of the way through a run found *81* live
-	// `AnnotationConfigServletWebServerApplicationContext`, and 81 each of HikariDataSource,
-	// HikariPool, SessionFactoryImpl and TomcatWebServer beside them. Only 32 were still
-	// running. The other 49 were closed and still reachable. So what the run retains grows
-	// with the number of contexts it has created, not with the size of the cache — which is
-	// exactly why the failures always landed on the last classes to run.
+	// *Corrected 2026-09-11, and the correction matters more than the number.* This
+	// comment used to say that the `@Import` was what split the cache. It is not. Spring
+	// Boot detects a test class's nested `@TestConfiguration` by itself and puts it into
+	// `MergedContextConfiguration.getClasses()`, which is the first thing the cache key is
+	// built from; the `@Import` line beside it is redundant. Measured on a 53-class subset:
+	// take the `@Import` customizer out of the key and the count stays at *53*; take the
+	// nested `@TestConfiguration` out as well and it falls to *8*. So re-pointing 99
+	// `@Import` lines at one shared class would collapse nothing at all while looking
+	// exactly like the repair. The nested classes have to be deleted.
+	//
+	// Spring caches 32 of those and evicts the rest, and the evicted ones stay visible to a
+	// class histogram: `jcmd GC.class_histogram` three quarters of the way through a run
+	// once found *81* live `AnnotationConfigServletWebServerApplicationContext` — 32 running
+	// and 49 closed — with a HikariDataSource, a HikariPool, a SessionFactoryImpl and a
+	// TomcatWebServer apiece.
+	//
+	// *They are held softly, not leaked, and that was re-measured on 2026-09-11 rather
+	// than argued.* Same subset, same command, one JVM flag different: with the default
+	// policy, twelve contexts built leaves all twelve reachable and 176 MB live; with
+	// `-XX:SoftRefLRUPolicyMSPerMB=0`, which tells the collector to treat a soft reference
+	// as expendable at every collection, the same run leaves *two* reachable and *70 MB*
+	// live. A search from Spring's cache, Boot's shutdown hook, Hibernate's registry,
+	// Quartz's registry, Micrometer's global registry, the logging back end and every live
+	// thread finds no *strong* route to a closed context, and the search is checked each
+	// time against a route it must find. So the collector will take these back the moment
+	// it needs the room — which is exactly what the 446 MB figure below is: this same suite
+	// under pressure, having given them up.
 	//
 	// That histogram totalled 886 MB live. Squeezed into a smaller heap the same suite
 	// compacts to about 446 MB, because much of the rest is soft-referenced cache — AspectJ
@@ -134,14 +178,22 @@ tasks.withType<Test> {
 	//
 	// 2 GB is roughly twice the measured live set and four times the floor, on a runner with
 	// 16 GB whose only other tenants are the Gradle process and one Postgres container. It
-	// is a ceiling, not a reservation. It is deliberately not larger: a much bigger heap
-	// would hide the retention rather than pay for it, and the retention is the actual
-	// defect. This buys room; it does not repair anything.
+	// is a ceiling, not a reservation. It is deliberately not larger, and the 2026-09-11
+	// measurement above sharpens rather than weakens the reason: a much bigger heap would
+	// hide what the suite is holding rather than pay for it, and what it is holding is a
+	// hundred-odd contexts it did not need to build. This buys room; it does not repair
+	// anything.
 	//
-	// The repair is two changes to the test sources, neither of them in this file: give
-	// those classes one shared stub-verifier configuration instead of the 88 private ones
-	// they declare today, which collapses about a hundred cached contexts into a handful;
-	// and find what holds a closed context reachable. Both are filed separately.
+	// The repair is one change to the test sources and it is not in this file: give those
+	// classes one shared stub-verifier configuration instead of the 99 private ones they
+	// declare today — deleting the nested classes, not merely re-aiming the imports —
+	// which collapses a hundred-odd cached contexts into a handful and takes the live set
+	// down with them. It is filed separately, because it is 99 test classes and it changes
+	// which classes share a context, which is not a thing to do in a wave where every other
+	// task is being verified by this suite.
+	//
+	// The second half of that repair, "find what holds a closed context reachable", was
+	// filed separately too and has since been answered: nothing does, strongly. See above.
 	// ---------------------------------------------------------------------------
 	maxHeapSize = "2g"
 
