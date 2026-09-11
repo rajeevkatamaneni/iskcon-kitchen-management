@@ -218,6 +218,24 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                     <Badge tone="neutral">{sentLateNote(vendor.ordersSentLate)}</Badge>
                   </span>
                 )}
+                {/*
+                  The other exclusion, and the same standard (T-142, D-26).
+
+                  An order closed part-delivered where the vendor rang, apologised and made it right
+                  is left out of this percentage AND out of the fill rate beside it. Rajeev was
+                  explicit that the exclusions belong on the screen: "a number whose exclusions are
+                  invisible cannot be checked". So a count sits here, exactly as the late-sent one
+                  does, and the caveat above the table says what was excused and from what.
+
+                  Neutral, not warning. Nothing about it is a black mark — it is the temple saying
+                  it accepted an apology — and amber beside "never delivered" would read as a second
+                  thing the vendor did wrong.
+                */}
+                {vendor.ordersExcused > 0 && (
+                  <span className="mt-1 flex justify-end">
+                    <Badge tone="neutral">{excusedNote(vendor.ordersExcused)}</Badge>
+                  </span>
+                )}
               </td>
 
               <td className={TD_NUM}>
@@ -226,6 +244,22 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                   <span className="mt-1 block text-xs text-ink-muted">
                     across {vendor.linesJudged.toLocaleString("en-IN")}{" "}
                     {vendor.linesJudged === 1 ? "line" : "lines"}
+                  </span>
+                )}
+                {/*
+                  This count appears in BOTH percentage columns and only this count does, which is
+                  the whole difference between the two exclusions (T-142, D-26 against T-137, D-25).
+
+                  An order we sent late is left out of on-time and still counted in the fill rate:
+                  ordering late excuses our timing, not a half-empty lorry. An order closed with the
+                  shortfall excused is left out of both, because on a part-delivery the black mark
+                  IS the half-empty lorry — waiving only the lateness would waive almost nothing.
+                  So the fill rate has an exclusion now, and the standard the ruling set says it has
+                  to be visible right here rather than inferred from the column next door.
+                */}
+                {vendor.ordersExcused > 0 && (
+                  <span className="mt-1 flex justify-end">
+                    <Badge tone="neutral">{excusedNote(vendor.ordersExcused)}</Badge>
                   </span>
                 )}
               </td>
@@ -287,6 +321,11 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                   {sentLateNote(report.ordersSentLate)}
                 </span>
               )}
+              {report.ordersExcused > 0 && (
+                <span className="mt-1 block text-xs font-normal text-ink-muted">
+                  {excusedNote(report.ordersExcused)}
+                </span>
+              )}
             </td>
             <td className={`${TD_NUM} font-medium`}>
               {asPercent(report.fillRatePercent)}
@@ -329,6 +368,15 @@ function caveat(report: VendorPerformance): string {
       } is not theirs to answer for. The fill rate still counts ${
         report.ordersSentLate === 1 ? "it" : "them"
       }: ordering late excuses lateness, not a half-empty delivery.`
+    );
+  }
+  if (report.ordersExcused > 0) {
+    parts.push(
+      `${report.ordersExcused.toLocaleString("en-IN")} ${
+        report.ordersExcused === 1 ? "order was" : "orders were"
+      } closed with part of the delivery never made, where the vendor put it right — so ${
+        report.ordersExcused === 1 ? "it is" : "they are"
+      } left out of the on-time figure and the fill rate alike. Unlike an order we sent late, this exclusion covers both: what an apology waives on a short delivery is mostly the shortfall itself. Nobody can change a percentage by hand anywhere in this application; an admin closing an order chooses what the shortfall meant, and the figures follow from that.`
     );
   }
   if (report.ordersWithoutNeededBy > 0) {
@@ -395,6 +443,19 @@ function sentLateNote(count: number): string {
   return count === 1
     ? "1 order we sent late — not counted"
     : `${count.toLocaleString("en-IN")} orders we sent late — not counted`;
+}
+
+/**
+ * "1 order they made right — not counted".
+ *
+ * <p>Deliberately not "excused" or "waived", which are the words the data uses and read as
+ * paperwork. What happened is that a supplier rang up, apologised and put it right, and the temple
+ * accepted — so the sentence says what the vendor did, in the way somebody would repeat it.
+ */
+function excusedNote(count: number): string {
+  return count === 1
+    ? "1 order they made right — not counted"
+    : `${count.toLocaleString("en-IN")} orders they made right — not counted`;
 }
 
 function rejectionNote(vendor: VendorPerformanceRow): string {

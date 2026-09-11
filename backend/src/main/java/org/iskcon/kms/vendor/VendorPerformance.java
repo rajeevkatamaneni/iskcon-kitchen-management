@@ -23,6 +23,13 @@ import java.util.List;
  * could not deliver, so a delay on it is not theirs. {@code ordersSentLate} says how many, beside
  * the percentage, because exclusions that cannot be seen cannot be checked.
  *
+ * <p><strong>And an order closed part-delivered with its shortfall excused leaves that vendor's
+ * figures entirely</strong> (T-142, D-26): both the on-time percentage and the fill rate, because
+ * the black mark on a part-delivery is mostly the half-empty lorry. {@code ordersExcused} says how
+ * many, beside the percentages. The admin's influence over a supplier's score is that name and
+ * nothing else — Rajeev, having proposed a dial, ruled it out: <em>"Let us not let the admin adjust
+ * the score. Just show it to them."</em>
+ *
  * <p><strong>Two clocks, deliberately.</strong> Everything counted over the period is selected by
  * the date the order was <em>placed</em> — one rule, so a reader never has to ask which date put a
  * row where it is. The open-order and aging columns are present tense and unfiltered: an order is
@@ -41,6 +48,7 @@ public record VendorPerformance(
 		int abandonedOrders,
 		int ordersWithoutNeededBy,
 		int ordersSentLate,
+		int ordersExcused,
 		int itemsScored,
 		int itemsOnTime,
 		BigDecimal onTimePercent,

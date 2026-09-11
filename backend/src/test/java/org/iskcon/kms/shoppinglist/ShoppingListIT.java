@@ -372,12 +372,19 @@ class ShoppingListIT extends AbstractIntegrationTest {
 	}
 
 	/**
-	 * The other half of the same predicate, and the reason the two rules do not fight. A part-
-	 * delivered order is not a pending promise: the truck came, and what it did not bring is
-	 * evidence of a shortfall. So {@code PARTIALLY_RECEIVED} re-feeds (E5-S6, asserted end-to-end in
-	 * {@code ReceivingIT}) while {@code DRAFT} and {@code SENT} suppress. Asserted here from the
-	 * suppressing side, on a sent order, because that status changed behaviour in T-132 and nothing
-	 * else in this suite would have noticed.
+	 * The other half of the same predicate. {@code DRAFT}, {@code SENT} and — since T-142 — a
+	 * part-delivered order all suppress: in every one of those cases the vendor still owes what is
+	 * on the order, and ordering again is ordering twice.
+	 *
+	 * <p>T-132 read a part delivery the other way, as evidence of a shortfall that should come round
+	 * again at once. D-26 reversed that: <em>"The 200 KG should still be tied to the PO that raised
+	 * and sent the 500KG rice order and it should sit in a partially delivered state and the clock
+	 * keeps ticking."</em> The balance is released when the admin CLOSES the order, which is the one
+	 * status {@code poOutstandingByIngredient} now answers for — asserted end to end in
+	 * {@code ReceivingIT} and {@code PurchaseOrderClosingIT}.
+	 *
+	 * <p>Asserted here from the suppressing side, on a sent order, because that status changed
+	 * behaviour in T-132 and nothing else in this suite would have noticed.
 	 */
 	@Test
 	@DisplayName("a sent order suppresses its ingredients too, not just a draft")

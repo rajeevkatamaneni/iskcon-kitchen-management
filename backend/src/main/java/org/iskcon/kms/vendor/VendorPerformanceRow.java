@@ -38,6 +38,20 @@ import java.util.UUID;
  *                            are invisible cannot be checked — the same standard {@code
  *                            abandonedOrders} already meets. The fill rate still counts them, which
  *                            is deliberate: ordering late excuses lateness, not a half-empty lorry.
+ * @param ordersExcused       orders in the period closed part-delivered with the shortfall excused
+ *                            — <em>they fell short but made it right</em> (T-142, D-26). The
+ *                            supplier rang, apologised, offered a discount next time and said buy
+ *                            it elsewhere, and the admin closing the order said so. Counted as
+ *                            placed and then set aside from BOTH the on-time figure and the fill
+ *                            rate: the black mark on a part-delivery is mostly the half-empty
+ *                            lorry, so excusing only the lateness would waive almost nothing. That
+ *                            is deliberately unlike {@code ordersSentLate}, which stays in the fill
+ *                            rate, and the difference is nameable — ordering late excuses our
+ *                            timing, this excuses their shortfall. The count is on the screen
+ *                            beside the percentages because an exclusion that cannot be seen
+ *                            cannot be checked, and there is no control anywhere that moves the
+ *                            number itself: "Let us not let the admin adjust the score. Just show
+ *                            it to them."
  * @param itemsScored         order lines that went into the on-time figure — the "of ten" in "eight
  *                            of ten items". A described line ("four plastic stools") counts as one
  *                            item like any other; the fill rate cannot judge it, on-time can.
@@ -74,6 +88,7 @@ public record VendorPerformanceRow(
 		int abandonedOrders,
 		int ordersWithoutNeededBy,
 		int ordersSentLate,
+		int ordersExcused,
 		int itemsScored,
 		int itemsOnTime,
 		BigDecimal onTimePercent,

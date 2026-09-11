@@ -24,6 +24,7 @@ import org.iskcon.kms.shoppinglist.ShoppingListService;
 import org.iskcon.kms.tenancy.TempleClock;
 import org.iskcon.kms.vendor.LeadTimes;
 import org.iskcon.kms.vendor.OrderLeadTime;
+import org.iskcon.kms.vendor.VendorPerformanceService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Purchase orders and their lifecycle (E5-S3): DRAFT → SENT → PARTIALLY_RECEIVED → RECEIVED /
- * CANCELLED. Approved shopping-list lines are grouped into one draft PO per vendor; manual creation is
+ * CLOSED / CANCELLED. Approved shopping-list lines are grouped into one draft PO per vendor; manual creation is
  * also allowed. Every PO carries a per-tenant sequential number and an append-only activity trail;
  * illegal transitions (editing after SENT, receiving a DRAFT) are refused at this layer.
  */
@@ -69,14 +70,27 @@ public class PurchaseOrderService {
 	 */
 	private final LeadTimes leadTimes;
 
+	/**
+	 * Asked one question: what did this order score on delivery (T-142, D-26)?
+	 *
+	 * <p>Injected rather than reimplemented for the same reason {@link #leadTimes} is. The person
+	 * closing a part-delivered order is shown the figure the scorecard will report for it, and a
+	 * second implementation of that sum would eventually show them a different number from the one
+	 * on the report — with both defended by somebody, and the transparency the ruling asked for
+	 * turned into a second thing to argue about.
+	 */
+	private final VendorPerformanceService vendorPerformance;
+
 	public PurchaseOrderService(JdbcTemplate jdbc, AuditService auditService,
 			org.iskcon.kms.document.DocumentService documentService,
 			IngredientUnits ingredientUnits, ShoppingListService shoppingListService,
 			TenantWhatsAppSettingsService whatsappSettings,
 			LeadTimes leadTimes,
+			VendorPerformanceService vendorPerformance,
 			TempleClock clock) {
 		this.clock = clock;
 		this.leadTimes = leadTimes;
+		this.vendorPerformance = vendorPerformance;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.documentService = documentService;
@@ -106,10 +120,14 @@ public class PurchaseOrderService {
 	 * still being edited.</li>
 	 * <li><b>CANCELLED is excluded.</b> The order was withdrawn; a bill against it is a dispute, not a
 	 * payable, and it must not be capturable in one dropdown pick.</li>
-	 * <li><b>SENT, PARTIALLY_RECEIVED and RECEIVED are all offered.</b> RECEIVED is the ordinary case
-	 * — the bill usually arrives after the goods. PARTIALLY_RECEIVED is offered deliberately: vendors
-	 * bill for what they have delivered so far, and hiding a part-delivered order would push exactly
-	 * that invoice onto the direct path, where it loses its order and its variance.</li>
+	 * <li><b>SENT, PARTIALLY_RECEIVED, CLOSED and RECEIVED are all offered.</b> RECEIVED is the
+	 * ordinary case — the bill usually arrives after the goods. PARTIALLY_RECEIVED is offered
+	 * deliberately: vendors bill for what they have delivered so far, and hiding a part-delivered
+	 * order would push exactly that invoice onto the direct path, where it loses its order and its
+	 * variance. CLOSED is that same order after somebody ended it (T-142, D-26), and it is the case
+	 * this list would most easily have got wrong: 300 kg of rice arrived and is owed for, so the
+	 * bill for it is a payable like any other. Closing an order settles what the vendor still owes
+	 * us, not what we owe them.</li>
 	 * </ul>
 	 *
 	 * <p><strong>What this does not filter, and that is a decision rather than an omission.</strong>
@@ -134,7 +152,7 @@ public class PurchaseOrderService {
 			args.add(vendorId);
 		}
 		if (openOnly) {
-			sql.append(" AND po.status IN ('SENT', 'PARTIALLY_RECEIVED', 'RECEIVED')");
+			sql.append(" AND po.status IN ('SENT', 'PARTIALLY_RECEIVED', 'CLOSED', 'RECEIVED')");
 		}
 		sql.append(" ORDER BY po.created_at DESC");
 		return withLeadTimes(jdbc.query(sql.toString(), HEADER_MAPPER, args.toArray()));
@@ -199,7 +217,10 @@ public class PurchaseOrderService {
 		// already reads and it may not ask the settings endpoint for it — see the note on
 		// PurchaseOrderDetailView.whatsappEverSent. One extra single-row lookup by primary key.
 		return new PurchaseOrderDetailView(
-				header, lines, events, whatsappSettings.hasEverSentSuccessfully());
+				header, lines, events, whatsappSettings.hasEverSentSuccessfully(),
+				// Shown, never editable (D-26). One more read on a screen that already runs three,
+				// and it is the fact the closing decision is meant to be made against.
+				vendorPerformance.scoreOfOrder(id));
 	}
 
 	// ---- Create ---------------------------------------------------------
@@ -582,8 +603,34 @@ public class PurchaseOrderService {
 	@Transactional
 	public void cancel(AuthenticatedUser actor, UUID id, String reason, boolean vendorAbandoned) {
 		PurchaseOrderView po = findHeader(id).orElseThrow(() -> notFound(id));
-		if (po.status() == PoStatus.RECEIVED || po.status() == PoStatus.CANCELLED) {
+		// CLOSED joins the two terminal states here (T-142, D-26). A closed order has already been
+		// ended by a person who said how it ended for the vendor, and its remainder has been
+		// released to the shopping list and very likely re-ordered since; cancelling it afterwards
+		// would withdraw an order 300 kg of real rice arrived against and take that delivery out of
+		// the supplier's record. The ending is the decision, and there is one of them.
+		if (po.status() == PoStatus.RECEIVED || po.status() == PoStatus.CANCELLED
+				|| po.status() == PoStatus.CLOSED) {
 			throw new ApplicationException(ErrorCode.PO_INVALID_TRANSITION, Map.of("purchaseOrderId", id));
+		}
+		// And a part-delivered order is not cancellable at all any more (T-142, D-26).
+		//
+		// Until closing existed this was the only ending such an order had, and it was the wrong
+		// one in a way that matters rather than in a way that is untidy. A cancellation leaves the
+		// scorecard's LIVE_ORDER predicate entirely, so cancelling this order would erase 300 kg of
+		// real rice from the supplier's record — and the "Vendor Never Delivered this Order" tick
+		// could then be put against a vendor who demonstrably DID deliver. That is a number this
+		// product promises is defensible becoming indefensible, which is the exact standard D-25,
+		// T-129 and KMS-400149 were all built to hold.
+		//
+		// KMS-400150 says so and names the door that is right: close it instead, and what arrived
+		// stays on the vendor's record while what did not goes back on the shopping list.
+		//
+		// Checked before the two claims below rather than after, because this is about the order's
+		// state and holds whether or not anybody ticked anything: an unticked cancellation of a
+		// part-delivered order still erases the delivery.
+		if (po.status() == PoStatus.PARTIALLY_RECEIVED) {
+			throw new ApplicationException(ErrorCode.PO_PART_DELIVERED_CANNOT_CANCEL,
+					Map.of("purchaseOrderId", id));
 		}
 		// Nothing was asked of the vendor, so nothing can be held against them (T-129). Read off
 		// sent_at rather than off the status, because a cancelled order's status no longer says
@@ -613,6 +660,122 @@ public class PurchaseOrderService {
 		auditService.record(actor, AuditAction.PO_CANCELLED, AuditEntityType.PURCHASE_ORDER, id,
 				Map.of("status", po.status().name()),
 				Map.of("status", "CANCELLED", "vendorAbandoned", vendorAbandoned), reason.trim());
+	}
+
+	/**
+	 * Ends a part-delivered order, releasing what the vendor never brought (T-142, D-26).
+	 *
+	 * <h2>The scenario, and why the remainder waited this long</h2>
+	 *
+	 * <p>Rajeev, 2026-09-10, walking through a real delivery: 500 kg of rice ordered, the vendor has
+	 * 300 on hand and <em>sends it immediately so the kitchen can cook</em>, expecting stock in two
+	 * days for the rest. <em>"The 200 KG should still be tied to the PO that raised and sent the
+	 * 500KG rice order and it should sit in a partially delivered state and the clock keeps
+	 * ticking."</em>
+	 *
+	 * <p>So a short delivery does not put its remainder back on the shopping list. The vendor still
+	 * owes it and the order is still live; what the temple sees instead is a purchase order past due,
+	 * on the clock, asking for a decision — which is better than a shopping-list line, because it
+	 * names the vendor who owes it. <strong>This method is that decision</strong>, and it is the
+	 * third door beside D-24a's two: a line leaves the list when an order is created, comes back when
+	 * one is cancelled, and comes back here when one is closed.
+	 *
+	 * <p><strong>Nothing is written to the shopping list, and nothing needs to be.</strong> T-132
+	 * derives that list on every read, so "released" is not a restore — it is the moment this order
+	 * stops answering {@code ShoppingListService.ingredientsOnLiveOrders}. See that method for the
+	 * two predicates this status moves between.
+	 *
+	 * <h2>PARTIALLY_RECEIVED only, and the other two doors stay where they are</h2>
+	 *
+	 * <p>An order nothing ever arrived against is a cancellation, ticked "Vendor Never Delivered
+	 * this Order" if that is what happened (T-124) — there is nothing to close, because nothing was
+	 * delivered and nothing is owed for. A fully received order is finished. A draft is swept or
+	 * cancelled. Closing exists for the one case none of those describe: goods came, and not all of
+	 * them, and somebody has decided the rest never will.
+	 *
+	 * <h2>The computed score is shown on the way in, and cannot be touched</h2>
+	 *
+	 * <p>The screen that calls this shows what the vendor actually scored on this order — the figure
+	 * {@code VendorPerformanceService} will report, read from the same arithmetic, not a second copy
+	 * of it. Rajeev asked for that transparency and then ruled out the control he originally wanted
+	 * beside it: <em>"Let us not let the admin adjust the score. Just show it to them."</em> There is
+	 * no parameter here that moves a number, and {@link CloseOutcome} carries the four costs that
+	 * decided it.
+	 *
+	 * <h2>What the outcome does</h2>
+	 *
+	 * <p>{@code VENDOR_LET_US_DOWN} scores exactly as computed — the missing 200 kg is already in the
+	 * percentage — and records that the temple holds the supplier responsible.
+	 * {@code SHORTFALL_EXCUSED} takes the order out of that vendor's on-time figure and fill rate
+	 * entirely, with the count visible beside both percentages. {@code AS_COMPUTED} says nothing
+	 * about anybody. Anything other than "as computed" requires a sentence, refused by
+	 * {@link ClosePoRequest} and by the row itself (V126).
+	 *
+	 * <h2>The trail, and the audit row that is missing</h2>
+	 *
+	 * <p>The closing is written to the order's own append-only trail with the actor named, which is
+	 * where the order screen shows it and where a person asking "why did this end like that?" looks.
+	 *
+	 * <p>It also writes an {@code audit_events} row under {@link AuditAction#PO_CLOSED}, carrying
+	 * the outcome and the sentence in its after-state. That is not bookkeeping: excusing a shortfall
+	 * is the one act an admin can take that changes what a supplier's scorecard reports, and D-26's
+	 * third cost is that a score must be defensible — <em>"an admin changed it" is not an answer to
+	 * a vendor who disputes their score</em>. Who waived it, when, and with what sentence is.
+	 *
+	 * <p>Unlike T-137's sweep there is no obstacle to writing it: closing is a human act, the actor
+	 * is verified, and {@code audit_events.actor_user_id} is satisfied.
+	 */
+	@Transactional
+	public void close(AuthenticatedUser actor, UUID id, CloseOutcome outcome, String note) {
+		PurchaseOrderView po = findHeader(id).orElseThrow(() -> notFound(id));
+		if (po.status() != PoStatus.PARTIALLY_RECEIVED) {
+			throw new ApplicationException(ErrorCode.PO_INVALID_TRANSITION, Map.of("purchaseOrderId", id));
+		}
+		String sentence = trimToNull(note);
+		jdbc.update("""
+				UPDATE purchase_orders
+				SET status = 'CLOSED', closed_at = now(), close_outcome = ?, close_note = ?,
+					updated_at = now()
+				WHERE id = ?
+				""", outcome.name(), sentence, id);
+		recordEvent(id, "CLOSED", closureSaid(po, outcome, sentence), actor);
+		// The outcome and the sentence go into the after-state, shaped like PO_CANCELLED's, because
+		// that is where a permanent claim about a third party belongs — who and when are already
+		// carried by the audit actor and closed_at, so the three together read as one act.
+		//
+		// This row is the answer to D-26's third cost. Excusing a shortfall is the single thing an
+		// admin can do that changes what a supplier's scorecard reports, and "an admin changed it"
+		// is not an answer to a vendor who disputes their score: who waived it, when, and with what
+		// sentence is. A LinkedHashMap because the after-state may carry a null note and Map.of
+		// refuses one.
+		Map<String, Object> after = new LinkedHashMap<>();
+		after.put("status", "CLOSED");
+		after.put("closeOutcome", outcome.name());
+		after.put("closeNote", sentence);
+		auditService.record(actor, AuditAction.PO_CLOSED, AuditEntityType.PURCHASE_ORDER, id,
+				Map.of("status", po.status().name()), after, sentence);
+	}
+
+	/**
+	 * The closing as a line on the order's own trail, in words a person reads months later.
+	 *
+	 * <p>Three sentences at most, and each earns its place: what happened to the order, what it
+	 * means for the vendor's record, and — where somebody made a claim — the claim in their own
+	 * words. The operator's sentence is appended rather than folded in, exactly as the cancellation
+	 * does it, so what they wrote survives verbatim in {@code close_note} and in the line beneath it.
+	 */
+	private static String closureSaid(PurchaseOrderView po, CloseOutcome outcome, String note) {
+		String opening = po.poNumber() + " was closed with part of it never delivered. "
+				+ "What it still asked for is back on the shopping list.";
+		String verdict = switch (outcome) {
+			case VENDOR_LET_US_DOWN -> " Recorded as the vendor letting us down; it is scored on what"
+					+ " actually arrived, as every order is.";
+			case SHORTFALL_EXCUSED -> " " + po.vendorName() + " fell short and made it right, so this"
+					+ " order is left out of their delivery record entirely.";
+			case AS_COMPUTED -> " Nothing was recorded for or against " + po.vendorName()
+					+ "; the order is scored on what actually arrived.";
+		};
+		return note == null ? opening + verdict : opening + verdict + " " + note;
 	}
 
 	/**
@@ -1043,7 +1206,8 @@ public class PurchaseOrderService {
 			SELECT po.id, po.po_number, po.vendor_id, v.name AS vendor_name, po.status, po.order_date,
 				   po.needed_by, po.delivery_location, po.notes, po.cancel_reason,
 				   po.vendor_abandoned, po.auto_cancelled, po.sent_at, po.cancelled_at, po.created_at,
-				   po.lead_time_days, po.sent_after_lead_time
+				   po.lead_time_days, po.sent_after_lead_time,
+				   po.closed_at, po.close_outcome, po.close_note
 			FROM purchase_orders po
 			JOIN vendors v ON v.id = po.vendor_id
 			""";
@@ -1077,7 +1241,15 @@ public class PurchaseOrderService {
 			// are not on this row, and a draft's governing lead time is not either.
 			null,
 			null,
-			rs.getBoolean("sent_after_lead_time"));
+			rs.getBoolean("sent_after_lead_time"),
+			instant(rs.getObject("closed_at", OffsetDateTime.class)),
+			// Null when nobody has closed the order, which is every order until somebody does. The
+			// database refuses the other three pairings (V126's
+			// purchase_orders_closure_is_a_closed_order), so a reader never has to defend against a
+			// live order carrying an ending or a CLOSED one carrying none.
+			rs.getString("close_outcome") == null
+					? null : CloseOutcome.valueOf(rs.getString("close_outcome")),
+			rs.getString("close_note"));
 
 	private static final RowMapper<PurchaseOrderLineView> LINE_MAPPER = (rs, n) -> new PurchaseOrderLineView(
 			rs.getObject("id", UUID.class),

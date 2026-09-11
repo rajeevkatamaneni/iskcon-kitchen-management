@@ -98,8 +98,8 @@ class ReceivingIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("30 received / 2 rejected of 36 → stock +30 with a batch, rejection recorded, PO partially received, 6 re-fed")
-	void partialReceiptBooksGoodRejectsBadAndRefeeds() throws Exception {
+	@DisplayName("30 received / 2 rejected of 36 → stock +30, rejection recorded, PO partially received, and the 6 stay with the vendor until it is closed")
+	void partialReceiptBooksGoodRejectsBadAndHoldsTheBalance() throws Exception {
 		UUID poId = sentPo("PO-2026-0042");
 		UUID line = poLine(poId, rice, "36");
 
@@ -122,14 +122,30 @@ class ReceivingIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
 				.andExpect(jsonPath("$.order.status").value("PARTIALLY_RECEIVED"));
 
-		// The 6 still outstanding re-feed the shopping list, traceable to the PO. There is no
-		// regeneration to run any more (T-132) — the list is computed as it is read — and this is
-		// also where the two rules about a live order meet without fighting. D-24a takes an
-		// ingredient off the list the moment a DRAFT or SENT order covers it, because the vendor
-		// still owes everything on it and ordering again is ordering twice. A part-delivered order
-		// is different in kind: the truck came, and what it did not bring is evidence of a shortfall
-		// rather than a pending promise. So PARTIALLY_RECEIVED is the one live status that re-feeds,
-		// which is exactly E5-S6 and exactly what is asserted below.
+		// The 6 still outstanding DO NOT re-feed the shopping list, and this assertion is the
+		// reversal T-142 carries (D-26). Until then a short delivery put its balance straight back
+		// on the list, on the reading that the truck came and what it did not bring is evidence of
+		// a shortfall. Rajeev walked through the real thing and answered otherwise: 500 kg of rice
+		// ordered, the vendor has 300 and sends it immediately so the kitchen can cook, 200 to
+		// follow in two days. "The 200 KG should still be tied to the PO that raised and sent the
+		// 500KG rice order and it should sit in a partially delivered state and the clock keeps
+		// ticking."
+		//
+		// So the balance stays with the vendor, and the list must not suggest rice a supplier is
+		// already bringing. What the temple sees instead is this purchase order, past due and
+		// asking for a decision — better than a shopping-list line, because it names who owes it.
+		mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')]").doesNotExist());
+
+		// And this is the release. Closing the order is the decision that the rest is not coming,
+		// and the balance comes back on the very next read — with the PO that fell short named
+		// beside it. Nothing was written to the shopping list to make that happen: the list is
+		// derived (T-132), so "released" is this order leaving one predicate and entering another.
+		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/close", poId))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"outcome\":\"AS_COMPUTED\",\"note\":null}"))
+				.andExpect(status().isNoContent());
+
 		mvc.perform(authed(get("/api/v1/shopping-list")))
 				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')]").exists())
 				.andExpect(jsonPath("$[0].suggestedQty").value(6))

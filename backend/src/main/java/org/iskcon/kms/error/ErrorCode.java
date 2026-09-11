@@ -988,6 +988,15 @@ public enum ErrorCode {
 					+ "they failed to deliver.",
 			"Cancel it without that mark. We asked late, so the delay isn't theirs to carry."),
 
+	// Cancelling an order that part of a delivery already arrived against would take that delivery
+	// out of the vendor's record entirely — and worse, it would let somebody tick "they never
+	// delivered" against a supplier who demonstrably did. Closing is the door D-26 built for this,
+	// and it keeps what came, releases what did not, and asks what the admin wants recorded.
+	PO_PART_DELIVERED_CANNOT_CANCEL(400150, 409,
+			"Part of this order has already arrived, so it can't be cancelled.",
+			"Close it instead. What arrived stays on the vendor's record, and what didn't goes back "
+					+ "on the shopping list."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

@@ -98,7 +98,42 @@ public record PurchaseOrderView(
 		 * cannot fairly be counted towards the vendor's performance, so the scorecard leaves the
 		 * order out of the on-time figure and counts it in its own column instead.
 		 */
-		boolean sentAfterLeadTime) {
+		boolean sentAfterLeadTime,
+
+		/**
+		 * When a person ended this part-delivered order, releasing its remainder (T-142, D-26).
+		 *
+		 * <p>Null on every order nobody has closed, and never set by a machine: the nightly sweep
+		 * matches {@code status = 'DRAFT'} only, because an order with 300 kg of real rice against
+		 * it and a vendor relationship behind it needs the human decision this records.
+		 *
+		 * <p>Deliberately not {@link #cancelledAt()}. A closed order is not a cancellation — goods
+		 * arrived against it and are owed for — and everything on every screen that reasons about
+		 * cancellations must go on reading a clean null there.
+		 */
+		Instant closedAt,
+
+		/**
+		 * Which of the three endings the person closing named (T-142, D-26), or null while the
+		 * order is still live.
+		 *
+		 * <p>This is the whole of an admin's influence over a supplier's score and it is a name,
+		 * never a number. Rajeev proposed a dial and then ruled against his own proposal:
+		 * <em>"Let us not let the admin adjust the score. Just show it to them."</em> See
+		 * {@link CloseOutcome} for the four costs that decided it.
+		 */
+		CloseOutcome closeOutcome,
+
+		/**
+		 * Why the order was closed the way it was, in the words of the person who closed it.
+		 *
+		 * <p>Required by the database whenever {@link #closeOutcome()} says something about the
+		 * vendor ({@code purchase_orders_named_outcome_has_a_sentence}, V126), and shown on the
+		 * order beside the outcome for the same reason T-126 put the no-show tick back on the
+		 * screen: the one place somebody asks "why did this end like that?" has to be able to
+		 * answer it.
+		 */
+		String closeNote) {
 
 	/**
 	 * The same order with its lead-time facts filled in.
@@ -113,6 +148,6 @@ public record PurchaseOrderView(
 		return new PurchaseOrderView(id, poNumber, vendorId, vendorName, status, orderDate, neededBy,
 				deliveryLocation, notes, cancelReason, vendorAbandoned, autoCancelled, sentAt,
 				cancelledAt, createdAt, leadTime.days(), leadTime.orderBy(), leadTime.urgency(),
-				sentAfterLeadTime);
+				sentAfterLeadTime, closedAt, closeOutcome, closeNote);
 	}
 }

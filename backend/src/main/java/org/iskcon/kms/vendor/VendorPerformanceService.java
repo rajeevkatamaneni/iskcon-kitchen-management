@@ -56,6 +56,24 @@ import org.springframework.transaction.annotation.Transactional;
  * counted as placed; it is simply not judged, and {@code ordersSentLate} says how many were set
  * aside that way.
  *
+ * <p><strong>And an order closed part-delivered with its shortfall excused is left out of both
+ * figures</strong> (T-142, D-26). This is the second of the two endings Rajeev walked through: the
+ * supplier who rings, apologises, blames the weather, offers a discount next time and says buy it
+ * elsewhere. The admin closing the order can waive the black mark — and the waiver takes the order
+ * out of the fill rate as well as the on-time figure, because on a part-delivery the black mark is
+ * mostly the half-empty lorry and excusing only the lateness would waive almost nothing. The other
+ * ending, <em>the vendor let us down</em>, needs no arithmetic at all: the missing quantity is
+ * already in the percentage, and the name is there so a reader can tell a 60% the temple blames
+ * from one it accepts.
+ *
+ * <p><strong>What is NOT here, and must never be.</strong> There is no adjustment, no dial and no
+ * column an admin can move a number with. Rajeev proposed one — <em>"there is SO MUCH human
+ * interaction that no machine or app can capture"</em> — and then ruled against his own proposal:
+ * <em>"Let us not let the admin adjust the score. Just show it to them."</em> An adjustable score
+ * stops being a measurement; nobody ever adjusts downward; "an admin changed it" is no answer to a
+ * vendor who disputes their score; and it would undo in one control everything D-25 and T-129
+ * closed the same day to make this number defensible.
+ *
  * <p><strong>The count is on the screen beside the percentage, and that is part of the ruling
  * rather than a nicety.</strong> The figures now exclude orders we submitted late, and he was
  * explicit that this must be visible rather than quietly changing a number: a reader who cannot see
@@ -326,7 +344,7 @@ public class VendorPerformanceService {
 		return new VendorPerformance(from, to,
 				everything.ordersPlaced, everything.ordersJudged, everything.onTimeOrders,
 				everything.abandonedOrders, everything.ordersWithoutNeededBy,
-				everything.ordersSentLate,
+				everything.ordersSentLate, everything.ordersExcused,
 				everything.itemsScored, everything.itemsOnTime, everything.onTimePercent(),
 				everything.linesJudged, everything.fillRate(), everything.rejectedLines,
 				everything.openOrders, everything.openCurrent, everything.openDue1To30,
@@ -376,8 +394,71 @@ public class VendorPerformanceService {
 	 * is the later and more deliberate statement, and it wins.
 	 */
 	private Map<UUID, OrderScore> scoreItems(LocalDate from, LocalDate to, LocalDate today) {
+		return scoreItemsWhere(SCORED_ORDER + """
+				  AND po.order_date BETWEEN ? AND ?
+				  -- We asked for the impossible, so nothing here is theirs to answer for (D-25).
+				  -- The order is still counted as placed; see countOrders.
+				  AND NOT po.sent_after_lead_time
+				  -- And they fell short but made it right, so the temple has said this one is not
+				  -- to be held against them (T-142, D-26). Counted as placed and set aside in its
+				  -- own column, exactly as the line above is.
+				  AND po.close_outcome IS DISTINCT FROM 'SHORTFALL_EXCUSED'
+				  AND (po.vendor_abandoned
+					   OR (po.needed_by IS NOT NULL AND po.needed_by < ?))
+				""", from, to, today);
+	}
+
+	/**
+	 * What one order scored, for the screen that closes it (T-142, D-26).
+	 *
+	 * <p><strong>The same arithmetic as the report, narrowed to one order — never a second copy of
+	 * it.</strong> The person closing a part-delivered order is shown what the vendor actually
+	 * scored on it, and if that figure were worked out separately they would be shown one number
+	 * while the scorecard printed another. Both would then be defended by somebody, and the whole
+	 * reason D-26 shows the figure at all — so that a judgement is made against a fact rather than a
+	 * feeling — would be gone.
+	 *
+	 * <p><strong>It answers for the order as it stands, with none of the report's exclusions.</strong>
+	 * No period, no needed-by-has-passed test, no lead-time exclusion, no excusing. Those decide
+	 * whether an order belongs in a <em>vendor's</em> figures; this answers what <em>this</em> order
+	 * scored, which is the question in front of the person about to decide what it means. Where the
+	 * report will then set the order aside — we sent it late, or it is closed excused — the screen
+	 * says so beside the number rather than hiding it.
+	 *
+	 * <p>Null percent where there is nothing to score: no needed-by date to be late against, or no
+	 * lines at all.
+	 */
+	@Transactional(readOnly = true)
+	public OrderDeliveryScore scoreOfOrder(UUID purchaseOrderId) {
+		OrderScore score = scoreItemsWhere("""
+				pol.po_id = ?
+				  AND po.needed_by IS NOT NULL
+				""", purchaseOrderId).get(purchaseOrderId);
+		return score == null
+				? OrderDeliveryScore.nothingToScore()
+				: new OrderDeliveryScore(
+						score.mean().multiply(HUNDRED).setScale(0, RoundingMode.HALF_UP),
+						score.items, score.fullyOnTime);
+	}
+
+	/**
+	 * The item arithmetic, once, with the caller saying which orders it is asked about.
+	 *
+	 * <p>Extracted when T-142 needed one order's score for the closing screen. The SELECT is the
+	 * part that must never be written twice — how much of a line arrived in time, how a described
+	 * line answers, what a NOT_DELIVERED return takes back out — and the WHERE is the part that
+	 * legitimately differs between the report and one order.
+	 *
+	 * @param where the rest of the WHERE clause; its bind parameters follow the two zone parameters
+	 *              the SELECT itself needs, which is why {@code args} is spread after them
+	 */
+	private Map<UUID, OrderScore> scoreItemsWhere(String where, Object... args) {
 		Map<UUID, OrderScore> byOrder = new LinkedHashMap<>();
 		String zone = clock.zone().getId();
+		Object[] all = new Object[args.length + 2];
+		all[0] = zone;
+		all[1] = zone;
+		System.arraycopy(args, 0, all, 2, args.length);
 		jdbc.query("""
 				SELECT po.id AS po_id, po.needed_by, po.vendor_abandoned,
 					   pol.ingredient_id, pol.quantity, pol.arrived_on,
@@ -399,14 +480,7 @@ public class VendorPerformanceService {
 				FROM purchase_order_lines pol
 				JOIN purchase_orders po ON po.id = pol.po_id
 				WHERE
-				""" + SCORED_ORDER + """
-				  AND po.order_date BETWEEN ? AND ?
-				  -- We asked for the impossible, so nothing here is theirs to answer for (D-25).
-				  -- The order is still counted as placed; see countOrders.
-				  AND NOT po.sent_after_lead_time
-				  AND (po.vendor_abandoned
-					   OR (po.needed_by IS NOT NULL AND po.needed_by < ?))
-				""", rs -> {
+				""" + where, rs -> {
 			OrderScore score = byOrder.computeIfAbsent(rs.getObject("po_id", UUID.class),
 					k -> new OrderScore());
 			score.add(itemFraction(rs.getBoolean("vendor_abandoned"),
@@ -416,7 +490,7 @@ public class VendorPerformanceService {
 					rs.getBigDecimal("quantity"),
 					rs.getBigDecimal("arrived_in_time"),
 					rs.getBigDecimal("never_came")));
-		}, zone, zone, from, to, today);
+		}, all);
 		return byOrder;
 	}
 
@@ -467,7 +541,7 @@ public class VendorPerformanceService {
 			LocalDate from, LocalDate to, LocalDate today) {
 		jdbc.query("""
 				SELECT po.id AS po_id, po.vendor_id, po.needed_by, po.vendor_abandoned,
-					   po.sent_after_lead_time
+					   po.sent_after_lead_time, po.close_outcome
 				FROM purchase_orders po
 				WHERE
 				""" + SCORED_ORDER + """
@@ -483,6 +557,17 @@ public class VendorPerformanceService {
 			// in its own column so a reader can see what the percentage leaves out.
 			if (rs.getBoolean("sent_after_lead_time")) {
 				totals.ordersSentLate++;
+				return;
+			}
+			// Then the temple's own decision at closing (T-142, D-26). The vendor fell short and
+			// made it right — rang up, apologised, offered a discount next time and said buy it
+			// elsewhere — so the order leaves their figures with the reason recorded on it.
+			//
+			// After the lead-time test and not before, so an order that is BOTH sent late and
+			// closed excused is counted once, in the column that says the lateness was ours. The
+			// two counts are exclusive by construction and ordersPlaced reconciles against them.
+			if ("SHORTFALL_EXCUSED".equals(rs.getString("close_outcome"))) {
+				totals.ordersExcused++;
 				return;
 			}
 			if (rs.getBoolean("vendor_abandoned")) {
@@ -612,6 +697,14 @@ public class VendorPerformanceService {
 				""" + LIVE_ORDER + """
 				  AND po.order_date BETWEEN ? AND ?
 				  AND po.needed_by IS NOT NULL AND po.needed_by < ?
+				  -- Closed, with the shortfall excused, so it leaves the fill rate as well as the
+				  -- on-time figure (T-142, D-26). This is NOT the same case as D-25's late-sent
+				  -- order, which T-137 deliberately left in the fill rate: ordering late excuses
+				  -- OUR timing and not a half-empty lorry, whereas this excuses THEIR shortfall,
+				  -- which is precisely the question the fill rate asks. Waiving the black mark and
+				  -- leaving 60% standing in the column that measures the shortfall would waive
+				  -- almost nothing. The count is on the screen beside both percentages.
+				  AND po.close_outcome IS DISTINCT FROM 'SHORTFALL_EXCUSED'
 				  -- A described line can never be received, so it can never be filled.
 				  -- See this method's comment before removing this (T-024).
 				  AND pol.ingredient_id IS NOT NULL
@@ -706,6 +799,8 @@ public class VendorPerformanceService {
 		private int ordersWithoutNeededBy;
 		/** Orders we submitted after the vendor's agreed lead time, and so do not judge (D-25). */
 		private int ordersSentLate;
+		/** Orders closed with their shortfall excused, and so judged nowhere (T-142, D-26). */
+		private int ordersExcused;
 		private int itemsScored;
 		private int itemsOnTime;
 		/**
@@ -730,6 +825,7 @@ public class VendorPerformanceService {
 			abandonedOrders += other.abandonedOrders;
 			ordersWithoutNeededBy += other.ordersWithoutNeededBy;
 			ordersSentLate += other.ordersSentLate;
+			ordersExcused += other.ordersExcused;
 			itemsScored += other.itemsScored;
 			itemsOnTime += other.itemsOnTime;
 			onTimeScore = onTimeScore.add(other.onTimeScore);
@@ -765,7 +861,7 @@ public class VendorPerformanceService {
 					.thenComparing(RejectionCount::reason));
 			return new VendorPerformanceRow(ref.id(), ref.name(), ref.active(),
 					ordersPlaced, ordersJudged, onTimeOrders, abandonedOrders, ordersWithoutNeededBy,
-					ordersSentLate,
+					ordersSentLate, ordersExcused,
 					itemsScored, itemsOnTime, onTimePercent(), linesJudged, fillRate(),
 					rejectedLines, List.copyOf(byReason),
 					openOrders, openCurrent, openDue1To30, openOverdue31Plus,

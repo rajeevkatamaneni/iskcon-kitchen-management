@@ -1977,6 +1977,21 @@ export interface VendorPerformanceRow {
    * `abandonedOrders`.
    */
   ordersSentLate: number;
+  /**
+   * Orders closed part-delivered with the shortfall excused — *they fell short but made it right*
+   * (T-142, D-26).
+   *
+   * <p>The supplier rang, apologised, offered a discount next time and said buy it elsewhere, and
+   * the admin closing the order said so. Counted as placed and then set aside from **both** the
+   * on-time figure and the fill rate: the black mark on a part-delivery is mostly the half-empty
+   * lorry, so excusing only the lateness would waive almost nothing. That is deliberately unlike
+   * `ordersSentLate`, which stays in the fill rate — ordering late excuses our timing, this excuses
+   * their shortfall.
+   *
+   * <p>It belongs on the screen beside the percentages, for the reason the whole ruling turns on: a
+   * number whose exclusions are invisible cannot be checked.
+   */
+  ordersExcused: number;
   /** Order lines that went into the on-time figure — the "of ten" in "eight of ten items". */
   itemsScored: number;
   /** Of those, the ones fully there in time — the "eight". */
@@ -2024,6 +2039,8 @@ export interface VendorPerformance {
   ordersWithoutNeededBy: number;
   /** Orders we submitted after the vendor's lead time, excluded from on time — see the row. */
   ordersSentLate: number;
+  /** Orders closed with their shortfall excused, out of both percentages — see the row. */
+  ordersExcused: number;
   itemsScored: number;
   itemsOnTime: number;
   onTimePercent: number | null;
@@ -2096,8 +2113,37 @@ export type PoStatus =
   | "DRAFT"
   | "SENT"
   | "PARTIALLY_RECEIVED"
+  /**
+   * A part-delivered order somebody ended, undelivered remainder and all (T-142, D-26).
+   *
+   * <p>Terminal, and not a cancellation: goods arrived against it and are owed for. It is what
+   * releases the balance back to the shopping list, and it is the only status that can carry a
+   * `closeOutcome`.
+   */
+  | "CLOSED"
   | "RECEIVED"
   | "CANCELLED";
+
+/**
+ * How closing a part-delivered order ended for the vendor (T-142, D-26).
+ *
+ * <p>**This is the whole of an admin's influence over a supplier's score, and it is a name rather
+ * than a number.** Rajeev proposed a control that let the admin adjust the computed figure up or
+ * down — "there is SO MUCH human interaction that no machine or app can capture" — and then ruled
+ * against his own proposal: "Let us not let the admin adjust the score. Just show it to them." So
+ * there is no field anywhere in this file that moves a percentage.
+ *
+ * - `VENDOR_LET_US_DOWN` — the one who went silent and never rang back. Scored exactly as computed:
+ *   the quantity that never came is already in the percentage. The name is what lets a reader tell
+ *   a 60% the temple blames from one it accepts.
+ * - `SHORTFALL_EXCUSED` — the one who apologised, blamed the weather, offered a discount next time
+ *   and said buy it elsewhere. The order leaves that vendor's on-time figure and fill rate
+ *   entirely, and the count of such orders is on the scorecard beside both.
+ * - `AS_COMPUTED` — neither. The figures stand as the receipts made them.
+ *
+ * Anything other than `AS_COMPUTED` requires a sentence.
+ */
+export type CloseOutcome = "VENDOR_LET_US_DOWN" | "SHORTFALL_EXCUSED" | "AS_COMPUTED";
 
 export interface PurchaseOrderView {
   id: string;
@@ -2172,9 +2218,51 @@ export interface PurchaseOrderView {
    * on-time figure, and cancelling it does not offer the "Vendor Never Delivered this Order" tick.
    */
   sentAfterLeadTime?: boolean;
+  /**
+   * When somebody ended this part-delivered order, releasing its remainder (T-142, D-26).
+   *
+   * <p>Deliberately not `cancelledAt`: a closed order is not a cancellation, and every screen that
+   * reasons about cancellations must go on reading a clean null there. Null or absent on every
+   * order nobody has closed.
+   */
+  closedAt?: string | null;
+  /**
+   * Which of the three endings the person closing named, or null while the order is still live.
+   *
+   * <p>A name and never a number — see `CloseOutcome`. The database refuses an outcome on a live
+   * order and a closed order with none (`purchase_orders_closure_is_a_closed_order`, V126), so a
+   * screen never has to defend against either.
+   */
+  closeOutcome?: CloseOutcome | null;
+  /**
+   * Why the order was closed the way it was, in the words of the person who closed it. Required by
+   * the server whenever `closeOutcome` says something about the vendor.
+   */
+  closeNote?: string | null;
   sentAt: string | null;
   cancelledAt: string | null;
   createdAt: string;
+}
+
+/**
+ * What one order scored on delivery — shown at closing, and editable nowhere (T-142, D-26).
+ *
+ * <p>The figure the vendor scorecard reports for this order, from the same arithmetic rather than a
+ * second copy of it. It is on the order's payload so that the person closing a part-delivered order
+ * decides against a fact: 300 kg of 500 inside the window is 60%, computed by T-124 with nothing
+ * new, and that number is in front of them while they choose what the shortfall meant.
+ */
+export interface OrderDeliveryScore {
+  /**
+   * The mean of this order's items, each the fraction of it that arrived on or before the needed-by
+   * day, as a whole percentage. Null where there is nothing to score — no needed-by date to be late
+   * against, or no lines — because a figure divided by nothing is worse than no figure.
+   */
+  percent: number | null;
+  /** The items behind it: the "of ten" in "eight of ten items". */
+  itemsScored: number;
+  /** Of those, the ones fully there in time — the "eight". */
+  itemsOnTime: number;
 }
 
 export interface PurchaseOrderLineView {
@@ -2252,6 +2340,16 @@ export interface PurchaseOrderDetailView {
    * open those two files.
    */
   whatsappEverSent?: boolean;
+  /**
+   * What this order scored on delivery (T-142, D-26). Optional for the same narrow reason
+   * `whatsappEverSent` is: existing fixtures construct this interface, and an absent score reads as
+   * "nothing to show", which is the safe direction — a screen that cannot see a figure prints no
+   * figure rather than a wrong one.
+   *
+   * <p>**Shown, never edited.** There is no call in this file that changes it, and there must not
+   * be: "Let us not let the admin adjust the score. Just show it to them."
+   */
+  deliveryScore?: OrderDeliveryScore | null;
 }
 
 export interface PoLineInput {
@@ -5151,6 +5249,34 @@ export const api = {
     request<void>(`/api/v1/purchase-orders/${id}/cancel`, {
       method: "POST",
       body: JSON.stringify({ reason, vendorAbandoned }),
+      token,
+    }),
+
+  /**
+   * Closes a part-delivered order, saying how it ended for the vendor (T-142, D-26).
+   *
+   * <p>The remainder the vendor never brought is released back to the shopping list by this call —
+   * not by a write, but because the list is derived on every read and a closed order stops covering
+   * its ingredients.
+   *
+   * <p>`outcome` and `note` are both required arguments rather than an options object with
+   * defaults, and that is the same reasoning `cancelPurchaseOrder` uses for `vendorAbandoned`.
+   * Every caller has to say which of the three endings this is; a default would let a screen
+   * quietly decline to say anything, or put words in somebody's mouth about a supplier. Pass `null`
+   * for the note on `AS_COMPUTED`, which asserts nothing and needs none.
+   *
+   * <p>**There is no score argument and there must never be one.** Rajeev, having proposed exactly
+   * that: "Let us not let the admin adjust the score. Just show it to them."
+   */
+  closePurchaseOrder: (
+    id: string,
+    outcome: CloseOutcome,
+    note: string | null,
+    token?: string,
+  ) =>
+    request<void>(`/api/v1/purchase-orders/${id}/close`, {
+      method: "POST",
+      body: JSON.stringify({ outcome, note }),
       token,
     }),
 

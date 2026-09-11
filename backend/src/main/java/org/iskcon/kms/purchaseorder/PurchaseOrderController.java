@@ -113,6 +113,28 @@ public class PurchaseOrderController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/**
+	 * Closes a part-delivered order, naming how it ended for the vendor (T-142, D-26).
+	 *
+	 * <p>Behind {@code MANAGE_PURCHASE_ORDERS}, the same authority cancelling carries and for the
+	 * same reason: this is the other way an order a person raised can end, taken by the same person
+	 * at the same desk. No new permission — whoever may call an order off may say that a
+	 * part-delivered one is finished.
+	 *
+	 * <p>The body carries the outcome and, for the two outcomes that say something about the
+	 * supplier, the sentence D-26 requires. It carries no figure: the computed score is shown on
+	 * the way in and there is nothing here that could move it.
+	 */
+	@PostMapping("/{id}/close")
+	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
+	public ResponseEntity<Void> close(
+			@PathVariable UUID id,
+			@Valid @RequestBody ClosePoRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		service.close(actor, id, request.outcome(), request.note());
+		return ResponseEntity.noContent().build();
+	}
+
 	@PostMapping("/{id}/cancel")
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public ResponseEntity<Void> cancel(

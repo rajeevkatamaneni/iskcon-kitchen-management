@@ -327,6 +327,18 @@ public enum AuditAction {
 	VOLUNTEER_REMOVED_FROM_SHIFT,
 
 	/**
+	 * A part-delivered purchase order was ended by a person, releasing what the vendor never
+	 * brought back to the shopping list (T-142, D-26).
+	 *
+	 * <p>The after-state carries the outcome the admin named — VENDOR_LET_US_DOWN,
+	 * SHORTFALL_EXCUSED or AS_COMPUTED — and their sentence. Excusing a shortfall takes the order
+	 * out of that supplier's on-time figure and fill rate, so this record is who did that, when,
+	 * and why; it is the answer to a vendor asking why an order is missing from their numbers.
+	 * Never written by a scheduled job: the nightly sweep matches drafts only.
+	 */
+	PO_CLOSED,
+
+	/**
 	 * Someone was hired (E6-S8). Recorded because it is the only act that grants a temple role —
 	 * a hire may be given Temple Admin, and that should never be something only a role column knows.
 	 */

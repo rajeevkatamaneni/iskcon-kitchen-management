@@ -43,6 +43,9 @@ function vendor(overrides: Partial<VendorPerformanceRow> = {}): VendorPerformanc
     abandonedOrders: 0,
     ordersWithoutNeededBy: 0,
     ordersSentLate: 0,
+    // T-142, D-26: nothing excused by default, so the pill and the caveat sentence are absent
+    // unless a test asks for them.
+    ordersExcused: 0,
     itemsScored: 24,
     itemsOnTime: 20,
     onTimePercent: 82,
@@ -69,6 +72,9 @@ function report(overrides: Partial<VendorPerformance> = {}): VendorPerformance {
     abandonedOrders: 0,
     ordersWithoutNeededBy: 0,
     ordersSentLate: 0,
+    // T-142, D-26: nothing excused by default, so the pill and the caveat sentence are absent
+    // unless a test asks for them.
+    ordersExcused: 0,
     itemsScored: 24,
     itemsOnTime: 20,
     onTimePercent: 82,

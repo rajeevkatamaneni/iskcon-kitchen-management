@@ -1,6 +1,7 @@
 package org.iskcon.kms.purchaseorder;
 
 import java.util.List;
+import org.iskcon.kms.vendor.OrderDeliveryScore;
 
 /**
  * A purchase order with its lines and activity trail (E5-S3).
@@ -37,5 +38,25 @@ public record PurchaseOrderDetailView(
 		 * <p>Derived from {@code tenant_settings.whatsapp_last_sent_at} (V123), which is written in
 		 * exactly one place — {@code WhatsAppChannelAdapter}, after Meta hands back a message id.
 		 */
-		boolean whatsappEverSent) {
+		boolean whatsappEverSent,
+
+		/**
+		 * What this order scored on delivery, shown and never editable (T-142, D-26).
+		 *
+		 * <p>The figure the vendor scorecard will report for this order, read from the same
+		 * arithmetic rather than worked out again. It is on this payload so the person closing a
+		 * part-delivered order decides against a fact: 300 kg of 500 inside the window is 60%, and
+		 * that number is in front of them while they choose what the shortfall meant.
+		 *
+		 * <p><strong>Shown, and that is the whole of it.</strong> Rajeev asked for a control beside
+		 * it that let an admin adjust the number, and then ruled against his own proposal — "Let us
+		 * not let the admin adjust the score. Just show it to them." There is no endpoint, no
+		 * column and no request field anywhere in this application that moves it. What an admin may
+		 * say is {@link PurchaseOrderView#closeOutcome()}: a name, never a number.
+		 *
+		 * <p>Present on every order, not only the closeable ones. It costs one query on a screen
+		 * that already runs three, and an order's delivery record is worth reading wherever
+		 * somebody has the order open.
+		 */
+		OrderDeliveryScore deliveryScore) {
 }

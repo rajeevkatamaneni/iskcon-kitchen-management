@@ -6,7 +6,7 @@ import { useCallback, useRef, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type GoodsReceiptLineView, type PurchaseOrderLineView, type PurchaseOrderView, type ReturnReason } from "@/lib/api";
+import { api, toApiError, type ApiError, type CloseOutcome, type GoodsReceiptLineView, type OrderDeliveryScore, type PurchaseOrderLineView, type PurchaseOrderView, type ReturnReason } from "@/lib/api";
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -78,6 +78,66 @@ function leadTimeSaid(days: number | null | undefined): string {
   if (days == null) return "the notice they asked for";
   if (days === 0) return "same-day collection";
   return days === 1 ? "1 day’s notice" : `${days} days’ notice`;
+}
+
+/**
+ * The three endings, in the words a person chooses between (T-142, D-26).
+ *
+ * <p>Rajeev's two real scenarios and the third that is neither. The labels are what he described,
+ * not the enum's names: the one who went silent and never rang back, and the one who apologised,
+ * blamed the weather, offered a discount next time and said buy it elsewhere.
+ */
+const CLOSE_OUTCOMES: { value: CloseOutcome; label: string; effect: string }[] = [
+  {
+    value: "VENDOR_LET_US_DOWN",
+    label: "The vendor let us down",
+    effect:
+      "Recorded against them. The order is scored on what actually arrived, as every order is — this says the temple holds them responsible for the rest.",
+  },
+  {
+    value: "SHORTFALL_EXCUSED",
+    label: "They fell short but made it right",
+    effect:
+      "This order leaves their delivery record entirely — both the on-time figure and the fill rate — and the count of orders left out is shown on the scorecard.",
+  },
+  {
+    value: "AS_COMPUTED",
+    label: "Neither — score it as it stands",
+    effect: "Nothing is recorded for or against them. The figures stand as the deliveries made them.",
+  },
+];
+
+/**
+ * What this order scored, shown to the person closing it and editable nowhere (T-142, D-26).
+ *
+ * <p>Rajeev proposed a control beside this number that let an admin adjust it — "there is SO MUCH
+ * human interaction that no machine or app can capture" — and then ruled against his own proposal:
+ * "Let us not let the admin adjust the score. Just show it to them." So this is a readout. There is
+ * no input, no stepper and no override anywhere near it, and the sentence underneath says so out
+ * loud, because a number on a form that cannot be changed should say that rather than leave
+ * somebody hunting for the box.
+ *
+ * <p>Null percent is not a failure: an order with no needed-by date has nothing to be late against,
+ * which is the same choice the scorecard makes rather than scoring a silent hundred per cent.
+ */
+function deliveryScoreLine(score: OrderDeliveryScore | null | undefined, vendorName: string) {
+  if (!score || score.percent == null) {
+    return (
+      <p className="max-w-prose text-sm text-ink-secondary">
+        There is no needed-by date on this order, so there is nothing to be late against and it is
+        outside {vendorName}’s on-time figure either way.
+      </p>
+    );
+  }
+  return (
+    <p className="max-w-prose text-sm text-ink-secondary">
+      <span className="text-lg font-medium tabular-nums text-ink">{score.percent}%</span>{" "}
+      of this order was there in time — {score.itemsOnTime} of {score.itemsScored}{" "}
+      {score.itemsScored === 1 ? "item" : "items"}. This is computed from what actually arrived
+      against what was ordered, and it is the same figure {vendorName}’s scorecard reports. It
+      cannot be changed here.
+    </p>
+  );
 }
 
 /**
@@ -179,6 +239,16 @@ function PurchaseOrderDetailView() {
   // the whole cancellation to the foot of the page where it is always open — reset on a successful
   // cancellation rather than when a panel closes, because there is no longer a panel to close.
   const [vendorAbandoned, setVendorAbandoned] = useState(false);
+  /**
+   * How a part-delivered order is being closed (T-142, D-26), and the sentence that goes with it.
+   *
+   * <p>It starts on "neither", which is the outcome that says nothing about anybody. The two named
+   * ones are claims — one holds the supplier responsible, the other takes an order out of their
+   * figures — and a claim must be chosen rather than arrived at by leaving a control alone. Two
+   * defects in this application came from boxes that were already ticked.
+   */
+  const [closeOutcome, setCloseOutcome] = useState<CloseOutcome>("AS_COMPUTED");
+  const [closeNote, setCloseNote] = useState("");
   // Null while nobody is returning anything. Non-null names the one receipt line the form is open
   // against: a return is about the sack somebody opened, so one line at a time is the whole
   // interaction and the server takes one line per request for the same reason.
@@ -272,7 +342,40 @@ function PurchaseOrderDetailView() {
   // cancel-and-regenerate wearing a disguise; the server refuses it by not accepting a vendor at all.
   const canEdit = po?.status === "DRAFT";
   const canReceive = po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
-  const canCancel = po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
+  /**
+   * Whether the order can be called off (T-124, narrowed by T-142/D-26).
+   *
+   * <p><strong>A part-delivered order is no longer cancellable, and the reason is a number rather
+   * than tidiness.</strong> A cancellation leaves the vendor scorecard's live-order predicate
+   * entirely, so cancelling this order would erase the 300 kg that actually arrived from the
+   * supplier's record — and the "Vendor Never Delivered this Order" tick could then be put against a
+   * vendor who demonstrably did deliver. The server refuses it with KMS-400150 whatever this screen
+   * does, because a rule that lives only in a form is not a rule.
+   *
+   * <p>The control disappearing needs no sentence of its own here, which is the one place this
+   * screen is allowed to stay silent about a missing control: `canClose` is the exact complement of
+   * the status removed from this list, so the panel that vanishes is always replaced, in the same
+   * spot, by "Close this order, part delivered" — which says what happens to the goods that came
+   * and to the ones that did not.
+   */
+  const canCancel = po?.status === "DRAFT" || po?.status === "SENT";
+  /**
+   * Whether this order can be closed part-delivered (T-142, D-26).
+   *
+   * <p>PARTIALLY_RECEIVED and nothing else, which matches the server. An order nothing arrived
+   * against is a cancellation — there is nothing to close and nothing is owed for. A fully received
+   * order is finished. Closing exists for the one case neither describes: goods came, not all of
+   * them, and somebody has decided the rest never will.
+   */
+  const canClose = po?.status === "PARTIALLY_RECEIVED";
+  /**
+   * Whether the outcome being offered says something about the supplier, and so needs a sentence.
+   *
+   * <p>D-26: anything other than "as computed" requires a sentence. The server enforces it and so
+   * does the row underneath it; this is the same rule said on the way in, so that somebody making a
+   * permanent statement about a supplier is asked for their reason rather than shown a 400.
+   */
+  const closeNeedsASentence = closeOutcome !== "AS_COMPUTED";
   /**
    * Send on WhatsApp is offered only where WhatsApp demonstrably works (T-136).
    *
@@ -602,6 +705,42 @@ function PurchaseOrderDetailView() {
                     </p>
                   )}
                 </div>
+                {/*
+                  How this order ended, on the order itself (T-142, D-26).
+
+                  The same lesson T-126 paid for with the no-show tick: a fact captured on a form
+                  and shown nowhere is a fact nobody can check. Somebody opening a closed order
+                  months later asks two questions — why did this end with part of it undelivered,
+                  and what did that mean for the vendor — and both answers are here, the second in
+                  the words of the person who made the decision.
+
+                  The sentence names what the outcome DOES rather than repeating the label, because
+                  the label is a judgement and the consequence is the thing a reader cannot work out
+                  for themselves.
+                */}
+                {po.closeOutcome && (
+                  <div className="mt-2 text-sm">
+                    <p className="flex flex-wrap items-baseline gap-2">
+                      <Badge tone={po.closeOutcome === "VENDOR_LET_US_DOWN" ? "warning" : "neutral"}>
+                        {po.closeOutcome === "VENDOR_LET_US_DOWN"
+                          ? "Vendor let us down"
+                          : po.closeOutcome === "SHORTFALL_EXCUSED"
+                            ? "Shortfall excused"
+                            : "Closed short"}
+                      </Badge>
+                      <span className="max-w-prose text-ink-secondary">
+                        {po.closeOutcome === "VENDOR_LET_US_DOWN"
+                          ? `Closed with part of it never delivered, and recorded against ${po.vendorName}. It is scored on what actually arrived.`
+                          : po.closeOutcome === "SHORTFALL_EXCUSED"
+                            ? `Closed with part of it never delivered. ${po.vendorName} made it right, so this order is left out of their delivery record.`
+                            : `Closed with part of it never delivered. Nothing was recorded for or against ${po.vendorName}.`}
+                      </span>
+                    </p>
+                    {po.closeNote && (
+                      <p className="mt-1 max-w-prose text-ink-muted">“{po.closeNote}”</p>
+                    )}
+                  </div>
+                )}
                 {/*
                   The bank of buttons, in the order Rajeev dictated on 2026-09-10 while driving the
                   deployed application (D-24 §3): Vendor's language, Generate PDF, Print, Edit, Mark
@@ -1110,6 +1249,136 @@ function PurchaseOrderDetailView() {
                     <div className="mt-4 flex items-center gap-4">
                       <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Record return</button>
                       <button type="button" disabled={busy} onClick={() => setReturning(null)} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">Cancel</button>
+                    </div>
+                  </form>
+                </section>
+              )}
+
+              {/*
+                Closing a part-delivered order (T-142, D-26).
+
+                Rajeev's rice: 500 kg ordered, the vendor has 300 and sends it straight away so the
+                kitchen can cook, 200 to follow in two days. "The 200 KG should still be tied to the
+                PO that raised and sent the 500KG rice order and it should sit in a partially
+                delivered state and the clock keeps ticking." So the balance stays with the vendor,
+                and THIS is the decision that ends it — releasing what never came back to the
+                shopping list, where it is suggested again with a fresh date.
+
+                Above the cancel block on purpose. For a part-delivered order this is the act that
+                is meant, and cancelling one would withdraw an order 300 kg of real rice arrived
+                against; a person scrolling to the foot of the page should meet the right door
+                first.
+
+                THE SCORE IS SHOWN AND THERE IS NO CONTROL ON IT. Rajeev asked for an adjustment
+                here and then ruled against his own request — "Let us not let the admin adjust the
+                score. Just show it to them." What a person may say is one of three names, and the
+                two that say something about the supplier require a sentence.
+              */}
+              {canClose && hasPoNumber && (
+                <section className="card mb-8 px-6 py-5" aria-labelledby="close-heading">
+                  <h2 id="close-heading" className="text-lg">Close this order, part delivered</h2>
+                  <p className="mt-1 max-w-prose text-sm text-ink-secondary">
+                    {po.vendorName} still owes what never arrived on {po.poNumber}, and while this
+                    order is open it stays with them. Closing it says the rest is not coming: what
+                    was never delivered goes back on the shopping list, and this order is finished
+                    for good.
+                  </p>
+
+                  <div className="mt-4 rounded border border-hairline bg-sunken px-4 py-3">
+                    <h3 className="text-sm font-medium text-ink">
+                      What {po.vendorName} scored on this order
+                    </h3>
+                    <div className="mt-1">{deliveryScoreLine(data?.deliveryScore, po.vendorName)}</div>
+                    {/* The one case where the figure above is real and the scorecard still will not
+                        count it (T-137, D-25). Said here rather than left for somebody to discover
+                        on the report, because a person choosing between "let us down" and "made it
+                        right" is entitled to know their choice changes nothing for this order. */}
+                    {po.sentAfterLeadTime && (
+                      <p className="mt-2 max-w-prose text-sm text-ink-muted">
+                        We sent this order after {po.vendorName} asked to be given, so it is already
+                        left out of their delivery record whatever is chosen below.
+                      </p>
+                    )}
+                  </div>
+
+                  <form className="mt-4" aria-label="Close this order, part delivered" onSubmit={async (e) => {
+                    e.preventDefault();
+                    const note = closeNote.trim();
+                    const ok = await run(
+                      (t) => api.closePurchaseOrder(id, closeOutcome, note === "" ? null : note, t),
+                      "We couldn’t close that order."
+                    );
+                    if (ok) {
+                      // Reset to the outcome that claims nothing, exactly as the cancellation
+                      // resets its tick: a statement about a supplier must never be left sitting in
+                      // a form after the act it belonged to.
+                      setCloseOutcome("AS_COMPUTED");
+                      setCloseNote("");
+                      setEditing(false);
+                    }
+                  }}>
+                    <fieldset>
+                      <legend className="text-sm font-medium text-ink">
+                        What happened with {po.vendorName}?
+                      </legend>
+                      {CLOSE_OUTCOMES.map((option) => (
+                        <label key={option.value} className="mt-3 flex items-start gap-2 text-sm">
+                          <input
+                            type="radio"
+                            name="closeOutcome"
+                            value={option.value}
+                            checked={closeOutcome === option.value}
+                            onChange={() => setCloseOutcome(option.value)}
+                            className="mt-1 h-4 w-4 shrink-0 accent-accent"
+                          />
+                          <span>
+                            <span className="text-ink">{option.label}</span>
+                            <span className="mt-1 block max-w-prose text-ink-secondary">
+                              {option.effect}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </fieldset>
+
+                    {/*
+                      "Anything other than as computed requires a sentence" (D-26), said on the way
+                      in rather than only refused on the way out. A permanent statement about
+                      somebody else's business with no explanation beside it is the record somebody
+                      will want to read back in a year and be unable to — which is the same reason
+                      the cancellation keeps its reason required beside its tick box.
+
+                      Offered on the third option too, as optional, because a temple that closed an
+                      order because it only needed 300 after all may still want to say so.
+                    */}
+                    <label className="mt-4 flex flex-col gap-1 text-sm text-ink-secondary">
+                      <span className="pl-field-inset font-medium text-ink">
+                        {closeNeedsASentence ? "Why" : "Why, if you want to say"}
+                      </span>
+                      <input
+                        name="closeNote"
+                        value={closeNote}
+                        onChange={(e) => setCloseNote(e.target.value)}
+                        required={closeNeedsASentence}
+                        maxLength={500}
+                        aria-describedby={closeNeedsASentence ? "close-note-hint" : undefined}
+                        className="min-h-touch rounded-control border border-hairline px-3"
+                      />
+                    </label>
+                    {/* Outside the label and pointed at by aria-describedby, not inside it. A hint
+                        nested in a label becomes part of the field's accessible NAME, so the box
+                        would be called "Why This goes on Govind Wholesale's record beside the
+                        outcome" to a screen reader and to anything else that asks. */}
+                    {closeNeedsASentence && (
+                      <p id="close-note-hint" className="mt-1 max-w-prose text-sm text-ink-muted">
+                        This goes on {po.vendorName}’s record beside the outcome.
+                      </p>
+                    )}
+
+                    <div className="mt-4">
+                      <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">
+                        Close order
+                      </button>
                     </div>
                   </form>
                 </section>

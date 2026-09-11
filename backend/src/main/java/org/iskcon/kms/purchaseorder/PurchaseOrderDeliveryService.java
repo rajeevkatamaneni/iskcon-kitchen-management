@@ -77,7 +77,12 @@ public class PurchaseOrderDeliveryService {
 	public UUID sendViaWhatsApp(AuthenticatedUser actor, UUID poId) {
 		PurchaseOrderDetailView po = purchaseOrders.get(poId);
 		PoStatus status = po.order().status();
-		if (status == PoStatus.RECEIVED || status == PoStatus.CANCELLED) {
+		// CLOSED sits with the other two terminal states (T-142, D-26). Somebody has ended this
+		// order, its remainder is back on the shopping list and may already have been re-ordered
+		// elsewhere; sending the sheet again would ask the vendor for goods the temple has stopped
+		// expecting from them.
+		if (status == PoStatus.RECEIVED || status == PoStatus.CANCELLED
+				|| status == PoStatus.CLOSED) {
 			throw new ApplicationException(ErrorCode.PO_NOT_SENDABLE, Map.of("purchaseOrderId", poId));
 		}
 

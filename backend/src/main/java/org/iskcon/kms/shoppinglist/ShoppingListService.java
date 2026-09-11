@@ -52,12 +52,12 @@ import org.springframework.transaction.annotation.Transactional;
  * <h2>What is suggested, and what a live order takes off the list</h2>
  *
  * <p>Three demand streams merge per ingredient: the meal-plan shortfall (E4-S5), stock below its
- * reorder level topped up to that level × a safety factor (E3-S3), and the balance still outstanding
- * on an order the vendor part-delivered (E5-S6). The largest of the three wins, rounded up to a
- * whole purchase unit.
+ * reorder level topped up to that level × a safety factor (E3-S3), and the balance a vendor never
+ * brought on an order somebody has since closed (E5-S6, moved to the close by D-26). The largest of
+ * the three wins, rounded up to a whole purchase unit.
  *
- * <p>Against that, D-24a: <strong>an ingredient covered by a live purchase order — draft or sent —
- * is not suggested at all.</strong> Rajeev's reason for choosing creation over sending as the moment
+ * <p>Against that, D-24a and D-26: <strong>an ingredient covered by a live purchase order — draft,
+ * sent, or part-delivered with a balance still owed — is not suggested at all.</strong> Rajeev's reason for choosing creation over sending as the moment
  * a line leaves: <em>"IF we take it off on send, they will be there in the shopping list begging to
  * be ordered, someone else will take pity and generate another PO. Same ingredients, 2 PO's. We
  * don't need that confusion."</em> Cancelling the order makes the line reappear, with no restore
@@ -334,9 +334,10 @@ public class ShoppingListService {
 			}
 		}
 
-		// Stream 3: the balance a vendor part-delivered and still owes (E5-S6). A short delivery
-		// re-feeds here so what was ordered but never arrived comes round again, traceable to the PO
-		// that fell short.
+		// Stream 3: the balance a vendor never brought on an order somebody has closed (E5-S6,
+		// D-26). It re-feeds here so what was ordered but never arrived comes round again,
+		// traceable to the PO that fell short. NOT while the order is live: until it is closed the
+		// vendor still owes the balance and the clock is still ticking on them.
 		for (Map.Entry<UUID, PoOutstanding> e : poOutstandingByIngredient().entrySet()) {
 			IngredientRef ref = refs.get(e.getKey());
 			if (ref == null) {
@@ -363,7 +364,8 @@ public class ShoppingListService {
 			if (ref == null) {
 				continue;
 			}
-			// D-24a. A live draft or sent order already covers this ingredient, so nothing about it
+			// D-24a and D-26. A live order — draft, sent, or part-delivered with a balance the
+			// vendor still owes — already covers this ingredient, so nothing about it
 			// is suggested — including a hand-added line, which drops out of the list entirely
 			// because `suggestions` is where its dates and vendor would have come from and the
 			// merge below finds nothing to render. Cancelling that order puts it back on the next
@@ -450,12 +452,27 @@ public class ShoppingListService {
 	 * Until T-132 nothing here looked at draft orders at all, which is why a freshly generated draft
 	 * left its lines sitting on the list looking unordered — the defect he found while writing D-24.
 	 *
-	 * <p><strong>{@code PARTIALLY_RECEIVED} is deliberately not here, and the two rules do not
-	 * fight.</strong> A draft or a sent order is a promise in full: the vendor still owes everything
-	 * on it, so ordering again is ordering twice. A part-delivered order is different in kind — the
-	 * truck came, and what it did not bring is evidence of a shortfall rather than a pending promise.
-	 * That is E5-S6's short-delivery re-feed, which is stream 3 in {@link #suggestions()}, and it is
-	 * why the two statuses are partitioned between the two methods rather than shared.
+	 * <p><strong>{@code PARTIALLY_RECEIVED} belongs here too, and that is D-26 reversing what T-132
+	 * assumed.</strong> T-132 read a part delivery as evidence of a shortfall — the truck came, and
+	 * what it did not bring should come round again — and re-fed the remainder immediately. Rajeev
+	 * walked through a real delivery and answered otherwise: 500 kg of rice ordered, the vendor has
+	 * 300 and sends it straight away so the kitchen can cook, 200 to follow in two days. <em>"The
+	 * 200 KG should still be tied to the PO that raised and sent the 500KG rice order and it should
+	 * sit in a partially delivered state and the clock keeps ticking."</em>
+	 *
+	 * <p>So a part-delivered order is a promise in full exactly as a sent one is: the vendor still
+	 * owes the balance, and putting it back on the list would have the temple ordering rice a
+	 * supplier is already bringing. The objection to that — a temple short of rice would see nothing
+	 * telling them so — is answered by what they do see: a purchase order past due, on the clock,
+	 * asking for a decision, which is better than a shopping-list line because it names the vendor
+	 * who owes it.
+	 *
+	 * <p><strong>{@code CLOSED} is the release, and it is an absence rather than an act.</strong>
+	 * There is no restore path and no row to write. Closing the order (T-142) moves it out of this
+	 * predicate, and the very next read of the list computes the line back — which is the whole of
+	 * what "released back to the shopping list" means in a list that is derived. The remainder then
+	 * arrives with the PO that fell short named beside it; see
+	 * {@link #poOutstandingByIngredient()}.
 	 *
 	 * <p>Described lines are excluded for the reason given on {@link #poOutstandingByIngredient()}:
 	 * {@code ingredient_id} is null on them, and null is a perfectly valid key.
@@ -466,7 +483,7 @@ public class ShoppingListService {
 				SELECT DISTINCT pol.ingredient_id
 				FROM purchase_order_lines pol
 				JOIN purchase_orders po ON po.id = pol.po_id
-				WHERE po.status IN ('DRAFT', 'SENT')
+				WHERE po.status IN ('DRAFT', 'SENT', 'PARTIALLY_RECEIVED')
 				  AND pol.ingredient_id IS NOT NULL
 				""", rs -> {
 			covered.add(rs.getObject("ingredient_id", UUID.class));
@@ -479,10 +496,29 @@ public class ShoppingListService {
 	 * everything received so far — summed in base units, with the PO numbers that fell short.
 	 * Rejected goods are not received, so they remain outstanding and come round again.
 	 *
-	 * <p><strong>{@code PARTIALLY_RECEIVED} only, since T-132.</strong> {@code SENT} used to be
-	 * counted here as well, which meant an order nobody had delivered anything against put its whole
-	 * quantity back on the shopping list as though it had never been raised. D-24a makes that a
-	 * suppression instead — see {@link #ingredientsOnLiveOrders()}.
+	 * <p><strong>{@code CLOSED} only, since T-142 — this is the release D-26 describes.</strong> It
+	 * was {@code PARTIALLY_RECEIVED} until then, which re-fed the balance the moment a lorry came
+	 * short; Rajeev ruled that the balance stays with the vendor while the order is live and comes
+	 * back only when the admin closes it. So the two statuses are partitioned between the two
+	 * methods, and this one now answers for orders that have ended rather than orders in progress.
+	 * ({@code SENT} was counted here before T-132, which put a whole undelivered order back on the
+	 * list as though it had never been raised; that is the suppression in
+	 * {@link #ingredientsOnLiveOrders()}.)
+	 *
+	 * <p><strong>And it stops once somebody has acted on it, which needed saying in SQL.</strong> A
+	 * closed order is terminal: nothing will ever move it out of CLOSED, so without the NOT EXISTS
+	 * below its 200 kg of rice would be re-fed on every read for ever — including after a
+	 * replacement order had been raised, delivered in full and received, at which point the list
+	 * would ask for 200 kg of rice the temple is standing on. The bound is the same act that takes
+	 * any other line off this list: <strong>a purchase order raised for that ingredient since the
+	 * close</strong>. Raised, not delivered, because D-24a already made creation the moment a line
+	 * is answered — <em>"someone else will take pity and generate another PO. Same ingredients, 2
+	 * PO's"</em> — and one rule for both is one thing to learn.
+	 *
+	 * <p>The edge it leaves open is the safe one: an order raised BEFORE the close and still live
+	 * does not count as the answer, so the remainder shows once the live order finishes. That errs
+	 * towards putting something in front of a person rather than hiding it, and an untick is the
+	 * standing way to say no.
 	 *
 	 * <p><strong>Described PO lines are excluded, and the exclusion is the whole point</strong>
 	 * (T-024). A line may now name something the catalogue has never heard of — four plastic stools
@@ -507,8 +543,14 @@ public class ShoppingListService {
 					SELECT po_line_id, SUM(received_qty) AS received
 					FROM goods_receipt_lines GROUP BY po_line_id
 				) r ON r.po_line_id = pol.id
-				WHERE po.status = 'PARTIALLY_RECEIVED'
+				WHERE po.status = 'CLOSED'
 				  AND pol.ingredient_id IS NOT NULL
+				  AND NOT EXISTS (
+					SELECT 1
+					FROM purchase_order_lines later_line
+					JOIN purchase_orders later ON later.id = later_line.po_id
+					WHERE later_line.ingredient_id = pol.ingredient_id
+					  AND later.created_at > po.closed_at)
 				""", rs -> {
 			BigDecimal outstanding = rs.getBigDecimal("outstanding");
 			if (outstanding == null || outstanding.signum() <= 0) {
