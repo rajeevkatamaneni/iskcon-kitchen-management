@@ -77,11 +77,15 @@ the rebuild**. None of them blocks UAT and the rebuild does.
 **Parked for Phase 2 by Rajeev:** T-091, secondary preferred vendor. **Do not resurrect it
 opportunistically.**
 
-**The tail — roughly thirteen small items, none blocking:** *"1 pieces"* printing across the app, a
-typo in a request body answering *"something went wrong"*, the temple forgotten between registering
-and signing in, telling a volunteer they were taken off a roster, a language picker that would
-silently read English for ever, three reconciliation rows, three test-infrastructure rows, a
-Terraform check, an unbounded donor history, and one query run once per recipient.
+**The tail — `docs/work/THE-REST.md`.** **That file is the answer when Rajeev asks "what else is
+left?"** — he asked for it to be a file rather than a fresh sweep of this ledger every time. Twelve
+items, none blocking, and his standing judgement on them is *"the rest I'd genuinely leave. Your
+testers will rank them for you, and several will turn out not to matter at all."*
+
+**What it holds, in one line each:** *"1 pieces"* printing across the app, a language picker that
+would silently read English for ever, three reconciliation rows, three test-infrastructure rows, a
+Terraform check, an unbounded donor history, one query run once per recipient, and the "never needs
+servicing" tick box missing from the equipment registration form.
 
 ### Read this before planning the next stretch
 
@@ -131,6 +135,9 @@ without a decision only he can make — and then keep going with everything else
 - **T-116** — the auth layer keeps an error's code and discards its words. Isolated to
   `frontend/lib/auth-context.tsx` and a new guard.
 - **T-076** — the lint script that cannot run. Isolated to frontend tooling and CI config.
+- **T-105** — a typo in a request body is answered *"something went wrong at our end."* Our mistake,
+  blamed on us, and the person is told nothing they can act on. Backend `error/` package, isolated
+  from everything else in this wave.
 
 **Wave B — two agents in parallel.**
 
@@ -139,6 +146,13 @@ without a decision only he can make — and then keep going with everything else
   twice they will drift.*
 - **T-141** — 404 SQL statements per page load, 360 of them recipe lookups, and the whole pass runs
   twice. Backend only, and disjoint from T-134's frontend work.
+- **T-080** — a volunteer taken off a roster is never told. **The one promoted into their place is
+  told; the one who lost the shift hears nothing.** Backend rosters and notifications, disjoint from
+  both of the above.
+- **T-118** — somebody registers, is told their email already has an account, signs in, and **lands
+  without the temple they chose.** Frontend registration and sign-in. **It goes in this wave rather
+  than Wave A because T-116 settles the auth layer first**, and it must **not** take
+  `frontend/lib/api.ts` — T-134 holds it.
 
 **Wave C — one agent, alone. The largest task in the set.**
 
@@ -149,6 +163,14 @@ without a decision only he can make — and then keep going with everything else
 
 - **T-142** — D-26's closing flow. **Same files as T-137**, which is why it follows rather than runs
   beside it.
+
+> **Everything not in these waves lives in `docs/work/THE-REST.md`** — twelve items, none of them
+> blocking, and that file is what to read out when Rajeev asks what is left.
+>
+> **Why three small items are in this plan at all.** Rajeev picked them out of a tail of fifteen on
+> 2026-09-10 as *"the shape of thing a tester finds in the first hour and writes up as three separate
+> bugs"* — T-105, T-118 and T-080. **The rest of the tail is deliberately left for the testers to
+> rank**, because several of them will turn out not to matter.
 
 **Wave E — one agent, last.**
 
