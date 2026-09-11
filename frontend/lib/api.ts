@@ -5002,8 +5002,13 @@ export const api = {
   getPurchaseOrder: (id: string, token?: string) =>
     request<PurchaseOrderDetailView>(`/api/v1/purchase-orders/${id}`, { method: "GET", token }),
 
+  // Answers with the order's number as well as its id (T-134). The shopping list's vendor tiles
+  // confirm a created order by name — "PO-2026-0041 raised for Heritage Fresh Dairy", which is what
+  // Rajeev asked for in D-24 §6 — and a uuid names nothing a person can repeat. Both are required
+  // and never optional: the server sends both on every 201, and a screen that read an absent
+  // `poNumber` as undefined would print a confirmation with a blank where the name should be.
   createPurchaseOrder: (input: CreatePurchaseOrderInput, token?: string) =>
-    request<{ id: string }>("/api/v1/purchase-orders", {
+    request<{ id: string; poNumber: string }>("/api/v1/purchase-orders", {
       method: "POST",
       body: JSON.stringify(input),
       token,

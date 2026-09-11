@@ -148,9 +148,23 @@ function NewPurchaseOrderLinesView() {
           // it: an omitted optional field arrives as undefined and the server then refuses the
           // whole order with KMS-400128, for a line that looked complete on screen.
           //
-          // No expected price. That figure is a snapshot of the vendor's last known price, taken
-          // when the shopping list generated an order, and there is nothing honest to put here for
-          // an order somebody is raising by hand. The vendor sheet prints a dash, which is true.
+          // `expectedPrice: null` is not "this line has no price". It is this screen saying it does
+          // not know one, and the server filling it in: on creation it reads the vendor's last-known
+          // price for that ingredient out of `vendor_supplies.last_price` for every line that
+          // arrives blank and names a catalogue ingredient (T-134, PurchaseOrderService.createPo).
+          //
+          // That is the same figure, out of the same column, that generation from the shopping list
+          // has always stamped on its lines — the only difference used to be the moment it was read,
+          // and this comment used to argue that the difference made one honest and the other not. It
+          // does not: what the temple last paid this vendor for this thing is a fact whenever you
+          // read it, and the screen was never in a position to know it anyway.
+          //
+          // Nothing is invented. A vendor with no recorded price for the ingredient leaves the
+          // column null and the sheet prints a dash; a described line — four plastic stools — has no
+          // catalogue row to have a price on and stays null; and a price a caller does send is left
+          // exactly as sent. Worth knowing before printing: a sheet with at least one price on it
+          // grows a rate column and an estimated total, so an order raised here now usually carries
+          // both where it used to carry neither.
           lines: lines.map((l, i) => ({
             ingredientId: l.ingredientId,
             description: l.description,

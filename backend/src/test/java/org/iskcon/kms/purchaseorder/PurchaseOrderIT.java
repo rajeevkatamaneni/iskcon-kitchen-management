@@ -142,6 +142,87 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 		assert b.get("lines").get(0).get("expectedPrice").asDouble() == 42.0;
 	}
 
+	/**
+	 * T-134. The shopping list's vendor tiles raise their orders through this endpoint and confirm
+	 * each one by name — "PO-2026-0041 raised for Heritage Fresh Dairy" — so the number has to come
+	 * back with the id. It used to answer with the id alone.
+	 *
+	 * <p>Checked against the order's own detail rather than a pattern alone, because a response that
+	 * invented a plausible-looking number would satisfy a regular expression perfectly.
+	 */
+	@Test
+	@DisplayName("a created order answers with the number a person can read out, not just its id")
+	void createAnswersWithThePoNumber() throws Exception {
+		String body = mvc.perform(authed(post("/api/v1/purchase-orders"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"vendorId\":\"" + vendorA + "\",\"lines\":["
+								+ "{\"ingredientId\":\"" + rice + "\",\"quantity\":5,\"unit\":\"KG\"}]}"))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.poNumber").exists())
+				.andReturn().getResponse().getContentAsString();
+
+		JsonNode answer = JSON.readTree(body);
+		String poNumber = answer.get("poNumber").asText();
+		assert poNumber.matches("PO-\\d{4}-\\d{4}") : "expected PO-YYYY-nnnn, got " + poNumber;
+		assert getDetail(answer.get("id").asText()).get("order").get("poNumber").asText().equals(poNumber)
+				: "the number in the response must be the order's own";
+	}
+
+	/**
+	 * T-134. Until the shopping list raised its orders one vendor tile at a time, only generation
+	 * filled in an expected price: it looked the vendor's last-known figures up, and manual creation
+	 * sent nulls. The tiles create their orders through the manual endpoint — it is the only one that
+	 * can carry an adjusted quantity, an added line and a typed date — so without this the price
+	 * column would have quietly vanished from every order the temple raises in the ordinary way.
+	 *
+	 * <p>Three lines, three answers, because "fills the price in" is not one behaviour: a blank line
+	 * takes the vendor's last-known price, a line that brought its own keeps it, and a described line
+	 * — four plastic stools — has no catalogue row to have a price on and stays null.
+	 */
+	@Test
+	@DisplayName("a line raised without a price takes the vendor's last-known one, and only that line")
+	void createFillsInTheVendorsLastKnownPrice() throws Exception {
+		admin.update("""
+				INSERT INTO vendor_supplies (tenant_id, vendor_id, ingredient_id, last_price, preferred)
+				VALUES (?, ?, ?, 45.00, true)
+				""", tenant, vendorA, rice);
+		admin.update("""
+				INSERT INTO vendor_supplies (tenant_id, vendor_id, ingredient_id, last_price, preferred)
+				VALUES (?, ?, ?, 120.00, true)
+				""", tenant, vendorA, dal);
+		// Sugar is supplied by this vendor but nobody has ever bought it: no price is known, and none
+		// is invented.
+		admin.update("""
+				INSERT INTO vendor_supplies (tenant_id, vendor_id, ingredient_id, last_price, preferred)
+				VALUES (?, ?, ?, NULL, true)
+				""", tenant, vendorA, sugar);
+
+		String body = mvc.perform(authed(post("/api/v1/purchase-orders"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"vendorId\":\"" + vendorA + "\",\"lines\":["
+								+ "{\"ingredientId\":\"" + rice + "\",\"quantity\":9,\"unit\":\"KG\"},"
+								+ "{\"ingredientId\":\"" + dal + "\",\"quantity\":6,\"unit\":\"KG\",\"expectedPrice\":99.50},"
+								+ "{\"ingredientId\":\"" + sugar + "\",\"quantity\":2,\"unit\":\"KG\"},"
+								+ "{\"description\":\"Plastic stool\",\"quantity\":4,\"unit\":\"PIECES\"}]}"))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+
+		JsonNode lines = getDetail(JSON.readTree(body).get("id").asText()).get("lines");
+		Map<String, JsonNode> bySubject = new HashMap<>();
+		for (JsonNode l : lines) {
+			bySubject.put(l.get("ingredientName").isNull()
+					? l.get("description").asText() : l.get("ingredientName").asText(), l);
+		}
+		assert bySubject.get("Rice").get("expectedPrice").asDouble() == 45.0
+				: "a blank price takes the vendor's last-known one";
+		assert bySubject.get("Toor Dal").get("expectedPrice").asDouble() == 99.5
+				: "a price the caller sent is the caller's";
+		assert bySubject.get("Sugar").get("expectedPrice").isNull()
+				: "no last price known, so none invented";
+		assert bySubject.get("Plastic stool").get("expectedPrice").isNull()
+				: "a described line has no catalogue row to have a price on";
+	}
+
 	@Test
 	@DisplayName("a sent purchase order can no longer be edited")
 	void cannotEditAfterSend() throws Exception {

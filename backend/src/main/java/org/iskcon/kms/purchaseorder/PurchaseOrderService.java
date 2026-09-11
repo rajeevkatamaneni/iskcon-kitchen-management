@@ -155,15 +155,24 @@ public class PurchaseOrderService {
 
 	// ---- Create ---------------------------------------------------------
 
+	/**
+	 * Raises an order that did not exist a moment ago — typed by hand at {@code /orders/new}, or
+	 * built in the panel a vendor tile on the shopping list opens (T-134).
+	 *
+	 * <p><strong>It answers with the order's number as well as its id.</strong> Rajeev's journey
+	 * (D-24 §6) ends with "a green confirmation naming the PO number" on the shopping list — the
+	 * thing a person can read out, {@code PO-2026-0041}, not a uuid — and the number is already in
+	 * hand here, having just been allocated. Returning it costs nothing; making the screen fetch
+	 * the order back to read one string is a second round trip for a fact this method already knows.
+	 */
 	@Transactional
-	public UUID createManual(AuthenticatedUser actor, CreatePurchaseOrderRequest request) {
+	public CreatedPurchaseOrder createManual(AuthenticatedUser actor, CreatePurchaseOrderRequest request) {
 		// A new order is dated the temple's today, so that is the floor a hand-typed needed-by is
 		// measured against. Checked here and not in createPo, because generation is not a person
 		// typing: see requireNeededByOnOrAfter.
 		requireNeededByOnOrAfter(request.neededBy(), LocalDate.now(clock.zone()), null);
-		UUID id = createPo(actor, request.vendorId(), request.neededBy(),
+		return createPo(actor, request.vendorId(), request.neededBy(),
 				request.deliveryLocation(), request.notes(), toLines(request.lines()));
-		return id;
 	}
 
 	/**
@@ -225,7 +234,7 @@ public class PurchaseOrderService {
 					.map(r -> new LineDraft(r.ingredientId(), null, r.quantity(), r.unit(), r.lastPrice()))
 					.toList();
 			created.add(createPo(actor, e.getKey(), neededBy, null,
-					"Generated from the shopping list", lines));
+					"Generated from the shopping list", lines).id());
 		}
 		return created;
 	}
@@ -247,7 +256,23 @@ public class PurchaseOrderService {
 		return map;
 	}
 
-	private UUID createPo(AuthenticatedUser actor, UUID vendorId, LocalDate neededBy,
+	/**
+	 * Writes the order header and its lines, and hands back both halves of its identity.
+	 *
+	 * <p><strong>A line that arrives without an expected price is given the vendor's last-known
+	 * one.</strong> That figure is what the sheet prints beside the quantity and what the delivery
+	 * and the vendor's bill are both checked against, and until T-134 only generation from the
+	 * shopping list carried it — generation looked the prices up and manual creation sent nulls.
+	 * The shopping list now raises its orders through this path (one order per vendor tile, created
+	 * by the panel's Save), so leaving the fill in the generator would have quietly dropped the
+	 * price column off every order the temple raises in the ordinary way.
+	 *
+	 * <p>It fills only what was left blank, and only for a line naming a catalogue ingredient: a
+	 * price the caller sent is the caller's, and a described line — four plastic stools — has no
+	 * catalogue row to have a last price on. Where nothing is known the column stays null and the
+	 * sheet prints a dash, which is truthful; an invented number would not be.
+	 */
+	private CreatedPurchaseOrder createPo(AuthenticatedUser actor, UUID vendorId, LocalDate neededBy,
 			String deliveryLocation, String notes, List<LineDraft> lines) {
 		requireVendor(vendorId);
 		String poNumber = nextPoNumber();
@@ -274,9 +299,29 @@ public class PurchaseOrderService {
 			ps.setObject(8, actor.getUserId());
 			return ps;
 		});
-		insertLines(id, lines);
+		insertLines(id, withLastKnownPrices(vendorId, lines));
 		recordEvent(id, "CREATED", poNumber + " created as draft with " + lines.size() + " line(s)", actor);
-		return id;
+		return new CreatedPurchaseOrder(id, poNumber);
+	}
+
+	/** One vendor's last-known prices, applied to the lines that did not bring one. */
+	private List<LineDraft> withLastKnownPrices(UUID vendorId, List<LineDraft> lines) {
+		if (lines.stream().noneMatch(l -> l.expectedPrice() == null && l.ingredientId() != null)) {
+			return lines;
+		}
+		Map<UUID, BigDecimal> lastPrices = new LinkedHashMap<>();
+		jdbc.query("""
+				SELECT ingredient_id, last_price FROM vendor_supplies
+				WHERE vendor_id = ? AND last_price IS NOT NULL
+				""", rs -> {
+			lastPrices.put(rs.getObject("ingredient_id", UUID.class), rs.getBigDecimal("last_price"));
+		}, vendorId);
+		return lines.stream()
+				.map(l -> l.expectedPrice() != null || l.ingredientId() == null
+						? l
+						: new LineDraft(l.ingredientId(), l.description(), l.quantity(), l.unit(),
+								lastPrices.get(l.ingredientId())))
+				.toList();
 	}
 
 	// ---- Lifecycle ------------------------------------------------------

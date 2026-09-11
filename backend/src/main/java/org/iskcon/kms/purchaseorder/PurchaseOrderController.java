@@ -56,13 +56,22 @@ public class PurchaseOrderController {
 		return service.get(id);
 	}
 
+	/**
+	 * Raises one order against one vendor: the manual path at {@code /orders/new}, and the panel a
+	 * vendor tile opens over the shopping list (T-134, D-24 §6).
+	 *
+	 * <p>Answers with the order's {@code poNumber} beside its id. The shopping list confirms a
+	 * created order by name — "PO-2026-0041 raised for Heritage Fresh Dairy" — and the alternative
+	 * was fetching the order back to read one string that this response already knew.
+	 */
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public ResponseEntity<Map<String, Object>> create(
 			@Valid @RequestBody CreatePurchaseOrderRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
-		UUID id = service.createManual(actor, request);
-		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
+		CreatedPurchaseOrder created = service.createManual(actor, request);
+		return ResponseEntity.status(HttpStatus.CREATED)
+				.body(Map.of("id", created.id(), "poNumber", created.poNumber()));
 	}
 
 	/** Generate one draft PO per vendor from the selected shopping-list lines. */

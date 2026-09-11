@@ -148,7 +148,11 @@ beforeEach(() => {
   listVendors.mockReset().mockResolvedValue([vendor({})]);
   listIngredients.mockReset().mockResolvedValue([RICE]);
   listPurchaseOrders.mockReset().mockResolvedValue([] as PurchaseOrderView[]);
-  createPurchaseOrder.mockReset().mockResolvedValue({ id: "po-new" });
+  // The endpoint answers with the order's number as well as its id since T-134, because the
+  // shopping list's vendor tiles confirm a created order by name. This screen still uses only the
+  // id — it hands it to /orders, which offers a link to the new draft — but the stub answers the
+  // way the server does, so a screen that started reading the number would not find undefined here.
+  createPurchaseOrder.mockReset().mockResolvedValue({ id: "po-new", poNumber: "PO-2026-0044" });
 });
 
 describe("the way in, from the purchase-order list", () => {

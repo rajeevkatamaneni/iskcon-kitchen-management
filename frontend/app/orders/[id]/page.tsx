@@ -6,15 +6,19 @@ import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type GoodsReceiptLineView, type IngredientView, type PurchaseOrderLineView, type ReturnReason } from "@/lib/api";
+import { api, toApiError, type ApiError, type GoodsReceiptLineView, type PurchaseOrderLineView, type ReturnReason } from "@/lib/api";
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { dateWithYear, FOOD_UNITS, leadTimeWarning, money, quantity, unitLabel, templeDay } from "@/lib/format";
+import { dateWithYear, money, quantity, unitLabel, templeDay } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
+// The edit form, which this screen and the shopping-list panel both mount — see T-134 and the
+// note on the component. `subjectOf` comes with it because the tables below print the same
+// subject and two copies of that rule is how one of them comes to print an empty cell.
+import { PurchaseOrderEditor, subjectOf, type PurchaseOrderDraft } from "@/components/PurchaseOrderEditor";
 import { Button } from "@/components/ds/Button";
 import { Badge } from "@/components/ds/Badge";
 import { HintedField } from "@/components/ds/InfoHint";
@@ -37,45 +41,6 @@ const RETURN_REASONS: ReturnReason[] = ["DAMAGED", "SPOILED", "WRONG_ITEM", "NOT
  */
 function reasonLabel(reason: string): string {
   return reason.replace(/_/g, " ").toLowerCase();
-}
-
-/**
- * A line as it is being edited. The quantity is held as the text in the box rather than a number so
- * a person can clear the field and retype it; it becomes a number once, on save.
- *
- * <p>`ingredientId` and `description` are exclusive, exactly as they are on the server: a line
- * either names a catalogue ingredient or describes something that is not in it. `subjectOf` is how
- * either is read for display.
- *
- * <p>`key` is a React key and nothing else. It is never sent: the update endpoint replaces a
- * draft's lines wholesale, so a line has no identity across a save. It exists because the table
- * used to be keyed on `ingredientId`, which collides the moment two lines are described and both
- * carry null — React would then reuse one row's DOM for the other and the quantity typed into one
- * box would appear in the wrong row. An existing line uses its own server id; a line just added
- * gets a fresh uuid.
- */
-interface DraftLine {
-  key: string;
-  ingredientId: string | null;
-  ingredientName: string | null;
-  description: string | null;
-  quantity: string;
-  unit: string;
-  expectedPrice: number | null;
-}
-
-/**
- * What a line is for, in words — the catalogue name, or the description when there is no catalogue
- * entry (T-024).
- *
- * <p>Never `l.ingredientName` on its own. A described line's name is null, and null renders as
- * nothing at all in JSX: the row would keep its quantity and its price and lose the one column that
- * says what is being bought, with no error anywhere. The `?? ""` at the end is unreachable — the
- * database CHECK guarantees one of the two is set — and is there because TypeScript cannot know
- * that and a crash on a screen is worse than an empty cell.
- */
-function subjectOf(l: { ingredientName: string | null; description: string | null }): string {
-  return l.ingredientName ?? l.description ?? "";
 }
 
 /**
@@ -139,12 +104,11 @@ function PurchaseOrderDetailView() {
   const [returning, setReturning] = useState<{ receiptId: string; line: GoodsReceiptLineView } | null>(null);
   // "" means the vendor's own preferred language; otherwise an explicit override for print / PDF.
   const [docLanguage, setDocLanguage] = useState("");
-  // Null while nobody is editing. Non-null holds the working copy of the lines, which is only
-  // written back to the server when Save is pressed — so abandoning an edit costs nothing.
-  const [draftLines, setDraftLines] = useState<DraftLine[] | null>(null);
-  // The working copy of the needed-by date, as the text in the box: "" is a date deliberately
-  // cleared, which is a legitimate order with nothing to meet, not a missing answer.
-  const [draftNeededBy, setDraftNeededBy] = useState("");
+  // Whether the edit form is open, and nothing more. The working copy of the lines and of the
+  // needed-by date belongs to PurchaseOrderEditor, which is mounted while this is true and
+  // unmounted when it is not — so abandoning an edit costs nothing and there is no second copy of
+  // the draft up here to fall out of step with the one being typed into (T-134).
+  const [editing, setEditing] = useState(false);
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -247,9 +211,6 @@ function PurchaseOrderDetailView() {
   // cancelled order's status no longer says whether it was ever sent, and that is exactly the case
   // the ruling is about — a draft, cancelled, with the box ticked.
   const wasSent = po?.sentAt != null;
-  // Advisory only, and recomputed as the date is typed. A date inside the vendor's usual notice is
-  // a thing worth saying out loud and not a thing worth refusing — see leadTimeWarning.
-  const neededByWarning = draftNeededBy === "" ? null : leadTimeWarning(draftNeededBy);
 
   /**
    * The described lines on this order that nobody has yet said arrived (T-066).
@@ -369,72 +330,29 @@ function PurchaseOrderDetailView() {
     }
   }
 
-  function startEditing() {
-    setActionError(null);
-    setDraftNeededBy(po?.neededBy ?? "");
-    setDraftLines(lines.map((l) => ({
-      key: l.id,
-      ingredientId: l.ingredientId,
-      ingredientName: l.ingredientName,
-      description: l.description,
-      quantity: String(l.quantity),
-      unit: l.unit,
-      expectedPrice: l.expectedPrice,
-    })));
-  }
-
-  async function saveLines(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!po || !draftLines) return;
-
-    // An order with nothing on it is not an empty order, it is a cancelled one — and this is where
-    // that is said, in words, rather than by greying the last Remove button (T-135). The manual
-    // order screen refuses the same thing in the same shape ("An order needs at least one line"),
-    // and the sentence can name the way out, which a disabled button never could.
-    if (draftLines.length === 0) {
-      setActionError(toApiError(null, "An order needs at least one line. Add what is being bought, or cancel the order at the foot of the page."));
-      return;
-    }
-
-    const quantities = draftLines.map((l) => Number(l.quantity));
-    if (quantities.some((q) => !Number.isFinite(q) || q <= 0)) {
-      setActionError(toApiError(null, "Every line needs a quantity above zero. Remove a line you no longer want."));
-      return;
-    }
-
-    // The one thing about this date that is refused rather than warned about, mirrored from the
-    // server's KMS-400014 so the refusal arrives before the round trip rather than after it. The
-    // server is still the guard; this only saves a wasted submit.
-    if (draftNeededBy !== "" && draftNeededBy < po.orderDate) {
-      setActionError(toApiError(null, "That date is before the order was raised. Choose a day on or after it."));
-      return;
-    }
-
+  /**
+   * Writes an edited draft back (T-134).
+   *
+   * <p>The draft itself is built and validated by PurchaseOrderEditor, which hands it over in the
+   * shape the endpoint takes. What is left here is what only this screen knows: which order it is,
+   * the two header fields the form does not offer, and what to do afterwards.
+   */
+  async function saveLines(draft: PurchaseOrderDraft) {
+    if (!po) return;
     // The endpoint replaces a draft wholesale, so the header fields travel back with the lines —
     // otherwise correcting a quantity would quietly erase the delivery address somebody typed last
     // week. If the order was sent from another screen in the meantime the server refuses with
     // KMS-400050, and that refusal is shown as it arrives rather than swallowed.
     const ok = await run(
       (t) => api.updatePurchaseOrder(id, {
-        neededBy: draftNeededBy === "" ? null : draftNeededBy,
+        neededBy: draft.neededBy,
         deliveryLocation: po.deliveryLocation,
         notes: po.notes,
-        // Both halves of the subject travel, always. `description` is required-and-nullable on
-        // PoLineInput rather than optional precisely so that this object literal cannot quietly
-        // omit it — an omitted optional field is exempt from the excess-property check when it is
-        // spread, arrives as undefined, and would turn every described line back into a line with
-        // no subject at all, which the server then refuses with KMS-400128.
-        lines: draftLines.map((l, i) => ({
-          ingredientId: l.ingredientId,
-          description: l.description,
-          quantity: quantities[i],
-          unit: l.unit,
-          expectedPrice: l.expectedPrice,
-        })),
+        lines: draft.lines,
       }, t),
       "We couldn’t save those changes."
     );
-    if (ok) setDraftLines(null);
+    if (ok) setEditing(false);
   }
 
   return (
@@ -472,9 +390,17 @@ function PurchaseOrderDetailView() {
                   <p className="text-sm tabular-nums text-ink-secondary">
                     {po.sentAt ? `Sent ${templeDay(po.sentAt)}` : "Not sent yet"}
                   </p>
-                  <p className="text-sm tabular-nums text-ink-secondary">
-                    {po.neededBy ? `Needed by ${dateWithYear(po.neededBy)}` : "No needed-by date"}
-                  </p>
+                  {/* The same rule as the lines table below, and found by the same sweep (T-134):
+                      the form carries a "Needed by" box, so in edit mode this readout is a second
+                      copy of one field — and it shows the saved date while the box shows the one
+                      being typed, which is two answers to one question. The other two dates stay:
+                      when the order was raised and whether it has gone are facts the form does not
+                      offer and cannot change. */}
+                  {!editing && (
+                    <p className="text-sm tabular-nums text-ink-secondary">
+                      {po.neededBy ? `Needed by ${dateWithYear(po.neededBy)}` : "No needed-by date"}
+                    </p>
+                  )}
                   {po.sentAt && <p className="text-sm text-ink-muted">Fixed when the order was sent</p>}
                   {po.cancelReason && <p className="mt-1 text-sm text-ink-muted">Cancelled: {po.cancelReason}</p>}
                   {/*
@@ -528,7 +454,11 @@ function PurchaseOrderDetailView() {
                   the order he was looking at was a draft and it does not appear on one; it is the
                   other thing a person does from this screen, and it belongs beside them.
                 */}
-                {!draftLines && (
+                {/* `!(editing && canEdit)` rather than `!editing`, and the difference only shows in
+                    one case: if the order stops being a draft while somebody has the form open —
+                    marked sent from another screen — the form is no longer rendered, and a bank
+                    hidden on `editing` alone would leave the screen with no actions on it at all. */}
+                {!(editing && canEdit) && (
                   <div className="flex flex-wrap items-center gap-2">
                     <select
                       aria-label="Document language"
@@ -546,7 +476,7 @@ function PurchaseOrderDetailView() {
                         needed-by date as well as the lines, so the old label was describing less
                         than the button did. It no longer doubles as the way out of edit mode
                         either: it is not rendered there at all. */}
-                    {canEdit && <button type="button" disabled={busy} onClick={startEditing} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Edit</button>}
+                    {canEdit && <button type="button" disabled={busy} onClick={() => { setActionError(null); setEditing(true); }} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Edit</button>}
                     {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn’t send that order.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Mark sent</button>}
                     {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn’t send it on WhatsApp.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Send on WhatsApp</button>}
                     {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
@@ -572,145 +502,45 @@ function PurchaseOrderDetailView() {
                 </div>
               )}
 
-              {draftLines && canEdit && (
-                <section className="card mb-6 px-6 py-5" aria-labelledby="edit-heading">
-                  <h2 id="edit-heading" className="text-lg">Edit this draft</h2>
-                  <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-                    The vendor cannot be changed. Cancel this order at the foot of the page and
-                    raise it against the right one. Once it is sent, nothing here can be changed
-                    at all.
-                  </p>
-                  <form className="mt-4" aria-label="Edit the draft order" onSubmit={saveLines}>
-                    {/* The standing advice — that the date may be left off — is the "i" beside the
-                        label. The warning underneath is not: it is recomputed as the date is typed
-                        and is about the day actually in the box, so it has to be on the screen
-                        rather than behind a press. */}
-                    <div className="mb-5 flex max-w-xs flex-col gap-1">
-                      <HintedField label="Needed by" hint="Leave it blank if there is no date to meet">
-                        {/* min is the order's own date, so the picker itself will not offer a day
-                            behind the order. The server refuses it regardless (KMS-400014): a browser
-                            attribute is a courtesy, not a guard. */}
-                        {(id) => (
-                          <input
-                            id={id}
-                            type="date"
-                            value={draftNeededBy}
-                            min={po.orderDate}
-                            onChange={(e) => setDraftNeededBy(e.target.value)}
-                            className="min-h-touch rounded-control border border-hairline px-3"
-                          />
-                        )}
-                      </HintedField>
-                      {neededByWarning && (
-                        <span className="pl-field-inset text-sm text-warning">{neededByWarning}</span>
-                      )}
-                    </div>
-                    <table className={`${TABLE} text-sm`}>
-                      <thead className={THEAD}>
-                        <tr>
-                          <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
-                          <th className={TH_NUM}>Quantity</th>
-                          <th className={TH_ACTIONS}>Remove</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {draftLines.map((l, i) => (
-                          <tr key={l.key} className={TR}>
-                            <td className={`${TD_TEXT} ${WRAP}`}>{subjectOf(l)}</td>
-                            <td className={TD_NUM}>
-                              <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                value={l.quantity}
-                                aria-label={`Quantity of ${subjectOf(l)}`}
-                                onChange={(e) => setDraftLines((cur) => cur && cur.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))}
-                                className="w-28 rounded-control border border-hairline px-2 py-1 tabular-nums"
-                              />{" "}
-                              {/* The bare label, never a promoted one: the box beside it holds and
-                                  submits the line's own stored unit, so a readout that said "gm"
-                                  over a figure in kilograms would invite a thousandfold error. */}
-                              <span className="text-ink-secondary">{unitLabel(l.unit)}</span>
-                            </td>
-                            <td className={TD_ACTIONS}>
-                              {/*
-                                Rajeev, 2026-09-10, driving the deployed app: the Remove button is
-                                "washed out — fix the styling" so that it reads as an available
-                                control. Three things were making it look unavailable, and only one
-                                of them was a colour.
+              {/*
+                The edit form itself lives in components/PurchaseOrderEditor.tsx, and the whole of
+                T-134 on this side is that it was moved there rather than copied (D-24 §6). Rajeev:
+                "The panel and the edit screen are the same thing. If they are built twice they
+                will drift." The shopping list mounts this identical component as a panel over
+                itself, for an order that does not exist yet; the only things that differ are the
+                words and what Save does with the finished draft.
 
-                                It was disabled whenever the draft was down to its last line, which
-                                dims it to 45% and says nothing about why. An order with nothing on
-                                it really is a cancellation rather than an empty order — but this
-                                screen already argues, at length, on the "Did these arrive?" panel
-                                below, that going grey is the wrong way to say so: there is nowhere
-                                on a greyed button to put the sentence that would explain it. So the
-                                button stays live and `saveLines` refuses an empty order in words,
-                                exactly as the manual order screen at /orders/new/lines does.
-
-                                `variant="ghost"` is the design system's neutral second action — a
-                                solid pane with a resting border, full-strength ink — and it is
-                                already what the identical Remove on /orders/new/lines uses. Danger
-                                was the wrong material as well as the paler one: a line taken off a
-                                working copy that has not been saved destroys nothing, and the one
-                                genuinely destructive act on this screen now has a titled block at
-                                the foot of the page. No new colour was invented; both are
-                                DESIGN_SYSTEM.md tokens by way of ds/Button.
-
-                                And `type="button"`, which was missing. A <button> inside a <form>
-                                defaults to type="submit", so pressing Remove both dropped the line
-                                and submitted the edit form — and because React had not yet applied
-                                the state update, it saved the order with the line still on it.
-                              */}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={busy}
-                                aria-label={`Remove ${subjectOf(l)}`}
-                                onClick={() => setDraftLines((cur) => cur && cur.filter((_, j) => j !== i))}
-                              >
-                                Remove
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-
-                    <AddLine
-                      busy={busy}
-                      ingredients={ingredientsData ?? []}
-                      alreadyOnOrder={draftLines
-                        .map((l) => l.ingredientId)
-                        .filter((x): x is string => x !== null)}
-                      onAdd={(line) => setDraftLines((cur) => (cur ? [...cur, line] : cur))}
-                    />
-
-                    {/*
-                      Two buttons in edit mode, and these are them (D-24 §4). Rajeev, 2026-09-10:
-                      "Why do we need all the other buttons in edit mode?" — so the bank in the
-                      header is not rendered at all while this form is open, and what is left is
-                      Save and Cancel.
-
-                      "Cancel" is safe to say here now, and was not before. His objection was that
-                      the word was ambiguous — "Is it cancelling out of this screen OR cancelling
-                      the PO?" — and the answer is that cancelling the purchase order has moved to
-                      a titled block at the foot of the page with its own reason box. There is no
-                      longer a second Cancel anywhere near this one, and the one that exists says
-                      what it cancels in its own heading.
-
-                      A real button rather than the underlined text "Discard" it replaces: the
-                      second of two actions is still an action, and a line of text that turns out
-                      to be pressable is the shape Rajeev objected to on the calendar screen.
-                    */}
-                    <div className="mt-5 flex items-center gap-3">
-                      <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Save</button>
-                      <Button type="button" variant="ghost" disabled={busy} onClick={() => setDraftLines(null)}>Cancel</Button>
-                    </div>
-                  </form>
-                </section>
+                What stayed behind on this page is the half that is not the form: the bank of
+                buttons above, the tables below, and the cancellation at the foot of the page.
+              */}
+              {editing && canEdit && (
+                <PurchaseOrderEditor
+                  words={{
+                    heading: "Edit this draft",
+                    formLabel: "Edit the draft order",
+                    intro: "The vendor cannot be changed. Cancel this order at the foot of the page and raise it against the right one. Once it is sent, nothing here can be changed at all.",
+                    emptyOrder: "An order needs at least one line. Add what is being bought, or cancel the order at the foot of the page.",
+                    dateBeforeFloor: "That date is before the order was raised. Choose a day on or after it.",
+                  }}
+                  initialLines={lines.map((l) => ({
+                    key: l.id,
+                    ingredientId: l.ingredientId,
+                    ingredientName: l.ingredientName,
+                    description: l.description,
+                    quantity: String(l.quantity),
+                    unit: l.unit,
+                    expectedPrice: l.expectedPrice,
+                  }))}
+                  initialNeededBy={po.neededBy ?? ""}
+                  minNeededBy={po.orderDate}
+                  ingredients={ingredientsData ?? []}
+                  busy={busy}
+                  onSave={saveLines}
+                  onCancel={() => setEditing(false)}
+                  onRefuse={(message) => setActionError(toApiError(null, message))}
+                />
               )}
+
 
               {showReceive && canReceive && (
                 <section className="card mb-6 px-6 py-5" aria-labelledby="receive-heading">
@@ -891,6 +721,25 @@ function PurchaseOrderDetailView() {
                 </section>
               )}
 
+              {/*
+                Not while the draft is being edited (T-134).
+
+                The lines were on this screen twice in edit mode: the editable table inside the form
+                — Item, Quantity, Remove, with the quantity in a box — and this read-only one
+                underneath it, showing the same line and the *saved* figure. Typing 45 into the box
+                left "Jaggery 5 Kg" sitting below it, so the screen disagreed with itself about what
+                the order says, and the second answer was the stale one.
+
+                It is not a Wave A regression: this table has been rendered unconditionally since
+                T-024, and the edit form has always opened above it. What Wave A changed is that the
+                bank of buttons no longer sits between them, which is what made it easy to see.
+
+                Rajeev's own question settles it — "Why do we need all the other buttons in edit
+                mode?" — and it answers this the same way. In edit mode the order's lines are the
+                thing being edited; a second, uneditable copy of them is not context, it is a
+                contradiction. It comes back the moment Save or Cancel is pressed.
+              */}
+              {!editing && (
               <section className="table-wrap mb-8 overflow-x-auto">
                 {/* Named, because this screen can show four tables at once — the order as issued,
                     the receiving form, and one per delivery — and until T-066 none of them could be
@@ -930,6 +779,7 @@ function PurchaseOrderDetailView() {
                   </tbody>
                 </table>
               </section>
+              )}
 
               {/* What actually arrived, delivery by delivery, and what has since gone back (T-013).
                   Until now this screen fetched the receipts only to add up "received so far" in the
@@ -1113,7 +963,7 @@ function PurchaseOrderDetailView() {
                       setVendorAbandoned(false);
                       // Nothing is being edited any more either: a cancelled order cannot be, and
                       // leaving the form open would offer a Save the server would refuse.
-                      setDraftLines(null);
+                      setEditing(false);
                     }
                   }}>
                     <div className="flex flex-wrap items-end gap-3">
@@ -1176,160 +1026,6 @@ function PurchaseOrderDetailView() {
           )}
         </div>
       </main>
-    </div>
-  );
-}
-
-/**
- * Adding a line to a draft — either an ingredient from the catalogue, or something that is not in
- * it at all.
- *
- * <p>A picker rather than a box to paste an identifier into: nobody knows an ingredient by its id,
- * and the vendor page and the invoice form both choose one this way already.
- *
- * <p><strong>The second half is what T-024 adds, and it is the only place in the application where
- * a described line can be created.</strong> Four plastic stools from a furniture shop are bought on
- * a purchase order like anything else, and until now the only way to put them on one was to invent
- * an `ingredients` row — which then appeared in the recipe picker, in the low-stock job and on the
- * ingredients screen for ever. So: a description, a quantity's unit, and nothing else. It gets no
- * expected price for the same reason the ingredient half gets none.
- *
- * <p>Two controls rather than one combined box, because the two are genuinely different acts and
- * the server treats them as exclusive. Pressing either "Add" adds one line; neither offers the
- * other's field, so a line with both — which the server refuses with KMS-400128 — cannot be built
- * here by accident.
- */
-function AddLine({
-  busy, ingredients, alreadyOnOrder, onAdd,
-}: {
-  busy: boolean;
-  ingredients: IngredientView[];
-  alreadyOnOrder: string[];
-  onAdd: (line: DraftLine) => void;
-}) {
-  const [chosen, setChosen] = useState("");
-  const [described, setDescribed] = useState("");
-  const [describedUnit, setDescribedUnit] = useState("PIECES");
-
-  // An ingredient already on the order is edited on its own row; offering it twice would produce
-  // two lines for one thing and leave the vendor to work out which is meant. Described lines are
-  // deliberately not de-duplicated this way: "Extension cord" twice may well be two different
-  // things, and there is no id to say otherwise.
-  const available = ingredients.filter((i) => !alreadyOnOrder.includes(i.id));
-
-  function add() {
-    const ingredient = available.find((i) => i.id === chosen);
-    if (!ingredient) return;
-    // No expected price: that figure is a snapshot of the vendor's last-known price taken when the
-    // order was raised, and there is nothing honest to put here for a line added by hand. The sheet
-    // prints a dash, which is truthful, where an invented number would not be.
-    onAdd({
-      key: crypto.randomUUID(),
-      ingredientId: ingredient.id,
-      ingredientName: ingredient.name,
-      description: null,
-      quantity: "",
-      unit: ingredient.unit,
-      expectedPrice: null,
-    });
-    setChosen("");
-  }
-
-  function addDescribed() {
-    const text = described.trim();
-    if (text === "") return;
-    onAdd({
-      key: crypto.randomUUID(),
-      ingredientId: null,
-      ingredientName: null,
-      description: text,
-      quantity: "",
-      unit: describedUnit,
-      expectedPrice: null,
-    });
-    setDescribed("");
-  }
-
-  return (
-    <div className="mt-4 grid gap-4 border-t border-hairline pt-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Add an ingredient</span>
-          <select
-            value={chosen}
-            onChange={(e) => setChosen(e.target.value)}
-            className="min-h-touch rounded-control border border-hairline px-3"
-          >
-            <option value="">Choose…</option>
-            {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-          </select>
-        </label>
-        <button
-          type="button"
-          disabled={busy || chosen === ""}
-          onClick={add}
-          className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
-        >
-          Add line
-        </button>
-      </div>
-
-      <div className="flex flex-wrap items-end gap-3">
-        {/* The hint says what this is for and, more usefully, what it costs: a described line is
-            never taken into stock, which is the whole reason it does not need a catalogue entry.
-            Saying so here is cheaper than saying it at the receiving table, where somebody has
-            already gone looking for a box to type into. */}
-        {/* Rajeev, 2026-09-10 (D-24 §4): "Or describe something not in the catalogue" becomes "An
-            item not in the catalogue". The old label described the act of typing; this one names
-            the thing being added, which is what the person is looking for. Changed on both screens
-            carrying this field in the same breath, because one wording in two places is how they
-            start to differ. */}
-        <HintedField
-          label="An item not in the catalogue"
-          hint="For things the store room doesn’t track — a plastic stool, an extension cord. It goes on the order and the bill, but never into stock."
-        >
-          {(fieldId) => (
-            <input
-              id={fieldId}
-              value={described}
-              maxLength={200}
-              placeholder="Plastic stool"
-              onChange={(e) => setDescribed(e.target.value)}
-              className="min-h-touch w-64 rounded-control border border-hairline px-3"
-            />
-          )}
-        </HintedField>
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Counted in</span>
-          {/* FOOD_UNITS, in its own order, and never a list typed out here. E11-S2's one
-              vocabulary: six screens each used to carry their own copy of the five unit names, so
-              adding a unit meant finding all six and forgetting one meant a dropdown that silently
-              offered less than its neighbours. This box was briefly a seventh, with the five
-              reordered to put pieces first — which is where almost everything reaching it lands.
-              That preference is expressed by the initial value instead, which costs nothing and
-              leaves the vocabulary reading the same here as on every other screen.
-
-              All five rather than PIECES alone: a described line might be twenty litres of floor
-              cleaner, and the column's CHECK admits the same five whatever the line's subject. */}
-          <select
-            value={describedUnit}
-            onChange={(e) => setDescribedUnit(e.target.value)}
-            className="min-h-touch rounded-control border border-hairline px-3"
-          >
-            {FOOD_UNITS.map((u) => (
-              <option key={u} value={u}>{unitLabel(u)}</option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          disabled={busy || described.trim() === ""}
-          onClick={addDescribed}
-          className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
-        >
-          Add described line
-        </button>
-      </div>
     </div>
   );
 }

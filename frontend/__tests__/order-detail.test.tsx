@@ -479,6 +479,45 @@ describe("purchase order detail", () => {
   });
 
   /**
+   * The order's lines are on the screen once (T-134).
+   *
+   * <p>They were on it twice in edit mode: the editable table inside the form, and the read-only
+   * "What was ordered" table still rendered underneath it — same order, same line, and the one
+   * underneath showing the saved figure while the box above showed the one being typed. Found by
+   * driving the deployed app as a Temple Admin, on Wave A as shipped.
+   *
+   * <p>Not a Wave A regression, and the test says so by covering the whole cycle: the read-only
+   * table has been unconditional since T-024 and the form has always opened above it. What Wave A
+   * changed is that the bank of buttons no longer sits between the two, which is what made it
+   * visible.
+   *
+   * <p>Asserted in all three states — before, during and after — because an assertion that the
+   * table is absent in edit mode would pass just as well on a screen that had lost the table
+   * altogether, and that is the opposite defect.
+   */
+  it("shows the order's lines once while editing, and brings the readout back after", () => {
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.getByRole("table", { name: "What was ordered" })).toBeInTheDocument();
+    expect(screen.getAllByText("Rice")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    expect(screen.queryByRole("table", { name: "What was ordered" })).not.toBeInTheDocument();
+    // One Rice on the screen, and it is the one with a box beside it.
+    expect(screen.getAllByText("Rice")).toHaveLength(1);
+    expect(screen.getByLabelText("Quantity of Rice")).toBeInTheDocument();
+    // The needed-by date is the other thing that was on the screen twice: a readout of the saved
+    // date beside a box holding the one being typed. The date field stays; the readout goes.
+    expect(screen.queryByText(/^Needed by \d/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Needed by")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    expect(screen.getByRole("table", { name: "What was ordered" })).toBeInTheDocument();
+    expect(screen.getByText(/^Needed by \d/)).toBeInTheDocument();
+  });
+
+  /**
    * Cancelling the order is at the foot of the page, on the view screen and the edit screen alike.
    *
    * <p>"Is it cancelling out of this screen OR cancelling the PO?" was Rajeev's question about the
