@@ -1,14 +1,18 @@
 package org.iskcon.kms.error;
 
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.constraints.Pattern;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -18,6 +22,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -51,6 +56,17 @@ public class GlobalExceptionHandler {
 	 * stops applying to that field — so a test, not a compiler, is what has to notice, and one does.
 	 */
 	private static final String E164_PHONE_RULE = "^\\+[1-9][0-9]{7,14}$";
+
+	/**
+	 * How many values are still worth printing in a sentence somebody has to read.
+	 *
+	 * <p>Listing what an enum accepts is the whole point of the field errors below, and it stops
+	 * being help at some size: {@code AuditAction} has 108 constants in this tree today and
+	 * {@code ErrorCode} has 148, and a wall of them next to a box tells a temple administrator less
+	 * than one sentence would. Past this many the field is still named — which was the actual defect
+	 * — and the list is left to the API documentation.
+	 */
+	private static final int MOST_VALUES_WORTH_LISTING = 12;
 
 	@ExceptionHandler(ApplicationException.class)
 	public ResponseEntity<ErrorResponse> handleApplicationException(
@@ -185,34 +201,206 @@ public class GlobalExceptionHandler {
 	 *
 	 * <p>The reason goes to the log, not to the screen. "Cannot deserialize value of type
 	 * `CommunicationCategory`" is internals leaking.
+	 *
+	 * <p><strong>It also names the field, which until T-105 it did not, and that was the sharper half
+	 * of the same defect.</strong> A body Jackson cannot parse never reaches the validator at all, so
+	 * the request that is <em>most</em> obviously the caller's own typo — {@code "unit": "EACH"} on a
+	 * purchase order line — was answered with the same KMS-400001 as a failed constraint but with an
+	 * empty field list, while every ordinary validation failure on the very same endpoint arrived
+	 * naming the box to go and fix. Two different answers to the same question, and the less useful
+	 * one went to the easier mistake.
+	 *
+	 * <p>What is added is the field and, for an enum, the values it will accept — both of which are
+	 * the caller's own vocabulary and neither of which is ours. What is deliberately <em>not</em>
+	 * added is Jackson's sentence: it names the Java type and the JSON pointer, and pasting it here
+	 * would trade one defect for the one the paragraph above exists to prevent. {@link
+	 * #nameOfFieldAt} and {@link #whatThisFieldWillAccept} read the exception's structure — its
+	 * {@code getPath()} and its target type — rather than scraping its message, so there is no
+	 * wording to leak and nothing to re-break when the library rephrases itself.
 	 */
 	@ExceptionHandler(HttpMessageNotReadableException.class)
 	public ResponseEntity<ErrorResponse> handleUnreadableBody(
 			HttpMessageNotReadableException e, HttpServletRequest request) {
 
 		ErrorCode code = ErrorCode.VALIDATION_FAILED;
-		log.warn("{} method={} path={} reason={}",
-				code.reference(), request.getMethod(), request.getRequestURI(), e.getMostSpecificCause().toString());
-		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
+		List<ErrorResponse.FieldError> fieldErrors = describeUnreadableValue(e);
+
+		log.warn("{} method={} path={} fields={} reason={}",
+				code.reference(), request.getMethod(), request.getRequestURI(), fieldErrors,
+				e.getMostSpecificCause().toString());
+
+		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code, fieldErrors));
 	}
 
 	/**
-	 * An address that cannot be what it claims — {@code /vendor-invoices/undefined/payments}, a date
-	 * where a number belongs.
+	 * Which field of the body could not be read, and what it would have taken — or nothing at all,
+	 * for the failures where no single field is to blame.
+	 *
+	 * <p>The empty answer is the honest one more often than it looks. A truncated body or an
+	 * unescaped newline is a {@code JsonParseException} with no path in it: nothing there identifies
+	 * a field, and inventing one would point somebody at a box that is perfectly fine. Only
+	 * {@link MismatchedInputException} — the family Jackson raises once it knows which property it
+	 * was filling — carries the {@code getPath()} this reads.
+	 */
+	private List<ErrorResponse.FieldError> describeUnreadableValue(Throwable thrown) {
+		MismatchedInputException mismatch = firstMismatchedInput(thrown);
+		if (mismatch == null) {
+			return List.of();
+		}
+
+		String field = nameOfFieldAt(mismatch.getPath());
+		if (field.isEmpty()) {
+			return List.of();
+		}
+		return List.of(new ErrorResponse.FieldError(field, whatThisFieldWillAccept(mismatch.getTargetType())));
+	}
+
+	/**
+	 * The first mismatch in the chain, because Spring hands us its own wrapper and not Jackson's
+	 * exception.
+	 *
+	 * <p>Bounded rather than looped to exhaustion: a cause chain that cycles is a library bug, and
+	 * hanging the request thread while an exception is being turned into a response would turn that
+	 * bug into an outage. Ten links is far past anything real.
+	 */
+	private MismatchedInputException firstMismatchedInput(Throwable thrown) {
+		Throwable cause = thrown;
+		for (int depth = 0; cause != null && depth < 10; depth++) {
+			if (cause instanceof MismatchedInputException mismatch) {
+				return mismatch;
+			}
+			cause = cause.getCause();
+		}
+		return null;
+	}
+
+	/**
+	 * The field's name as the caller wrote it — {@code lines[0].unit} — built from Jackson's own
+	 * references rather than from its message.
+	 *
+	 * <p>Every part of this is the caller's vocabulary: {@code getFieldName()} is the JSON property,
+	 * which is the name they typed, and the index is the position in the array they sent. A Java
+	 * type name cannot appear here, which is the property that makes echoing it back safe at all.
+	 *
+	 * <p>A reference that is neither a named field nor an index is skipped rather than guessed at.
+	 * That can leave the whole path empty — a failure against the root object itself — and the
+	 * caller of this treats an empty path as "no field to name", which is the truth.
+	 */
+	private String nameOfFieldAt(List<JsonMappingException.Reference> references) {
+		StringBuilder path = new StringBuilder();
+
+		for (JsonMappingException.Reference reference : references) {
+			if (reference.getFieldName() != null) {
+				if (!path.isEmpty()) {
+					path.append('.');
+				}
+				path.append(reference.getFieldName());
+			}
+			else if (reference.getIndex() >= 0) {
+				path.append('[').append(reference.getIndex()).append(']');
+			}
+		}
+		return path.toString();
+	}
+
+	/**
+	 * What to say next to the box: the values, when there is a readable list of them, and otherwise
+	 * that this one will not do.
+	 *
+	 * <p>Enum constants are printed as their names rather than their labels because the name is what
+	 * the caller has to send — {@code KG}, not "Kg". They are the wire vocabulary, so they are not
+	 * internals, and this is the one place a user-facing string is generated rather than written.
+	 *
+	 * <p>Anything that is not an enum gets the general sentence. A date or a decimal could be given
+	 * advice of its own — "use a date like 2026-09-30" — and deliberately is not, because the format
+	 * a field accepts is a fact about that field's configuration, and a sentence here that asserted
+	 * it would be guessing on behalf of every date field in the product at once. Naming the field is
+	 * already the whole of what was missing.
+	 */
+	private String whatThisFieldWillAccept(Class<?> target) {
+		if (target != null && target.isEnum() && target.getEnumConstants().length <= MOST_VALUES_WORTH_LISTING) {
+			String values = Arrays.stream(target.getEnumConstants())
+					.map(constant -> ((Enum<?>) constant).name())
+					.reduce((a, b) -> a + ", " + b)
+					.orElse("");
+			return "Choose one of " + values + ".";
+		}
+		return "That isn't a value we can use here.";
+	}
+
+	/**
+	 * A value in the request that cannot be what it claims — {@code /vendor-invoices/undefined/payments},
+	 * a date where a number belongs, {@code ?status=SNET}.
 	 *
 	 * <p>The third member of the same family as the two below, and found the same way: by a caller
 	 * doing something ordinary and wrong. Answering KMS-500001 for it says the fault is ours when the
 	 * request never named anything real, and sends whoever is diagnosing it into code that never ran.
-	 * A path that identifies nothing is a 404 — which is what it is.
+	 *
+	 * <p><strong>Two different things arrive here, and since T-105 they are answered differently.</strong>
+	 * The argument this handler was written on — <em>"a path that identifies nothing is a 404, which
+	 * is what it is"</em> — is sound for a path and unsound for a filter, and the same exception
+	 * carries both.
+	 *
+	 * <ul>
+	 *   <li>{@code /vendor-invoices/undefined/payments} <strong>names no resource</strong>. Nothing
+	 *       exists at that address and nothing ever could, so KMS-400030 and a 404 is the truth.
+	 *   <li>{@code /orders?status=SNET} <strong>names a real collection and one misspelt word</strong>.
+	 *       The resource is fine; the field is wrong. Answering "We couldn't find what you were
+	 *       looking for" sends the reader hunting for a missing order that exists — which is the
+	 *       same defect T-105 exists to fix, one layer along. So a value that is not part of the
+	 *       address is KMS-400001 and a 400, arriving with the field named exactly as a failed
+	 *       constraint on the same endpoint would.
+	 * </ul>
+	 *
+	 * <p>The test is {@link #isPartOfTheAddress}: whether the parameter that failed to convert is a
+	 * {@code @PathVariable}. That is the whole rule, and it is deliberately a property of the
+	 * parameter rather than of the URL — scoping an exception handler to a request path is the
+	 * mistake the note at the bottom of this file exists to prevent. Anything that is not part of
+	 * the address — a query parameter today, a typed header or cookie in principle — takes the 400,
+	 * because only the address can name something that does not exist. No typed header can reach
+	 * here as this is written: every {@code @RequestHeader} in the tree is a {@code String}, and a
+	 * String never fails to convert.
+	 *
+	 * <p>Either way it now names the parameter, and lists the values when the thing it could not be
+	 * is an enum — for the same reason the body handler above does.
+	 *
+	 * <p>Checked before this was changed: no test in the tree asserts a 404 on a query parameter.
+	 * Every one of the fourteen places asserting KMS-400030 is an {@link ApplicationException}
+	 * raised by service code — a withdrawn endpoint, a row another tenant's RLS policy hides, a
+	 * business rule — and none of them is a type mismatch.
 	 */
 	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
-	public ResponseEntity<ErrorResponse> handleUnusablePathValue(
+	public ResponseEntity<ErrorResponse> handleUnusableRequestValue(
 			MethodArgumentTypeMismatchException e, HttpServletRequest request) {
 
-		ErrorCode code = ErrorCode.RESOURCE_NOT_FOUND;
+		ErrorCode code = isPartOfTheAddress(e) ? ErrorCode.RESOURCE_NOT_FOUND : ErrorCode.VALIDATION_FAILED;
+		List<ErrorResponse.FieldError> fieldErrors = e.getName() == null || e.getName().isBlank()
+				? List.of()
+				: List.of(new ErrorResponse.FieldError(
+						e.getName(), whatThisFieldWillAccept(e.getRequiredType())));
+
 		log.warn("{} method={} path={} parameter={} value={}",
 				code.reference(), request.getMethod(), request.getRequestURI(), e.getName(), e.getValue());
-		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
+
+		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code, fieldErrors));
+	}
+
+	/**
+	 * Whether the value that would not convert was part of the address itself.
+	 *
+	 * <p>Read off the parameter's own annotation rather than by looking at the URL, which is the
+	 * distinction that matters: a handler keyed on a path is a handler that silently stops applying
+	 * when somebody moves an endpoint, and re-learning that is what the closing note of this class
+	 * is about.
+	 *
+	 * <p>A parameter we cannot see at all takes the 400 with the rest. It is the answer that is
+	 * never misleading — it names the parameter the caller themselves supplied and asserts nothing
+	 * about what does or does not exist — whereas a 404 guessed at in the dark tells somebody their
+	 * order is missing when it is not.
+	 */
+	private boolean isPartOfTheAddress(MethodArgumentTypeMismatchException e) {
+		MethodParameter parameter = e.getParameter();
+		return parameter != null && parameter.hasParameterAnnotation(PathVariable.class);
 	}
 
 	/**
