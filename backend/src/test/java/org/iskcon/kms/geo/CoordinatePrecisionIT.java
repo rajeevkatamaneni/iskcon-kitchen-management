@@ -174,6 +174,84 @@ class CoordinatePrecisionIT {
 				.isEqualTo(new GeocodingProvider.Coordinates(12.9716, 77.5946));
 	}
 
+	// ---- The promise belongs to the port, not to each provider (T-063) ----
+
+	/**
+	 * A provider written later, by somebody who never read any of this, that does nothing at all
+	 * about precision — it reads a reply and hands the numbers straight back.
+	 *
+	 * <p>This is the whole acceptance criterion for T-063 in one class. Before the rounding moved
+	 * into {@link GeocodingProvider.Coordinates}, the promise was kept by two private methods in two
+	 * sibling classes, so a third implementation kept it only by remembering to; this one is written
+	 * as carelessly as it is possible to be and the port keeps the promise over its head.
+	 */
+	private static final class NaiveProvider implements GeocodingProvider {
+
+		@Override
+		public Optional<GeocodingProvider.Coordinates> locate(String place) {
+			// Google's own reply for ISKCON - Mysuru, digit for digit, with nothing done to it.
+			return Optional.of(new GeocodingProvider.Coordinates(12.285518000000001, 76.6340866));
+		}
+	}
+
+	@Test
+	@DisplayName("a new provider that does nothing about precision still answers in six decimals")
+	void aProviderThatDoesNothingStillKeepsThePromise() {
+		assertThat(new NaiveProvider().locate("iskcon mysuru"))
+				.as("the port rounds, so an implementation does not have to know that it must")
+				.contains(new GeocodingProvider.Coordinates(12.285518, 76.634087));
+
+		// And through describe(), which is the defaulted method every such provider inherits.
+		assertThat(new NaiveProvider().describe("iskcon mysuru").orElseThrow().at())
+				.isEqualTo(new GeocodingProvider.Coordinates(12.285518, 76.634087));
+	}
+
+	@Test
+	@DisplayName("the constructor itself rounds, so there is no way to hold an unrounded coordinate")
+	void theConstructorIsWhereThePromiseLives() {
+		// The reason this is a compact constructor and not a static factory. A factory would leave
+		// new Coordinates(...) reachable and enforce nothing: every construction site outside this
+		// package — three in meal/MealPlanService and the readers in tenant/ and document/ — calls
+		// the constructor directly, and so would the next one.
+		GeocodingProvider.Coordinates built =
+				new GeocodingProvider.Coordinates(12.285518000000001, 76.6340866);
+
+		assertThat(built.latitude()).isEqualTo(12.285518);
+		assertThat(built.longitude()).isEqualTo(76.634087);
+	}
+
+	@Test
+	@DisplayName("a coordinate read back from a NUMERIC(9,6) column is unchanged by the rounding")
+	void aCoordinateFromAColumnIsUntouched() {
+		// The claim the ledger asked to be tested rather than assumed. tenants.latitude (V1) and
+		// meal_plans.delivery_latitude (V88) are both NUMERIC(9,6), so every Coordinates built from
+		// one of those columns is already at six decimals and the new constructor is a no-op for it.
+		// No database is needed to show it: the question is what BigDecimal("12.971600").doubleValue()
+		// survives, and that is arithmetic.
+		for (String stored : new String[] {"12.971600", "77.594600", "12.285518", "76.634087",
+				"-33.868820", "0.000000", "89.999999", "-179.999999"}) {
+			double column = new java.math.BigDecimal(stored).doubleValue();
+			assertThat(new GeocodingProvider.Coordinates(column, column).latitude())
+					.as("a value the database already holds at six decimals is handed back unchanged")
+					.isEqualTo(column);
+		}
+	}
+
+	@Test
+	@DisplayName("a coordinate that is not finite is carried, not rounded, and never raises")
+	void theConstructorNeverRaises() {
+		// The providers' standing promise — a bad reply from a map service is an empty answer, never
+		// an exception — now has to hold inside the record they answer with. BigDecimal.valueOf
+		// throws on these three, so the guard that used to sit in each provider has to move with the
+		// rounding rather than be left behind.
+		for (double bad : new double[] {
+				Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NaN}) {
+			assertThatCode(() -> new GeocodingProvider.Coordinates(bad, bad)).doesNotThrowAnyException();
+		}
+		assertThat(new GeocodingProvider.Coordinates(Double.POSITIVE_INFINITY, 0).latitude())
+				.isEqualTo(Double.POSITIVE_INFINITY);
+	}
+
 	// ---- Plumbing ---------------------------------------------------------
 
 	private GooglePlaceSuggestionProvider places(String key) {

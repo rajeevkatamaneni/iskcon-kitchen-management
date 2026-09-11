@@ -159,7 +159,9 @@ public class CommunicationService {
 	@Transactional
 	public void sendTest(AuthenticatedUser actor, UUID id) {
 		CommunicationView c = find(id).orElseThrow(() -> notFound(id));
-		queueFor(c, actor.getUserId(), true);
+		// One copy, so the lookup is not hoisted out of anything here — it is passed in because
+		// queueFor takes it, and a test copy must carry the same From line as the real one.
+		queueFor(c, actor.getUserId(), true, templeName());
 		log.info("Test copy of communication {} queued for its author {}", id, actor.getUserId());
 	}
 
@@ -191,9 +193,24 @@ public class CommunicationService {
 	public SendResultView send(AuthenticatedUser actor, UUID id) {
 		Sent sent = transactions.execute(status -> recordSend(actor, id));
 
+		// Read once, outside the loop (T-097). It used to sit inside queueFor, so a 400-person send
+		// asked the database four hundred times for a name that cannot change while the loop runs —
+		// and each ask cost far more than one statement, because of the paragraph above this method's
+		// loop rather than in spite of it: send() holds no transaction across the loop on purpose, so
+		// nothing is keeping a connection and every call checked one out of the pool. TenantAwareDataSource
+		// stamps each checkout with eight set_config and clears it with five RESET, so one lookup was
+		// fourteen statements and forty recipients were 560 of the send's 1,833. Measured, both before
+		// and after, in CommunicationSendStatementCountIT.
+		//
+		// A local, deliberately: not a field, not a cache, and not a memo bound to a transaction.
+		// There is no transaction here to bind one to, and a value that lives from this line to the
+		// end of the loop cannot be read by another temple, because it never outlives the send that
+		// computed it.
+		String temple = templeName();
+
 		int queued = 0;
 		for (UUID userId : sent.audience()) {
-			if (queueFor(sent.communication(), userId, false)) {
+			if (queueFor(sent.communication(), userId, false, temple)) {
 				queued++;
 			}
 		}
@@ -386,11 +403,15 @@ public class CommunicationService {
 		// changed the way T-094 changed send()'s; substituting the constant would turn a number that
 		// is correct by construction into a claim that would go on being asserted after it stopped
 		// being true, which is the shape of defect this codebase keeps finding in its own sums.
+		// Once, for the same reason send() reads it once (T-097). A retry of a forty-person send is
+		// the same loop over a smaller list and was paying the same fourteen statements per person.
+		String temple = templeName();
+
 		int retried = 0;
 		for (UUID userId : failed) {
 			// The same queueFor() the original send used, so a retry is the send it is retrying and
 			// not a second implementation of it that would drift from it by the second edit.
-			if (queueFor(c, userId, false)) {
+			if (queueFor(c, userId, false, temple)) {
 				retried++;
 			}
 		}
@@ -606,15 +627,23 @@ public class CommunicationService {
 	 * <p>Guarded on the notification being real, so a failed <em>retry</em> leaves the failure it was
 	 * retrying in place rather than erasing which copy it was: null already means failed, and the old
 	 * one still says which channel it went out on and when.
+	 *
+	 * @param temple the temple's name, read once by the caller rather than looked up here (T-097).
+	 *     It used to be {@code templeName()} on the line that builds the parameters, which made it a
+	 *     per-recipient database read inside a loop over the whole audience — and, because the send
+	 *     loop deliberately holds no transaction, a per-recipient connection checkout with its own
+	 *     tenancy handshake on top. Fourteen statements a head. It is a parameter rather than a field
+	 *     or a cache so that its life is exactly the call that passes it: there is nothing here that
+	 *     can outlive a send, and therefore nothing one temple's send can hand to another's.
 	 */
-	private boolean queueFor(CommunicationView c, UUID userId, boolean isTest) {
+	private boolean queueFor(CommunicationView c, UUID userId, boolean isTest, String temple) {
 		UUID tenantId = TenantContext.get().orElseThrow(
 				() -> new IllegalStateException("A communication is sent within a tenant context"));
 
 		Map<String, Object> params = new HashMap<>();
 		params.put("communicationId", c.id().toString());
 		params.put("subject", c.subject());
-		params.put("temple", templeName());
+		params.put("temple", temple);
 		params.put("link", webUrl(c.publicToken()));
 		params.put("intro", c.whatsappSummary() == null ? "" : c.whatsappSummary());
 		params.put("unsubscribeUrl", webBaseUrl + "/unsubscribe?token="
@@ -739,6 +768,19 @@ public class CommunicationService {
 		}
 	}
 
+	/**
+	 * The temple's own name, for the From line and the letter's header.
+	 *
+	 * <p><strong>Never call this inside a loop over recipients.</strong> It is a bare query with no
+	 * transaction around it, so on the send path each call also borrows a pooled connection and pays
+	 * {@code TenantAwareDataSource}'s eight {@code set_config} and five {@code RESET} — fourteen
+	 * statements for one name that cannot change while a send runs. {@link #send},
+	 * {@link #retryWithin} and {@link #sendTest} each read it once and pass it to {@link #queueFor}
+	 * (T-097).
+	 *
+	 * <p>A failure here is not worth failing a send over: the name is decoration on a message whose
+	 * content is the point, so it falls back to "the temple" rather than raising.
+	 */
 	private String templeName() {
 		try {
 			return jdbc.queryForObject("""

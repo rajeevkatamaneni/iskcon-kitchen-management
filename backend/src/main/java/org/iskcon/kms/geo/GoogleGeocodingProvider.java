@@ -2,8 +2,6 @@ package org.iskcon.kms.geo;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -199,9 +197,12 @@ public class GoogleGeocodingProvider implements GeocodingProvider {
 			// wanted a label simply does not get one.
 			String formatted = root.path("results").path(0).path("formatted_address").asText(null);
 			return Optional.of(new Located(
+					// Not rounded here any more (T-063): Coordinates rounds in its own constructor, so both
+					// providers behind this port are precise to six decimals because the record is, not
+					// because each of them remembered to be.
 					new Coordinates(
-							sixDecimals(location.get("lat").asDouble()),
-							sixDecimals(location.get("lng").asDouble())),
+							location.get("lat").asDouble(),
+							location.get("lng").asDouble()),
 					formatted == null || formatted.isBlank() ? null : formatted));
 
 		} catch (Exception e) {
@@ -213,36 +214,6 @@ public class GoogleGeocodingProvider implements GeocodingProvider {
 			log.warn("Geocoding {} failed ({}); falling back to a name match", place, e.toString());
 			return Optional.empty();
 		}
-	}
-
-	/**
-	 * Google's degrees, cut to the six decimal places anything downstream can actually hold.
-	 *
-	 * <p><strong>The same cut {@link GooglePlaceSuggestionProvider} makes, for the same reason.</strong>
-	 * Both providers hand back the same {@link Coordinates} record and both of them feed columns
-	 * declared {@code NUMERIC(9,6)} — {@code tenants.latitude} since V1, {@code
-	 * meal_plans.delivery_latitude} since V88 — so six decimals is what is kept whichever service
-	 * answered. Two providers behind one port that disagreed about how precise an answer is would be
-	 * exactly the confusion the port exists to prevent, and the difference would show up as a screen
-	 * where the number an operator was shown is not the number that was saved.
-	 *
-	 * <p><strong>What this one actually carries.</strong> The Geocoding API is the milder case: it
-	 * renders seven decimals, so it produces {@code 76.6340866} rather than the seventeen significant
-	 * digits Places produces for the same place. That is still one more decimal than anything here
-	 * stores, and about a centimetre of it is real; it is cut here rather than left for the database
-	 * to cut silently, so that whatever a caller shows and whatever the row holds are the one number.
-	 *
-	 * <p>Rounded rather than formatted, so a coordinate that was already short stays short, and a
-	 * value that is not finite is handed back untouched — {@code BigDecimal.valueOf} raises on those,
-	 * and nothing in this class may raise. See {@link GooglePlaceSuggestionProvider} for the longer
-	 * version of both arguments; T-059 made the cut, after Rajeev picked a temple on the provisioning
-	 * screen and got a fifteen-digit latitude to confirm.
-	 */
-	private static double sixDecimals(double degrees) {
-		if (!Double.isFinite(degrees)) {
-			return degrees;
-		}
-		return BigDecimal.valueOf(degrees).setScale(6, RoundingMode.HALF_UP).doubleValue();
 	}
 
 	private static String enc(String s) {

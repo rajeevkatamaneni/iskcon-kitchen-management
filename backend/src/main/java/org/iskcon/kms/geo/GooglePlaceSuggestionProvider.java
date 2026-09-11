@@ -2,8 +2,6 @@ package org.iskcon.kms.geo;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -134,46 +132,12 @@ public class GooglePlaceSuggestionProvider implements PlaceSuggestionProvider {
 		return Optional.of(new Place(
 				root.path("id").asText(placeId),
 				withName(root.path("displayName").path("text").asText(null), address),
+				// Not rounded here any more (T-063): GeocodingProvider.Coordinates rounds both degrees to
+				// six decimals in its own constructor, so the promise is kept by the port for every
+				// provider behind it — including one written later that does nothing but read a reply.
 				new GeocodingProvider.Coordinates(
-						sixDecimals(location.path("latitude").asDouble()),
-						sixDecimals(location.path("longitude").asDouble()))));
-	}
-
-	/**
-	 * Google's degrees, cut to the six decimal places the temple is going to keep.
-	 *
-	 * <p><strong>Why here, and not in the screen that shows it.</strong> Places answers with the
-	 * shortest decimal that names its own double, and for a great many places that is seventeen
-	 * significant digits of which the last three are float noise from a computation that was never
-	 * ours. Rajeev picked ISKCON - Mysuru on the provisioning screen and the latitude box filled with
-	 * a fifteen-digit number. That number is then shown to an operator under the words <em>is this
-	 * the right place?</em>, and a person cannot check what they cannot read: the digits past the
-	 * sixth are noise dressed as precision, and they crowd out the ones that carry the answer.
-	 *
-	 * <p><strong>Why six and not five or seven.</strong> The sixth decimal of a degree is about
-	 * eleven centimetres. The only machines that read this are the Vaishnava calendar, which wants
-	 * degrees for a sunrise, and the Routes call, which wants a street; neither can tell eleven
-	 * centimetres from nothing. The tenant column is {@code NUMERIC(9,6)} besides, so six is what the
-	 * database was always going to store — this makes the operator's eye and the row agree, which is
-	 * the whole of it, and it matters because D-17 freezes these two numbers at provisioning and
-	 * there is deliberately no screen that can tidy them up afterwards.
-	 *
-	 * <p><strong>Rounded, never formatted.</strong> {@code BigDecimal.valueOf} reads the double's own
-	 * shortest rendering and {@link java.math.RoundingMode#HALF_UP} cuts it; going back to a double
-	 * drops any trailing zeros the scale introduced. So a coordinate that was already short stays
-	 * short, where a {@code %.6f} would have padded it out to six places it never had and made a
-	 * neatly typed number look machine-generated.
-	 *
-	 * <p>A value that is not finite is handed back untouched rather than rounded: {@code
-	 * BigDecimal.valueOf} raises on those, and this class's standing promise is that a bad reply from
-	 * a map service is an empty answer and never an exception. Such a reply fails the column's range
-	 * check a moment later, which is the right place for it to fail.
-	 */
-	private static double sixDecimals(double degrees) {
-		if (!Double.isFinite(degrees)) {
-			return degrees;
-		}
-		return BigDecimal.valueOf(degrees).setScale(6, RoundingMode.HALF_UP).doubleValue();
+						location.path("latitude").asDouble(),
+						location.path("longitude").asDouble())));
 	}
 
 	/**
