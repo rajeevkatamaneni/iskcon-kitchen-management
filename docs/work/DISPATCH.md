@@ -396,6 +396,104 @@ compiling**, where an array would have gone on compiling with a dropdown quietly
 
 ---
 
+## 🔎 WAVE B — DRIVEN ON STAGING 2026-09-11, as the Temple Admin
+
+On `kms-staging-web-00136-mjl` / `api-00148-lrq`, signed in as `ikms.temple-admin.1`, with a
+volunteer signed on through a second minted identity.
+
+### The whole D-24 / D-24a journey, verified end to end rather than screen by screen
+
+1. **Three Kalasipalya drafts cancelled by API** (`PO-2026-0041`, `-0038`, `-0030`, each with the
+   reason *"VERIFY T-134 — coordinator test, 2026-09-11"*). **Amla came straight back onto the
+   shopping list**, which is [[D-24a]]'s return loop working on a deployed build.
+2. **A tile per vendor**, headed *Kalasipalya Vegetable Mandi*, *"1 of 1 line will go on this
+   order"*, with **its own Generate purchase order button**. Columns Include · Ingredient · On hand ·
+   Suggested · Why · **Order by**.
+3. **Order by reads `—`**, because Kalasipalya has no recorded lead time. `leadTimeDays: null`,
+   `orderUrgency: null` on the API. **That is Rajeev's rule already holding before T-137 builds:**
+   *"an order for a vendor with no recorded lead time has no cutoff — silence, and nothing held
+   against anybody."*
+4. **The panel is a real `role="dialog"` over the list**, headed *"Purchase order for Kalasipalya
+   Vegetable Mandi"*, and its subtitle explains D-24a to the reader in the reader's words: *"Nothing
+   is ordered until you save. These lines leave the shopping list when the order is created, and come
+   back if it is cancelled."*
+5. **No "Cancel this purchase order" control anywhere in the panel** — checked in the DOM, not by
+   eye. That is Rajeev's explicit requirement, and the gate is the order having a number.
+6. **Every button in the panel carries an explicit `type`; `Save` is the only `submit`.** Wave A's
+   Remove-button defect cannot recur here, which was worth checking rather than assuming given it was
+   found in this very component's sibling hours earlier.
+7. **On save:** `PO-2026-0044 raised for Kalasipalya Vegetable Mandi. It stays a draft until it is
+   sent to the vendor. Its ingredients have left this list.* — green, naming the number, back on the
+   list, and the line gone. **Every clause of Rajeev's paragraph 6, in order.**
+
+### T-080, driven for the first time — and it works
+
+A shift was created for 25 September (**labelled `VERIFY T-080 — coordinator test 2026-09-11`, left
+on staging on purpose**) and `ikms.volunteer.3` signed onto it.
+
+- **The form makes Rajeev's distinction visible in its own labels:** *"Reason (they are told this)"*
+  against *"Note for the temple (they never see this)"*.
+- **The four reasons are the ruled vocabulary and there is no fifth:** Shift cancelled · No longer
+  needed · Rota changed · Other.
+- **The note is genuinely mandatory** — submitting with a reason and no note is refused.
+- **After removal:** *"Lalita Devi Dasi was taken off this shift, and has been told why."*, a
+  **Released** section reading *"taken off 11 Sept 2026, 13:55; rota changed"*, and the note rendered
+  under **"Note (not sent to them)"**.
+- **The volunteer cannot reach the note:** reading the roster as them answers **403**.
+
+### Two defects the browser found and the suite was green over
+
+**1. The removal form runs off the right-hand edge of the screen, and the mandatory field is the part
+that is off it.** Measured on a **1470 px** viewport — an ordinary desktop, not a narrow one:
+
+```
+viewport 1470 · table scrollWidth 1342 vs clientWidth 1124 · overflow-x auto
+reason select   left 979  right 1571   ← 101px past the viewport
+note field      left 1063 right 1655   ← 185px past the viewport
+```
+
+The form is rendered **inside a table cell**, so the coordinator has to scroll sideways *within the
+table* to reach the note they are required to fill in. It is not unusable — it scrolls — but it is
+the same family as T-090, which *"shipped fully green and was unusable, because the field it added
+had no way in."* **Open. Nobody is in that file.**
+
+**2. The mandatory note is enforced by the browser's native validation bubble** — *"Please fill out
+this field."* — and not by the product's own error styling. **This is the fourth sighting of one
+class**: it is already **T-058 item 6** (equipment reinstatement) and was recorded once before as
+*"the equipment screen's existing convention in three places"*. **It should be fixed as the class it
+is, in Wave E, not as a fourth instance.**
+
+### The T-080 follow-up is no longer a prediction — it is demonstrated
+
+Its builder argued that a removed volunteer's only account is a best-effort message. **Driven as the
+removed volunteer on the deployed build:** `my-shifts` returns **0 shifts**, the shift they were
+taken off is **not listed**, and **nothing anywhere mentions a removal or a reason** — the string
+*"rota"* appears nowhere in anything they can fetch. **The shift simply vanished.** Combined with
+`notifyShift` swallowing a send failure into a `log.warn`, and Mailgun's sandbox blocking mail to
+most test volunteers on staging, **a removal whose message does not land leaves the person with no
+way at all to find out.** Queued fix: a *"taken off in the last week"* list on My Shifts.
+
+### T-118 could not be driven, and the reason is a rule rather than a defect
+
+The carried-temple path fires on `auth/email-already-in-use`, which requires **submitting the
+register form with a password**. Entering a password into a form is prohibited outright and does not
+bend for a test account on a dev system. **Everything else about T-118 is proven by test**, and this
+is thirty seconds of Rajeev's time if he wants it seen. **Nothing about the feature is in doubt; the
+verification route is.**
+
+### Test data left on staging on purpose, all labelled
+
+- Shift **`VERIFY T-080 — coordinator test 2026-09-11`**, 25 Sept, Test kitchen, with one released
+  volunteer carrying a reason and an internal note.
+- **`PO-2026-0044`**, raised through the new panel, Kalasipalya Vegetable Mandi, 1 Kg Amla.
+- **`PO-2026-0041`, `-0038`, `-0030` cancelled**, each naming this verification in its reason.
+
+**Note this changes what Rajeev's own test will find:** the shopping list was empty before and is
+empty again now, but for a different reason — the Amla line left it because `PO-2026-0044` now covers
+it. **To see the tiles populated again, cancel `PO-2026-0044`.**
+
+---
+
 ## ▶ THE RUN PLAN — ordered by Rajeev 2026-09-10, for the session that picks this up
 
 **His instruction, in his words:** *"Assign these tasks to Subagents and run them parallelly whenever
