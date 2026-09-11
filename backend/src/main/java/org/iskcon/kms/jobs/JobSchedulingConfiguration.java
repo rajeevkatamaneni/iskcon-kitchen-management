@@ -4,6 +4,7 @@ import java.util.TimeZone;
 import org.iskcon.kms.calendar.CalendarPrecomputeJob;
 import org.iskcon.kms.donation.ExpirePendingDonationsJob;
 import org.iskcon.kms.inventory.LowStockDigestJob;
+import org.iskcon.kms.purchaseorder.PurchaseOrderAutoCancelJob;
 import org.iskcon.kms.wishlist.WishlistArchiveJob;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
@@ -112,6 +113,32 @@ public class JobSchedulingConfiguration {
 				.forJob(expirePendingDonationsJobDetail)
 				.withIdentity("expire-pending-donations-hourly")
 				.withSchedule(SimpleScheduleBuilder.repeatHourlyForever())
+				.build();
+	}
+
+	@Bean
+	public JobDetail purchaseOrderAutoCancelJobDetail() {
+		return JobBuilder.newJob(PurchaseOrderAutoCancelJob.class)
+				.withIdentity("purchase-order-auto-cancel")
+				.withDescription("Daily cancellation of drafts nobody sent, past their needed-by date (T-137).")
+				.storeDurably()
+				.requestRecovery()
+				.build();
+	}
+
+	@Bean
+	public Trigger purchaseOrderAutoCancelTrigger(JobDetail purchaseOrderAutoCancelJobDetail) {
+		// Early morning IST, before the kitchen starts. A draft whose needed-by date passed at
+		// midnight holds its ingredients off the shopping list until this runs, so it runs before
+		// anybody reads that list rather than at some hour convenient to a server.
+		//
+		// Deliberately not adjacent to a send: this cancels orders that were never sent at all, and
+		// D-26 keeps it away from anything part-delivered, which needs a human.
+		return TriggerBuilder.newTrigger()
+				.forJob(purchaseOrderAutoCancelJobDetail)
+				.withIdentity("purchase-order-auto-cancel-daily")
+				.withSchedule(CronScheduleBuilder.dailyAtHourAndMinute(4, 30)
+						.inTimeZone(TimeZone.getTimeZone("Asia/Kolkata")))
 				.build();
 	}
 

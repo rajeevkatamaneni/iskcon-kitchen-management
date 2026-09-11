@@ -95,11 +95,21 @@ public class PurchaseOrderController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/**
+	 * Marks an order as sent, which is where the vendor's lead time is enforced (T-137, D-25).
+	 *
+	 * <p>The body is optional and carries one thing: whether the person has already been shown
+	 * {@code KMS-400148} — "this order is going out later than the vendor asked to be given" — and
+	 * meant it anyway. Optional rather than required so that every existing caller keeps working and
+	 * gets the reading that keeps the promise; see {@link SendPurchaseOrderRequest}.
+	 */
 	@PostMapping("/{id}/send")
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public ResponseEntity<Void> send(
-			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
-		service.send(actor, id);
+			@PathVariable UUID id,
+			@RequestBody(required = false) SendPurchaseOrderRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		service.send(actor, id, request != null && request.sendAnyway());
 		return ResponseEntity.noContent().build();
 	}
 

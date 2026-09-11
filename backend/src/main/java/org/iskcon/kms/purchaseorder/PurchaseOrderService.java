@@ -22,6 +22,8 @@ import org.iskcon.kms.notification.TenantWhatsAppSettingsService;
 import org.iskcon.kms.shoppinglist.ShoppingListLineView;
 import org.iskcon.kms.shoppinglist.ShoppingListService;
 import org.iskcon.kms.tenancy.TempleClock;
+import org.iskcon.kms.vendor.LeadTimes;
+import org.iskcon.kms.vendor.OrderLeadTime;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -52,12 +54,29 @@ public class PurchaseOrderService {
 	 */
 	private final TenantWhatsAppSettingsService whatsappSettings;
 
+	/**
+	 * The one place the order-by date is worked out (T-090), and the one place that knows which lead
+	 * time governs an order with several on it (T-137).
+	 *
+	 * <p>Injected rather than reimplemented here, and that is the whole of why T-137 was built as a
+	 * single task. The same subtraction — needed-by minus the vendor's lead time — has to answer on
+	 * the planner badge, on Mark sent, on the Today dashboard and at the top of the purchase-order
+	 * list. Written four times it would quietly disagree four ways: one counting plain days and
+	 * another skipping Sundays, one reading an unrecorded lead time as zero and another as unknown.
+	 * Nobody would ever see an exception. They would see the planner telling a cook to order by the
+	 * 13th, this service letting the order through on the 14th in silence, and the dashboard calling
+	 * the draft healthy.
+	 */
+	private final LeadTimes leadTimes;
+
 	public PurchaseOrderService(JdbcTemplate jdbc, AuditService auditService,
 			org.iskcon.kms.document.DocumentService documentService,
 			IngredientUnits ingredientUnits, ShoppingListService shoppingListService,
 			TenantWhatsAppSettingsService whatsappSettings,
+			LeadTimes leadTimes,
 			TempleClock clock) {
 		this.clock = clock;
+		this.leadTimes = leadTimes;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.documentService = documentService;
@@ -118,7 +137,37 @@ public class PurchaseOrderService {
 			sql.append(" AND po.status IN ('SENT', 'PARTIALLY_RECEIVED', 'RECEIVED')");
 		}
 		sql.append(" ORDER BY po.created_at DESC");
-		return jdbc.query(sql.toString(), HEADER_MAPPER, args.toArray());
+		return withLeadTimes(jdbc.query(sql.toString(), HEADER_MAPPER, args.toArray()));
+	}
+
+	/**
+	 * Fills in every order's lead-time facts: what its vendor asked for, the last day it could be
+	 * placed, and — while it is still a draft — where today stands against that day (T-137, D-25).
+	 *
+	 * <p><strong>A draft is measured live and a sent order is read off its own row, and that split
+	 * is the no-retroactive rule.</strong> Nothing has been asked of a vendor while an order is a
+	 * draft, so if their profile changes the draft moves with it. Once the order has gone out, the
+	 * lead time it went out under is stamped on it by {@link #send}, and editing the vendor's
+	 * profile next month must not re-judge it: <em>"Any SLA Adjustments made to a vendor's profile
+	 * will take effect for the Orders after the change. No retroactive change here."</em> Reading
+	 * {@code vendor_supplies} for a sent order would turn past deliveries late, or excuse ones that
+	 * genuinely were.
+	 *
+	 * <p>One extra query for a whole screenful, and none at all for a list with no unsent orders on
+	 * it.
+	 */
+	private List<PurchaseOrderView> withLeadTimes(List<PurchaseOrderView> orders) {
+		List<UUID> unsent = orders.stream()
+				.filter(po -> po.sentAt() == null)
+				.map(PurchaseOrderView::id)
+				.toList();
+		Map<UUID, Integer> live = leadTimes.governingByPurchaseOrder(unsent);
+		LocalDate today = LocalDate.now(clock.zone());
+		return orders.stream()
+				.map(po -> po.with(po.sentAt() == null
+						? OrderLeadTime.beforeSending(live.get(po.id()), po.neededBy(), today)
+						: OrderLeadTime.asSent(po.leadTimeDays(), po.neededBy())))
+				.toList();
 	}
 
 	@Transactional(readOnly = true)
@@ -353,16 +402,115 @@ public class PurchaseOrderService {
 		recordEvent(id, "EDITED", "Draft edited", actor);
 	}
 
+	/** Sends an order, refusing one that is already past its vendor's lead time. See the overload. */
 	@Transactional
 	public void send(AuthenticatedUser actor, UUID id) {
+		send(actor, id, false);
+	}
+
+	/**
+	 * Marks an order as sent — and this is where the vendor's lead time is enforced and stamped
+	 * (T-137, D-25).
+	 *
+	 * <h2>Why the gate is here and nowhere else</h2>
+	 *
+	 * <p>A lead time is the vendor's own number, agreed at onboarding: <em>"we are good with 1 day
+	 * lead time BUT we want to be safe than sorry so we need 3 days notice to guarantee that
+	 * everything will be delivered on time 100%."</em> Rajeev, asked where the check belongs,
+	 * answered that the zone is a fact about <strong>submitting</strong>. Showing it earlier — on
+	 * the panel that creates the order, on the planner badge — is helpful, but those are advice.
+	 * This is the moment the promise is either kept or asked to be broken, so this is the gate.
+	 *
+	 * <h2>The three zones, in his own worked example</h2>
+	 *
+	 * <p>Heritage Fresh Dairy promised two days; curd is wanted for 15 September.
+	 *
+	 * <ul>
+	 *   <li><strong>Ordered 11 September</strong> — <em>"with in spec and no alarm bells here"</em>.
+	 *       Nothing happens.</li>
+	 *   <li><strong>Ordered 13 September</strong>, the last day that works — a gentle nudge, which he
+	 *       called optional: <em>"All of this nudging and coaching is optional."</em> Not a refusal,
+	 *       and nothing is stamped: the order is inside the promise.</li>
+	 *   <li><strong>Ordered 14 September</strong> — refused with {@code KMS-400148} until somebody
+	 *       says they mean it, and then stamped.</li>
+	 * </ul>
+	 *
+	 * <p><strong>The cutoff is a date and not a time.</strong> His <em>"Sep 13 at 6 AM"</em> is
+	 * colour; the rule is needed-by minus the lead time, and 13 September is simply the last day
+	 * that works. Nothing here adds a time of day to a needed-by date.
+	 *
+	 * <h2>What sending late costs, and who it costs</h2>
+	 *
+	 * <p><em>"That is a FAVOR we are asking."</em> So this never refuses outright — a temple that
+	 * genuinely needs a sack of rice tomorrow must be able to ask for it, and a rule that made that
+	 * impossible would only teach people to write a date they do not mean. What it does is make the
+	 * consequence explicit before the press, and then record it: the order is left out of the
+	 * vendor's on-time figure, and cancelling it later does not offer the "Vendor Never Delivered
+	 * this Order" tick, <em>"BECAUSE it is their fault NOT the vendors"</em> — and here the fault is
+	 * ours. That extends T-129, which already required an order to have been sent; now it also
+	 * requires one sent in time.
+	 *
+	 * <h2>The stamp, and why the column exists at all</h2>
+	 *
+	 * <p>{@code lead_time_days} and {@code sent_after_lead_time} are written here and read
+	 * everywhere afterwards. Nothing downstream may go back to {@code vendor_supplies} for a sent
+	 * order: <em>"Any SLA Adjustments made to a vendor's profile will take effect for the Orders
+	 * after the change. No retroactive change here."</em> Without the stamp, one edit to a vendor's
+	 * profile would silently re-judge every order already placed.
+	 *
+	 * <p>The lead time is stamped <strong>whether or not the order is late</strong>. It is the
+	 * figure that applied, and a reader asking why an on-time delivery counted as on time needs it
+	 * as much as one asking why a late order was excused.
+	 *
+	 * @param sendAnyway the person was shown the refusal and meant it — the override Rajeev asked
+	 *                   for. False for every other caller, which is the reading that keeps the
+	 *                   promise.
+	 */
+	@Transactional
+	public void send(AuthenticatedUser actor, UUID id, boolean sendAnyway) {
 		PurchaseOrderView po = findHeader(id).orElseThrow(() -> notFound(id));
 		if (po.status() != PoStatus.DRAFT) {
 			throw new ApplicationException(ErrorCode.PO_INVALID_TRANSITION, Map.of("purchaseOrderId", id));
 		}
-		jdbc.update("UPDATE purchase_orders SET status = 'SENT', sent_at = now(), updated_at = now() WHERE id = ?", id);
-		recordEvent(id, "SENT", po.poNumber() + " sent to vendor", actor);
+		// The zone is already on the view, worked out by LeadTimes for every read of this order —
+		// so the refusal below is decided by the same value the person was looking at when they
+		// pressed the button, rather than by a second sum that could disagree with it.
+		boolean tooLate = po.orderUrgency() == org.iskcon.kms.vendor.OrderUrgency.TOO_LATE;
+		if (tooLate && !sendAnyway) {
+			// The detail is what the screen needs to say the sentence properly: whose promise, how
+			// long it was, and which day has gone. The words a person reads are ErrorCode's.
+			Map<String, Object> detail = new LinkedHashMap<>();
+			detail.put("purchaseOrderId", id);
+			detail.put("vendorName", po.vendorName());
+			detail.put("leadTimeDays", po.leadTimeDays());
+			detail.put("orderBy", po.orderBy());
+			detail.put("neededBy", po.neededBy());
+			throw new ApplicationException(ErrorCode.ORDER_PAST_VENDOR_LEAD_TIME, detail);
+		}
+		jdbc.update("""
+				UPDATE purchase_orders
+				SET status = 'SENT', sent_at = now(), lead_time_days = ?, sent_after_lead_time = ?,
+					updated_at = now()
+				WHERE id = ?
+				""", po.leadTimeDays(), tooLate, id);
+		recordEvent(id, "SENT", tooLate
+				// Said on the order's own trail, because this is the one record a person reading the
+				// order back will find — and it is the sentence that explains a figure on somebody
+				// else's scorecard. The vendor is named because the promise was theirs.
+				? po.poNumber() + " sent to vendor after the last day it could be ordered ("
+						+ po.orderBy() + "). " + po.vendorName() + " asked for " + po.leadTimeDays()
+						+ " day(s) notice, so a late delivery on this order is not counted against them."
+				: po.poNumber() + " sent to vendor", actor);
+		Map<String, Object> after = new LinkedHashMap<>();
+		after.put("status", "SENT");
+		after.put("poNumber", po.poNumber());
+		// In the after-state because this is what the order now permanently is, and because a claim
+		// that a supplier is excused from a delivery belongs beside who did it and when — which the
+		// audit actor and sent_at already carry.
+		after.put("leadTimeDays", po.leadTimeDays());
+		after.put("sentAfterLeadTime", tooLate);
 		auditService.record(actor, AuditAction.PO_SENT, AuditEntityType.PURCHASE_ORDER, id,
-				Map.of("status", "DRAFT"), Map.of("status", "SENT", "poNumber", po.poNumber()), null);
+				Map.of("status", "DRAFT"), after, null);
 
 		// A sent PO gets its vendor sheet automatically (E5-S4); best-effort, so a worker-less
 		// context (or node) never blocks the send.
@@ -395,6 +543,18 @@ public class PurchaseOrderService {
 	 * needed-by guard above does: the screen hides the box, and the endpoint takes the same field
 	 * from anything that can post to it. {@code sent_at} is the fact it reads, and that column is
 	 * stamped in exactly one place — {@link #send} — so "was it sent?" has one answer and not two.
+	 *
+	 * <p><strong>D-25 extends that rule to an order we sent too late, and it is refused here for the
+	 * same reason</strong> (T-137). An order submitted after the vendor's agreed notice period asked
+	 * them for something they never promised — <em>"That is a FAVOR we are asking"</em> — so when it
+	 * is not delivered, that is our doing and not theirs. <em>"BECAUSE it is their fault NOT the
+	 * vendors"</em>: on such an order the fault is ours, and putting it on their permanent record is
+	 * the specific thing the ruling forbids. {@code KMS-400149}.
+	 *
+	 * <p>The two refusals are one idea said twice — nothing was asked of this vendor, or nothing was
+	 * asked of them <em>in time</em> — and both read a column stamped in exactly one place by {@link
+	 * #send}, so each question has one answer and not two. The cancel form hides the box in both
+	 * cases; these are what stop it anyway.
 	 *
 	 * <p><strong>What was given up by choosing this, said plainly, because it is a real loss.</strong>
 	 * <em>Sent</em> in this application means somebody pressed a button, not that a vendor knows. A
@@ -431,6 +591,18 @@ public class PurchaseOrderService {
 		if (vendorAbandoned && po.sentAt() == null) {
 			throw new ApplicationException(ErrorCode.PO_NEVER_SENT_TO_VENDOR, Map.of("purchaseOrderId", id));
 		}
+		// And nothing was asked of them IN TIME, which D-25 makes the same kind of claim (T-137).
+		// Read off the stamp rather than recomputed: what this order went out under was decided when
+		// it went out, and a vendor whose profile changed last week must not become blameable — or
+		// unblameable — for an order nobody has touched since.
+		if (vendorAbandoned && po.sentAfterLeadTime()) {
+			Map<String, Object> detail = new LinkedHashMap<>();
+			detail.put("purchaseOrderId", id);
+			detail.put("vendorName", po.vendorName());
+			detail.put("leadTimeDays", po.leadTimeDays());
+			detail.put("orderBy", po.orderBy());
+			throw new ApplicationException(ErrorCode.PO_SENT_AFTER_LEAD_TIME, detail);
+		}
 		jdbc.update("""
 				UPDATE purchase_orders SET status = 'CANCELLED', cancel_reason = ?, cancelled_at = now(),
 					vendor_abandoned = ?, updated_at = now() WHERE id = ?
@@ -441,6 +613,92 @@ public class PurchaseOrderService {
 		auditService.record(actor, AuditAction.PO_CANCELLED, AuditEntityType.PURCHASE_ORDER, id,
 				Map.of("status", po.status().name()),
 				Map.of("status", "CANCELLED", "vendorAbandoned", vendorAbandoned), reason.trim());
+	}
+
+	/**
+	 * The reason a swept draft carries, in Rajeev's own words (D-24a): <em>"mark it as Auto
+	 * Cancelled. Reason: Past need by date."</em> Written into {@code cancel_reason} exactly as he
+	 * said it, because it is what a person will read on the order.
+	 */
+	static final String PAST_NEED_BY_DATE = "Past need by date";
+
+	/**
+	 * Cancels every draft in this temple whose needed-by date has gone (T-137, D-24a).
+	 *
+	 * <h2>The hole this closes</h2>
+	 *
+	 * <p>Since D-24a a line leaves the shopping list the moment a purchase order is created, draft
+	 * or not — Rajeev: <em>"IF we take it off on send, they will be there in the shopping list
+	 * begging to be ordered, someone else will take pity and generate another PO. Same ingredients,
+	 * 2 PO's."</em> That is right, and it opens a hole he closed in the same breath: a draft nobody
+	 * ever sends holds its ingredients hostage, off the list and never ordered.
+	 *
+	 * <p>So a draft past its needed-by date is abandoned, and the sweep cancels it. The loop closes
+	 * on its own: the cancellation hands those ingredients back to the list (T-132 derives the list,
+	 * so nothing has to be written back), where they are suggested again with a fresh date. And
+	 * because the order was never sent, nothing is held against the vendor — T-129's rule already
+	 * sees to that, with no special case here.
+	 *
+	 * <h2>It never touches a part-delivered order, and that is not an accident of the filter</h2>
+	 *
+	 * <p>Rajeev agreed this explicitly (D-26). A draft nobody sent can be swept away by a machine.
+	 * An order with 300 kg of real rice against it and a vendor relationship behind it needs a
+	 * human: the admin closes it and says which of the two endings it was — the vendor let us down,
+	 * or they fell short and made it right. {@code status = 'DRAFT'} is what keeps this job away
+	 * from that decision, and it is load-bearing rather than incidental.
+	 *
+	 * <h2>It has to read afterwards as legibly as a human cancellation</h2>
+	 *
+	 * <p>This is a scheduled job acting with no human in the room, on a shared record, and the
+	 * person who finds the order tomorrow will want to know who cancelled it before they go looking
+	 * for who to ask. So it writes the same three columns a person's cancellation writes, and leaves
+	 * a line on the order's own append-only trail with <strong>no actor</strong> — which is how the
+	 * trail says "the system did this" rather than naming somebody who was asleep.
+	 *
+	 * <p><strong>No {@code audit_events} row, and that is a limitation worth stating.</strong> That
+	 * table's {@code actor_user_id} is NOT NULL and {@code AuditService} reads the actor's id, name
+	 * and role off a verified user — there is no system principal in this application, and inventing
+	 * one here would be a new shared concept smuggled in as a side effect. The order's own trail is
+	 * what the order screen shows and is append-only in exactly the same way, so the act is on the
+	 * record where a reader will actually look for it.
+	 *
+	 * <h2>Idempotent</h2>
+	 *
+	 * <p>Required of every job in this application, and true here by construction: the swept orders
+	 * are no longer drafts, so a second run in the same minute matches nothing. The UPDATE and its
+	 * trail line are one transaction.
+	 *
+	 * @return how many drafts were cancelled, for the job's log line
+	 */
+	@Transactional
+	public int autoCancelAbandonedDrafts() {
+		// The temple's own today, like every other date decision here: a draft is not abandoned
+		// because it is already tomorrow somewhere the server happens to be running.
+		LocalDate today = LocalDate.now(clock.zone());
+		List<UUID> swept = new ArrayList<>();
+		List<String> numbers = new ArrayList<>();
+		List<LocalDate> dates = new ArrayList<>();
+		jdbc.query("""
+				UPDATE purchase_orders
+				SET status = 'CANCELLED', auto_cancelled = TRUE, cancel_reason = ?,
+					cancelled_at = now(), updated_at = now()
+				WHERE status = 'DRAFT' AND needed_by IS NOT NULL AND needed_by < ?
+				RETURNING id, po_number, needed_by
+				""", rs -> {
+			swept.add(rs.getObject("id", UUID.class));
+			numbers.add(rs.getString("po_number"));
+			dates.add(rs.getObject("needed_by", LocalDate.class));
+		}, PAST_NEED_BY_DATE, today);
+
+		for (int i = 0; i < swept.size(); i++) {
+			recordEvent(swept.get(i), "AUTO_CANCELLED",
+					numbers.get(i) + " was still a draft on " + dates.get(i)
+							+ ", the day it was needed, so it was cancelled automatically. Nothing was "
+							+ "sent to the vendor, so nothing counts against them; what it asked for is "
+							+ "back on the shopping list.",
+					null);
+		}
+		return swept.size();
 	}
 
 	/**
@@ -748,8 +1006,15 @@ public class PurchaseOrderService {
 				.toList();
 	}
 
+	/**
+	 * One order's header, with its lead-time facts already worked out — see {@link #withLeadTimes}.
+	 *
+	 * <p>Every caller gets them, including {@link #send}, which is what makes the gate there a
+	 * question about a value somebody has already seen on their screen rather than a second sum.
+	 */
 	private Optional<PurchaseOrderView> findHeader(UUID id) {
-		return jdbc.query(HEADER_SELECT + " WHERE po.id = ?", HEADER_MAPPER, id).stream().findFirst();
+		return withLeadTimes(jdbc.query(HEADER_SELECT + " WHERE po.id = ?", HEADER_MAPPER, id))
+				.stream().findFirst();
 	}
 
 	private static String trimToNull(String s) {
@@ -777,7 +1042,8 @@ public class PurchaseOrderService {
 	private static final String HEADER_SELECT = """
 			SELECT po.id, po.po_number, po.vendor_id, v.name AS vendor_name, po.status, po.order_date,
 				   po.needed_by, po.delivery_location, po.notes, po.cancel_reason,
-				   po.vendor_abandoned, po.sent_at, po.cancelled_at, po.created_at
+				   po.vendor_abandoned, po.auto_cancelled, po.sent_at, po.cancelled_at, po.created_at,
+				   po.lead_time_days, po.sent_after_lead_time
 			FROM purchase_orders po
 			JOIN vendors v ON v.id = po.vendor_id
 			""";
@@ -797,9 +1063,21 @@ public class PurchaseOrderService {
 			// no third state to carry and a primitive says that plainly. Every order raised before
 			// V118 reads false, which is the reading that blames nobody.
 			rs.getBoolean("vendor_abandoned"),
+			// Same reading, same reason (V125): NOT NULL DEFAULT FALSE, so every order raised
+			// before the sweep existed reads "no machine touched this", which is the truth.
+			rs.getBoolean("auto_cancelled"),
 			instant(rs.getObject("sent_at", OffsetDateTime.class)),
 			instant(rs.getObject("cancelled_at", OffsetDateTime.class)),
-			instant(rs.getObject("created_at", OffsetDateTime.class)));
+			instant(rs.getObject("created_at", OffsetDateTime.class)),
+			// getObject and not getInt: the column is nullable and null MEANS something here —
+			// nobody has said how long this vendor needs — where getInt would read it as 0, which
+			// is "they deliver the same day". That is the one confusion V119 exists to prevent.
+			(Integer) rs.getObject("lead_time_days"),
+			// Left null by the mapper and filled by withLeadTimes: the order-by date and the zone
+			// are not on this row, and a draft's governing lead time is not either.
+			null,
+			null,
+			rs.getBoolean("sent_after_lead_time"));
 
 	private static final RowMapper<PurchaseOrderLineView> LINE_MAPPER = (rs, n) -> new PurchaseOrderLineView(
 			rs.getObject("id", UUID.class),

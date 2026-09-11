@@ -95,6 +95,9 @@ function TodayScreen() {
               {approvalNotices(data)}
               {unrecordedNotice(data)}
               {equipmentNotice(data)}
+              {/* Drafts nobody has sent that are at or past their order-by date (T-137, D-24a).
+                  Fetches its own list, like PlatformNotices above — see the component. */}
+              <DraftsAtRiskNotice />
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatTile
@@ -633,6 +636,75 @@ function equipmentNotice(data: TodayView) {
       }
     >
       Book the engineer before {one ? "it stops" : "one of them stops"} in the middle of a festival.
+    </InlineNotice>
+  );
+}
+
+/**
+ * Drafts that have reached, or passed, the last day they could be ordered (T-137, D-24a).
+ *
+ * <h2>Why this is on the morning screen at all</h2>
+ *
+ * <p>D-24a took a line off the shopping list the moment a purchase order is created rather than
+ * when it is sent, because otherwise "they will be there in the shopping list begging to be
+ * ordered, someone else will take pity and generate another PO. Same ingredients, 2 PO's." The cost
+ * of that decision is a draft nobody ever sends: it holds its ingredients off the list and orders
+ * nothing. Rajeev closed the hole in the same breath — a warning here and at the top of the
+ * purchase-orders page, and a nightly sweep that cancels a draft once the day it was needed has
+ * gone.
+ *
+ * <h2>It fetches its own list</h2>
+ *
+ * <p>Like `PlatformNotices` above. The alternative was a count on the `/today` payload, which would
+ * have meant editing the dashboard's own service for a fact that belongs to purchase orders — and
+ * the order list already answers this question, with the same lead-time arithmetic as every other
+ * screen, because the server works it out in one place.
+ *
+ * <p><strong>A failure here shows nothing at all.</strong> This is the morning screen and the
+ * notice is a nudge; a red box about purchase orders on a cook's dashboard, because a list failed
+ * to load, is worse than the nudge is good. Every role that can open this screen holds
+ * `MANAGE_PURCHASE_ORDERS`, so a 403 is not the expected case — it is simply not worth shouting
+ * about if it ever happens.
+ */
+function DraftsAtRiskNotice() {
+  const load = useCallback((token?: string) => api.listPurchaseOrders("DRAFT", token), []);
+  const { data } = useAuthedQuery(load);
+  const drafts = (data ?? []).filter(
+    (po) => po.orderUrgency === "ORDER_TODAY" || po.orderUrgency === "TOO_LATE"
+  );
+  if (drafts.length === 0) return null;
+
+  const past = drafts.filter((po) => po.orderUrgency === "TOO_LATE").length;
+  const today = drafts.length - past;
+
+  return (
+    <InlineNotice
+      // Amber and not red, unlike the equipment line above. Every one of these is still something
+      // somebody can do something about this morning — send it, or raise it again for a day that
+      // works — which is the distinction the design system draws between the two tones.
+      tone="warning"
+      title={
+        <>
+          <span className="font-semibold">
+            {plural(drafts.length, "draft order", "draft orders")}
+          </span>{" "}
+          {drafts.length === 1 ? "is" : "are"} waiting to be sent
+          {past > 0 && today > 0
+            ? ` — ${past} past the day ${past === 1 ? "it" : "they"} had to go out, ${today} due today`
+            : past > 0
+              ? ` — past the day ${past === 1 ? "it" : "they"} had to go out`
+              : ` — today is the last day ${today === 1 ? "it" : "they"} can be`}
+          .
+        </>
+      }
+      action={
+        <ButtonLink href="/orders?status=DRAFT" size="sm" variant="secondary">
+          Open them
+        </ButtonLink>
+      }
+    >
+      A draft holds its ingredients off the shopping list, so one nobody sends stops them being
+      ordered at all.
     </InlineNotice>
   );
 }

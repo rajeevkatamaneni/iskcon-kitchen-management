@@ -196,6 +196,28 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                     <Badge tone="warning">{abandonedNote(vendor.abandonedOrders)}</Badge>
                   </span>
                 )}
+                {/*
+                  What this percentage leaves out, and whose doing it was (T-137, D-25).
+
+                  Rajeev: "That is a FAVOR we are asking." An order we submitted after this
+                  supplier's agreed lead time asked for something their notice period could not
+                  deliver, so a delay on it is not counted towards their performance — and the
+                  figure above therefore excludes it.
+
+                  It has to be visible. He was explicit that the exclusions belong on the screen
+                  rather than quietly changing a percentage, which is the same standard the
+                  abandoned count above already meets: a reader who cannot see what was left out
+                  cannot check the number.
+
+                  A neutral pill and not a warning one. The order says nothing bad about this
+                  vendor — if anything it says something about us — and colouring it amber beside
+                  "never delivered" would read as a second black mark against them.
+                */}
+                {vendor.ordersSentLate > 0 && (
+                  <span className="mt-1 flex justify-end">
+                    <Badge tone="neutral">{sentLateNote(vendor.ordersSentLate)}</Badge>
+                  </span>
+                )}
               </td>
 
               <td className={TD_NUM}>
@@ -260,6 +282,11 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                   {abandonedNote(report.abandonedOrders)}
                 </span>
               )}
+              {report.ordersSentLate > 0 && (
+                <span className="mt-1 block text-xs font-normal text-ink-muted">
+                  {sentLateNote(report.ordersSentLate)}
+                </span>
+              )}
             </td>
             <td className={`${TD_NUM} font-medium`}>
               {asPercent(report.fillRatePercent)}
@@ -291,6 +318,19 @@ function caveat(report: VendorPerformance): string {
     "The fill rate beside it is a different question: how much of the order turned up in the end, whenever it turned up, and how much of that the temple kept.",
     "Drafts are left out, and so is a cancellation nobody has marked against the vendor. An order that was sent and then cancelled because the vendor never delivered it does count, and scores nothing; an order that was never sent cannot be marked that way at all, so nothing a vendor was never told about reaches these figures. On time and the fill rate cover orders placed in this period whose needed-by date has passed; open orders are whatever is open today, whenever it was ordered.",
   ];
+  if (report.ordersSentLate > 0) {
+    parts.push(
+      `${report.ordersSentLate.toLocaleString("en-IN")} ${
+        report.ordersSentLate === 1 ? "order was" : "orders were"
+      } sent after the vendor had asked to be given — later than the notice period they agreed at onboarding — so ${
+        report.ordersSentLate === 1 ? "it is" : "they are"
+      } left out of the on-time figure. We asked for something their lead time could not deliver, so a delay on ${
+        report.ordersSentLate === 1 ? "it" : "them"
+      } is not theirs to answer for. The fill rate still counts ${
+        report.ordersSentLate === 1 ? "it" : "them"
+      }: ordering late excuses lateness, not a half-empty delivery.`
+    );
+  }
   if (report.ordersWithoutNeededBy > 0) {
     parts.push(
       `${report.ordersWithoutNeededBy.toLocaleString("en-IN")} ${
@@ -342,6 +382,19 @@ function itemsNote(onTime: number, scored: number): string {
  */
 function abandonedNote(count: number): string {
   return count === 1 ? "1 order never delivered" : `${count.toLocaleString("en-IN")} orders never delivered`;
+}
+
+/**
+ * "1 order we sent late" — ours, and said so.
+ *
+ * <p>The word "we" is the whole sentence. This count is the one figure on this screen that is about
+ * the temple rather than about the supplier, and a reader skimming a column of judgements needs to
+ * see that immediately or it looks like one more thing the vendor did.
+ */
+function sentLateNote(count: number): string {
+  return count === 1
+    ? "1 order we sent late — not counted"
+    : `${count.toLocaleString("en-IN")} orders we sent late — not counted`;
 }
 
 function rejectionNote(vendor: VendorPerformanceRow): string {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LEAD_BUFFER_DAYS, leadTimeWarning, moment, money, templeDay, todayIso } from "@/lib/format";
+import { leadTimeWarning, moment, money, templeDay, todayIso } from "@/lib/format";
 
 describe("the temple's today", () => {
   afterEach(() => vi.useRealTimers());
@@ -27,26 +27,53 @@ describe("the notice a vendor is given", () => {
   const TODAY = "2026-08-31";
 
   it("says nothing about a date with enough notice in it", () => {
-    expect(leadTimeWarning("2026-09-05", TODAY)).toBeNull();
+    expect(leadTimeWarning("2026-09-05", 2, TODAY)).toBeNull();
   });
 
-  it("says nothing on the buffer's own boundary — two days is the notice, not less than it", () => {
-    expect(leadTimeWarning("2026-09-02", TODAY)).toBeNull();
+  it("says nothing on the vendor's own boundary — two days is the notice, not less than it", () => {
+    expect(leadTimeWarning("2026-09-02", 2, TODAY)).toBeNull();
   });
 
-  it("warns, and does not refuse, inside the buffer", () => {
+  it("warns, and does not refuse, inside the notice this vendor asked for", () => {
     // A temple that genuinely needs rice tomorrow may ask for it tomorrow. The screen says what it
-    // is asking for; nothing here stops it being asked.
-    expect(leadTimeWarning("2026-09-01", TODAY)).toBe(
-      `Sooner than the ${LEAD_BUFFER_DAYS} days a vendor usually gets`
+    // is asking for; nothing here stops it being asked. What is enforced is D-25's cutoff, on the
+    // server, at Mark sent — and with an override, because it is a favour we are asking.
+    expect(leadTimeWarning("2026-09-01", 2, TODAY)).toBe(
+      "Sooner than the 2 days’ notice this vendor asked for"
     );
-    expect(leadTimeWarning(TODAY, TODAY)).toBe(
-      `Sooner than the ${LEAD_BUFFER_DAYS} days a vendor usually gets`
+    expect(leadTimeWarning(TODAY, 2, TODAY)).toBe(
+      "Sooner than the 2 days’ notice this vendor asked for"
     );
   });
 
-  it("says so plainly when the day has already gone", () => {
-    expect(leadTimeWarning("2026-08-30", TODAY)).toBe("That day has already gone");
+  it("uses the vendor's own number, not a figure of its own (T-137)", () => {
+    // The whole point of the change: the same date is fine for a dairy that wants two days' notice
+    // and not for a wholesaler who wants five. One number, per vendor, from the server — the
+    // hard-coded two days was a second answer to the question T-137 exists to make single.
+    expect(leadTimeWarning("2026-09-03", 2, TODAY)).toBeNull();
+    expect(leadTimeWarning("2026-09-03", 5, TODAY)).toBe(
+      "Sooner than the 5 days’ notice this vendor asked for"
+    );
+    expect(leadTimeWarning("2026-09-01", 1, TODAY)).toBeNull();
+    expect(leadTimeWarning(TODAY, 1, TODAY)).toBe(
+      "Sooner than the 1 day’s notice this vendor asked for"
+    );
+  });
+
+  it("says nothing about notice for a vendor who has never asked for any", () => {
+    // Rajeev's rule: no recorded lead time means no cutoff — no nudge, no warning, nothing held
+    // against anybody. Silence, and emphatically not the two days this used to assume.
+    expect(leadTimeWarning(TODAY, null, TODAY)).toBeNull();
+    expect(leadTimeWarning("2026-09-01", null, TODAY)).toBeNull();
+    // Zero is a real answer and means cash and carry: the goods come back with the person.
+    expect(leadTimeWarning(TODAY, 0, TODAY)).toBeNull();
+  });
+
+  it("says so plainly when the day has already gone, whatever the vendor asked for", () => {
+    // Ahead of the notice question, and true with no lead time recorded at all: a date behind today
+    // is not a request anybody can act on.
+    expect(leadTimeWarning("2026-08-30", 2, TODAY)).toBe("That day has already gone");
+    expect(leadTimeWarning("2026-08-30", null, TODAY)).toBe("That day has already gone");
   });
 });
 

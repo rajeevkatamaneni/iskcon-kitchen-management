@@ -175,6 +175,54 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("an order we sent after their lead time is counted as placed and judged nowhere")
+	void anOrderWeSentLateIsExcludedAndShown() throws Exception {
+		// T-137, D-25. Rajeev: "That is a FAVOR we are asking." We submitted this order after the
+		// notice period this vendor agreed at onboarding, so nothing that happened to it afterwards
+		// is theirs to answer for — not a late delivery and not a missing one.
+		UUID vendor = vendor("Govind Wholesale");
+		for (int i = 0; i < 4; i++) {
+			UUID po = order(vendor, days(-20), days(-10), "RECEIVED");
+			fullyReceived(po, days(-11));
+		}
+		// The fifth was ours to get wrong: nothing was ever delivered, which on any ordinary order
+		// would drag this vendor from 100% to 80%.
+		UUID late = sentLate(order(vendor, days(-20), days(-10), "SENT"));
+		line(late, "40");
+
+		mvc.perform(report())
+				.andExpect(status().isOk())
+				// Placed with them — we did order it, and the count says so.
+				.andExpect(jsonPath("$.vendors[0].ordersPlaced").value(5))
+				// Judged on the four we gave them a fair chance at.
+				.andExpect(jsonPath("$.vendors[0].ordersJudged").value(4))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").value(100))
+				// And the exclusion is on the screen, which is the half of the ruling that makes the
+				// percentage checkable: "a reader who cannot see what was excluded cannot check the
+				// number".
+				.andExpect(jsonPath("$.vendors[0].ordersSentLate").value(1))
+				.andExpect(jsonPath("$.ordersSentLate").value(1));
+	}
+
+	@Test
+	@DisplayName("a late-sent order marked as a no-show still counts against nobody")
+	void aLateSentNoShowIsStillNotTheirs() throws Exception {
+		// The tick box is not offered on such an order (T-129 as D-25 extends it), so this row can
+		// only arrive from outside the screen — and if it does, it must still carry no weight. The
+		// order is excluded before the abandoned tick is even looked at.
+		UUID vendor = vendor("Silent Supplies");
+		UUID po = sentLate(abandoned(vendor, days(-20), days(-10)));
+		line(po, "40");
+
+		mvc.perform(report())
+				.andExpect(jsonPath("$.vendors[0].ordersPlaced").value(1))
+				.andExpect(jsonPath("$.vendors[0].ordersJudged").value(0))
+				.andExpect(jsonPath("$.vendors[0].abandonedOrders").value(0))
+				.andExpect(jsonPath("$.vendors[0].onTimePercent").doesNotExist())
+				.andExpect(jsonPath("$.vendors[0].ordersSentLate").value(1));
+	}
+
+	@Test
 	@DisplayName("a draft, and a cancellation nobody blamed the vendor for, are never held against them")
 	void draftsAndOrdinaryCancellationsAreOut() throws Exception {
 		UUID vendor = vendor("Govind Wholesale");
@@ -835,6 +883,28 @@ class VendorPerformanceIT extends AbstractIntegrationTest {
 		UUID po = order(vendorId, orderDate, neededBy, "CANCELLED");
 		admin.update("UPDATE purchase_orders SET vendor_abandoned = true WHERE id = ?", po);
 		return po;
+	}
+
+	/**
+	 * An order we submitted after this vendor's agreed lead time (T-137, D-25).
+	 *
+	 * <p>Written straight to the columns, like every other fixture in this file: the report is being
+	 * tested against stored facts rather than against the lifecycle that produced them. The verdict
+	 * is decided once, in Java, when the order is sent — the end-to-end path, including the refusal
+	 * somebody has to override and the stamp that makes it survive an edit to the vendor's profile,
+	 * is {@code PurchaseOrderLeadTimeIT}.
+	 *
+	 * <p>{@code sent_at} comes with it because the schema insists (V125): lateness is a fact about
+	 * sending, so it cannot be true of an order nobody sent.
+	 */
+	private UUID sentLate(UUID poId) {
+		admin.update("""
+				UPDATE purchase_orders
+				SET sent_after_lead_time = true, lead_time_days = 2,
+					sent_at = COALESCE(sent_at, now())
+				WHERE id = ?
+				""", poId);
+		return poId;
 	}
 
 	private UUID line(UUID poId, String quantity) {

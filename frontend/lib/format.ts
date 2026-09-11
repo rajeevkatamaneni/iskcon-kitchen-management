@@ -298,31 +298,49 @@ export function contractWarning(contractEndDate: string, today = todayIso()): st
 }
 
 /**
- * The notice a vendor is assumed to need, in days.
+ * What to say about a needed-by date that leaves this vendor little or no notice — or none at all.
  *
- * <p>The same figure the shopping list plans with — `ShoppingListService.LEAD_BUFFER_DAYS` — which
- * subtracts it from the first meal that needs an ingredient to get the date it suggests. Held on
- * both sides for the same reason `TEMPLE_TIME_ZONE` is: it is a fact about how the temple works,
- * and this side has to be able to say something about a date *before* it is submitted.
- */
-export const LEAD_BUFFER_DAYS = 2;
-
-/**
- * What to say about a needed-by date that leaves a vendor little or no notice — or none at all.
+ * <p>It warns and never refuses, and the difference is the point. A temple that genuinely needs a
+ * sack of rice tomorrow should be able to ask for it tomorrow, and a rule that made that impossible
+ * would only teach people to write a date they do not mean. Only a date behind the order itself is
+ * refused, and that is refused on the server, because it is not a request anybody can act on. What
+ * *is* enforced — on Mark sent, with an override — is D-25's cutoff, and that lives on the server
+ * too (KMS-400148).
  *
- * <p>It warns and never refuses, and the difference is the point. The buffer is a planning default,
- * not a statement about what a supplier can do: a temple that genuinely needs a sack of rice
- * tomorrow should be able to ask for it tomorrow, and a rule that made that impossible would only
- * teach people to write a date they do not mean. Only a date behind the order itself is refused,
- * and that is refused on the server, because it is not a request anybody can act on.
+ * <p><strong>`leadTimeDays` is the vendor's own number, and this function used to invent one.</strong>
+ * It compared every date against a hard-coded two days — *"Sooner than the 2 days a vendor usually
+ * gets"* — which was honest before T-090 stored a real figure per vendor and ingredient, and became
+ * a second answer to the question T-137 exists to make single. Two numbers on one screen is the
+ * drift, not the fix: the form would say "2 days" beside a server that had refused the send against
+ * five. So the caller passes the governing lead time the server sent it, and this says what that
+ * vendor actually asked for.
+ *
+ * <p>**Null `leadTimeDays` is silence about notice, not two days.** Rajeev's rule for a vendor who
+ * has never given a lead time is that there is no cutoff at all — no nudge, no warning, nothing held
+ * against anybody — so with nothing recorded the only thing left to say is that the date itself has
+ * gone. Inventing a promise on a supplier's behalf is what the Golden Rule forbids.
+ *
+ * <p>Zero is a real answer and means cash and carry, so it warns about nothing: goods come back in
+ * the same van as the person.
+ *
+ * <p>`leadTimeDays` is **required and nullable, never optional with a default**, which is the
+ * convention `lib/api.ts` argues for at length and pays for here: a default would let a caller that
+ * has a vendor's figure forget to pass it and get silence that looks exactly like a vendor who has
+ * never been asked. Every call site has to say which of the two it means.
  *
  * <p>Null when there is nothing to say, so a caller renders the ordinary hint instead.
  */
-export function leadTimeWarning(neededBy: string, today = todayIso()): string | null {
+export function leadTimeWarning(
+  neededBy: string,
+  leadTimeDays: number | null,
+  today = todayIso()
+): string | null {
   const days = wholeDaysBetween(today, neededBy);
   if (days < 0) return "That day has already gone";
-  if (days < LEAD_BUFFER_DAYS) return `Sooner than the ${LEAD_BUFFER_DAYS} days a vendor usually gets`;
-  return null;
+  if (leadTimeDays == null || days >= leadTimeDays) return null;
+  return leadTimeDays === 1
+    ? "Sooner than the 1 day’s notice this vendor asked for"
+    : `Sooner than the ${leadTimeDays} days’ notice this vendor asked for`;
 }
 
 /**

@@ -4,7 +4,7 @@ import type { ApiError, TodayView } from "@/lib/api";
 
 // Today is role-gated and reads a single assembled payload. Drive the guard and the query from
 // mutable refs so each case states only what it is about.
-const { authRef, queryRef } = vi.hoisted(() => ({
+const { authRef, queryRef, callRef } = vi.hoisted(() => ({
   authRef: {
     current: {
       status: "signed-in",
@@ -14,13 +14,26 @@ const { authRef, queryRef } = vi.hoisted(() => ({
   queryRef: {
     current: { data: null as TodayView | null, error: null as ApiError | null, loading: false },
   },
+  // Which of the screen's two queries is being answered. Today's own payload is the first; the
+  // second is the draft purchase orders the at-risk notice reads for itself (T-137) - a list, from
+  // a different endpoint, which the single-value mock below used to hand a TodayView to.
+  callRef: { i: 0 },
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token", signOut: vi.fn() }),
 }));
-vi.mock("@/lib/use-authed-query", () => ({ useAuthedQuery: () => queryRef.current }));
+vi.mock("@/lib/use-authed-query", () => ({
+  useAuthedQuery: () => {
+    // Alternating, because the screen issues its two queries in a fixed order on every render. The
+    // at-risk notice gets an empty list here: these tests are about the rest of the dashboard, and
+    // the notice has its own file (lead-time-one-promise.test.tsx).
+    const first = callRef.i % 2 === 0;
+    callRef.i += 1;
+    return first ? queryRef.current : { data: [], error: null, loading: false };
+  },
+}));
 
 // The notice band fetches its own feed, which the single query mock above cannot serve alongside
 // Today's payload. It has its own tests (notices.test.tsx); here we only care that Today mounts it,
@@ -125,6 +138,7 @@ describe("today", () => {
       appUser: { role: "TEMPLE_ADMIN", fullName: "Radha Devi", tenantName: "ISKCON Bengaluru" },
     };
     queryRef.current = { data: today(), error: null, loading: false };
+    callRef.i = 0;
   });
 
   it("opens on the date, and says what the day holds", () => {
@@ -231,6 +245,7 @@ describe("today", () => {
       appUser: { role: "KITCHEN_STAFF", fullName: "Gopal Das", tenantName: "ISKCON Bengaluru" },
     };
     queryRef.current = { data: today(), error: null, loading: false };
+    callRef.i = 0;
     render(<TodayPage />);
 
     expect(screen.queryByText(/given this month/i)).not.toBeInTheDocument();
@@ -239,6 +254,7 @@ describe("today", () => {
 
   it("counts staff and volunteers apart, because they are not interchangeable", () => {
     queryRef.current = { data: today(), error: null, loading: false };
+    callRef.i = 0;
     render(<TodayPage />);
 
     const tile = screen.getByRole("link", { name: /working today/i });
@@ -263,6 +279,7 @@ describe("today", () => {
   it("counts plates per meal, never by summing the dishes of one", () => {
     // A lunch of two dishes at 820 servings each is 820 servings, not 1,640 (A4, §1d).
     queryRef.current = { data: today(), error: null, loading: false };
+    callRef.i = 0;
     render(<TodayPage />);
 
     const tile = screen.getByRole("link", { name: /servings today/i });
@@ -272,6 +289,7 @@ describe("today", () => {
 
   it("groups the day's dishes under their meal, and links each meal to that day's planner", () => {
     queryRef.current = { data: today(), error: null, loading: false };
+    callRef.i = 0;
     render(<TodayPage />);
 
     expect(screen.getByText("Meals planned for today")).toBeInTheDocument();
@@ -289,6 +307,7 @@ describe("today", () => {
 
   it("puts the platform notice band above everything else on the screen", () => {
     queryRef.current = { data: today(), error: null, loading: false };
+    callRef.i = 0;
     const { container } = render(<TodayPage />);
 
     const band = screen.getByTestId("platform-notices");

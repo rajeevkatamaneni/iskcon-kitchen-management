@@ -47,6 +47,34 @@ import org.springframework.transaction.annotation.Transactional;
  * abandoned, and that is the safe direction rather than an omission. Silence blames nobody, which
  * is what a box left alone should mean.
  *
+ * <p><strong>And an order we sent after the vendor's own lead time is left out of the on-time
+ * figure entirely</strong> (T-137, D-25). Rajeev put the principle first: <em>"We can't forget the
+ * Golden Rule: Hold others to the same standards you want to be held to."</em> A lead time is the
+ * supplier's own number, agreed at onboarding and padded on purpose, and if we submit an order
+ * after the last day it could have been filled then <em>"that is a FAVOR we are asking"</em> — so a
+ * delay on that delivery cannot be counted towards their performance. The order was placed and is
+ * counted as placed; it is simply not judged, and {@code ordersSentLate} says how many were set
+ * aside that way.
+ *
+ * <p><strong>The count is on the screen beside the percentage, and that is part of the ruling
+ * rather than a nicety.</strong> The figures now exclude orders we submitted late, and he was
+ * explicit that this must be visible rather than quietly changing a number: a reader who cannot see
+ * what was excluded cannot check the number. It is the same standard the abandoned count already
+ * meets.
+ *
+ * <p><strong>The verdict is read off the order, never recomputed.</strong>
+ * {@code purchase_orders.sent_after_lead_time} was decided once, in Java, at the moment of sending
+ * (V125). This report does no date arithmetic about lead times at all, which is what makes an edit
+ * to a vendor's profile unable to re-judge an order already placed — <em>"No retroactive change
+ * here."</em>
+ *
+ * <p><strong>The fill rate does not move, and that is decided rather than overlooked.</strong>
+ * Ordering late excuses a supplier for being <em>late</em>; it does not excuse them for never
+ * bringing half the rice. And T-124's own argument applies with full force — an exclusion that
+ * silently changed an existing percentage on an existing screen is the defect that ruling exists to
+ * avoid. If Rajeev wants a late-placed order left out of the fill rate too, that is one predicate
+ * and it should be his decision rather than this task's inference.
+ *
  * <p><strong>The period selects orders by the date they were placed.</strong> One rule for
  * everything counted over a period, so no reader has to work out which date put a row where. The
  * open-order and aging columns are the exception and say so: they are present tense, unfiltered by
@@ -298,6 +326,7 @@ public class VendorPerformanceService {
 		return new VendorPerformance(from, to,
 				everything.ordersPlaced, everything.ordersJudged, everything.onTimeOrders,
 				everything.abandonedOrders, everything.ordersWithoutNeededBy,
+				everything.ordersSentLate,
 				everything.itemsScored, everything.itemsOnTime, everything.onTimePercent(),
 				everything.linesJudged, everything.fillRate(), everything.rejectedLines,
 				everything.openOrders, everything.openCurrent, everything.openDue1To30,
@@ -372,6 +401,9 @@ public class VendorPerformanceService {
 				WHERE
 				""" + SCORED_ORDER + """
 				  AND po.order_date BETWEEN ? AND ?
+				  -- We asked for the impossible, so nothing here is theirs to answer for (D-25).
+				  -- The order is still counted as placed; see countOrders.
+				  AND NOT po.sent_after_lead_time
 				  AND (po.vendor_abandoned
 					   OR (po.needed_by IS NOT NULL AND po.needed_by < ?))
 				""", rs -> {
@@ -434,7 +466,8 @@ public class VendorPerformanceService {
 	private void countOrders(Map<UUID, Totals> byVendor, Map<UUID, OrderScore> scores,
 			LocalDate from, LocalDate to, LocalDate today) {
 		jdbc.query("""
-				SELECT po.id AS po_id, po.vendor_id, po.needed_by, po.vendor_abandoned
+				SELECT po.id AS po_id, po.vendor_id, po.needed_by, po.vendor_abandoned,
+					   po.sent_after_lead_time
 				FROM purchase_orders po
 				WHERE
 				""" + SCORED_ORDER + """
@@ -444,6 +477,14 @@ public class VendorPerformanceService {
 			totals.ordersPlaced++;
 			OrderScore score = scores.get(rs.getObject("po_id", UUID.class));
 
+			// Checked before anything else, the abandoned tick included (D-25). We submitted this
+			// order after the vendor's agreed notice period, so there is no delivery of theirs to
+			// judge — not a late one, and not a missing one either. Counted as placed and set aside
+			// in its own column so a reader can see what the percentage leaves out.
+			if (rs.getBoolean("sent_after_lead_time")) {
+				totals.ordersSentLate++;
+				return;
+			}
 			if (rs.getBoolean("vendor_abandoned")) {
 				totals.ordersJudged++;
 				totals.abandonedOrders++;
@@ -663,6 +704,8 @@ public class VendorPerformanceService {
 		private int onTimeOrders;
 		private int abandonedOrders;
 		private int ordersWithoutNeededBy;
+		/** Orders we submitted after the vendor's agreed lead time, and so do not judge (D-25). */
+		private int ordersSentLate;
 		private int itemsScored;
 		private int itemsOnTime;
 		/**
@@ -686,6 +729,7 @@ public class VendorPerformanceService {
 			onTimeOrders += other.onTimeOrders;
 			abandonedOrders += other.abandonedOrders;
 			ordersWithoutNeededBy += other.ordersWithoutNeededBy;
+			ordersSentLate += other.ordersSentLate;
 			itemsScored += other.itemsScored;
 			itemsOnTime += other.itemsOnTime;
 			onTimeScore = onTimeScore.add(other.onTimeScore);
@@ -721,6 +765,7 @@ public class VendorPerformanceService {
 					.thenComparing(RejectionCount::reason));
 			return new VendorPerformanceRow(ref.id(), ref.name(), ref.active(),
 					ordersPlaced, ordersJudged, onTimeOrders, abandonedOrders, ordersWithoutNeededBy,
+					ordersSentLate,
 					itemsScored, itemsOnTime, onTimePercent(), linesJudged, fillRate(),
 					rejectedLines, List.copyOf(byReason),
 					openOrders, openCurrent, openDue1To30, openOverdue31Plus,

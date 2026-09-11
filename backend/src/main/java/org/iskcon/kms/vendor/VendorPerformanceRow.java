@@ -30,6 +30,14 @@ import java.util.UUID;
  * @param ordersWithoutNeededBy orders in the period with no needed-by date at all. There is nothing
  *                            to be late against, so they are outside both figures and counted here
  *                            instead of quietly scoring the vendor a hundred per cent.
+ * @param ordersSentLate      orders in the period that <em>we</em> submitted after this vendor's
+ *                            agreed lead time (T-137, D-25). They are counted as placed and then
+ *                            set aside: we asked for something their notice period could not
+ *                            deliver, so a delay on one is not theirs to answer for. The count is
+ *                            on the screen beside the percentage because a figure whose exclusions
+ *                            are invisible cannot be checked — the same standard {@code
+ *                            abandonedOrders} already meets. The fill rate still counts them, which
+ *                            is deliberate: ordering late excuses lateness, not a half-empty lorry.
  * @param itemsScored         order lines that went into the on-time figure — the "of ten" in "eight
  *                            of ten items". A described line ("four plastic stools") counts as one
  *                            item like any other; the fill rate cannot judge it, on-time can.
@@ -65,6 +73,7 @@ public record VendorPerformanceRow(
 		int onTimeOrders,
 		int abandonedOrders,
 		int ordersWithoutNeededBy,
+		int ordersSentLate,
 		int itemsScored,
 		int itemsOnTime,
 		BigDecimal onTimePercent,

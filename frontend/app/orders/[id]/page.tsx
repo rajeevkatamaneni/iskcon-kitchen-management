@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type GoodsReceiptLineView, type PurchaseOrderLineView, type ReturnReason } from "@/lib/api";
+import { api, toApiError, type ApiError, type GoodsReceiptLineView, type PurchaseOrderLineView, type PurchaseOrderView, type ReturnReason } from "@/lib/api";
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -67,6 +67,87 @@ function quantitySaid(value: number | null | undefined, unit: string): string {
   return quantity(value, unit);
 }
 
+/**
+ * "2 days’ notice" — a lead time in the words a person would say it in.
+ *
+ * <p>Zero is a real answer and means cash and carry: the shop somebody walks into, where the goods
+ * come back in the same van as the person. It must not read as "no notice at all", which is what
+ * "0 days’ notice" sounds like.
+ */
+function leadTimeSaid(days: number | null | undefined): string {
+  if (days == null) return "the notice they asked for";
+  if (days === 0) return "same-day collection";
+  return days === 1 ? "1 day’s notice" : `${days} days’ notice`;
+}
+
+/**
+ * Where this order stands against its vendor's promise, as one line under the dates (T-137, D-25).
+ *
+ * <p>Every fact in it is the server's: `orderBy` is the last day the order could be placed,
+ * `orderUrgency` is which of Rajeev's three zones today is in, and `sentAfterLeadTime` is the
+ * verdict stamped on the order when it went out. This function chooses words and nothing else — it
+ * does no date arithmetic, because the whole of T-137 is that the arithmetic happens once.
+ *
+ * <p>Null when the vendor has no recorded lead time for anything on this order, or when there is no
+ * needed-by date to count back from. That silence is the ruling and not an oversight: with no
+ * agreed lead time there is no cutoff, so there is nothing to warn about and nobody to hold to
+ * anything.
+ */
+function leadTimeLine(po: PurchaseOrderView) {
+  if (po.sentAt) {
+    if (po.sentAfterLeadTime) {
+      return (
+        <p className="mt-2 flex flex-wrap items-baseline gap-2 text-sm">
+          <Badge tone="warning">Sent late</Badge>
+          <span className="max-w-prose text-ink-secondary">
+            This went out after {po.orderBy ? dateWithYear(po.orderBy) : "the last day it could be ordered"},
+            the last day {po.vendorName} could have filled it — they asked for{" "}
+            {leadTimeSaid(po.leadTimeDays)}. A late delivery on this order isn’t counted against
+            them.
+          </span>
+        </p>
+      );
+    }
+    // The quiet half of the same fact, and worth printing: it is the evidence that the figure on
+    // the vendor's scorecard was measured against what they actually agreed to, on this order,
+    // whatever their profile says today.
+    return po.leadTimeDays == null ? null : (
+      <p className="mt-1 max-w-prose text-sm text-ink-muted">
+        Sent within the {leadTimeSaid(po.leadTimeDays)} {po.vendorName} asked for.
+      </p>
+    );
+  }
+  if (!po.orderBy || !po.orderUrgency) return null;
+  const orderBy = dateWithYear(po.orderBy);
+  const asked = `${po.vendorName} asked for ${leadTimeSaid(po.leadTimeDays)}.`;
+  if (po.orderUrgency === "TOO_LATE") {
+    return (
+      <p className="mt-2 flex flex-wrap items-baseline gap-2 text-sm">
+        <Badge tone="danger">Past the order-by date</Badge>
+        <span className="max-w-prose text-ink-secondary">
+          This had to be ordered by {orderBy} to arrive in time. {asked} Sending it now is a favour
+          we are asking, and a late delivery on it won’t count against them.
+        </span>
+      </p>
+    );
+  }
+  if (po.orderUrgency === "ORDER_TODAY") {
+    return (
+      <p className="mt-2 flex flex-wrap items-baseline gap-2 text-sm">
+        <Badge tone="warning">Order today</Badge>
+        <span className="max-w-prose text-ink-secondary">
+          Today is the last day this can be ordered and still arrive for {po.neededBy ? dateWithYear(po.neededBy) : "the day it is needed"}. {asked}
+        </span>
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-sm tabular-nums text-ink-secondary">
+      Order by {orderBy} — {asked}
+    </p>
+  );
+}
+
 export default function PurchaseOrderDetailPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
@@ -104,11 +185,24 @@ function PurchaseOrderDetailView() {
   const [returning, setReturning] = useState<{ receiptId: string; line: GoodsReceiptLineView } | null>(null);
   // "" means the vendor's own preferred language; otherwise an explicit override for print / PDF.
   const [docLanguage, setDocLanguage] = useState("");
+  // Whether the person has been told this order is going out after the vendor's agreed lead time
+  // and is being offered the chance to send it anyway (T-137, D-25).
+  //
+  // It is set only by the server's own refusal (KMS-400148), never by this screen working the date
+  // out for itself. The whole of T-137 is that one place decides where an order stands against its
+  // vendor's promise; a second opinion computed in the browser is exactly how the planner, this
+  // screen and the dashboard come to say three different things about one order.
+  const [lateSend, setLateSend] = useState(false);
   // Whether the edit form is open, and nothing more. The working copy of the lines and of the
   // needed-by date belongs to PurchaseOrderEditor, which is mounted while this is true and
   // unmounted when it is not — so abandoning an edit costs nothing and there is no second copy of
   // the draft up here to fall out of step with the one being typed into (T-134).
   const [editing, setEditing] = useState(false);
+
+  // The code of the last refusal, for the one caller that has to branch on which refusal it was.
+  // A ref and not state: it is read immediately after the await that set it, and a state update
+  // would not have landed by then.
+  const lastRefusal = useRef<string | null>(null);
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -119,7 +213,9 @@ function PurchaseOrderDetailView() {
       reloadReceipts();
       return true;
     } catch (e) {
-      setActionError(toApiError(e, failure));
+      const refusal = toApiError(e, failure);
+      lastRefusal.current = refusal.code;
+      setActionError(refusal);
       return false;
     } finally {
       setBusy(false);
@@ -211,6 +307,18 @@ function PurchaseOrderDetailView() {
   // cancelled order's status no longer says whether it was ever sent, and that is exactly the case
   // the ruling is about — a draft, cancelled, with the box ticked.
   const wasSent = po?.sentAt != null;
+  /**
+   * Whether this cancellation may be laid at the vendor's door (T-129, extended by T-137/D-25).
+   *
+   * <p>Two conditions, and they are the same idea twice. The order has to have been sent, because
+   * nothing was asked of a supplier who never saw it. And it has to have been sent in time, because
+   * an order we submitted after their agreed lead time asked for something they never promised —
+   * Rajeev: "BECAUSE it is their fault NOT the vendors", and on such an order the fault is ours.
+   *
+   * <p>`sentAfterLeadTime` is the verdict the server stamped when the order went out, never a
+   * judgement this screen makes.
+   */
+  const canBlameVendor = wasSent && po?.sentAfterLeadTime !== true;
 
   /**
    * The described lines on this order that nobody has yet said arrived (T-066).
@@ -331,6 +439,25 @@ function PurchaseOrderDetailView() {
   }
 
   /**
+   * Marks the order as sent — and the vendor's lead time is enforced on the way (T-137, D-25).
+   *
+   * <p>Rajeev's rule is that ordering after a supplier's agreed notice period is allowed and is not
+   * a mistake: <em>"That is a FAVOR we are asking."</em> So the first press asks, the server refuses
+   * with KMS-400148 and says what it will cost — a delay on this delivery cannot then be counted
+   * against them — and the second press means it.
+   *
+   * <p>The refusal is the server's and the consent is the person's. This screen does not decide
+   * whether the order is late, does not hide the button, and does not warn in place of asking.
+   */
+  async function markSent(anyway: boolean) {
+    const ok = await run(
+      (t) => (anyway ? api.sendPurchaseOrderAnyway(id, t) : api.sendPurchaseOrder(id, t)),
+      "We couldn’t send that order."
+    );
+    setLateSend(!ok && !anyway && lastRefusal.current === "KMS-400148");
+  }
+
+  /**
    * Writes an edited draft back (T-134).
    *
    * <p>The draft itself is built and validated by PurchaseOrderEditor, which hands it over in the
@@ -402,7 +529,45 @@ function PurchaseOrderDetailView() {
                     </p>
                   )}
                   {po.sentAt && <p className="text-sm text-ink-muted">Fixed when the order was sent</p>}
-                  {po.cancelReason && <p className="mt-1 text-sm text-ink-muted">Cancelled: {po.cancelReason}</p>}
+                  {/*
+                    The vendor's own promise, said on the order it applies to (T-137, D-25).
+
+                    A lead time is agreed at onboarding and it is theirs — "we are good with 1 day
+                    lead time BUT we want to be safe than sorry so we need 3 days notice" — so the
+                    order-by date underneath it is not our deadline, it is the last day their
+                    promise can still be kept. Every figure here comes from the server, which works
+                    it out in the one place that arithmetic exists; nothing on this screen subtracts
+                    a date from another.
+
+                    Three zones on a draft, which are Rajeev's own: comfortably inside says so
+                    quietly, the last day gets a nudge (he called the nudge optional), and past it
+                    is a different sentence rather than a louder one — there is no longer an action
+                    that produces the outcome the warning was about.
+
+                    On a sent order the zone is gone and the verdict has taken its place. That
+                    verdict was decided when the order went out and is stamped on it, so editing
+                    the vendor's profile afterwards cannot move it: "No retroactive change here."
+
+                    Nothing at all for a vendor with no recorded lead time. Rajeev was explicit
+                    that this case is silence — no nudge, no warning, no exclusion, nothing held
+                    against anybody — so an absent figure prints nothing rather than an assumption
+                    dressed up as their word.
+                  */}
+                  {leadTimeLine(po)}
+                  {po.cancelReason && (
+                    <p className="mt-1 text-sm text-ink-muted">
+                      {/* "Auto Cancelled", not "Cancelled" (D-24a). Nobody in the temple did this,
+                          and a person reading the order will otherwise go looking for who did. */}
+                      {po.autoCancelled ? "Auto Cancelled" : "Cancelled"}: {po.cancelReason}
+                    </p>
+                  )}
+                  {po.autoCancelled && (
+                    <p className="mt-1 max-w-prose text-sm text-ink-secondary">
+                      It was still a draft on the day it was needed, so it was cancelled
+                      automatically and what it asked for went back on the shopping list. Nothing
+                      was sent to {po.vendorName}, so nothing counts against them.
+                    </p>
+                  )}
                   {/*
                     The other half of the cancellation, and until T-126 it was on no screen at all.
                     T-124 recorded the "Vendor Never Delivered this Order" tick in the row, the
@@ -424,8 +589,15 @@ function PurchaseOrderDetailView() {
                   {po.vendorAbandoned && (
                     <p className="mt-2 flex flex-wrap items-baseline gap-2 text-sm text-ink-secondary">
                       <Badge tone="warning">Never delivered</Badge>
+                      {/* The second half of the sentence has to stay true (T-137). This order was
+                          marked as a no-show, but if we sent it after the vendor's agreed lead time
+                          the scorecard leaves it out of their figures entirely — so promising that
+                          it counts against them would be the screen saying something the numbers
+                          do not do. The mark stays on the record; what it costs them changes. */}
                       <span className="max-w-prose">
-                        The vendor never delivered this order. It counts against their delivery record.
+                        {po.sentAfterLeadTime
+                          ? `The vendor never delivered this order. We sent it after ${po.vendorName} asked to be given, so it is left out of their delivery record rather than counted against them.`
+                          : "The vendor never delivered this order. It counts against their delivery record."}
                       </span>
                     </p>
                   )}
@@ -477,7 +649,7 @@ function PurchaseOrderDetailView() {
                         than the button did. It no longer doubles as the way out of edit mode
                         either: it is not rendered there at all. */}
                     {canEdit && <button type="button" disabled={busy} onClick={() => { setActionError(null); setEditing(true); }} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Edit</button>}
-                    {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn’t send that order.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Mark sent</button>}
+                    {canSend && <button type="button" disabled={busy} onClick={() => markSent(false)} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Mark sent</button>}
                     {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn’t send it on WhatsApp.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Send on WhatsApp</button>}
                     {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
                   </div>
@@ -487,6 +659,32 @@ function PurchaseOrderDetailView() {
               {actionError && (
                 <div className="mb-6 grid gap-3">
                   <ErrorNotice error={actionError} />
+                  {/*
+                    The override on a late send (T-137, D-25), and it is deliberately a second,
+                    separate press rather than a confirm dialog over the first.
+
+                    Rajeev did not want this refused: "That is a FAVOR we are asking." What he
+                    wanted was that the person knows what it costs before they ask for it — the
+                    refusal above says that a delay on this delivery will not count against the
+                    vendor — and then that they can go ahead. Nothing is hidden and nothing is
+                    disabled; the ordinary Mark sent button is still there above.
+                  */}
+                  {lateSend && canSend && (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => markSent(true)}
+                        className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60"
+                      >
+                        Send it anyway
+                      </button>
+                      <span className="max-w-prose text-sm text-ink-secondary">
+                        {po.vendorName} agreed to {leadTimeSaid(po.leadTimeDays)}, so this one goes
+                        out as a favour. A late delivery on it won’t count against them.
+                      </span>
+                    </div>
+                  )}
                   {/* A few refusals name the lines they are about — a unit the ingredient cannot be
                       measured in (KMS-400013) is one. An order can run to twenty lines, and being told
                       that one of them is wrong without being told which is not much of a refusal. */}
@@ -512,6 +710,11 @@ function PurchaseOrderDetailView() {
 
                 What stayed behind on this page is the half that is not the form: the bank of
                 buttons above, the tables below, and the cancellation at the foot of the page.
+
+                `leadTimeDays` and `vendorName` are what this vendor asked for at onboarding, so
+                the form can say it while somebody picks a date (T-137). A statement of their own
+                number and nothing more: where the order stands against it is decided on the server,
+                on Mark sent, and is never worked out twice.
               */}
               {editing && canEdit && (
                 <PurchaseOrderEditor
@@ -533,6 +736,8 @@ function PurchaseOrderDetailView() {
                   }))}
                   initialNeededBy={po.neededBy ?? ""}
                   minNeededBy={po.orderDate}
+                  leadTimeDays={po.leadTimeDays ?? null}
+                  vendorName={po.vendorName}
                   ingredients={ingredientsData ?? []}
                   busy={busy}
                   onSave={saveLines}
@@ -951,7 +1156,7 @@ function PurchaseOrderDetailView() {
                       // pairing outright (KMS-400147), and a screen that could send a request it
                       // knows will be refused is a screen waiting to show somebody an error it
                       // could have avoided.
-                      (t) => api.cancelPurchaseOrder(id, reason, wasSent && vendorAbandoned, t),
+                      (t) => api.cancelPurchaseOrder(id, reason, canBlameVendor && vendorAbandoned, t),
                       "We couldn’t cancel that order."
                     );
                     if (ok) {
@@ -996,7 +1201,7 @@ function PurchaseOrderDetailView() {
                       the person cancelling is the one who most needs to know that this cancellation
                       will not count against anybody.
                     */}
-                    {wasSent ? (
+                    {canBlameVendor ? (
                       <label className="mt-4 flex items-start gap-2 text-sm">
                         <input
                           type="checkbox"
@@ -1013,6 +1218,24 @@ function PurchaseOrderDetailView() {
                           </span>
                         </span>
                       </label>
+                    ) : wasSent ? (
+                      /*
+                        Sent, but sent after the vendor's own lead time (T-137, D-25). The box is
+                        not offered for the same reason it is not offered on a draft: we are not
+                        entitled to the claim. Rajeev: "That is a FAVOR we are asking" — we asked
+                        for something their agreed notice period could not deliver, so their not
+                        delivering it is not a failure of theirs to record.
+
+                        Said out loud rather than left as a gap, like the sentence below it. A
+                        control that disappears with no explanation reads as a bug or a missing
+                        permission, and the person cancelling is the one who most needs to know
+                        this cancellation will not count against anybody.
+                      */
+                      <p className="mt-4 max-w-prose text-sm text-ink-secondary">
+                        We sent this order after {po.vendorName} asked to be given —{" "}
+                        {leadTimeSaid(po.leadTimeDays)} — so there is nothing to hold them to.
+                        Cancelling it counts against nobody’s delivery record.
+                      </p>
                     ) : (
                       <p className="mt-4 max-w-prose text-sm text-ink-secondary">
                         This order was never sent, so there is nothing to hold the vendor to.

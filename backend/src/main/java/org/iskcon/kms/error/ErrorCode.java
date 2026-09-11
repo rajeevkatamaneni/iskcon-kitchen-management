@@ -963,6 +963,31 @@ public enum ErrorCode {
 			"This order was never sent, so it can't be marked as one the vendor failed to deliver.",
 			"Cancel it without that mark. Nothing was asked of the vendor, so nothing counts against them."),
 
+	// Sending after the vendor's agreed notice period is allowed, and it is a favour we are asking
+	// rather than a mistake we are making — so this refuses only until somebody says they meant it.
+	// It is a 409 rather than a 422 for the same reason PO_NEVER_SENT_TO_VENDOR above is: nothing
+	// about the request is malformed, the order is simply in a state this action does not fit yet.
+	//
+	// The consequence belongs in the words because it is the whole of why Rajeev wanted the warning
+	// (D-25): ordering late means a delay cannot fairly be counted against the vendor, and somebody
+	// pressing Send ought to know that before they press it rather than discover it on a scorecard.
+	ORDER_PAST_VENDOR_LEAD_TIME(400148, 409,
+			"This order is going out later than the vendor asked to be given.",
+			"Send it anyway if they have agreed, or change the needed-by date. A late delivery on "
+					+ "this order won't count against them."),
+
+	// The sibling of PO_NEVER_SENT_TO_VENDOR above, and it exists for the reason written there: the
+	// screen hides the box, and this is what stops it anyway. A rule that lives only in a form is not
+	// a rule, because the same endpoint takes the same field from anything that can post to it.
+	//
+	// D-25 is what makes it a rule rather than a courtesy: we asked this vendor for something after
+	// the notice they were promised, so a late delivery is our doing. Letting somebody tick "they
+	// never delivered" on it would put our own lateness on their record.
+	PO_SENT_AFTER_LEAD_TIME(400149, 409,
+			"This order went out after the notice this vendor asked for, so it can't be marked as one "
+					+ "they failed to deliver.",
+			"Cancel it without that mark. We asked late, so the delay isn't theirs to carry."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

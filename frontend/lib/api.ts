@@ -1965,6 +1965,18 @@ export interface VendorPerformanceRow {
   abandonedOrders: number;
   /** Orders with no needed-by date: nothing to be late against, so outside both figures. */
   ordersWithoutNeededBy: number;
+  /**
+   * Orders **we** submitted after this vendor's agreed lead time (T-137, D-25).
+   *
+   * <p>Counted as placed and then set aside: we asked for something their notice period could not
+   * deliver, so a delay on one of them is not theirs to answer for. Rajeev: "That is a FAVOR we are
+   * asking."
+   *
+   * <p>It belongs on the screen beside the percentage, and that is part of the ruling rather than a
+   * nicety — a figure whose exclusions are invisible cannot be checked. Same standard as
+   * `abandonedOrders`.
+   */
+  ordersSentLate: number;
   /** Order lines that went into the on-time figure — the "of ten" in "eight of ten items". */
   itemsScored: number;
   /** Of those, the ones fully there in time — the "eight". */
@@ -2010,6 +2022,8 @@ export interface VendorPerformance {
   onTimeOrders: number;
   abandonedOrders: number;
   ordersWithoutNeededBy: number;
+  /** Orders we submitted after the vendor's lead time, excluded from on time — see the row. */
+  ordersSentLate: number;
   itemsScored: number;
   itemsOnTime: number;
   onTimePercent: number | null;
@@ -2113,6 +2127,51 @@ export interface PurchaseOrderView {
    * convention was paid for.
    */
   vendorAbandoned: boolean;
+  /**
+   * Whether the nightly sweep cancelled this draft because its needed-by date had gone (T-137,
+   * D-24a). Rajeev: "mark it as Auto Cancelled. Reason: Past need by date."
+   *
+   * <p>A draft holds its ingredients off the shopping list from the moment it is created, so one
+   * nobody ever sends holds them hostage; cancelling it hands them back. The screens say "Auto
+   * Cancelled" where they would otherwise say Cancelled, because nobody in the temple did it and
+   * the person who finds the order will otherwise go looking for who did.
+   */
+  autoCancelled?: boolean;
+  /**
+   * The lead time governing this order, in days — the vendor's own number, agreed at onboarding
+   * (T-137, D-25). Null or absent where nobody has said, which is silence and never zero.
+   *
+   * <p>**Two facts wear this name, and which one it is depends on `sentAt`.** On a draft it is read
+   * live from the vendor's supply rows, so editing their profile moves it — nothing has been asked
+   * of anybody yet. Once the order is sent it is the figure stamped on the order when it went out,
+   * and a later edit cannot move it: "Any SLA Adjustments made to a vendor's profile will take
+   * effect for the Orders after the change. No retroactive change here."
+   */
+  leadTimeDays?: number | null;
+  /**
+   * The last day this order could be placed and still arrive: `neededBy` minus `leadTimeDays`.
+   * Null or absent exactly when either of those is.
+   *
+   * <p>Worked out by the server, in the one place that subtraction exists. A screen must not
+   * recompute it — the whole of T-137 is that the planner badge, this screen, the Today dashboard
+   * and the Mark sent gate cannot be allowed to give different answers about one order.
+   */
+  orderBy?: string | null;
+  /**
+   * Where today stands against `orderBy`, for an order still waiting to go out.
+   *
+   * <p>**Null once the order has been sent**, and that is not a missing answer: the zone is advice
+   * about when to press the button, and what the order went out under is `sentAfterLeadTime`.
+   */
+  orderUrgency?: OrderUrgency | null;
+  /**
+   * Whether this order went out after the last day it could have been placed (T-137, D-25).
+   *
+   * <p>Decided once, on the server, at the moment of sending — never recomputed. What follows is
+   * that a delay on this delivery is not counted against the vendor: it is excluded from their
+   * on-time figure, and cancelling it does not offer the "Vendor Never Delivered this Order" tick.
+   */
+  sentAfterLeadTime?: boolean;
   sentAt: string | null;
   cancelledAt: string | null;
   createdAt: string;
@@ -5057,6 +5116,27 @@ export const api = {
 
   sendPurchaseOrder: (id: string, token?: string) =>
     request<void>(`/api/v1/purchase-orders/${id}/send`, { method: "POST", token }),
+
+  /**
+   * Sends an order the server has already refused as late — the override on KMS-400148 (T-137,
+   * D-25).
+   *
+   * <p>Rajeev's rule is that ordering after a vendor's agreed lead time is allowed and is not a
+   * mistake: "That is a FAVOR we are asking." So the first press is refused with what it will cost
+   * — a delay on this delivery cannot then be counted against the supplier — and this is the second
+   * press, which means it.
+   *
+   * <p>**A separate function rather than an argument on `sendPurchaseOrder`.** A boolean added to
+   * that signature would sit where callers already pass a token, and `sendPurchaseOrder(id, t)`
+   * would go on compiling while quietly waiving a vendor's promise on every send. Two names, each
+   * with one meaning, and the dangerous one has to be typed out.
+   */
+  sendPurchaseOrderAnyway: (id: string, token?: string) =>
+    request<void>(`/api/v1/purchase-orders/${id}/send`, {
+      method: "POST",
+      body: JSON.stringify({ sendAnyway: true }),
+      token,
+    }),
 
   /**
    * Cancels an order, saying whether the vendor is why (T-124).

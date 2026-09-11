@@ -8,7 +8,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { InlineNotice } from "@/components/ds/InlineNotice";
-import { api, type PoStatus } from "@/lib/api";
+import { api, type PoStatus, type PurchaseOrderView } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { STATUSES, STATUS_LABEL, statusChip } from "./po-status";
 import { Loading } from "@/components/Loading";
@@ -35,6 +35,14 @@ function PurchaseOrdersView() {
   );
   const { data, error, loading } = useAuthedQuery(fetchPos);
   const orders = data ?? [];
+  // Read off whatever list is on screen, and deliberately not a second request: the filter above
+  // is the person's own, and a warning that ignored it would name orders they cannot see. On the
+  // "All" view — the default, and the one somebody lands on — that is every draft.
+  const atRisk = orders.filter(
+    (po) =>
+      po.status === "DRAFT" &&
+      (po.orderUrgency === "ORDER_TODAY" || po.orderUrgency === "TOO_LATE")
+  );
 
   // An order raised by hand is raised on /orders/new and ends back here, so the confirmation has to
   // travel in the URL — the same shape /vendors/new uses, down to the parameter's name. The id
@@ -74,6 +82,28 @@ function PurchaseOrdersView() {
                 is for (T-026). */}
             <ButtonLink href="/orders/new">Raise an order</ButtonLink>
           </header>
+
+          {/*
+            Drafts that are at or past the day they had to be ordered (T-137, D-24a).
+
+            This exists because of what D-24a changed: a line leaves the shopping list the moment a
+            purchase order is created, draft or not — otherwise "someone else will take pity and
+            generate another PO. Same ingredients, 2 PO's." The cost of that is a draft nobody ever
+            sends, holding its ingredients off the list and never ordering them. So the two screens
+            a person actually looks at say so.
+
+            Every figure comes from the server, which measures each draft against its own vendor's
+            agreed lead time. A draft whose vendor has no recorded lead time is not counted here at
+            all: Rajeev ruled that case is silence, and the nightly sweep catches such an order
+            anyway once its needed-by date has gone.
+          */}
+          {atRisk.length > 0 && (
+            <div className="mb-6">
+              <InlineNotice tone="warning" title={draftsAtRiskTitle(atRisk)}>
+                {draftsAtRiskBody(atRisk)}
+              </InlineNotice>
+            </div>
+          )}
 
           {flash && (
             <div className="mb-6">
@@ -170,4 +200,44 @@ function PurchaseOrdersView() {
       </main>
     </div>
   );
+}
+
+/**
+ * "2 drafts are past the day they had to be ordered" — the count first, because the number is the
+ * thing to react to (T-137, D-24a).
+ *
+ * <p>Past and last-day are separated rather than summed. They are two different problems: one still
+ * has an action that works — send it today — and the other does not, and telling a person to hurry
+ * over an order that can no longer arrive in time is advice they cannot take. That is the same
+ * distinction `OrderUrgency` draws on the planner badge, in the same words.
+ */
+function draftsAtRiskTitle(drafts: PurchaseOrderView[]): string {
+  const past = drafts.filter((po) => po.orderUrgency === "TOO_LATE").length;
+  const today = drafts.length - past;
+  const parts: string[] = [];
+  if (past > 0) {
+    parts.push(
+      past === 1
+        ? "1 draft is past the day it had to be ordered"
+        : `${past} drafts are past the day they had to be ordered`
+    );
+  }
+  if (today > 0) {
+    parts.push(
+      today === 1
+        ? "1 draft has to be sent today to arrive in time"
+        : `${today} drafts have to be sent today to arrive in time`
+    );
+  }
+  return `${parts.join(" · ")}.`;
+}
+
+/** Which orders, by number and vendor, so somebody can go straight to them. */
+function draftsAtRiskBody(drafts: PurchaseOrderView[]): string {
+  const named = drafts
+    .slice(0, 4)
+    .map((po) => `${po.poNumber} (${po.vendorName})`)
+    .join(", ");
+  const more = drafts.length > 4 ? ` and ${drafts.length - 4} more` : "";
+  return `${named}${more}. A draft holds its ingredients off the shopping list, so one nobody sends stops them being ordered at all.`;
 }

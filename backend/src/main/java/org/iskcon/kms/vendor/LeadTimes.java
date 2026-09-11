@@ -1,6 +1,7 @@
 package org.iskcon.kms.vendor;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -75,6 +76,61 @@ public class LeadTimes {
 
 	public LeadTimes(JdbcTemplate jdbc) {
 		this.jdbc = jdbc;
+	}
+
+	/**
+	 * The lead time governing each of these purchase orders: the longest recorded against the
+	 * order's own vendor for the ingredients actually on it (T-137, D-25).
+	 *
+	 * <p><strong>The longest governs, and it is a decision rather than an inference.</strong> Lead
+	 * time is per vendor <em>and</em> ingredient, so one order can carry several — a dairy may bring
+	 * curd next morning and take three days over ghee it has to fetch. Rajeev, asked directly on
+	 * 2026-09-10, chose the longest: the order is only fully deliverable when its slowest item is,
+	 * and an order-by date computed off the quickest line would promise a delivery the vendor never
+	 * agreed to.
+	 *
+	 * <p><strong>The order's own vendor, not the preferred one.</strong> {@link
+	 * #recordedByIngredient()} above answers a question about a shopping list, where nobody has
+	 * chosen a supplier yet and the preferred vendor is the best guess at who will be rung. An order
+	 * has no guessing left in it: it is addressed to somebody, and the promise that binds is theirs.
+	 *
+	 * <p>An order is <strong>absent from this map</strong> when no line on it has a recorded lead
+	 * time against its vendor — a vendor nobody has asked, an ingredient they do not have a supply
+	 * row for, or an order of nothing but described lines ("four plastic stools"), which name no
+	 * catalogue ingredient and so can carry no recorded lead time at all. All of those mean the same
+	 * thing and get the same treatment: no cutoff, and silence. {@code MAX} ignores nulls, so a
+	 * vendor who has answered for the rice and not for the jaggery governs the order by the rice —
+	 * which is the most we honestly know they agreed to.
+	 *
+	 * <p>One query for the whole set rather than one per order, because every caller has a list: the
+	 * order screen has one order, the purchase-order list and the Today dashboard have every draft.
+	 *
+	 * <p><strong>Never call this for an order that has already been sent.</strong> What such an
+	 * order went out under is stamped on it ({@code purchase_orders.lead_time_days}), and reading it
+	 * live would let an edit to a vendor's profile re-judge deliveries that already happened — the
+	 * precise thing Rajeev ruled out: <em>"Any SLA Adjustments made to a vendor's profile will take
+	 * effect for the Orders after the change. No retroactive change here."</em>
+	 */
+	@Transactional(readOnly = true)
+	public Map<UUID, Integer> governingByPurchaseOrder(Collection<UUID> purchaseOrderIds) {
+		Map<UUID, Integer> map = new LinkedHashMap<>();
+		if (purchaseOrderIds.isEmpty()) {
+			return map;
+		}
+		String placeholders = String.join(", ", java.util.Collections.nCopies(purchaseOrderIds.size(), "?"));
+		jdbc.query("""
+				SELECT po.id AS po_id, MAX(vs.lead_time_days) AS lead_time_days
+				FROM purchase_orders po
+				JOIN purchase_order_lines pol ON pol.po_id = po.id
+				JOIN vendor_supplies vs
+					ON vs.vendor_id = po.vendor_id AND vs.ingredient_id = pol.ingredient_id
+				WHERE po.id IN (%s)
+				GROUP BY po.id
+				HAVING MAX(vs.lead_time_days) IS NOT NULL
+				""".formatted(placeholders), rs -> {
+			map.put(rs.getObject("po_id", UUID.class), rs.getInt("lead_time_days"));
+		}, purchaseOrderIds.toArray());
+		return map;
 	}
 
 	/**

@@ -123,6 +123,8 @@ export function PurchaseOrderEditor({
   initialLines,
   initialNeededBy,
   minNeededBy,
+  leadTimeDays = null,
+  vendorName = null,
   ingredients,
   busy,
   onSave,
@@ -140,6 +142,25 @@ export function PurchaseOrderEditor({
    * (KMS-400014) and this is the same refusal said where the person is looking.
    */
   minNeededBy: string;
+  /**
+   * What this order's vendor asked to be given, in days, or null where nobody has said (T-137).
+   *
+   * <p>A lead time is agreed at onboarding and it is the vendor's own number — Rajeev: *"they might
+   * say, we are good with 1 day lead time BUT we want to be safe than sorry so we need 3 days
+   * notice"* — so it is worth saying out loud to whoever is choosing the date.
+   *
+   * <p><strong>What this component deliberately does not do with it is arithmetic.</strong> It does
+   * not work out an order-by date, does not decide which of the three zones today is in, and does
+   * not refuse anything. All of that is the server's, once, on Mark sent; a second copy of the sum
+   * living in a form is exactly how the planner, the order screen and the dashboard come to give
+   * three answers about one order. This prints a fact and stops.
+   *
+   * <p>Null on the shopping-list panel, where the order does not exist yet and so has no vendor
+   * lead time to read.
+   */
+  leadTimeDays?: number | null;
+  /** Whose promise it is. Only used beside `leadTimeDays`, and null where that is. */
+  vendorName?: string | null;
   ingredients: IngredientView[];
   busy: boolean;
   /** The host writes the draft to the server and decides what happens next. */
@@ -159,9 +180,14 @@ export function PurchaseOrderEditor({
   // these could yet be rendered on one page by a third caller.
   const headingId = useId();
 
-  // Advisory only, and recomputed as the date is typed. A date inside the vendor's usual notice is
-  // a thing worth saying out loud and not a thing worth refusing — see leadTimeWarning.
-  const neededByWarning = neededBy === "" ? null : leadTimeWarning(neededBy);
+  // Advisory only, and recomputed as the date is typed. A date inside the notice THIS vendor asked
+  // for is a thing worth saying out loud and not a thing worth refusing — see leadTimeWarning.
+  //
+  // `leadTimeDays` is the vendor's own figure, sent by the server. Until T-137 this compared every
+  // date against a hard-coded two days, which was a second answer to the question T-137 exists to
+  // make single: the form would say "2 days" on a screen whose Mark sent had just been refused
+  // against five. Null means nobody has recorded a lead time for this vendor, which is silence.
+  const neededByWarning = neededBy === "" ? null : leadTimeWarning(neededBy, leadTimeDays);
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -232,6 +258,24 @@ export function PurchaseOrderEditor({
           </HintedField>
           {neededByWarning && (
             <span className="pl-field-inset text-sm text-warning">{neededByWarning}</span>
+          )}
+          {/* The vendor's own promise, said where the date is being chosen (T-137, D-25). Not a
+              warning and not a gate: where this order stands against that promise is decided on
+              the server when it is sent, and is shown on the order screen.
+
+              Hidden while the warning above is showing, because that sentence already names the
+              same number — "Sooner than the 5 days' notice this vendor asked for" — and printing
+              both would say one fact twice in two shapes. */}
+          {leadTimeDays != null && neededByWarning === null && (
+            <span className="pl-field-inset text-sm text-ink-secondary">
+              {vendorName ?? "This vendor"} asked for{" "}
+              {leadTimeDays === 0
+                ? "no notice — they are a walk-in supplier"
+                : leadTimeDays === 1
+                  ? "1 day’s notice"
+                  : `${leadTimeDays} days’ notice`}
+              .
+            </span>
           )}
         </div>
         <table className={`${TABLE} text-sm`}>

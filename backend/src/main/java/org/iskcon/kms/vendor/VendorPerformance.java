@@ -18,6 +18,11 @@ import java.util.List;
  * is counted again in {@code abandonedOrders}; a cancellation nobody has marked is counted nowhere
  * at all.
  *
+ * <p><strong>An order we sent after the vendor's agreed lead time is counted as placed and then
+ * left out of the on-time figure</strong> (T-137, D-25): we asked for something their notice period
+ * could not deliver, so a delay on it is not theirs. {@code ordersSentLate} says how many, beside
+ * the percentage, because exclusions that cannot be seen cannot be checked.
+ *
  * <p><strong>Two clocks, deliberately.</strong> Everything counted over the period is selected by
  * the date the order was <em>placed</em> — one rule, so a reader never has to ask which date put a
  * row where it is. The open-order and aging columns are present tense and unfiltered: an order is
@@ -35,6 +40,7 @@ public record VendorPerformance(
 		int onTimeOrders,
 		int abandonedOrders,
 		int ordersWithoutNeededBy,
+		int ordersSentLate,
 		int itemsScored,
 		int itemsOnTime,
 		BigDecimal onTimePercent,
