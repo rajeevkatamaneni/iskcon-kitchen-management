@@ -290,6 +290,40 @@ class ShoppingListIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[1].included").value(false));
 	}
 
+	/**
+	 * The half of the same trap that faces the other way, and the one that was recorded as harmless.
+	 *
+	 * <p>{@code included} is written through unconditionally — it has to be, because it is the thing
+	 * this endpoint exists to record. The note against it said that was safe because the column is
+	 * {@code NOT NULL}, so a body that left the field out would be refused. It would not have been:
+	 * the field was a primitive {@code boolean}, Jackson gives a missing primitive its Java default,
+	 * and {@code false} is a perfectly good value for a {@code NOT NULL} column. A PATCH that said
+	 * nothing about whether to buy the thing would have unticked it.
+	 *
+	 * <p>No screen could send that — {@code lib/api.ts} types {@code included} as required — so this
+	 * asserts the latch rather than a bug anybody met. What it must show is both halves: the request
+	 * is refused, and the line is untouched by it.
+	 */
+	@Test
+	@DisplayName("a PATCH that omits included is refused, and does not quietly untick the line")
+	void omittingIncludedIsRefusedRatherThanTreatedAsFalse() throws Exception {
+		mvc.perform(authed(patch("/api/v1/shopping-list/{id}", rice))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"suggestedQty\":20}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				// The only thing wrong with the body, so index 0 is it — and asserting the index
+				// rather than a filter also says that nothing else about the request was rejected.
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("included"));
+
+		// The half that would have been the actual damage: nothing was written, so the line is still
+		// on the list and still recomputing.
+		mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(jsonPath("$[1].ingredientName").value("Rice"))
+				.andExpect(jsonPath("$[1].included").value(true))
+				.andExpect(jsonPath("$[1].edited").value(false));
+	}
+
 	@Test
 	@DisplayName("the preferred vendor is derived on every read, and an edit cannot disturb it")
 	void theVendorIsDerivedRatherThanStored() throws Exception {

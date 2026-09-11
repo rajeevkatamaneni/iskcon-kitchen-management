@@ -1,5 +1,6 @@
 package org.iskcon.kms.shoppinglist;
 
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 
@@ -16,8 +17,22 @@ import java.math.BigDecimal;
  * sent one — the request accepted a value nothing produced. The snapshot D-25 asks for already exists
  * where it belongs, on {@code purchase_orders.vendor_id}, written when the order is created and never
  * derived again.
+ *
+ * <p><strong>{@code included} is required, and the boxed type is what makes that possible.</strong>
+ * It was a primitive {@code boolean}, which was recorded as safe on the grounds that the column is
+ * {@code NOT NULL} and an omission would therefore fail loudly. It would not have: Jackson gives a
+ * missing primitive its Java default, so a body that simply left {@code included} out arrived here
+ * as {@code false} and the upsert below wrote that over whatever the line already said — silently
+ * unticking something a person had chosen to buy. The column never saw a null and so never had the
+ * chance to refuse. That is the same shape as the {@code suggested_vendor_id} defect that opened
+ * this batch: a value nobody sent, written as though they had.
+ *
+ * <p>No screen can reach it — {@code updateShoppingListLine} in {@code lib/api.ts} types
+ * {@code included} as a required boolean, so the only client always sends it — which is why this is
+ * a latch rather than a bug fix. Boxed and {@code @NotNull}, an omission is now KMS-400001 naming
+ * the field, and no request that succeeds today behaves any differently.
  */
 public record UpdateShoppingListLineRequest(
 		@Positive(message = "Enter an amount greater than zero.") BigDecimal suggestedQty,
-		boolean included) {
+		@NotNull(message = "Say whether this line is being bought.") Boolean included) {
 }

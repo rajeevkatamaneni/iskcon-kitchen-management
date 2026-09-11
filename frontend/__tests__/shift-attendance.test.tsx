@@ -574,6 +574,47 @@ describe("taking a volunteer off a roster", () => {
     expect(choosable).toEqual(["SHIFT_CANCELLED", "NO_LONGER_NEEDED", "ROTA_CHANGED", "OTHER"]);
   });
 
+  /**
+   * T-058, item 6b. The form shipped inside the row's Actions cell, and a cell is the one place on
+   * this screen that cannot hold a form: every column carries `whitespace-nowrap` from
+   * `components/ds/table.ts`, so a column is never squeezed below what its contents ask for. The
+   * cell took the width its widest control wanted, the table outgrew the page, and the
+   * `overflow-x-auto` wrapper turned that into sideways scrolling inside the table.
+   *
+   * <p>Measured by Rajeev on the deployed build at a 1470px desktop: the table wanted 1342px inside
+   * a 1124px box, putting the reason picker 101px and the note field 185px past the right edge. The
+   * note is the field a coordinator is *required* to fill in, so the mandatory half of the form was
+   * the half off the screen.
+   *
+   * <p>jsdom has no layout engine, so this cannot assert those pixels and does not pretend to. What
+   * it asserts is the structural fact that produced them: the controls are no longer in a cell that
+   * can widen one column, but in a cell that spans every column and so can only be as wide as the
+   * table already is. That is the property a future edit would have to break to bring the defect
+   * back, and it fails against the markup as it shipped.
+   */
+  it("puts the removal form in a row spanning every column, not in the actions cell", async () => {
+    render(<ShiftRosterPage />);
+    fireEvent.click(screen.getAllByRole("button", { name: /^remove$/i })[0]);
+
+    const note = await screen.findByLabelText(/note about taking .* off the shift/i);
+    const reason = screen.getByLabelText(/why .* is coming off the shift/i);
+
+    const cell = note.closest("td");
+    expect(cell).not.toBeNull();
+    expect(reason.closest("td")).toBe(cell);
+
+    // Read the column count off the rendered header rather than hard-coding 4, so that a column
+    // added or removed later moves this assertion with it instead of quietly invalidating it.
+    const columns = within(screen.getByRole("table")).getAllByRole("columnheader").length;
+    expect(columns).toBeGreaterThan(1);
+    expect(cell!.colSpan).toBe(columns);
+
+    // And it is genuinely a second row, not the volunteer's own: a colSpan cell sitting in the row
+    // beside the name would be malformed markup that happened to satisfy the line above.
+    expect(cell!.closest("tr")).not.toBe(screen.getByText("Radha Devi").closest("tr"));
+    expect(cell!.closest("tr")).not.toBe(screen.getByText("Gopal Das").closest("tr"));
+  });
+
   it("shows a released volunteer under Released, with no attendance tick", () => {
     queryRef.current = {
       data: roster([

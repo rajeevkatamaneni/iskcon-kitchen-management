@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { useParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -318,105 +318,154 @@ function ShiftRosterView() {
                         </thead>
                         <tbody>
                           {activeSignups.map((s) => (
-                            <tr key={s.userId} className={TR}>
-                              {/* The name is the unbounded value here and so it is the one that
-                                  wraps. The reminders beside it are a fixed vocabulary — an offset,
-                                  a status and a channel — and no length a person can type reaches
-                                  them, so squeezing a name to keep a row of "24h: sent (email)"
-                                  on one line was the exception put on the wrong column. */}
-                              <td className={`${TD_TEXT} ${WRAP}`}>
-                                {s.fullName}
-                                {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">promoted</span>}
-                              </td>
-                              <td className={TD_TEXT}>
-                                {canMarkAttendance ? (
-                                  // Ticked to start, and the tick is what a person unticks for the
-                                  // one or two who did not come. The other way round — an empty
-                                  // list the coordinator ticks their way down — makes a distracted
-                                  // save record a shift of no-shows, and a no-show is the mark that
-                                  // costs somebody something.
-                                  <input
-                                    type="checkbox"
-                                    name="attended"
-                                    value={s.userId}
-                                    defaultChecked
-                                    aria-label={`${s.fullName} came`}
-                                    className="accent-accent"
-                                  />
-                                ) : (
-                                  <span className="flex flex-wrap items-center gap-2">
-                                    <span>
-                                      {s.attended === true ? (
-                                        <span>Came</span>
-                                      ) : s.attended === false ? (
-                                        <span className="text-warning">Did not come</span>
-                                      ) : (
-                                        // Null, and never rendered as an absence. A signup made after
-                                        // the marking, or a shift nobody has marked at all, is a shift
-                                        // nobody has spoken about — not a roster of no-shows.
-                                        <span className="text-sm text-ink-muted">Not marked</span>
-                                      )}
-                                      {/* Three states, not two (T-099, finishing T-079): never
-                                          marked (above), marked once and never changed (silence,
-                                          same as today), and changed — which alone earns this line.
-                                          `attendanceCorrectedAt` is null on a first answer given late
-                                          through the correction door, on purpose (V110's own
-                                          comment): that row is being answered for the first time, not
-                                          changed, so it stays silent too. House idiom for "who did
-                                          what when" (MealServices' "Corrected by X on Y.") rather than
-                                          a new pattern — there is no prior *value* to show beside it,
-                                          unlike a corrected meal, because the roster does not carry
-                                          one; the audit trail is where that lives. */}
-                                      {s.attendanceCorrectedAt && (
-                                        <span className="block text-xs text-ink-muted">
-                                          Corrected{s.attendanceCorrectedByName ? ` by ${s.attendanceCorrectedByName}` : ""} on{" "}
-                                          {templeDay(s.attendanceCorrectedAt)}.
-                                        </span>
-                                      )}
+                            <Fragment key={s.userId}>
+                              <tr className={TR}>
+                                {/* The name is the unbounded value here and so it is the one that
+                                    wraps. The reminders beside it are a fixed vocabulary — an offset,
+                                    a status and a channel — and no length a person can type reaches
+                                    them, so squeezing a name to keep a row of "24h: sent (email)"
+                                    on one line was the exception put on the wrong column. */}
+                                <td className={`${TD_TEXT} ${WRAP}`}>
+                                  {s.fullName}
+                                  {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">promoted</span>}
+                                </td>
+                                <td className={TD_TEXT}>
+                                  {canMarkAttendance ? (
+                                    // Ticked to start, and the tick is what a person unticks for the
+                                    // one or two who did not come. The other way round — an empty
+                                    // list the coordinator ticks their way down — makes a distracted
+                                    // save record a shift of no-shows, and a no-show is the mark that
+                                    // costs somebody something.
+                                    <input
+                                      type="checkbox"
+                                      name="attended"
+                                      value={s.userId}
+                                      defaultChecked
+                                      aria-label={`${s.fullName} came`}
+                                      className="accent-accent"
+                                    />
+                                  ) : (
+                                    <span className="flex flex-wrap items-center gap-2">
+                                      <span>
+                                        {s.attended === true ? (
+                                          <span>Came</span>
+                                        ) : s.attended === false ? (
+                                          <span className="text-warning">Did not come</span>
+                                        ) : (
+                                          // Null, and never rendered as an absence. A signup made after
+                                          // the marking, or a shift nobody has marked at all, is a shift
+                                          // nobody has spoken about — not a roster of no-shows.
+                                          <span className="text-sm text-ink-muted">Not marked</span>
+                                        )}
+                                        {/* Three states, not two (T-099, finishing T-079): never
+                                            marked (above), marked once and never changed (silence,
+                                            same as today), and changed — which alone earns this line.
+                                            `attendanceCorrectedAt` is null on a first answer given late
+                                            through the correction door, on purpose (V110's own
+                                            comment): that row is being answered for the first time, not
+                                            changed, so it stays silent too. House idiom for "who did
+                                            what when" (MealServices' "Corrected by X on Y.") rather than
+                                            a new pattern — there is no prior *value* to show beside it,
+                                            unlike a corrected meal, because the roster does not carry
+                                            one; the audit trail is where that lives. */}
+                                        {s.attendanceCorrectedAt && (
+                                          <span className="block text-xs text-ink-muted">
+                                            Corrected{s.attendanceCorrectedByName ? ` by ${s.attendanceCorrectedByName}` : ""} on{" "}
+                                            {templeDay(s.attendanceCorrectedAt)}.
+                                          </span>
+                                        )}
+                                      </span>
+                                      {/* One button per answer this row does not currently hold
+                                          (T-079). A marked row gets the one opposite answer, so the
+                                          press is unambiguous and pressing what it already says is
+                                          not on offer; an unmarked row gets both, because "nobody has
+                                          said" has two ways out and neither of them is the default.
+                                          The label says the answer it will set rather than "Change",
+                                          so nothing turns on reading the cell first. */}
+                                      {canCorrectAttendance &&
+                                        [true, false]
+                                          .filter((answer) => s.attended !== answer)
+                                          .map((answer) => (
+                                            <Button
+                                              key={String(answer)}
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              disabled={busy}
+                                              onClick={() => correctAttendance(s.userId, s.fullName, answer)}
+                                            >
+                                              {answer ? "Mark as came" : "Mark as did not come"}
+                                            </Button>
+                                          ))}
                                     </span>
-                                    {/* One button per answer this row does not currently hold
-                                        (T-079). A marked row gets the one opposite answer, so the
-                                        press is unambiguous and pressing what it already says is
-                                        not on offer; an unmarked row gets both, because "nobody has
-                                        said" has two ways out and neither of them is the default.
-                                        The label says the answer it will set rather than "Change",
-                                        so nothing turns on reading the cell first. */}
-                                    {canCorrectAttendance &&
-                                      [true, false]
-                                        .filter((answer) => s.attended !== answer)
-                                        .map((answer) => (
-                                          <Button
-                                            key={String(answer)}
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            disabled={busy}
-                                            onClick={() => correctAttendance(s.userId, s.fullName, answer)}
-                                          >
-                                            {answer ? "Mark as came" : "Mark as did not come"}
-                                          </Button>
-                                        ))}
+                                  )}
+                                </td>
+                                <td className={`${TD_TEXT} text-sm text-ink-secondary`}>
+                                  <span className="block">
+                                    {s.reminders.length === 0 ? "—" : s.reminders.map((r, i) => (
+                                      <span key={i} className="me-2 inline-block tabular-nums">{r.offsetMinutes / 60}h: {(r.status ?? "").toLowerCase()}{r.channel ? ` (${r.channel.toLowerCase()})` : ""}</span>
+                                    ))}
                                   </span>
+                                </td>
+                                {shift.status === "OPEN" && (
+                                  <td className={TD_ACTIONS}>
+                                    {/* The button is the whole of this cell now. The form it opens
+                                        is the row below, which is where the note it is really about
+                                        can be reached — see the comment there. Rendered only while
+                                        that form is closed: pressing "Remove" on a row whose form
+                                        is already open does nothing, and this table has no other
+                                        dead controls. */}
+                                    {removing !== s.userId && (
+                                      <div className={ACTIONS_ROW}>
+                                        <Button
+                                          type="button"
+                                          variant="danger"
+                                          size="sm"
+                                          disabled={busy}
+                                          onClick={() => setRemoving(s.userId)}
+                                        >
+                                          Remove
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </td>
                                 )}
-                              </td>
-                              <td className={`${TD_TEXT} text-sm text-ink-secondary`}>
-                                <span className="block">
-                                  {s.reminders.length === 0 ? "—" : s.reminders.map((r, i) => (
-                                    <span key={i} className="me-2 inline-block tabular-nums">{r.offsetMinutes / 60}h: {(r.status ?? "").toLowerCase()}{r.channel ? ` (${r.channel.toLowerCase()})` : ""}</span>
-                                  ))}
-                                </span>
-                              </td>
-                              {shift.status === "OPEN" && (
-                                <td className={TD_ACTIONS}>
-                                  {removing === s.userId ? (
-                                    /* T-080. The form is on the row rather than in a dialog because
-                                       it has to be read next to the name it is about: the whole
-                                       point of the note is that somebody thought about this
-                                       particular person, and a modal that covers the roster invites
-                                       the opposite. Nested inside the attendance <form> is not
-                                       allowed, so this is a sibling bound by `form=` — see the id
-                                       below. */
-                                    <div className="text-start">
+                              </tr>
+
+                              {/* T-080's removal form, moved out of the Actions cell and into a row
+                                  of its own (T-058, item 6b).
+
+                                  It shipped inside the cell, and a cell is the one place on this
+                                  screen that cannot hold a form. Every column here carries
+                                  `whitespace-nowrap` from `components/ds/table.ts`, so a column is
+                                  never squeezed below what its contents ask for — which is right for
+                                  a date or a status and fatal for a form. The cell demanded the width
+                                  its widest control wanted, the table grew past the page, and the
+                                  `overflow-x-auto` wrapper turned that into sideways scrolling
+                                  *inside* the table. Measured on the deployed build at an ordinary
+                                  1470px desktop: the table wanted 1342px in a 1124px box, which put
+                                  the reason picker 101px and the note field 185px beyond the right
+                                  edge. The note is the field the coordinator is required to fill in,
+                                  so the mandatory half of the form was the half off the screen.
+
+                                  A full-width row cannot do that: it spans the columns rather than
+                                  widening one, and `max-w-prose` stops two small controls stretching
+                                  to the width of the page. Why T-080 put the form on the row at all
+                                  is unchanged and still right — the note only means anything if it
+                                  was written about this particular person, and a modal covering the
+                                  roster invites the opposite — and a row directly beneath the name
+                                  keeps that, rather than trading it away for a dialog. */}
+                              {shift.status === "OPEN" && removing === s.userId && (
+                                // colSpan 4 is every column: this row renders only while the shift
+                                // is OPEN, which is exactly when the Actions column exists.
+                                //
+                                // `hover:bg-sunken` without the rest of `TR`: the design system
+                                // asks every body row to answer the pointer and this one does, but
+                                // `TR`'s `border-t` would draw a line between a volunteer and their
+                                // own form and read as two records where there is one.
+                                <tr className="hover:bg-sunken">
+                                  <td colSpan={4} className="px-5 pb-4 pt-0">
+                                    <div className="max-w-prose text-start">
                                       <p className="mb-2 text-sm text-ink-secondary">
                                         Take {s.fullName} off this shift
                                       </p>
@@ -476,22 +525,10 @@ function ShiftRosterView() {
                                         </Button>
                                       </div>
                                     </div>
-                                  ) : (
-                                    <div className={ACTIONS_ROW}>
-                                      <Button
-                                        type="button"
-                                        variant="danger"
-                                        size="sm"
-                                        disabled={busy}
-                                        onClick={() => setRemoving(s.userId)}
-                                      >
-                                        Remove
-                                      </Button>
-                                    </div>
-                                  )}
-                                </td>
+                                  </td>
+                                </tr>
                               )}
-                            </tr>
+                            </Fragment>
                           ))}
                         </tbody>
                       </table>

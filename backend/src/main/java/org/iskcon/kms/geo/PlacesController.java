@@ -12,9 +12,12 @@ import org.springframework.web.bind.annotation.RestController;
  * Address suggestions, proxied (2026-09-05).
  *
  * <p>The browser asks us and we ask Google, so the Maps key stays on the server — see
- * {@link PlaceSuggestionProvider} for why that is worth a round trip. Both endpoints answer with an
- * empty result rather than an error when there is no map service: an address box with no suggestions
- * is the plain text box every temple had before this, which works.
+ * {@link PlaceSuggestionProvider} for why that is worth a round trip. There are three endpoints, and
+ * none of them raises when there is no map service. The two lookups answer with an empty result —
+ * {@code /suggest} an empty list, {@code /{placeId}} a 204 — because an address box with no
+ * suggestions is the plain text box every temple had before this, which works. {@code /available}
+ * is the exception by design: reporting the absence is its whole job, so it answers {@code false}
+ * rather than emptily, and the screen uses that to offer a plain box instead of a dead picker.
  *
  * <p><strong>Two callers, one lookup.</strong> {@code MANAGE_MEAL_PLANS} is the planner typing a
  * delivery address onto a meal plan; {@code MANAGE_TENANTS} is the platform operator picking a

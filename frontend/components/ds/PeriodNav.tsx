@@ -51,8 +51,11 @@ import { SegmentedControl } from "@/components/ds/SegmentedControl";
  *               because it has a second cursor — the open day — and its Today resets both: on the
  *               15th, looking at the 23rd of this month, the period *is* current and there is
  *               still somewhere to go.
- * @param children anything that belongs beside the stepper on this screen alone — the calendar's
- *               legend, the planner's "Duplicate last week".
+ * @param children anything that belongs beside the stepper on this screen alone — today the
+ *               calendar's `<Legend />`, and nothing else: the planner, the issue log, vendor
+ *               performance and cost per serving all pass none. The example used to name the
+ *               planner's "Duplicate last week" too, which was deleted on 2026-09-05; a docblock
+ *               offering a control that no longer exists sends the next reader looking for it.
  */
 export function PeriodNav<T extends string>({
   label,

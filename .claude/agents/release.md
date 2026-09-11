@@ -76,7 +76,7 @@ instructions give them**. Do not copy a session URL out of this file or out of a
 it identifies the session that made the change, so a stale one is worse than none.
 
 **4. Push and watch CI.** Because commits go straight to `main`, CI runs *after* the push — step 2
-is the real gate, and this is confirmation. Four jobs: `hygiene`, `backend`, `frontend`.
+is the real gate, and this is confirmation. Three jobs: `hygiene`, `backend`, `frontend`.
 
 ```bash
 git push origin main
