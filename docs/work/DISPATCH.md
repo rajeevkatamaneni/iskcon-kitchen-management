@@ -16,8 +16,26 @@ block is the one that is maintained.
 
 ### Where the work stands
 
-**Staging is `kms-staging-api-00145` / `kms-staging-web-00133`, schema `V120`.** Waves 15 to 20 all
-shipped on 2026-09-10.
+**Staging is `kms-staging-api-00146-vgt` / `kms-staging-web-00134-gjx` /
+`kms-staging-worker-00128-l9m`, all on image tag `20260910-200950`, schema `V122`.** Waves 15 to 21
+all shipped on 2026-09-10.
+
+**Wave 21's live check, and what it proves — read this before concluding the shopping list is
+broken.** `GET /api/v1/shopping-list` answers **200 with an empty array**, and that is correct rather
+than a failure. The only two ingredients in the tenant that are below their reorder level — Amla and
+Curd — are **each already on live purchase orders** (Amla on PO-2026-0041, -0038 and -0030; Curd on
+PO-2026-0029 SENT and -0039, -0042 DRAFT), and D-24a says an ingredient a live order already covers
+leaves the list. Six of the twelve live orders were raised from the shopping list on 2026-09-10, so
+the list emptied itself exactly as designed. **`POST /api/v1/shopping-list/regenerate` answers 404**,
+and the string `regenerate` appears nowhere in any of the fourteen JavaScript chunks the deployed
+shopping-list page loads — the button is gone from the client as well as the server. The screen's own
+subtitle now reads *"Worked out from the meal plan and the store room each time you open this page."*
+
+**What was deliberately not done, and why:** the list was **not** made to populate by hand. There is
+no `DELETE` on `/api/v1/shopping-list` — only `GET`, `POST` and `PATCH` — so a hand-added line
+created to demonstrate a populated list could not have been taken back out, and it would have sat on
+the screen Rajeev is about to test. **To see it populated, cancel one of the drafts covering Curd and
+reload**; the line should come back.
 
 **Migration numbers: `V121` and `V122` both shipped in wave 21** (T-132 and T-120), so the schema is
 at **`V122`** and the next free number is **`V123`** — but **take it from the deployed schema history,
