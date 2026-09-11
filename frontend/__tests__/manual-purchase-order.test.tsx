@@ -287,7 +287,7 @@ describe("step two — the lines", () => {
     // …and something the catalogue has never heard of, which is what T-024 made possible.
     // `{ selector }` because the field is hinted: InfoHint's "i" button carries the accessible name
     // "More about <label>", so a bare getByLabelText matches the input and the button both.
-    const describe_ = screen.getByLabelText(/describe something not in the catalogue/i, {
+    const describe_ = screen.getByLabelText(/an item not in the catalogue/i, {
       selector: "input",
     });
     fireEvent.change(describe_, { target: { value: "  Plastic stool  " } });

@@ -48,15 +48,20 @@ public class WhatsAppChannelAdapter implements ChannelAdapter {
 			return SendResult.failed("this temple has not connected WhatsApp");
 		}
 
+		String providerMessageId;
+		// The try holds the Meta call and nothing else, which it did not have to before T-136 added
+		// a second statement after it. A stamp that threw inside this block would be caught as a
+		// send failure — reported as FAILED for a message Meta has already accepted, and the cascade
+		// would then send the same order again by SMS. The vendor would get it twice because a
+		// column could not be written.
 		try {
-			String providerMessageId = meta.sendTemplate(
+			providerMessageId = meta.sendTemplate(
 					identity.get().phoneNumberId(),
 					identity.get().accessToken(),
 					address,
 					message.template().whatsappTemplateName(),
 					languageCode,
 					message.orderedParameters());
-			return SendResult.sent(providerMessageId);
 
 		} catch (RuntimeException e) {
 			// Meta refusing one message — an unapproved template, a number outside the test list, a
@@ -66,5 +71,24 @@ public class WhatsAppChannelAdapter implements ChannelAdapter {
 					message.template().whatsappTemplateName(), e.toString());
 			return SendResult.failed(e.getMessage());
 		}
+
+		// The one place in the application where "this temple's WhatsApp actually works" becomes a
+		// fact (T-136, V123). It is stamped here and nowhere else, on the far side of the one call
+		// that puts a message in front of a real person.
+		//
+		// Rajeev, 2026-09-10, on the Send on WhatsApp button on the purchase-order screen: it is
+		// shown "only after a message has actually gone through it successfully", not merely
+		// configured. Everything else this application stores about WhatsApp says configured —
+		// whatsapp_verified_at is MetaWhatsAppClient.verifyNumber, a GET that deliberately sends
+		// nothing; whatsapp_templates_submitted_at is us asking Meta for approval, not getting it;
+		// whatsapp_webhook_seen_at is Meta calling us. Gating a button on any of those is the defect,
+		// not the fix.
+		//
+		// After the send and only on the success path. The failures this distinguishes — an
+		// unapproved template, a number outside Meta's test list, a spent messaging tier — all throw
+		// out of sendTemplate with credentials that are perfectly valid, which is exactly the case
+		// where verifying the number would have said yes.
+		settings.markMessageSent();
+		return SendResult.sent(providerMessageId);
 	}
 }

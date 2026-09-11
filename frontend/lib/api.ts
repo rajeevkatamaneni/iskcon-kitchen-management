@@ -2168,6 +2168,31 @@ export interface PurchaseOrderDetailView {
   order: PurchaseOrderView;
   lines: PurchaseOrderLineView[];
   events: PoEventView[];
+  /**
+   * Whether a WhatsApp message from this temple has ever gone out successfully (T-136).
+   *
+   * <p>Rajeev's ruling, 2026-09-10: the Send on WhatsApp button is shown "only after a message has
+   * actually gone through it successfully", not merely configured — and where it does not apply it
+   * is not there at all, not disabled and not greyed.
+   *
+   * <p>A fact about the temple, not about this order. It says nothing about whether THIS order was
+   * ever sent; that is `order.sentAt`. It rides here because this is the payload the order screen
+   * already reads, under `MANAGE_PURCHASE_ORDERS`. The screen must not learn it from
+   * `api.whatsappSettings()`, which is behind `MANAGE_TEMPLE_SETTINGS` — a permission whoever
+   * raises a purchase order need not hold, and the button would then vanish for a reason that has
+   * nothing to do with WhatsApp.
+   *
+   * <p><strong>Optional, against this file's own convention, and the reason is specific.</strong>
+   * Every other field here is required-and-nullable because an omitted optional field arrives as
+   * `undefined` and reads as the benign value while being indistinguishable from the truth — see
+   * `PurchaseOrderLineView.ingredientId`. That danger is inverted here: `undefined` reads as "no
+   * WhatsApp message has ever gone out", which hides the button, which is exactly the ruling's own
+   * default and the safe direction. It is optional only because two existing fixtures
+   * (`__tests__/goods-return.test.tsx`, `__tests__/described-po-line.test.tsx`) construct this
+   * interface and were outside T-135's path contract. Make it required the next time somebody may
+   * open those two files.
+   */
+  whatsappEverSent?: boolean;
 }
 
 export interface PoLineInput {

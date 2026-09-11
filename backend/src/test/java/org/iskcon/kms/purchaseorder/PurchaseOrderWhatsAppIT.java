@@ -98,6 +98,7 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM po_sequence");
 		admin.execute("DELETE FROM vendors");
 		admin.execute("DELETE FROM audit_events");
+		admin.execute("DELETE FROM tenant_settings");
 		// Anything that moved through the stock ledger is tracked now, so the item rows exist
 		// even where the test never asked for them, and they hold the ingredient down.
 		admin.execute("DELETE FROM inventory_items");
@@ -196,6 +197,40 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 		Boolean reachable = admin.queryForObject(
 				"SELECT whatsapp_reachable FROM vendors WHERE id = ?", Boolean.class, vendor);
 		assert Boolean.FALSE.equals(reachable) : "vendor should be flagged unreachable";
+	}
+
+	/**
+	 * Whether the order screen may offer Send on WhatsApp at all (T-136).
+	 *
+	 * <p>Rajeev's ruling, 2026-09-10: the button is shown "only after a message has actually gone
+	 * through it successfully", not merely configured. So the fact travels on this payload, and it
+	 * travels here rather than on {@code GET /api/v1/settings/whatsapp} on purpose — that endpoint
+	 * is behind {@code MANAGE_TEMPLE_SETTINGS}, which the Kitchen Staff account signed in below does
+	 * not hold, and reading it from there would have hidden the button for a reason that has nothing
+	 * to do with WhatsApp.
+	 *
+	 * <p>The temple here is fully configured — credentials verified, templates submitted, a callback
+	 * seen — and has still sent nothing, which is exactly the state the ruling distinguishes.
+	 */
+	@Test
+	@DisplayName("the order says whether this temple's WhatsApp has ever actually sent anything")
+	void orderCarriesWhetherWhatsAppHasEverSent() throws Exception {
+		UUID poId = sentPo("PO-2026-0049");
+		admin.update("""
+				INSERT INTO tenant_settings (tenant_id, whatsapp_phone_number_id, whatsapp_waba_id,
+						whatsapp_webhook_token, whatsapp_verified_at, whatsapp_templates_submitted_at,
+						whatsapp_webhook_seen_at)
+				VALUES (?, 'phone-1', 'waba-1', 'tok-1', now(), now(), now())
+				""", tenant);
+
+		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
+				.andExpect(jsonPath("$.whatsappEverSent").value(false));
+
+		// One message actually out of the door, and the offer appears — for a reader with
+		// MANAGE_PURCHASE_ORDERS and nothing else.
+		admin.update("UPDATE tenant_settings SET whatsapp_last_sent_at = now() WHERE tenant_id = ?", tenant);
+		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
+				.andExpect(jsonPath("$.whatsappEverSent").value(true));
 	}
 
 	@Test

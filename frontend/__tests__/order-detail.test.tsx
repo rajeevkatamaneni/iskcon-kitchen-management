@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { api } from "@/lib/api";
 import type {
   GoodsReceiptView, IngredientView, PurchaseOrderDetailView,
@@ -64,6 +64,10 @@ const DETAIL: PurchaseOrderDetailView = {
   events: [
     { eventType: "SENT", detail: "PO-2026-0042 sent to vendor", actorName: "Staff A", createdAt: "2026-08-01T10:00:00Z" },
   ],
+  // This temple's WhatsApp has actually sent something, so the button is on offer (T-136). Stated
+  // on the base fixture because most of these tests are about something else and want the screen
+  // in its ordinary state; the tests that are about the gate say `false` for themselves.
+  whatsappEverSent: true,
 };
 
 const RECEIPTS: GoodsReceiptView[] = [];
@@ -141,28 +145,32 @@ describe("purchase order detail", () => {
     // A sent PO can be received, sent on WhatsApp, and cancelled — but not "marked sent" again.
     expect(screen.getByRole("button", { name: /send on whatsapp/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /receive delivery/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeInTheDocument();
+    // Cancelling reads "Cancel order" now, inside its own block at the foot of the page. The bare
+    // "Cancel" that used to sit in the header bank is gone: Rajeev asked what it cancelled, the
+    // screen or the order, and a button nobody can answer that about is not a button (T-135).
+    expect(screen.getByRole("button", { name: /cancel order/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^cancel$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /mark sent/i })).not.toBeInTheDocument();
     // And it cannot be edited: the offer is absent, not merely refused when pressed (A9).
-    expect(screen.queryByRole("button", { name: /edit lines/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^edit$/i })).not.toBeInTheDocument();
     // The screen is the order itself: no event trail, no list of generated sheets to come back to.
     expect(screen.queryByRole("heading", { name: /activity/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /documents/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/sent to vendor/i)).not.toBeInTheDocument();
   });
 
-  it("offers Mark sent and Edit lines on a draft, and no receiving", () => {
+  it("offers Mark sent and Edit on a draft, and no receiving", () => {
     withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
     expect(screen.getByRole("button", { name: /mark sent/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /edit lines/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /receive delivery/i })).not.toBeInTheDocument();
   });
 
   it("edits a draft's quantities and lines, but never its vendor", () => {
     withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     // The quantity is editable, and the picker offers the ingredients not already on the order.
     const quantity = screen.getByLabelText("Quantity of Rice") as HTMLInputElement;
@@ -222,7 +230,8 @@ describe("purchase order detail", () => {
    */
   it("offers the never-delivered box unticked, with the line saying what ticking it does", () => {
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    // Nothing is pressed to get here. Since T-135 the cancellation is a block at the foot of the
+    // page rather than a panel behind a button in the header.
 
     // Rajeev's own wording, 2026-09-09, and not to be improved.
     const box = screen.getByLabelText(/Vendor Never Delivered this Order/) as HTMLInputElement;
@@ -237,7 +246,6 @@ describe("purchase order detail", () => {
   it("sends false when nobody touched the box, and true when somebody ticked it", async () => {
     const cancel = vi.spyOn(api, "cancelPurchaseOrder").mockResolvedValue(undefined);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "festival moved" } });
     await act(async () => {
       fireEvent.submit(screen.getByRole("button", { name: /cancel order/i }).closest("form")!);
@@ -247,7 +255,6 @@ describe("purchase order detail", () => {
     // caller has to say which of the two kinds of cancellation this is.
     expect(cancel.mock.calls[0][2]).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
     fireEvent.click(screen.getByLabelText(/Vendor Never Delivered this Order/));
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "never answered the phone" } });
     await act(async () => {
@@ -258,19 +265,25 @@ describe("purchase order detail", () => {
   });
 
   it("does not carry a tick from one cancellation into the next", async () => {
-    // Closing the panel and reopening it must not leave a claim about a supplier sitting there
-    // ticked, waiting for somebody to press a button meaning something else.
+    // The same rule as before T-135, now guarding a different moment. There is no panel to close
+    // and reopen: the block is part of the page. So what must not survive is a completed
+    // cancellation — a claim about a supplier left sitting there ticked, waiting for somebody to
+    // press a button meaning something else.
+    vi.spyOn(api, "cancelPurchaseOrder").mockResolvedValue(undefined);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "never answered" } });
     fireEvent.click(screen.getByLabelText(/Vendor Never Delivered this Order/));
     expect((screen.getByLabelText(/Vendor Never Delivered this Order/) as HTMLInputElement).checked)
       .toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("button", { name: /cancel order/i }).closest("form")!);
+    });
 
     expect((screen.getByLabelText(/Vendor Never Delivered this Order/) as HTMLInputElement).checked)
       .toBe(false);
+    // And the sentence somebody wrote goes with it, for the same reason.
+    expect((screen.getByLabelText("Reason") as HTMLInputElement).value).toBe("");
   });
 
   /**
@@ -289,7 +302,6 @@ describe("purchase order detail", () => {
   it("does not offer the never-delivered box on an order that was never sent, and says why", () => {
     withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
 
     expect(screen.queryByLabelText(/Vendor Never Delivered this Order/)).not.toBeInTheDocument();
     expect(
@@ -309,7 +321,6 @@ describe("purchase order detail", () => {
     const cancel = vi.spyOn(api, "cancelPurchaseOrder").mockResolvedValue(undefined);
     withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "raised against the wrong vendor" } });
     await act(async () => {
       fireEvent.submit(screen.getByRole("button", { name: /cancel order/i }).closest("form")!);
@@ -358,7 +369,7 @@ describe("purchase order detail", () => {
   it("offers the needed-by date on a draft, pre-filled with what is already there", () => {
     withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     const neededBy = screen.getByLabelText("Needed by") as HTMLInputElement;
     expect(neededBy.value).toBe("2026-08-20");
@@ -370,7 +381,7 @@ describe("purchase order detail", () => {
     const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
     withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     fireEvent.change(screen.getByLabelText("Needed by"), { target: { value: "2026-09-04" } });
     await act(async () => {
@@ -380,7 +391,7 @@ describe("purchase order detail", () => {
 
     // Cleared is a date deliberately removed, not a field left unanswered: an order with nothing
     // to meet is a real order, and E5-S9 counts those aside rather than scoring them.
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     fireEvent.change(screen.getByLabelText("Needed by"), { target: { value: "" } });
     await act(async () => {
       fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
@@ -392,7 +403,7 @@ describe("purchase order detail", () => {
     const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
     withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     fireEvent.change(screen.getByLabelText("Needed by"), { target: { value: "2026-07-25" } });
     await act(async () => {
@@ -408,7 +419,7 @@ describe("purchase order detail", () => {
     const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
     withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     // A date in the past on a draft still sitting there — worth saying out loud, and still the
     // temple's to ask for. The buffer is a planning default, not a rule about what a vendor can do.
@@ -420,10 +431,163 @@ describe("purchase order detail", () => {
     expect(update.mock.calls[0][1].neededBy).toBe("2026-08-20");
   });
 
-  it("keeps the last line, because an order with nothing on it is a cancellation", () => {
+  /**
+   * The bank of buttons, in the order Rajeev dictated on 2026-09-10 while driving the deployed
+   * application: Vendor's language, Generate PDF, Print, Edit, Mark as sent (D-24 §3).
+   *
+   * <p>The order is asserted rather than the presence of each, because presence was never the
+   * complaint. Print and Generate PDF were the other way round and "Edit lines" sat between two
+   * sending actions, and a test that only checked each button existed would have passed on the
+   * screen he objected to.
+   */
+  it("lays the buttons out in the order they were asked for", () => {
     withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
-    expect(screen.getByRole("button", { name: /^remove$/i })).toBeDisabled();
+
+    const bank = screen.getByRole("button", { name: "Generate PDF" }).closest("div")!;
+    expect(within(bank).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Generate PDF", "Print", "Edit", "Mark sent", "Send on WhatsApp",
+    ]);
+    // The language picker leads, which is the first thing on his list and is a select, not a
+    // button, so it is checked on its own rather than in the row above.
+    const language = screen.getByLabelText("Document language");
+    expect(
+      language.compareDocumentPosition(within(bank).getByRole("button", { name: "Generate PDF" }))
+        & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  /**
+   * Edit mode shows two buttons: Save and Cancel (D-24 §4).
+   *
+   * <p>Rajeev: "Why do we need all the other buttons in edit mode?" — so the whole bank goes,
+   * including the language picker, which exists only to steer Print and Generate PDF. "Stop
+   * editing" goes with it; Cancel is the way out now.
+   */
+  it("shows nothing but Save and Cancel while a draft is being edited", () => {
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    expect(screen.getByRole("button", { name: /^save$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeInTheDocument();
+
+    for (const gone of [/generate pdf/i, /^print$/i, /^edit$/i, /mark sent/i, /send on whatsapp/i, /stop editing/i]) {
+      expect(screen.queryByRole("button", { name: gone })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByLabelText("Document language")).not.toBeInTheDocument();
+  });
+
+  /**
+   * Cancelling the order is at the foot of the page, on the view screen and the edit screen alike.
+   *
+   * <p>"Is it cancelling out of this screen OR cancelling the PO?" was Rajeev's question about the
+   * old header button. The answer is that this one says so in its own heading, sits below
+   * everything else, and takes a reason.
+   */
+  it("puts cancelling the order at the foot of the page, in both modes", () => {
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+
+    const heading = screen.getByRole("heading", { name: /cancel this purchase order/i });
+    const table = screen.getByRole("table", { name: "What was ordered" });
+    expect(table.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByLabelText("Reason")).toBeRequired();
+
+    // And it is still there with the edit form open, which is the half that is easy to lose: the
+    // header bank is not rendered in edit mode and the cancellation is not part of it.
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    expect(screen.getByRole("heading", { name: /cancel this purchase order/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cancel order/i })).toBeInTheDocument();
+  });
+
+  /**
+   * And it is gated on there being a purchase-order number, not on which screen this is (T-134).
+   *
+   * <p>T-134 opens this same edit form as a panel over the shopping list, for an order that does
+   * not exist yet, and Rajeev was explicit: show the cancel control "only when there is a
+   * purchase-order number". The fixture below is artificial — a real order always has one — and it
+   * is the only way to prove the condition is about the data rather than about the route, which is
+   * the thing T-134 is going to rely on.
+   */
+  it("hides the cancellation entirely when there is no purchase-order number yet", () => {
+    withDetail({ ...DRAFT, order: { ...DRAFT.order, poNumber: "" } });
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.queryByRole("heading", { name: /cancel this purchase order/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /cancel order/i })).not.toBeInTheDocument();
+  });
+
+  /**
+   * Send on WhatsApp exists only where WhatsApp has actually sent something (T-136).
+   *
+   * <p>Rajeev's ruling, 2026-09-10: shown "only after a message has actually gone through it
+   * successfully", not merely configured — and where it does not apply, not there at all.
+   *
+   * <p>Both halves are asserted, and the second is the one that is easy to get wrong: absent, not
+   * disabled. A greyed button is still an offer, and a person who presses it learns nothing.
+   */
+  it("does not offer Send on WhatsApp until a WhatsApp message has actually gone out", () => {
+    withDetail({ ...DETAIL, whatsappEverSent: false });
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.queryByRole("button", { name: /send on whatsapp/i })).not.toBeInTheDocument();
+    // Everything else on the bank is untouched: this gate is about WhatsApp and nothing else.
+    expect(screen.getByRole("button", { name: "Generate PDF" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /receive delivery/i })).toBeInTheDocument();
+  });
+
+  it("treats a missing WhatsApp fact as 'never sent', which hides the button", () => {
+    // `whatsappEverSent` is optional on the interface (see lib/api.ts), so `undefined` is reachable
+    // from an older payload. It must read as not-proven: hiding the button is the safe direction,
+    // and it is the ruling's own default.
+    const { whatsappEverSent: _omitted, ...withoutTheFact } = DETAIL;
+    withDetail(withoutTheFact);
+    render(<PurchaseOrderDetailPage />);
+
+    expect(screen.queryByRole("button", { name: /send on whatsapp/i })).not.toBeInTheDocument();
+  });
+
+  /**
+   * The Remove button, which Rajeev found "washed out" and asked to read as an available control.
+   *
+   * <p>It was disabled on a one-line draft — dimmed to 45%, saying nothing about why. The rule it
+   * was enforcing is real (an order with nothing on it is a cancellation, not an empty order) and
+   * is kept; it is now said in words on save, which is what the rest of this screen already does
+   * and what /orders/new/lines does with the identical control.
+   */
+  it("offers Remove on the last line, and refuses an emptied order in words", async () => {
+    const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    const remove = screen.getByRole("button", { name: /remove rice/i });
+    expect(remove).toBeEnabled();
+    fireEvent.click(remove);
+    // Pressing it removes the row and does not submit the form on the way — the button used to
+    // carry no `type`, which defaults to submit inside a <form>.
+    expect(screen.queryByLabelText("Quantity of Rice")).not.toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
+    });
+
+    expect(update).not.toHaveBeenCalled();
+    expect(screen.getByText(/An order needs at least one line/)).toBeInTheDocument();
+  });
+
+  it("names the uncatalogued adder the way Rajeev asked", () => {
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    // "Or describe something not in the catalogue" became "An item not in the catalogue" (D-24 §4).
+    // `{ selector }` because the field is hinted: InfoHint's "i" button carries the accessible name
+    // "More about <label>", so a bare getByLabelText matches the input and the button both.
+    expect(screen.getByLabelText(/an item not in the catalogue/i, { selector: "input" }))
+      .toBeInTheDocument();
+    expect(screen.queryByLabelText(/describe something not in the catalogue/i)).not.toBeInTheDocument();
   });
 });

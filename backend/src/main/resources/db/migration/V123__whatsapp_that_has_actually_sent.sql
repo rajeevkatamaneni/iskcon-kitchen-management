@@ -1,0 +1,111 @@
+-- =====================================================================
+-- V123 — "WhatsApp is configured" and "WhatsApp has actually sent
+--        something" stop being the same fact (T-136)
+--
+-- Rajeev's ruling, 2026-09-10, on the Send on WhatsApp button on the
+-- purchase-order screen: it is shown "only after a message has actually
+-- gone through it successfully", not merely configured. Where it does not
+-- apply the button is not there at all — not disabled, not greyed.
+--
+-- ---------------------------------------------------------------------
+-- 1. Why none of the three dates already on this row answers that
+--
+-- V55 gave tenant_settings three WhatsApp timestamps and every one of
+-- them is about set-up rather than about a message:
+--
+--   whatsapp_verified_at
+--       When the stored credentials last reached Meta. It is stamped by
+--       TenantWhatsAppSettingsService.save() and by its test(), and both
+--       of those call MetaWhatsAppClient.verifyNumber — a GET that asks
+--       Meta to describe the business number. The method's own comment
+--       says why it is a read: "pressing Test must never put a message in
+--       front of anybody." So this date proves a token works. It proves
+--       nothing about a send: an unapproved template, a number outside
+--       Meta's test list, or a spent messaging tier all leave this date
+--       looking perfect while every message fails.
+--
+--   whatsapp_templates_submitted_at
+--       When we last ASKED Meta to approve the templates. V55's own
+--       comment: "this records that we asked, never that they said yes."
+--
+--   whatsapp_webhook_seen_at
+--       When a correctly signed callback last arrived. That is the RETURN
+--       path — Meta calling us — and a temple can receive callbacks for
+--       messages that all failed.
+--
+-- Gating the button on any of the three would give exactly the behaviour
+-- the ruling exists to remove: a button offered on the strength of
+-- configuration, pressed, and refused.
+--
+-- ---------------------------------------------------------------------
+-- 2. So: one new column, stamped only from the real outbound success path
+--
+-- whatsapp_last_sent_at is written in exactly one place —
+-- WhatsAppChannelAdapter, immediately after MetaWhatsAppClient.sendTemplate
+-- returns Meta's message id. Nothing else may write it. A send that throws
+-- returns SendResult.failed and the cascade falls to SMS and then email;
+-- the column is untouched, which is the honest record.
+--
+-- Note what it is NOT evidence of. Meta accepting a message for delivery
+-- is not the vendor reading it — that is the delivery callback, which
+-- lands on notifications.status and notification_attempts and is a
+-- per-message fact. This column answers one tenant-wide question only:
+-- has a WhatsApp message from this temple ever left the building? That is
+-- the question the button needs answered, and it is the strongest claim
+-- that can be made at the moment of sending.
+--
+-- Last rather than first. A temple whose WhatsApp worked in March and was
+-- revoked in September still reads TRUE here, and that is deliberate:
+-- proving a channel is CURRENTLY working requires sending a message,
+-- which is the thing the button is for. Keeping the date rather than a
+-- boolean means a later task can say "not for six months" without another
+-- migration, and costs nothing now.
+--
+-- ---------------------------------------------------------------------
+-- 3. Nullable, with no default, and no backfill
+--
+-- NULL means "no WhatsApp message from this temple has ever succeeded",
+-- which is the true statement about every existing row: nothing in this
+-- database has ever recorded an outbound WhatsApp success, because there
+-- has been nowhere to record it. Every temple therefore starts with the
+-- button absent and earns it by sending.
+--
+-- A backfill from notifications (final_channel = 'WHATSAPP' AND status IN
+-- ('SENT','DELIVERED')) was considered and rejected. It would be more
+-- generous than the ruling: it counts a message the dispatcher marked
+-- sent, which on staging includes the dev fail-channels path and any
+-- adapter that reported success without reaching Meta. Starting empty is
+-- the conservative direction, it is one WhatsApp message away from being
+-- corrected, and a wrong TRUE here is precisely the defect being fixed.
+--
+-- ---------------------------------------------------------------------
+-- 4. RLS, and why there is no tenant loop
+--
+-- tenant_settings is tenant-owned and has carried enable_tenant_rls()
+-- since V36, where it was created. Migrations run as the unprivileged
+-- role with app.tenant_id unset, so any UPDATE here would match nothing
+-- through the policy's NULLIF and report success — which is why every
+-- migration in this project that touches rows adopts each tenant in turn.
+--
+-- This one touches no rows. ADD COLUMN is DDL and runs as the table
+-- owner, which the policy does not apply to. The absence of a loop is
+-- deliberate, exactly as it was in V118 and V122.
+--
+-- Reads and writes of the new column go through ordinary tenant
+-- isolation. The one exception already on this table — the
+-- tenant_settings_whatsapp_webhook_lookup SELECT policy from V55, which
+-- lets an unauthenticated Meta callback find its temple by the opaque
+-- token in its URL — now exposes one more timestamp to a caller that
+-- already presented that token. It is the same kind of value as the two
+-- dates it already exposes and says nothing that could be used to send
+-- anything.
+--
+-- No index. It is read one row at a time by primary key (tenant_id), on
+-- a table with one row per temple.
+-- =====================================================================
+
+ALTER TABLE tenant_settings
+    ADD COLUMN whatsapp_last_sent_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN tenant_settings.whatsapp_last_sent_at IS
+    'When a WhatsApp message from this temple last reached Meta successfully (T-136). Written in exactly one place — WhatsAppChannelAdapter, after MetaWhatsAppClient.sendTemplate returns a message id — and by nothing else. NULL means no WhatsApp message from this temple has ever gone out, which is what hides the Send on WhatsApp button on the purchase-order screen: Rajeev, 2026-09-10, ruled that button is shown "only after a message has actually gone through it successfully", not merely configured. Distinct from whatsapp_verified_at (credentials reached Meta), whatsapp_templates_submitted_at (we asked Meta to approve) and whatsapp_webhook_seen_at (a callback came back), none of which is evidence that anything was sent.';

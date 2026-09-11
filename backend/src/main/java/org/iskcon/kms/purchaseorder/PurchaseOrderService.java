@@ -18,6 +18,7 @@ import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.error.ErrorResponse;
 import org.iskcon.kms.ingredient.IngredientUnits;
+import org.iskcon.kms.notification.TenantWhatsAppSettingsService;
 import org.iskcon.kms.shoppinglist.ShoppingListLineView;
 import org.iskcon.kms.shoppinglist.ShoppingListService;
 import org.iskcon.kms.tenancy.TempleClock;
@@ -42,10 +43,19 @@ public class PurchaseOrderService {
 	private final org.iskcon.kms.document.DocumentService documentService;
 	private final IngredientUnits ingredientUnits;
 	private final ShoppingListService shoppingListService;
+	/**
+	 * Only ever asked one question: has this temple's WhatsApp ever actually sent anything (T-136)?
+	 *
+	 * <p>Injected rather than reading {@code tenant_settings} with SQL of our own, because the
+	 * column and the meaning of its NULL belong to the notification side. Two packages holding two
+	 * copies of "and NULL means never" is how the second copy comes to be wrong.
+	 */
+	private final TenantWhatsAppSettingsService whatsappSettings;
 
 	public PurchaseOrderService(JdbcTemplate jdbc, AuditService auditService,
 			org.iskcon.kms.document.DocumentService documentService,
 			IngredientUnits ingredientUnits, ShoppingListService shoppingListService,
+			TenantWhatsAppSettingsService whatsappSettings,
 			TempleClock clock) {
 		this.clock = clock;
 		this.jdbc = jdbc;
@@ -53,6 +63,7 @@ public class PurchaseOrderService {
 		this.documentService = documentService;
 		this.ingredientUnits = ingredientUnits;
 		this.shoppingListService = shoppingListService;
+		this.whatsappSettings = whatsappSettings;
 	}
 
 	// ---- Read -----------------------------------------------------------
@@ -135,7 +146,11 @@ public class PurchaseOrderService {
 				SELECT event_type, detail, actor_name, created_at
 				FROM po_events WHERE po_id = ? ORDER BY created_at
 				""", EVENT_MAPPER, id);
-		return new PurchaseOrderDetailView(header, lines, events);
+		// A tenant-wide fact, carried on the order because this is the payload the order screen
+		// already reads and it may not ask the settings endpoint for it — see the note on
+		// PurchaseOrderDetailView.whatsappEverSent. One extra single-row lookup by primary key.
+		return new PurchaseOrderDetailView(
+				header, lines, events, whatsappSettings.hasEverSentSuccessfully());
 	}
 
 	// ---- Create ---------------------------------------------------------

@@ -129,9 +129,9 @@ function PurchaseOrderDetailView() {
   const [preparingPdf, setPreparingPdf] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [showReceive, setShowReceive] = useState(false);
-  const [showCancel, setShowCancel] = useState(false);
-  // "Vendor Never Delivered this Order" (T-124). Unticked to begin with and reset whenever the form
-  // closes, so a tick can never survive from one cancellation into the next.
+  // "Vendor Never Delivered this Order" (T-124). Unticked to begin with, and — since T-135 moved
+  // the whole cancellation to the foot of the page where it is always open — reset on a successful
+  // cancellation rather than when a panel closes, because there is no longer a panel to close.
   const [vendorAbandoned, setVendorAbandoned] = useState(false);
   // Null while nobody is returning anything. Non-null names the one receipt line the form is open
   // against: a return is about the sack somebody opened, so one line at a time is the whole
@@ -213,7 +213,35 @@ function PurchaseOrderDetailView() {
   const canEdit = po?.status === "DRAFT";
   const canReceive = po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
   const canCancel = po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
-  const canWhatsApp = po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
+  /**
+   * Send on WhatsApp is offered only where WhatsApp demonstrably works (T-136).
+   *
+   * <p>Rajeev's ruling, 2026-09-10: the button is shown "only after a message has actually gone
+   * through it successfully", not merely configured — and where it does not apply it is **not there
+   * at all**, not disabled and not greyed. So this is an `&&` on the render and never a `disabled`.
+   *
+   * <p>`whatsappEverSent` is a fact about the temple that arrives on this order's own payload,
+   * which is the whole point: the screen must not ask `api.whatsappSettings()` for it, because that
+   * endpoint is behind `MANAGE_TEMPLE_SETTINGS` and the person raising a purchase order need not
+   * hold it. The button would then vanish for a Kitchen Manager whose WhatsApp works perfectly.
+   *
+   * <p>`=== true` rather than a truthiness check, because the field is optional on the interface
+   * (see `PurchaseOrderDetailView` in `lib/api.ts`) and `undefined` must read as "not proven".
+   */
+  const whatsappWorks = data?.whatsappEverSent === true;
+  const canWhatsApp = whatsappWorks
+    && (po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED");
+  /**
+   * Whether the "Cancel this purchase order" block at the foot of the page is rendered at all.
+   *
+   * <p>Gated on there being a purchase-order NUMBER, not on which screen this is (T-135, for
+   * T-134). T-134 opens this same edit form as a panel over the shopping list, for an order that
+   * does not exist yet — and Rajeev was explicit that the cancel control must not appear there,
+   * "because no order exists yet. Show it only when there is a purchase-order number." Written as a
+   * question about the data so that the answer is the same wherever the form is rendered; a
+   * condition on the route or on a `mode` prop would have to be remembered by the next caller.
+   */
+  const hasPoNumber = (po?.poNumber ?? "") !== "";
   // Whether anything was ever asked of the vendor, which is what gates the "Vendor Never Delivered
   // this Order" tick on the cancel panel (T-129). Read off sentAt and not off the status: a
   // cancelled order's status no longer says whether it was ever sent, and that is exactly the case
@@ -359,6 +387,15 @@ function PurchaseOrderDetailView() {
     event.preventDefault();
     if (!po || !draftLines) return;
 
+    // An order with nothing on it is not an empty order, it is a cancelled one — and this is where
+    // that is said, in words, rather than by greying the last Remove button (T-135). The manual
+    // order screen refuses the same thing in the same shape ("An order needs at least one line"),
+    // and the sentence can name the way out, which a disabled button never could.
+    if (draftLines.length === 0) {
+      setActionError(toApiError(null, "An order needs at least one line. Add what is being bought, or cancel the order at the foot of the page."));
+      return;
+    }
+
     const quantities = draftLines.map((l) => Number(l.quantity));
     if (quantities.some((q) => !Number.isFinite(q) || q <= 0)) {
       setActionError(toApiError(null, "Every line needs a quantity above zero. Remove a line you no longer want."));
@@ -467,24 +504,54 @@ function PurchaseOrderDetailView() {
                     </p>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    aria-label="Document language"
-                    value={docLanguage}
-                    onChange={(e) => setDocLanguage(e.target.value)}
-                    className="min-h-touch rounded-control border border-hairline px-3 text-sm"
-                  >
-                    <option value="">Vendor’s language</option>
-                    {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-                  </select>
-                  <button type="button" disabled={busy} onClick={print} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Print</button>
-                  <button type="button" disabled={busy} onClick={generatePdf} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{preparingPdf ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Generate PDF"}</button>
-                  {canEdit && <button type="button" disabled={busy} onClick={() => (draftLines ? setDraftLines(null) : startEditing())} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{draftLines ? "Stop editing" : "Edit lines"}</button>}
-                  {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn’t send that order.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Mark sent</button>}
-                  {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn’t send it on WhatsApp.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Send on WhatsApp</button>}
-                  {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
-                  {canCancel && <button type="button" disabled={busy} onClick={() => { setVendorAbandoned(false); setShowCancel((s) => !s); }} className="min-h-touch rounded border border-hairline px-4 text-danger transition-colors duration-state hover:bg-sunken disabled:opacity-60">Cancel</button>}
-                </div>
+                {/*
+                  The bank of buttons, in the order Rajeev dictated on 2026-09-10 while driving the
+                  deployed application (D-24 §3): Vendor's language, Generate PDF, Print, Edit, Mark
+                  as sent. That is the whole of the order and it is not a suggestion — Print and
+                  Generate PDF were the other way round, and "Edit lines" sat between two send
+                  actions.
+
+                  Three things are true of this bank that were not before T-135:
+
+                  * It is gone entirely in edit mode. "Why do we need all the other buttons in edit
+                    mode?" — in edit mode there are two buttons, Save and Cancel, and they live on
+                    the form itself. The language picker goes with them: it exists to steer Print
+                    and Generate PDF, and neither is offered while a draft is being edited.
+                  * Send on WhatsApp is here only where WhatsApp has actually sent something
+                    (T-136). See `canWhatsApp`.
+                  * Cancel has left it. It was ambiguous where it stood — "Is it cancelling out of
+                    this screen OR cancelling the PO?" — and cancelling a purchase order is a
+                    deliberate act, so it is now a titled block at the foot of the page that
+                    somebody has to go to on purpose.
+
+                  Receive delivery keeps the tail of the bank. It is not in Rajeev's five because
+                  the order he was looking at was a draft and it does not appear on one; it is the
+                  other thing a person does from this screen, and it belongs beside them.
+                */}
+                {!draftLines && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      aria-label="Document language"
+                      value={docLanguage}
+                      onChange={(e) => setDocLanguage(e.target.value)}
+                      className="min-h-touch rounded-control border border-hairline px-3 text-sm"
+                    >
+                      <option value="">Vendor’s language</option>
+                      {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+                    </select>
+                    <button type="button" disabled={busy} onClick={generatePdf} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{preparingPdf ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Generate PDF"}</button>
+                    <button type="button" disabled={busy} onClick={print} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Print</button>
+                    {/* "Edit", not "Edit lines" — Rajeev, 2026-09-10: "because that is what you are
+                        doing. EDITING the whole PO, not just 1 line." The form below edits the
+                        needed-by date as well as the lines, so the old label was describing less
+                        than the button did. It no longer doubles as the way out of edit mode
+                        either: it is not rendered there at all. */}
+                    {canEdit && <button type="button" disabled={busy} onClick={startEditing} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Edit</button>}
+                    {canSend && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrder(id, t), "We couldn’t send that order.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Mark sent</button>}
+                    {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn’t send it on WhatsApp.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Send on WhatsApp</button>}
+                    {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
+                  </div>
+                )}
               </header>
 
               {actionError && (
@@ -505,89 +572,13 @@ function PurchaseOrderDetailView() {
                 </div>
               )}
 
-              {showCancel && (
-                <section className="card mb-6 px-6 py-5">
-                  <h2 className="text-lg">Cancel this purchase order</h2>
-                  <form className="mt-3" onSubmit={async (e) => {
-                    e.preventDefault();
-                    const reason = String(new FormData(e.currentTarget).get("reason") ?? "").trim();
-                    const ok = await run(
-                      // wasSent, not the state alone: the box is not rendered on an unsent order,
-                      // so the state cannot be true there today - but the endpoint refuses the
-                      // pairing outright (KMS-400147), and a screen that could send a request it
-                      // knows will be refused is a screen waiting to show somebody an error it
-                      // could have avoided.
-                      (t) => api.cancelPurchaseOrder(id, reason, wasSent && vendorAbandoned, t),
-                      "We couldn’t cancel that order."
-                    );
-                    if (ok) {
-                      setShowCancel(false);
-                      setVendorAbandoned(false);
-                    }
-                  }}>
-                    <div className="flex flex-wrap items-end gap-3">
-                      <label className="flex flex-1 flex-col gap-1 text-sm text-ink-secondary">
-                        <span className="pl-field-inset font-medium text-ink">Reason</span>
-                        <input name="reason" required className="min-h-touch rounded-control border border-hairline px-3" />
-                      </label>
-                      <button type="submit" disabled={busy} className="min-h-touch rounded bg-danger px-5 text-ink-inverse disabled:opacity-60">Cancel order</button>
-                    </div>
-
-                    {/*
-                      The one new fact anybody enters for the whole of T-124, and Rajeev's own
-                      wording of it (2026-09-09). Ticking it is a permanent statement about somebody
-                      else's business — it scores this order 0% on the vendor's record and names them
-                      as a no-show — so it starts unticked and stays that way unless a person means
-                      it. Two defects this week came from boxes that were already ticked, both
-                      recording things nobody meant to say.
-
-                      The reason field above stays required either way: the box carries the fact and
-                      the sentence carries the story.
-                    */}
-                    {/*
-                      And it is only offered once the order has been sent (T-129, Rajeev's ruling of
-                      2026-09-10). A draft nobody sent is an order the vendor has never heard of, so
-                      there is nothing to hold them to; the coordinator ticked the box on exactly
-                      such a draft on staging and gave a dairy 0% for it.
-
-                      The absence is said out loud rather than left as a gap. A control that
-                      disappears with no explanation reads as a bug or as a missing permission, and
-                      the person cancelling is the one who most needs to know that this cancellation
-                      will not count against anybody.
-                    */}
-                    {wasSent ? (
-                      <label className="mt-4 flex items-start gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          name="vendorAbandoned"
-                          checked={vendorAbandoned}
-                          onChange={(e) => setVendorAbandoned(e.target.checked)}
-                          className="mt-1 h-4 w-4 shrink-0 accent-accent"
-                        />
-                        <span>
-                          <span className="text-ink">Vendor Never Delivered this Order</span>
-                          <span className="mt-1 block max-w-prose text-ink-secondary">
-                            This counts against the vendor’s delivery record. Leave it alone if we are
-                            cancelling for our own reasons.
-                          </span>
-                        </span>
-                      </label>
-                    ) : (
-                      <p className="mt-4 max-w-prose text-sm text-ink-secondary">
-                        This order was never sent, so there is nothing to hold the vendor to.
-                        Cancelling it counts against nobody’s delivery record.
-                      </p>
-                    )}
-                  </form>
-                </section>
-              )}
-
               {draftLines && canEdit && (
                 <section className="card mb-6 px-6 py-5" aria-labelledby="edit-heading">
                   <h2 id="edit-heading" className="text-lg">Edit this draft</h2>
                   <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-                    The vendor cannot be changed. Cancel this order and raise it against the right
-                    one. Once it is sent, nothing here can be changed at all.
+                    The vendor cannot be changed. Cancel this order at the foot of the page and
+                    raise it against the right one. Once it is sent, nothing here can be changed
+                    at all.
                   </p>
                   <form className="mt-4" aria-label="Edit the draft order" onSubmit={saveLines}>
                     {/* The standing advice — that the date may be left off — is the "i" beside the
@@ -642,12 +633,41 @@ function PurchaseOrderDetailView() {
                               <span className="text-ink-secondary">{unitLabel(l.unit)}</span>
                             </td>
                             <td className={TD_ACTIONS}>
-                              {/* An order with nothing on it is not an empty order, it is a cancelled
-                                  one — so the last line stays and Cancel is the way out. */}
+                              {/*
+                                Rajeev, 2026-09-10, driving the deployed app: the Remove button is
+                                "washed out — fix the styling" so that it reads as an available
+                                control. Three things were making it look unavailable, and only one
+                                of them was a colour.
+
+                                It was disabled whenever the draft was down to its last line, which
+                                dims it to 45% and says nothing about why. An order with nothing on
+                                it really is a cancellation rather than an empty order — but this
+                                screen already argues, at length, on the "Did these arrive?" panel
+                                below, that going grey is the wrong way to say so: there is nowhere
+                                on a greyed button to put the sentence that would explain it. So the
+                                button stays live and `saveLines` refuses an empty order in words,
+                                exactly as the manual order screen at /orders/new/lines does.
+
+                                `variant="ghost"` is the design system's neutral second action — a
+                                solid pane with a resting border, full-strength ink — and it is
+                                already what the identical Remove on /orders/new/lines uses. Danger
+                                was the wrong material as well as the paler one: a line taken off a
+                                working copy that has not been saved destroys nothing, and the one
+                                genuinely destructive act on this screen now has a titled block at
+                                the foot of the page. No new colour was invented; both are
+                                DESIGN_SYSTEM.md tokens by way of ds/Button.
+
+                                And `type="button"`, which was missing. A <button> inside a <form>
+                                defaults to type="submit", so pressing Remove both dropped the line
+                                and submitted the edit form — and because React had not yet applied
+                                the state update, it saved the order with the line still on it.
+                              */}
                               <Button
-                                variant="danger"
+                                type="button"
+                                variant="ghost"
                                 size="sm"
-                                disabled={busy || draftLines.length === 1}
+                                disabled={busy}
+                                aria-label={`Remove ${subjectOf(l)}`}
                                 onClick={() => setDraftLines((cur) => cur && cur.filter((_, j) => j !== i))}
                               >
                                 Remove
@@ -667,9 +687,26 @@ function PurchaseOrderDetailView() {
                       onAdd={(line) => setDraftLines((cur) => (cur ? [...cur, line] : cur))}
                     />
 
+                    {/*
+                      Two buttons in edit mode, and these are them (D-24 §4). Rajeev, 2026-09-10:
+                      "Why do we need all the other buttons in edit mode?" — so the bank in the
+                      header is not rendered at all while this form is open, and what is left is
+                      Save and Cancel.
+
+                      "Cancel" is safe to say here now, and was not before. His objection was that
+                      the word was ambiguous — "Is it cancelling out of this screen OR cancelling
+                      the PO?" — and the answer is that cancelling the purchase order has moved to
+                      a titled block at the foot of the page with its own reason box. There is no
+                      longer a second Cancel anywhere near this one, and the one that exists says
+                      what it cancels in its own heading.
+
+                      A real button rather than the underlined text "Discard" it replaces: the
+                      second of two actions is still an action, and a line of text that turns out
+                      to be pressable is the shape Rajeev objected to on the calendar screen.
+                    */}
                     <div className="mt-5 flex items-center gap-3">
-                      <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Save changes</button>
-                      <button type="button" disabled={busy} onClick={() => setDraftLines(null)} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">Discard</button>
+                      <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Save</button>
+                      <Button type="button" variant="ghost" disabled={busy} onClick={() => setDraftLines(null)}>Cancel</Button>
                     </div>
                   </form>
                 </section>
@@ -1023,6 +1060,118 @@ function PurchaseOrderDetailView() {
                 </section>
               )}
 
+              {/*
+                Cancelling the purchase order, at the foot of the page — on the view screen and on
+                the edit screen alike (D-24 §3 and §4, Rajeev, 2026-09-10).
+
+                It used to be a button called "Cancel" in the bank at the top, which opened this
+                panel just under the header. His objection was the word: "Is it cancelling out of
+                this screen OR cancelling the PO?" — and the answer, that it ends the order the
+                vendor may already be filling, is not something a person should learn by pressing
+                it. "Cancelling a purchase order is a deliberate act... Somebody should have to go
+                there on purpose."
+
+                So: the foot of the page, open, under its own heading, with the reason box and the
+                tick box in it. No toggle. The deliberateness is the journey down the page rather
+                than a disclosure to expand — a collapsed panel at the bottom would be the same
+                two presses as before with more scrolling, which is ceremony rather than intent.
+
+                WHAT IT IS GATED ON, and this is load-bearing for T-134. `hasPoNumber` — the
+                purchase order having a number — and never "which screen is this". T-134 opens the
+                edit form above as a panel over the shopping list for an order that does not exist
+                yet, and reuses this file rather than copying it. Rajeev: show the cancel control
+                "only when there is a purchase-order number". A condition written about the route,
+                or about a `mode` prop, is a condition the next caller has to remember; this one
+                answers itself from the data.
+              */}
+              {canCancel && hasPoNumber && (
+                <section className="card mb-8 px-6 py-5" aria-labelledby="cancel-heading">
+                  <h2 id="cancel-heading" className="text-lg">Cancel this purchase order</h2>
+                  <p className="mt-1 max-w-prose text-sm text-ink-secondary">
+                    This calls off {po.poNumber} with {po.vendorName}. It cannot be undone — raise a
+                    new order if it is needed again.
+                  </p>
+                  <form className="mt-3" aria-label="Cancel this purchase order" onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = e.currentTarget;
+                    const reason = String(new FormData(form).get("reason") ?? "").trim();
+                    const ok = await run(
+                      // wasSent, not the state alone: the box is not rendered on an unsent order,
+                      // so the state cannot be true there today - but the endpoint refuses the
+                      // pairing outright (KMS-400147), and a screen that could send a request it
+                      // knows will be refused is a screen waiting to show somebody an error it
+                      // could have avoided.
+                      (t) => api.cancelPurchaseOrder(id, reason, wasSent && vendorAbandoned, t),
+                      "We couldn’t cancel that order."
+                    );
+                    if (ok) {
+                      // The panel no longer closes — it is part of the page — so the form is
+                      // emptied instead, and the tick with it. A claim about a supplier must never
+                      // be left sitting there after the act it belonged to, waiting for somebody
+                      // to press a button meaning something else.
+                      form.reset();
+                      setVendorAbandoned(false);
+                      // Nothing is being edited any more either: a cancelled order cannot be, and
+                      // leaving the form open would offer a Save the server would refuse.
+                      setDraftLines(null);
+                    }
+                  }}>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <label className="flex flex-1 flex-col gap-1 text-sm text-ink-secondary">
+                        <span className="pl-field-inset font-medium text-ink">Reason</span>
+                        <input name="reason" required className="min-h-touch rounded-control border border-hairline px-3" />
+                      </label>
+                      <button type="submit" disabled={busy} className="min-h-touch rounded bg-danger px-5 text-ink-inverse disabled:opacity-60">Cancel order</button>
+                    </div>
+
+                    {/*
+                      The one new fact anybody enters for the whole of T-124, and Rajeev's own
+                      wording of it (2026-09-09). Ticking it is a permanent statement about somebody
+                      else's business — it scores this order 0% on the vendor's record and names them
+                      as a no-show — so it starts unticked and stays that way unless a person means
+                      it. Two defects this week came from boxes that were already ticked, both
+                      recording things nobody meant to say.
+
+                      The reason field above stays required either way: the box carries the fact and
+                      the sentence carries the story.
+                    */}
+                    {/*
+                      And it is only offered once the order has been sent (T-129, Rajeev's ruling of
+                      2026-09-10). A draft nobody sent is an order the vendor has never heard of, so
+                      there is nothing to hold them to; the coordinator ticked the box on exactly
+                      such a draft on staging and gave a dairy 0% for it.
+
+                      The absence is said out loud rather than left as a gap. A control that
+                      disappears with no explanation reads as a bug or as a missing permission, and
+                      the person cancelling is the one who most needs to know that this cancellation
+                      will not count against anybody.
+                    */}
+                    {wasSent ? (
+                      <label className="mt-4 flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          name="vendorAbandoned"
+                          checked={vendorAbandoned}
+                          onChange={(e) => setVendorAbandoned(e.target.checked)}
+                          className="mt-1 h-4 w-4 shrink-0 accent-accent"
+                        />
+                        <span>
+                          <span className="text-ink">Vendor Never Delivered this Order</span>
+                          <span className="mt-1 block max-w-prose text-ink-secondary">
+                            This counts against the vendor’s delivery record. Leave it alone if we are
+                            cancelling for our own reasons.
+                          </span>
+                        </span>
+                      </label>
+                    ) : (
+                      <p className="mt-4 max-w-prose text-sm text-ink-secondary">
+                        This order was never sent, so there is nothing to hold the vendor to.
+                        Cancelling it counts against nobody’s delivery record.
+                      </p>
+                    )}
+                  </form>
+                </section>
+              )}
             </>
           )}
         </div>
@@ -1130,8 +1279,13 @@ function AddLine({
             never taken into stock, which is the whole reason it does not need a catalogue entry.
             Saying so here is cheaper than saying it at the receiving table, where somebody has
             already gone looking for a box to type into. */}
+        {/* Rajeev, 2026-09-10 (D-24 §4): "Or describe something not in the catalogue" becomes "An
+            item not in the catalogue". The old label described the act of typing; this one names
+            the thing being added, which is what the person is looking for. Changed on both screens
+            carrying this field in the same breath, because one wording in two places is how they
+            start to differ. */}
         <HintedField
-          label="Or describe something not in the catalogue"
+          label="An item not in the catalogue"
           hint="For things the store room doesn’t track — a plastic stool, an extension cord. It goes on the order and the bill, but never into stock."
         >
           {(fieldId) => (

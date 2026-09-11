@@ -184,7 +184,7 @@ describe("a purchase-order line that isn't in the catalogue", () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     withDetail(MIXED_DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     const duplicateKeyWarnings = errors.mock.calls
       .map((c) => String(c[0]))
@@ -200,7 +200,7 @@ describe("a purchase-order line that isn't in the catalogue", () => {
     const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
     withDetail(MIXED_DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     await act(async () => {
       fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
@@ -228,11 +228,11 @@ describe("a purchase-order line that isn't in the catalogue", () => {
     const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
     withDetail(MIXED_DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     // `{ selector }` because the field is hinted: InfoHint's "i" button carries the accessible
     // name "More about <label>", so a bare getByLabelText matches the input and the button both.
-    const box = screen.getByLabelText(/describe something not in the catalogue/i, { selector: "input" });
+    const box = screen.getByLabelText(/an item not in the catalogue/i, { selector: "input" });
     fireEvent.change(box, { target: { value: "  Steel trolley  " } });
     fireEvent.click(screen.getByRole("button", { name: /add described line/i }));
 
@@ -258,14 +258,14 @@ describe("a purchase-order line that isn't in the catalogue", () => {
   it("cannot build a line that names both an ingredient and a description", () => {
     withDetail(MIXED_DRAFT);
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /edit lines/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     // The two adders are separate controls with separate buttons, so the exclusivity the server
     // enforces with KMS-400128 cannot be violated from this form by accident. The ingredient
     // picker offers no description box and the description box offers no picker.
     const picker = screen.getByLabelText(/add an ingredient/i).closest("div");
     expect(picker).not.toBeNull();
-    expect(within(picker as HTMLElement).queryByLabelText(/describe something/i)).toBeNull();
+    expect(within(picker as HTMLElement).queryByLabelText(/an item not in the catalogue/i)).toBeNull();
 
     // And an empty description cannot be added at all — the button stays disabled.
     expect(screen.getByRole("button", { name: /add described line/i })).toBeDisabled();

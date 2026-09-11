@@ -250,6 +250,69 @@ public class TenantWhatsAppSettingsService {
 				""", tenantId);
 	}
 
+	/**
+	 * Records that a WhatsApp message from this temple actually reached Meta (T-136, V123).
+	 *
+	 * <p><strong>The only writer of {@code whatsapp_last_sent_at}, and it must stay that way.</strong>
+	 * Called from {@link WhatsAppChannelAdapter} immediately after
+	 * {@link MetaWhatsAppClient#sendTemplate} hands back a message id, and from nowhere else. The
+	 * moment anything else stamps it — a settings screen, a connection test, a backfill — the column
+	 * goes back to meaning "configured", which is the distinction it exists to draw.
+	 *
+	 * <p>Rajeev, 2026-09-10, on the Send on WhatsApp button: it is shown "only after a message has
+	 * actually gone through it successfully", not merely configured. The three dates V55 already
+	 * stores are all about set-up — see the column comment in V123 — so none of them could answer it.
+	 *
+	 * <p>Scoped by the tenant on the connection rather than by an id passed in, unlike
+	 * {@link #markWebhookSeen}: a send always happens inside the tenant context of the notification
+	 * being dispatched, where a webhook arrives before any tenant is known and has to say which one
+	 * it means.
+	 *
+	 * <p>It joins the dispatcher's transaction rather than opening its own. That is the right
+	 * coupling: if the surrounding dispatch rolls back, no attempt row and no SENT status survive
+	 * either, and a stamp claiming a send nothing else records would be a lie with no witness.
+	 */
+	@Transactional
+	public void markMessageSent() {
+		jdbc.update("""
+				UPDATE tenant_settings SET whatsapp_last_sent_at = now(), updated_at = now()
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""");
+	}
+
+	/**
+	 * Whether a WhatsApp message from this temple has ever gone out successfully (T-136).
+	 *
+	 * <p><strong>Read by the purchase-order screen, and deliberately not through the settings
+	 * endpoint.</strong> {@code GET /api/v1/settings/whatsapp} is behind {@code
+	 * MANAGE_TEMPLE_SETTINGS}, which whoever raises a purchase order need not hold — a Kitchen
+	 * Manager has {@code MANAGE_PURCHASE_ORDERS} and no reason to have the other. Had the orders
+	 * screen asked that endpoint, the button would have vanished for people whose WhatsApp works
+	 * perfectly, for a reason that is about a permission and has nothing to do with WhatsApp. So the
+	 * fact travels on {@link org.iskcon.kms.purchaseorder.PurchaseOrderDetailView}, which that screen
+	 * already reads under its own authority.
+	 *
+	 * <p>This method itself is not exposed on any controller, so it carries no permission of its own.
+	 * Isolation is the database's, as always: the row is found through {@code tenant_settings}'
+	 * ordinary RLS policy and one temple can never read another's.
+	 *
+	 * <p>A boolean and not the date. The screen has one question — offer the button or not — and a
+	 * timestamp sitting on a purchase-order payload invites being read as something about THIS
+	 * order's WhatsApp send, which it is not. The date stays in the column for whoever needs to say
+	 * "not for six months" later.
+	 */
+	@Transactional(readOnly = true)
+	public boolean hasEverSentSuccessfully() {
+		if (TenantContext.get().isEmpty()) {
+			return false;
+		}
+		Boolean ever = jdbc.query("""
+				SELECT whatsapp_last_sent_at IS NOT NULL AS ever FROM tenant_settings
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", rs -> rs.next() && rs.getBoolean("ever"));
+		return Boolean.TRUE.equals(ever);
+	}
+
 	// ---------------------------------------------------------------------
 
 	/**

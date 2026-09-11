@@ -391,8 +391,13 @@ function AddLine({
             reaches stock, which is the whole reason it needs no catalogue entry. Saying so here is
             cheaper than saying it at the receiving table, where somebody has already gone looking
             for a box to type into. */}
+        {/* Rajeev, 2026-09-10 (D-24 §4): "Or describe something not in the catalogue" becomes "An
+            item not in the catalogue". The old label described the act of typing; this one names
+            the thing being added, which is what the person is looking for. Changed on both screens
+            carrying this field in the same breath, because one wording in two places is how they
+            start to differ. */}
         <HintedField
-          label="Or describe something not in the catalogue"
+          label="An item not in the catalogue"
           hint="For things the store room doesn’t track — a plastic stool, an extension cord. It goes on the order and the bill, but never into stock."
         >
           {(fieldId) => (
