@@ -583,6 +583,90 @@ checked** — met in the reader's own words rather than in a release note.
 
 ---
 
+## ✅ WAVE D — SHIPPED AND DRIVEN ON STAGING, 2026-09-11
+
+**T-142**, commit `2784a06` plus ledger `c8850e6`. CI run **34590126810** green on the first run.
+Staging is **`kms-staging-api-00150-7fp` / `web-00138-z6t` / `worker-00132-9wt`**, schema **`V126`**.
+Next free migration number is **`V127`**; next free error code is **`400151`**.
+
+### Driven end to end, on a real part-delivered order
+
+`PO-2026-0045` — the order T-137's verification sent late on purpose — was **part-received, 6 L of
+10 L of Curd**, which moved it to `PARTIALLY_RECEIVED`. Then closed as a person would.
+
+**What the order screen showed before closing:**
+
+- Status **Partially received**, and a **`Sent late`** badge reading *"This went out after 9 Sept
+  2026, the last day Heritage Fresh Dairy could have filled it — they asked for 3 days' notice. A
+  late delivery on this order isn't counted against them."*
+- **"Fixed when the order was sent"** printed beside the lead time — **the stamp made visible to the
+  reader**, which is D-25's no-retroactive rule showing its working rather than being invisible.
+- **No Cancel control at all.** That is `KMS-400150`'s screen half: cancelling a part-delivered order
+  would take a real delivery out of the vendor's record, and could put *"never delivered"* against a
+  supplier who demonstrably did.
+- A **Close this order, part delivered** panel explaining the consequence in the reader's words:
+  *"Heritage Fresh Dairy still owes what never arrived … Closing it says the rest is not coming: what
+  was never delivered goes back on the shopping list, and this order is finished for good."*
+
+**The score, shown and not editable** — D-26's whole ruling in one box:
+
+> **60%** of this order was there in time — 0 of 1 item. This is computed from what actually arrived
+> against what was ordered, and it is the same figure Heritage Fresh Dairy's scorecard reports.
+> **It cannot be changed here.**
+>
+> We sent this order after Heritage Fresh Dairy asked to be given, so it is **already left out of
+> their delivery record whatever is chosen below.**
+
+That second paragraph is T-137 and T-142 meeting correctly **and saying so**, rather than two
+exclusions silently compounding.
+
+**The three outcomes, each with its consequence written underneath**, and `Neither — score it as it
+stands` selected by default. **Choosing a named outcome makes the Why field required** — verified by
+submitting it empty and watching the order stay `PARTIALLY_RECEIVED`. That is D-26's *"anything other
+than 'as computed' requires a sentence"*, enforced rather than asked for politely.
+
+**After closing:** status **Closed**, a **Vendor let us down** badge, the sentence shown, and
+Receive, Close and Cancel all gone. On the API: `closeOutcome = VENDOR_LET_US_DOWN`, the note stored,
+`closedAt` set, `deliveryScore = {percent: 60, itemsScored: 1, itemsOnTime: 0}`.
+
+**On the scorecard:** `ordersPlaced 3 · ordersJudged 2 · ordersSentLate 1`, and `openOrders` fell
+from 2 to 1. *The vendor let us down* changed no figure, **which is what its builder said it would
+do** — the missing quantity is already in the percentage; what the outcome adds is the record.
+
+### ⚠ One thing I could NOT distinguish on staging, said plainly rather than ticked
+
+**D-26's "the remainder returns to the shopping list when the order is closed" was not verified by
+driving.** After closing, `GET /api/v1/shopping-list` returns **zero lines** — and that is
+**consistent with the feature working and equally consistent with it not working**, because staging's
+Curd has neither a reorder shortfall nor planned demand in the window, so it is absent either way.
+Receiving 6 L into stock made that more true, not less.
+
+**This is exactly the trap T-142's own first negative control fell into** — it came back green
+*because nothing in the fixture wanted rice anyway*, so *"not on the shopping list"* was true for an
+unrelated reason. **The builder caught it, added a fixture with an independent demand, and got the
+correct failure.** So the behaviour **is** covered, by `PurchaseOrderClosingIT` and the rewritten
+`ReceivingIT` — but it is covered by test, not by eye, and this block says so rather than implying
+otherwise. **To see it by hand, give Curd a reorder level above its stock, or plan a meal that calls
+for it, then close a part-delivered order against it.**
+
+### A fifth sighting of the native-validation-bubble class, shipped today
+
+The new `Why` field (`name="closeNote"`) is refused by the **browser's native bubble** —
+*"Please fill out this field."* — with no product error styling. **The rule is right and must not
+change**; only how it is reported. Handed to T-058, which is working that class in Wave E. **Tally:
+the equipment reinstatement form, the three recorded as "the equipment screen's existing convention",
+T-080's volunteer-removal form, and this. Five sightings across three screens, two shipped within
+twenty-four hours** — which is why it wants a shared mechanism rather than a fifth patch.
+
+### Test data left on staging, labelled
+
+**`PO-2026-0045` is now CLOSED** — Heritage Fresh Dairy, 10 L Curd ordered, 6 L received, sent late
+on purpose, closed as *The vendor let us down* with the note *"Rang three times over two days and got
+no answer. Buying the rest from Mahalakshmi Stores."* **It is the only worked example of the whole
+D-25/D-26 chain on staging and should be left alone until Rajeev has seen it.**
+
+---
+
 ## ▶ THE RUN PLAN — ordered by Rajeev 2026-09-10, for the session that picks this up
 
 **His instruction, in his words:** *"Assign these tasks to Subagents and run them parallelly whenever
