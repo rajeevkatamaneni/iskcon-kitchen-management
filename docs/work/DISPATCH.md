@@ -667,6 +667,261 @@ D-25/D-26 chain on staging and should be left alone until Rajeev has seen it.**
 
 ---
 
+## ✅ WAVE E — SHIPPED AND DRIVEN ON STAGING, 2026-09-11
+
+**T-058**, commit `13987d2` plus ledger `a734cf8`. CI run **34594324932** green on the first run.
+Staging is **`kms-staging-api-00151-g5l` / `web-00139-rfq` / `worker-00133-hkm`**. **No migration** —
+and that was checked positively from the API's own startup log rather than inferred from a green
+deploy: *"Current version of schema "public": 126 — Schema "public" is up to date. No migration
+necessary."* Schema stays at **`V126`**; next free is `V127`.
+
+### Twelve items: four built, five dropped, three returned
+
+**Rajeev's rule for this wave was that dropping an item with a good sentence is a finding rather than
+a failure**, and five were dropped that way: the dead design-system-guard exemption (left
+deliberately, now with a comment saying so), `terraform fmt` (clean on both files), the
+`terraform.tfvars.example` drift (**already repaired by T-115** — all 19 variables match), and the CI
+heap item (**stale**: `build.gradle.kts` already sets 2g, with forty lines of measurement describing
+exactly the failure the ledger was worried about).
+
+### Two items were worse or larger than the ledger recorded, and both were found by measuring
+
+**The shopping-list PATCH was worse than recorded, and the ledger's own reassurance was the error.**
+The note said it was harmless *because the column is `NOT NULL`, so an omission fails loudly.* **It
+did not fail at all.** `included` was a primitive `boolean`, so Jackson defaulted an omitted field to
+`false` and the upsert wrote it — the control got **204, not a refusal**. Now `@NotNull Boolean`,
+which changes no request that succeeds today. Same shape as the `suggested_vendor_id` defect that
+opened this whole batch.
+
+**The removal form's overflow had a cause nobody would have guessed from the symptom.** The form
+rendered inside the Actions `<td>`, and **every column carries `whitespace-nowrap` from
+`components/ds/table.ts`**, so the cell demanded whatever width its widest control wanted and pushed
+the table past the page — leaving the **mandatory** internal-note field 185 px beyond a 1470 px
+viewport. It is now **a row of its own spanning all four columns**, under the volunteer it names.
+
+**Verified on the deployed build, measured rather than eyeballed:**
+
+```
+before   table 1342-in-1124, scrollable · select right 1571 · note right 1655   (viewport 1470)
+after    table 1124-in-1124, NOT scrollable · select 333→973 · note 333→973 · td colspan=4
+```
+
+### The item that grew out of being a cleanup — and it is the one to read
+
+**The native-validation-bubble item is not five instances. It is 83, across 39 files.** It is how
+**every** form in the application reports a blank required field.
+
+**And the convention the brief told the builder to match does not exist.** `fieldErrors` appears in
+four files and in all four it carries **server** errors from `ApiError.byField()`. **Nothing in the
+app sets a field error for a blank box before submitting.** So converting only the ~35 inside one
+contract would have left the product with **two conventions and no rule** — which is why the builder
+stopped, and it was right to.
+
+**It needs two decisions from Rajeev before it can be a task:**
+
+1. **The sentence a blank required field should show.**
+2. **Whether `required` stays on the element.** It should, for screen readers — **but then the
+   browser refuses the submit before our code runs, so every form needs `noValidate`.** That is the
+   part that makes this a product change rather than tidying.
+
+**Recommendation: one shared helper beside `components/Field.tsx`, adopted across all 39 files as its
+own task.** A fix that leaves the sixth instance just as easy to write has not fixed it.
+
+**Three more went back to him:** `DESIGN_SYSTEM.md:119` still names the deleted sattvic feature but
+the document is **locked under Commandment 8**; the geocoding port's richer method; and whether
+`var.api_base_url` should become required now the example is correct.
+
+### One item the builder correctly refused, and the coordinator did instead
+
+`.claude/agents/release.md:79` said *"Four jobs"* and listed three. **The builder declined to edit
+agent configuration on an agent's instruction** — right instinct — and the coordinator made the
+one-word change.
+
+---
+
+## ✅ WAVE F — THE REST, WORKED AS A WAVE, 2026-09-11
+
+**Twelve items from `docs/work/THE-REST.md`, plus one new task the wave produced (T-144).** Merged
+tree: backend **2301 / 2294 passed / 0 failed / 7 skipped, 4m 11s**; frontend `tsc` silent,
+`eslint --max-warnings=0` silent, **123 files / 1459 tests**, `next build` clean.
+
+**Rajeev's framing held all the way through** — *"an item that turns out not to be a real problem is
+dropped with a sentence saying why"* — and **five of the twelve were closed without a line of
+production code.** That is the wave working, not the wave failing.
+
+### ⚠ A coordinator error worth recording before anything else: a green run that ran nothing
+
+The first merged-tree backend run returned **`BUILD SUCCESSFUL in 3s`** with `> Task :test
+UP-TO-DATE`. **It executed no tests at all** — a builder had already run the suite and nothing had
+changed since, so Gradle skipped it. Taken at face value it would have been reported as a green
+merged tree.
+
+**This is the exact failure `docs/work/README.md` already warns about for negative controls** — *"an
+incremental build cannot tell a control that failed to apply from a control that applied and
+passed"* — arriving in the one place the file had not thought to apply it: **the coordinator's own
+verification step.** The re-run with `--rerun-tasks` was then **killed by the OS for memory**, and
+the run that finally counted cleared `build/test-results` instead, which forces execution without
+recompiling the world. **Check that a verification run actually ran**, not merely that it exited 0.
+
+### Five items closed as findings, with the evidence
+
+- **T-070 is moot.** It named `RecurringDonationService` and a recurring-donation history endpoint;
+  **all of it was deleted on 2026-09-10 by T-111** when recurring giving went to Phase 2, two days
+  after the row was filed. There is no donor-facing list of a donor's own charges left in the product
+  at all, and the one surviving donor-history surface is staff-facing and **already correct** (T-110:
+  struck gifts out of the default list, struck through with a `Voided` badge on the toggle).
+- **T-071 and T-072 were already built on 2026-09-08**, and both fixes were **proved still
+  load-bearing** rather than assumed.
+- **T-123: dropped, measured.** The whole temple has **25 donations ever**, the biggest donor has
+  **2**, and the endpoint returns **620 bytes**. ~310 bytes a row means a donor needs **~3,000 gifts
+  to reach a megabyte.** Paging it would be ceremony.
+- **T-065 does not reproduce.** The closed contexts are **softly reachable, not held**: the same
+  subset under `-XX:SoftRefLRUPolicyMSPerMB=0` goes from **12 contexts / 176 MB to 2 / 70 MB**, and a
+  route search from Spring's cache, Boot's shutdown hook, Hibernate, Quartz, Micrometer, logback and
+  every live thread finds no strong route — **while carrying a control route it must find, and does,
+  in 9 objects.** It also explains the original sighting: **`jcmd GC.class_histogram` compacts but
+  does not clear soft references**, so whoever counted 81 live contexts was reading an artefact of
+  their own tool. *"There is nothing to fix; the cure is fewer contexts."*
+
+### T-064: the premise holds and the stated mechanism is wrong
+
+The suite builds **119 contexts, not 106** — two independent counters agree. **But `@Import` is not
+what splits the cache.** Spring Boot detects each test class's nested `@TestConfiguration` itself and
+puts it into `MergedContextConfiguration.getClasses()`, which is read before the import is
+considered. Measured: removing the `@Import` from the key takes the suite **118 → 109**; removing the
+nested classes as well takes it to **12**.
+
+**So the repair the ledger describes — re-pointing 99 `@Import` lines at one shared class — would
+have collapsed almost nothing while looking exactly like a fix on a green suite.** The collapse was
+then done *for real* on `staff/` — **9 contexts → 1**, green — and reverted, tree clean.
+
+**It was deliberately not done for the other 90, and the reason is right:** `InMemoryTenantSecretStore`
+and `PaymentGatewayResolver` hold mutable state for a context's life, **JUnit's class order is not
+fixed**, so a cross-class effect would surface **intermittently** — and one green run would not be
+evidence. **In a wave where every other task is verified against this suite, that trade is clearly
+wrong.** It wants its own wave and three consecutive full runs. **Queued, not attempted.**
+
+**And a number for whoever schedules it:** the suite's live set now reaches **1187 MB** at the end of
+a full run against the 2 GB ceiling, where `build.gradle.kts`'s comment records 886 MB. **That is an
+argument for 119 contexts → 12, not for raising the ceiling.**
+
+**Shipped from it:** an opt-in census (`./gradlew test -PcontextCensus`), inert by default, and ~40
+lines of corrected commentary in `build.gradle.kts`.
+
+**Micrometer, measured and dropped.** `Metrics.globalRegistry` genuinely accumulates — 119 closed
+registries by the end of a run — and one line fixes it. **A/B twice each: 167 MB → 166 MB, registries
+12 → 0.** About **85 KB a registry, under 1% of the live set.** Real, unbounded in principle,
+immaterial here. **Not shipped, because a line whose effect nobody can later justify from its
+measurement is how a test-only setting ends up copied into production config.**
+
+### The live defect the wave found, and it was ours from that morning
+
+**`GivingPageController.spendShares` — the donor-facing "where last month's money went" — summed
+purchase-order lines with no status filter at all.** A draft nobody sent and an order that was
+cancelled both counted as money spent. On staging, **12 of the 22 orders in that window were DRAFT or
+CANCELLED**.
+
+**It had been dormant because those lines carried no price — and T-134 ended that the same morning.**
+`createPo` now fills a blank expected price from `vendor_supplies.last_price`, so drafts began
+carrying prices and the dormant defect went live on a donor-facing page within hours. **A change in
+one package woke a bug in another that neither author could see.**
+
+**Fixed to `NOT IN ('DRAFT', 'CANCELLED')`.** The coordinator overruled the builder's caution on
+DRAFT, on the record and reversible in one line: **the page's own sentence is "where last month's
+money went", and an order nobody has sent is money that has not gone anywhere.** If committed spend
+is wanted, that is a different sentence on the page, not a different `WHERE`.
+
+**And the second finding is better than the first.** `GivingPageIT`'s `purchaseOrder(...)` helper
+inserted no status, so every fixture order took V26's default — **`DRAFT`**. Both existing
+spend-share tests were asserting their percentages **against orders nobody had sent, and passing,
+because the production query counted drafts too.** **The fixture was wrong in exactly the way the
+query was, so the two agreed and nothing ever went red.** That is now written into
+`docs/work/README.md` as its own lesson.
+
+**The sweep it triggered found no second instance:** every other aggregate over `purchase_orders`
+carries an explicit predicate, and `VendorPerformanceService:241` holds the identical clause — *"po.status
+NOT IN ('DRAFT', 'CANCELLED')"* — named and commented **one package away**. `spendShares` simply
+never asked.
+
+### T-097: the row under-stated it by an order of magnitude
+
+Not *"400 identical queries"* but **fourteen statements per recipient** — `send()` deliberately holds
+no transaction across its loop (T-094), so every `templeName()` borrowed its own pooled connection
+and paid `TenantAwareDataSource`'s eight `set_config` plus five `RESET` on top of the query.
+
+**Before → after, same fixture, 40 recipients: 1,833 statements → 1,287; `templeName` 560 → 14.**
+At 400 recipients, ~5,600 → 14.
+
+**No memo, and that was the right call**: the name is hoisted into a local passed down three call
+sites, so **it cannot outlive the send that computed it and the tenant-isolation question does not
+arise rather than being argued away.**
+
+### T-063: the brief named the wrong package and the builder said so
+
+There is no rounding promise in `payment/` — **nothing there rounds.** It is in `geo/`, which the
+original row said and the coordinator paraphrased wrongly. Two identical private `sixDecimals()`
+methods became a compact constructor on `GeocodingProvider.Coordinates`, and **the control tests the
+acceptance criterion rather than the code**: a deliberately naive provider gets `12.285518` on the
+fixed tree and `12.285518000000001` on the reverted one, **while all six of T-059's original tests
+pass on both** — *"the old arrangement was never broken, it was unenforceable."*
+
+### T-108 and T-144: one bug, two languages, and the second half had an outside audience
+
+**T-108** put the count into the label — the renderer *"had the number in its hand and threw it away
+before choosing the word"* — covering **44 call sites across 9 screens**. **Two screens built the
+phrase themselves and would still have said "1 pieces"**, including one T-107 had "fixed" locally;
+that shim is gone and its 8 sites are back on the shared formatter. A `design-system.test.ts` rule
+now fails the build if anyone hand-builds it again.
+
+**T-144 is the Java half, and it exists because T-108 named it rather than reaching for it.** One
+line in `ingredient/Quantities.say()` covers **four** documents, not the three the brief claimed —
+`DocumentGenerationService` also renders the **purchase-order sheet**, so *the sheet a vendor is
+handed* had the bug. Its guard is inverted rather than a regex — enumerating the call sites of the
+plural `label()` and holding the list fixed — and the measurement that makes it credible: twelve
+unrelated enums expose `label()`, so a tree-wide scan hits ~22 innocent lines, **but narrowed to
+files mentioning `Unit` it hits exactly four, zero false positives.**
+
+**The coordinator's brief named `document/Quantities.java`, which does not exist.** The builder found
+it at `ingredient/Quantities.java`, judged every in-contract alternative worse, proceeded and asked —
+in that order — and the grant was confirmed after the fact. **The proof records the question as it
+was asked, with the ruling appended under its own heading**, because editing it to match the outcome
+would destroy the evidence that the stop-and-ask happened.
+
+**Still open from it:** `recipe/RecipeScaler.java` ships `unit.label()` **as a wire field** and the
+recipe screen prints it beside a number, so **the recipe scale preview still says "1 pieces"** —
+invisible to T-108's guard (it never calls `unitLabel`) and to T-108's fix (the word comes from
+Java). Changing it touches an API response and its screen together. **Its own task; no number taken.**
+Same for `"₹80 / pieces"` in `DocumentGenerationService:224`.
+
+### T-143 and T-077
+
+**T-143** needed no client change and the builder **confirmed that rather than assuming it** —
+`ServiceScheduleInput.neverNeedsServicing` already existed and the registration screen was already
+posting `false`. Built identically to T-120, same label and hint verbatim. **The way-in test drives
+the real registration screen and ticks the box with nothing else typed** — the case that would have
+been silently dropped, and the lesson T-090 cost.
+
+**T-077 could not be reproduced, and it was fixed anyway with the reason stated.** The section renders
+below the page's `if (!settings)` gate and all six settings requests resolve in one `Promise.all`, so
+the prop cannot change underneath it — **no user has hit this and none can today.** It was moved into
+`components/LanguageSection.tsx` so the control can actually have its prop changed; inside the page
+**the test would have proved nothing.** `AppearanceSection` forty lines above has the identical
+`useState(prop)` shape — **named, not touched.**
+
+### T-117
+
+No mismatch today, so **neither infra file was touched — the whole task is the check.** It fails
+correctly in both directions and on the case that actually happened (`api_min_instances` renamed to
+the dead `min_instances`, which trips both ways at once).
+
+**And it proved its parser is not a grep rather than claiming it:** `variable "…{` planted inside a
+comment and inside a heredoc at column 0 — **`grep -c` counted 23, the check counted the one variable
+that exists.** It was also run under Ubuntu's `mawk` in a container, because macOS ships a different
+awk and **a difference that only appears on the runner is exactly the silent failure this task exists
+to stop.**
+
+---
+
 ## ▶ THE RUN PLAN — ordered by Rajeev 2026-09-10, for the session that picks this up
 
 **His instruction, in his words:** *"Assign these tasks to Subagents and run them parallelly whenever

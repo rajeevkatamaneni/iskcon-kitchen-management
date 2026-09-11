@@ -462,6 +462,45 @@ The wider point, and the reason this sits beside lesson 4 rather than inside one
 wave adds a new kind of shared resource, ask what serialises it.** Files have contracts. The build
 has a lock. The schema had neither.
 
+## A fixture that shares the production bug can never find it
+
+Added 2026-09-11, from Wave F's T-070, and it is the sharpest instance this project has of *why a
+green suite proves less than it looks like it proves*.
+
+`GivingPageController.spendShares` — the donor-facing **"where last month's money went"** — summed
+purchase-order lines with **no status filter at all**, so a draft nobody sent and an order that was
+cancelled both counted as money spent.
+
+**The reason no test caught it is the lesson.** `GivingPageIT`'s `purchaseOrder(...)` helper inserted
+no status, so every fixture order took V26's column default — **`DRAFT`**. Both existing spend-share
+tests were therefore asserting their percentages **against orders nobody had sent**, and passing,
+*because the production query counted drafts too.* **The fixture was wrong in exactly the way the
+query was wrong, so the two agreed and nothing ever went red.**
+
+No amount of running that suite would have found it. Not a type-check, not a grep, not a review of
+either file alone — **only reading the fixture and the query against each other**, which is a thing
+nobody does unless they are already suspicious.
+
+**So, two habits:**
+
+- **When a test asserts an aggregate, check what the fixture's unstated columns default to.** A
+  column default is a silent third author of every test that omits it. Here it was one word in a
+  migration from months earlier.
+- **When you fix a query's filter, look at the fixtures that fed it before assuming they were right.**
+  A fixture built to make the old query pass is evidence about the old query, not about the data.
+
+*(The same pass confirmed there is no second instance: every other aggregate over `purchase_orders`
+carries an explicit predicate, and `VendorPerformanceService:241` holds the identical clause —
+`private static final String LIVE_ORDER = "po.status NOT IN ('DRAFT', 'CANCELLED')"` — named and
+commented **one package away**. `spendShares` simply never asked.)*
+
+**And the reason it mattered on the day rather than eventually:** the defect had been dormant because
+those lines carried no price. T-134 shipped that morning and made `createPo` fill a blank expected
+price from `vendor_supplies.last_price`, so drafts began carrying prices and the dormant defect went
+live on a donor-facing page within hours. **A change in one package woke a bug in another that
+neither author could see** — which is the same shape as every other entry in this file: *whenever a
+claim crosses a boundary, the evidence has to come from the far side of it.*
+
 ## What this is not
 
 It is **not a fourth backlog**. The project already has three lists and they each mean something
