@@ -20,6 +20,17 @@ jobs:
       - name: No source file is ignored
         run: ./tools/check-ignored-sources.sh
 
+      # Seconds too, and here for the same reason: it guards a file that no other tool in this
+      # repository looks at. `terraform fmt` and `terraform validate` both refuse the `.example`
+      # extension, and the real terraform.tfvars is gitignored, so terraform.tfvars.example has
+      # never been read by anything that could disagree with it. It drifted accordingly — by
+      # September 2026 it named `min_instances`, deleted long before, and carried none of the
+      # smtp_*/email_* variables the application had grown. Somebody standing up a new
+      # environment would have had terraform fail on the first step and assumed it was their
+      # mistake.
+      - name: terraform.tfvars.example matches variables.tf
+        run: ./tools/check-tfvars-example.sh
+
   backend:
     name: Backend (Spring Boot)
     runs-on: ubuntu-latest
