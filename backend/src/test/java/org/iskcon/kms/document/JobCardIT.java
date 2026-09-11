@@ -185,6 +185,79 @@ class JobCardIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("one of a counted thing on the printed card reads \"1 piece\", not \"1 pieces\"")
+	void oneOfACountedThingIsSingularOnThePrintedCard() throws Exception {
+		// T-144. T-108 fixed this on the screens and could not reach the PDFs, so for one wave the
+		// stock page said "1 piece" about a stool and the job card in the cook's hand said
+		// "1 pieces" about the same stool on the same day. This is the printed half, asserted on the
+		// real card rather than on the formatter — the formatter's own table is in QuantitiesTest.
+		//
+		// Two counted ingredients, because the plural must go on being right: fixing a plural by
+		// making everything singular is the same defect facing the other way.
+		countedIngredients();
+
+		// The recipe's base yield is 100, so a plan for 100 scales 1:1 and the sheet prints the
+		// figures as they are written on the recipe. That matters here: a fixture that never lands
+		// on exactly one would pass whether this is fixed or not, because "2 pieces" was always
+		// right.
+		plan("Lunch", 100, 100, 0, 0);
+
+		String html = print(null);
+
+		assertThat(html)
+				// The load-bearing one. "1 piece" on its own is a substring of "1 pieces" and would
+				// pass with the defect in place, which is why the negative is here beside it.
+				.contains("1 piece")
+				.doesNotContain("1 pieces")
+				// Unchanged by this work, and asserted so that it stays unchanged.
+				.contains("3 pieces");
+	}
+
+	@Test
+	@DisplayName("a counted line that scales down to one is singular too, because the card rounds first")
+	void aCountedLineThatRoundsToOneIsSingular() throws Exception {
+		countedIngredients();
+
+		// 70 of a 100-serving recipe: the single banana becomes 0.7 of one and the three become 2.1.
+		// A cook cannot fetch 0.7 of a banana, so the card rounds a count to a whole thing before it
+		// prints it — and the word has to be chosen from the figure that is actually printed, not
+		// from the one that was scaled. This is the non-integer case, and it is the reason the word
+		// is picked inside Quantities.say() rather than by any of its callers.
+		plan("Lunch", 70, 70, 0, 0);
+
+		String html = print(null);
+
+		assertThat(html)
+				.contains("1 piece")
+				.doesNotContain("1 pieces")
+				.contains("2 pieces");
+	}
+
+	/**
+	 * A banana and three cardamom pods on the Khichdi — one counted line of exactly one, one of more
+	 * than one.
+	 *
+	 * <p>Seeded inside the tests that want them rather than in {@code @BeforeEach}, so that the two
+	 * dozen assertions about the card's layout above go on reading the fixture they were written
+	 * against. {@code tearDown} already clears {@code recipe_ingredients} and {@code ingredients}.
+	 */
+	private void countedIngredients() {
+		UUID banana = admin.queryForObject("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, 'Banana', 'Produce', 'PIECES') RETURNING id
+				""", UUID.class, tenant);
+		UUID cardamom = admin.queryForObject("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, 'Cardamom pod', 'Spices', 'PIECES') RETURNING id
+				""", UUID.class, tenant);
+
+		admin.update("""
+				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
+				VALUES (?, ?, ?, 1, 'PIECES', 2), (?, ?, ?, 3, 'PIECES', 3)
+				""", tenant, khichdi, banana, tenant, khichdi, cardamom);
+	}
+
+	@Test
 	@DisplayName("the corner says which meal, on two lines, and the card number is not up there at all")
 	void theHeaderLeadsWithTheMealAndNotTheCardNumber() throws Exception {
 		plan("Dinner", 133, 133, 0, 0);

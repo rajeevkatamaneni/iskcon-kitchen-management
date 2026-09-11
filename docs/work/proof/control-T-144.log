@@ -1,0 +1,78 @@
+snapshot taken in /var/folders/7t/yb8772ln3r7fyhq6lypp7vqh0000gn/T/tmp.LRsnkDlXbs
+anchor OK: [return format.format(value) + " " + unit.label(value);] x1 in Quantities.java
+anchor OK: [PIECES("pieces", "piece", Family.COUNT, 1);] x1 in Unit.java
+anchor OK: [public String label(BigDecimal count) {] x1 in Unit.java
+anchor OK: [class OneOfAThing {] x1 in QuantitiesTest.java
+anchor OK: [void oneOfACountedThingIsSingularOnThePrintedCard()] x1 in JobCardIT.java
+anchor OK: [void aCountedLineThatRoundsToOneIsSingular()] x1 in JobCardIT.java
+anchor OK: [void plainLabelCallSitesAreTheKnownOnes()] x1 in UnitLabelAgreementTest.java
+
+### arm A — Quantities.say() throws the number away again
+ .../main/java/org/iskcon/kms/ingredient/Quantities.java   | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+=== A1 — the formatter's vector table and the guard — expecting RED ===
+> Task :test FAILED
+QuantitiesTest > a count agreeing with its number — "1 piece", not "1 pieces" > a quantity that becomes one by rounding is said in the singular too FAILED
+    expected: "1 piece"
+     but was: "1 pieces"
+QuantitiesTest > a count agreeing with its number — "1 piece", not "1 pieces" > taking one back out again reads as one, not as minus one pieces FAILED
+    expected: "-1 piece"
+     but was: "-1 pieces"
+QuantitiesTest > a count agreeing with its number — "1 piece", not "1 pieces" > one of a counted thing is said in the singular, in both forms FAILED
+    expected: "1 piece"
+     but was: "1 pieces"
+QuantitiesTest > a count agreeing with its number — "1 piece", not "1 pieces" > a quantity of exactly one arriving from the database is still one FAILED
+    expected: "1 piece"
+     but was: "1 pieces"
+UnitLabelAgreementTest > nobody reads the plural label in a new place without it being looked at FAILED
+=== A1 — the formatter's vector table and the guard was red, as it must be ===
+
+=== A2 — the printed job card, one banana and 0.7 of one — expecting RED ===
+JobCardIT > a counted line that scales down to one is singular too, because the card rounds first FAILED
+JobCardIT > one of a counted thing on the printed card reads "1 piece", not "1 pieces" FAILED
+> Task :test FAILED
+  Failed:   2
+BUILD FAILED in 13s
+=== A2 — the printed job card, one banana and 0.7 of one was red, as it must be ===
+
+### arm B — PIECES declares no singular
+ .../main/java/org/iskcon/kms/ingredient/Unit.java  | 74 +++++++++++++++++++++-
+ 1 file changed, 73 insertions(+), 1 deletion(-)
+
+=== B — the formatter's vector table — expecting RED ===
+> Task :test FAILED
+QuantitiesTest > a count agreeing with its number — "1 piece", not "1 pieces" > a quantity that becomes one by rounding is said in the singular too FAILED
+    expected: "1 piece"
+     but was: "1 pieces"
+QuantitiesTest > a count agreeing with its number — "1 piece", not "1 pieces" > taking one back out again reads as one, not as minus one pieces FAILED
+    expected: "-1 piece"
+     but was: "-1 pieces"
+QuantitiesTest > a count agreeing with its number — "1 piece", not "1 pieces" > one of a counted thing is said in the singular, in both forms FAILED
+    expected: "1 piece"
+     but was: "1 pieces"
+QuantitiesTest > a count agreeing with its number — "1 piece", not "1 pieces" > a quantity of exactly one arriving from the database is still one FAILED
+    expected: "1 piece"
+     but was: "1 pieces"
+  Failed:   4
+=== B — the formatter's vector table was red, as it must be ===
+
+### arm C — a new unguarded reader of the plural label
+ .../java/org/iskcon/kms/ingredient/Quantities.java     | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+=== C — the call-site guard — expecting RED ===
+> Task :test FAILED
+UnitLabelAgreementTest > nobody reads the plural label in a new place without it being looked at FAILED
+        "document/DocumentGenerationService.java|price = money(l.expectedPrice()) + " / " + Unit.valueOf(l.unit()).label();",
+      ["document/DocumentGenerationService.java|price = money(l.expectedPrice()) + " / " + Unit.valueOf(l.unit()).label();",
+    but the following elements were unexpected:
+  Failed:   1
+BUILD FAILED in 5s
+=== C — the call-site guard was red, as it must be ===
+
+anchor OK: [return format.format(value) + " " + unit.label(value);] x1 in Quantities.java
+anchor OK: [PIECES("pieces", "piece", Family.COUNT, 1);] x1 in Unit.java
+
+ALL ARMS WERE RED. The control is evidence.
+--- restored from the snapshot ---

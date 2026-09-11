@@ -248,6 +248,92 @@ class QuantitiesTest {
 		}
 	}
 
+	/**
+	 * The "1 pieces" table (T-144), mirroring {@code __tests__/quantities.test.ts} line for line.
+	 *
+	 * <p>T-108 fixed this on the screens. It could not reach here, so for one wave the stock page
+	 * said "1 piece" and the job card a cook was holding said "1 pieces" — two answers to one
+	 * question, about the same stool, on the same day. Every assertion below has a twin in the
+	 * TypeScript table with the same input and the same expected string; adding to one and not the
+	 * other is how these two files drifted over zero in September, silently, with both suites green.
+	 */
+	@Nested
+	@DisplayName("a count agreeing with its number — \"1 piece\", not \"1 pieces\"")
+	class OneOfAThing {
+
+		@Test
+		@DisplayName("one of a counted thing is said in the singular, in both forms")
+		void oneIsSingular() {
+			// What Rajeev saw: one plastic stool on a purchase order, printed "1 pieces".
+			assertThat(Quantities.exact(n("1"), Unit.PIECES)).isEqualTo("1 piece");
+			assertThat(Quantities.cooks(n("1"), Unit.PIECES)).isEqualTo("1 piece");
+		}
+
+		@Test
+		@DisplayName("a quantity that becomes one by rounding is said in the singular too")
+		void roundingDownToOneIsSingular() {
+			// The word is chosen from the figure as SHOWN, not as stored — which is the whole reason
+			// say() picks it and the caller does not. The cook's form makes 1.2 stools a whole stool
+			// first, so the sheet must read "1 piece" and not "1 pieces".
+			assertThat(Quantities.cooks(n("1.2"), Unit.PIECES)).isEqualTo("1 piece");
+
+			// And the ledger form does not round, so the same input keeps its plural there. Both are
+			// right; they are answering different questions.
+			assertThat(Quantities.exact(n("1.2"), Unit.PIECES)).isEqualTo("1.2 pieces");
+		}
+
+		@Test
+		@DisplayName("a quantity of exactly one arriving from the database is still one")
+		void scaleDoesNotDefeatIt() {
+			// JDBC hands back a quantity scaled to its column, so a genuine one stool is "1.000".
+			// BigDecimal.equals compares the scale as well as the value and would answer false here,
+			// printing "1 pieces" for every row that had ever been near a database. compareTo does not.
+			assertThat(Quantities.exact(n("1.000"), Unit.PIECES)).isEqualTo("1 piece");
+			assertThat(Quantities.cooks(n("1.00"), Unit.PIECES)).isEqualTo("1 piece");
+		}
+
+		@Test
+		@DisplayName("taking one back out again reads as one, not as minus one pieces")
+		void reversalOfOneIsSingular() {
+			assertThat(Quantities.exact(n("-1"), Unit.PIECES)).isEqualTo("-1 piece");
+		}
+
+		@Test
+		@DisplayName("every other number of them stays plural, including none and a fraction")
+		void everythingElseIsPlural() {
+			assertThat(Quantities.exact(n("0"), Unit.PIECES)).isEqualTo("0 pieces");
+			assertThat(Quantities.exact(n("2"), Unit.PIECES)).isEqualTo("2 pieces");
+			assertThat(Quantities.exact(n("1.5"), Unit.PIECES)).isEqualTo("1.5 pieces");
+			assertThat(Quantities.cooks(n("3.4"), Unit.PIECES)).isEqualTo("3 pieces");
+		}
+
+		@Test
+		@DisplayName("a mass or a volume is an abbreviation and never takes an s")
+		void abbreviationsDoNotPluralise() {
+			// "1 Kgs" is not English, in India or anywhere else. This is the half of the rule that is
+			// easy to get wrong in the other direction, by pluralising everything on a count of one.
+			assertThat(Quantities.exact(n("1"), Unit.KG)).isEqualTo("1 Kg");
+			assertThat(Quantities.exact(n("1"), Unit.GM)).isEqualTo("1 gm");
+			assertThat(Quantities.exact(n("1"), Unit.L)).isEqualTo("1 L");
+			assertThat(Quantities.exact(n("1"), Unit.ML)).isEqualTo("1 ml");
+
+			// And the same on the two figures that land on exactly one by being promoted into it,
+			// which is the path an abbreviation actually reaches a count of one by.
+			assertThat(Quantities.exact(n("1000"), Unit.GM)).isEqualTo("1 Kg");
+			assertThat(Quantities.exact(n("1000"), Unit.ML)).isEqualTo("1 L");
+		}
+
+		@Test
+		@DisplayName("naming the unit with no number beside it is still plural, deliberately")
+		void theLabelAloneIsUntouched() {
+			// A column heading, a dropdown option, the "/ Kg" after a price. T-108 left 22 such call
+			// sites alone on the screens for this reason and this side must match: "pieces" is the
+			// name of the unit, and only a phrase with a figure in it has anything to agree with.
+			assertThat(Unit.PIECES.label()).isEqualTo("pieces");
+			assertThat(Unit.PIECES.label(null)).isEqualTo("pieces");
+		}
+	}
+
 	@Test
 	@DisplayName("rounding cannot compound, because it happens last")
 	void roundingCannotCompound() {

@@ -204,10 +204,25 @@ public final class Quantities {
 		return value.divide(step, 0, RoundingMode.HALF_UP).multiply(step);
 	}
 
+	/**
+	 * The figure and its word, as one phrase.
+	 *
+	 * <p>{@code value} here is the figure as it will be <em>shown</em> — already rounded by
+	 * {@link #roundAsAPersonWould} where the cook's form asked for it, and already promoted between
+	 * gm and Kg. That is why the word is chosen here and not by the caller: this is the last place
+	 * that holds the number the reader will actually see. A job card asking for 1.2 stools prints
+	 * "1 piece" because the cook's form made it a whole thing before it got here, and a ledger row
+	 * prints "1.2 pieces" because it did not, and both are right.
+	 *
+	 * <p>It goes through {@link Unit#label(BigDecimal)} rather than {@link Unit#label()} because a
+	 * label that has not been shown its number cannot agree with it — the "1 pieces" defect (T-144).
+	 * Reading {@code label()} directly anywhere a quantity is in scope brings it straight back, and
+	 * {@code UnitLabelAgreementTest} fails the build if anyone does.
+	 */
 	private static String say(BigDecimal value, Unit unit, int maxDecimals) {
 		NumberFormat format = NumberFormat.getInstance(INDIA);
 		format.setMaximumFractionDigits(maxDecimals);
 		format.setGroupingUsed(true);
-		return format.format(value) + " " + unit.label();
+		return format.format(value) + " " + unit.label(value);
 	}
 }
