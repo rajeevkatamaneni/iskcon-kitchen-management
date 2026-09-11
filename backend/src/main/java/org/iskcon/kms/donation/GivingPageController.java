@@ -216,6 +216,29 @@ public class GivingPageController {
 	 * things the temple bought that the store room does not stock — so the two can appear side by
 	 * side without reading as duplicates. {@code ingredients.category} is NOT NULL (V10:23), so this
 	 * COALESCE fires only for the LEFT JOIN miss and never merges a real category into the bucket.
+	 *
+	 * <p><strong>A draft and a cancellation are not spend, and this query counted both until
+	 * T-070's sweep.</strong> The sentence on the screen is "where last month's money went". An
+	 * order nobody has sent is money that has not gone anywhere; a cancelled one is money that never
+	 * will. Neither belongs in a figure a devotee reads as a report of what the temple did with
+	 * their gift. If committed-but-undelivered spend is ever wanted here, that is a different
+	 * sentence on the page rather than a different WHERE clause.
+	 *
+	 * <p><strong>The precedent was already written down twice, which is the part worth noticing.</strong>
+	 * {@code PurchaseOrderService}'s order picker spells out the identical habit at length — <em>"DRAFT
+	 * is excluded. A draft has not been sent … CANCELLED is excluded. The order was withdrawn"</em> —
+	 * and {@code VendorPerformanceService} keeps the very clause below under the name
+	 * {@code LIVE_ORDER}, for the same reason. This method simply never asked.
+	 *
+	 * <p><strong>And its own neighbour knew.</strong> {@link #costPerPlate} forty lines above filters
+	 * {@code status <> 'VOIDED'} so a struck bill cannot understate a plate (T-010), while this
+	 * method, in the same file and on the same screen, filtered no status at all. One reader of a
+	 * table knowing about a state and its neighbour not knowing is the whole shape of this defect
+	 * class: nothing is renamed and nothing is removed, so no compiler, test or grep finds it — a row
+	 * that used to mean one thing simply comes to mean another underneath a SUM that still compiles.
+	 * It stayed invisible here only because unpriced lines fell out at the HAVING, and that stopped
+	 * being true on 2026-09-11 when T-134 began filling a blank {@code expected_price} from
+	 * {@code vendor_supplies.last_price}. Drafts have carried prices since.
 	 */
 	private List<Map<String, Object>> spendShares() {
 		List<Map<String, Object>> rows = jdbc.query("""
@@ -224,7 +247,8 @@ public class GivingPageController {
 				FROM purchase_order_lines pol
 				JOIN purchase_orders po ON po.id = pol.po_id
 				LEFT JOIN ingredients i ON i.id = pol.ingredient_id
-				WHERE po.created_at >= CURRENT_DATE - INTERVAL '30 days'
+				WHERE po.status NOT IN ('DRAFT', 'CANCELLED')
+				  AND po.created_at >= CURRENT_DATE - INTERVAL '30 days'
 				GROUP BY COALESCE(i.category, 'Other supplies')
 				HAVING SUM(pol.quantity * COALESCE(pol.expected_price, 0)) > 0
 				ORDER BY spend DESC

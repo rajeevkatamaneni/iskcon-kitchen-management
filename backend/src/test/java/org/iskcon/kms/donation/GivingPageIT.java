@@ -117,6 +117,65 @@ class GivingPageIT extends AbstractIntegrationTest {
 	}
 
 	/**
+	 * A draft and a cancellation are not money that went anywhere (T-070's sweep).
+	 *
+	 * <p>Written as a <em>move</em>, like the two invoice-correction tests below it: the same temple
+	 * is read once with nothing but real orders and again with a priced draft and a priced
+	 * cancellation added, and the figure must not budge. A test that only asserted "two shares come
+	 * back" would have passed against the defect, because the defect returns a perfectly well-formed
+	 * breakdown — it is simply the wrong one.
+	 *
+	 * <p><strong>Both intruders are priced, and both are sized to be impossible to miss.</strong>
+	 * The draft is ₹10,000 of vegetables against ₹4,000 that really arrived, so counting it would
+	 * push Vegetables past Grains and re-order the list; the cancellation is ₹10,000 of a category
+	 * the temple bought nothing else from, so counting it would add a whole third slice that does
+	 * not exist. Three independent things therefore go wrong at once if the clause is removed — the
+	 * number of shares, their order, and every percentage — which is what stops this passing for an
+	 * unrelated reason. Pricing matters: until T-134 began filling a blank {@code expected_price}
+	 * from {@code vendor_supplies.last_price} on 2026-09-11, an unpriced draft fell out at the
+	 * HAVING and the defect was invisible. A fixture with no prices on it would prove nothing.
+	 */
+	@Test
+	@DisplayName("an order nobody sent and one that was cancelled are not money that went anywhere")
+	void draftsAndCancellationsAreNotSpend() throws Exception {
+		UUID vendor = vendor(tenant, "Govind Wholesale", "+919812345678");
+
+		// What the temple really bought: ₹6,000 grains, ₹4,000 vegetables — 60/40.
+		UUID received = purchaseOrder(tenant, vendor, "PO-1");
+		UUID rice = ingredient(tenant, "Rice", "Grains and dal");
+		UUID beans = ingredient(tenant, "Beans", "Vegetables");
+		poLine(tenant, received, rice, "100", "60");
+		poLine(tenant, received, beans, "80", "50");
+
+		page("uid-page-staff")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.spendShares.length()").value(2))
+				.andExpect(jsonPath("$.spendShares[0].label").value("Grains and dal"))
+				.andExpect(jsonPath("$.spendShares[0].percent").value(60))
+				.andExpect(jsonPath("$.spendShares[1].label").value("Vegetables"))
+				.andExpect(jsonPath("$.spendShares[1].percent").value(40));
+
+		// Typed up and never sent: ₹10,000 of vegetables. Counting it would make Vegetables the
+		// largest category on a donor's screen on the strength of an order still being edited.
+		UUID draft = purchaseOrder(tenant, vendor, "PO-2", staff, "DRAFT");
+		poLine(tenant, draft, beans, "200", "50");
+
+		// Sent and then withdrawn: ₹10,000 of a category the temple bought nothing else from.
+		// Counting it would invent a slice out of money that was never paid to anybody.
+		UUID cancelled = purchaseOrder(tenant, vendor, "PO-3", staff, "CANCELLED");
+		poLine(tenant, cancelled, ingredient(tenant, "Jaggery", "Sweeteners"), "50", "200");
+
+		// Unmoved, to the percentage point.
+		page("uid-page-staff")
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.spendShares.length()").value(2))
+				.andExpect(jsonPath("$.spendShares[0].label").value("Grains and dal"))
+				.andExpect(jsonPath("$.spendShares[0].percent").value(60))
+				.andExpect(jsonPath("$.spendShares[1].label").value("Vegetables"))
+				.andExpect(jsonPath("$.spendShares[1].percent").value(40));
+	}
+
+	/**
 	 * The two corrections V103 gave an invoice are corrected differently here, and both tests are
 	 * written as a <em>move</em> — read the figure, correct a bill, read it again — rather than as a
 	 * shape. The query this replaced returned a perfectly well-formed number in both cases; it was
@@ -342,15 +401,29 @@ class GivingPageIT extends AbstractIntegrationTest {
 				""", amount, number);
 	}
 
+	/**
+	 * An order the temple actually placed and took delivery of — which is what every fixture here
+	 * meant all along.
+	 *
+	 * <p><strong>This used to take the column default, which is DRAFT</strong> (V26:26), so both
+	 * spend-share tests were quietly asserting their percentages against orders nobody had sent.
+	 * They passed, because the query counted drafts. That is the defect T-070's sweep found, seen
+	 * from the test side: the fixture was wrong in exactly the way the production query was, so the
+	 * two agreed and nothing went red.
+	 */
 	private UUID purchaseOrder(UUID tenantId, UUID vendor, String number) {
-		return purchaseOrder(tenantId, vendor, number, staff);
+		return purchaseOrder(tenantId, vendor, number, staff, "RECEIVED");
 	}
 
 	private UUID purchaseOrder(UUID tenantId, UUID vendor, String number, UUID by) {
+		return purchaseOrder(tenantId, vendor, number, by, "RECEIVED");
+	}
+
+	private UUID purchaseOrder(UUID tenantId, UUID vendor, String number, UUID by, String status) {
 		return admin.queryForObject("""
-				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, created_by)
-				VALUES (?, ?, ?, ?) RETURNING id
-				""", UUID.class, tenantId, number, vendor, by);
+				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, created_by, status)
+				VALUES (?, ?, ?, ?, ?) RETURNING id
+				""", UUID.class, tenantId, number, vendor, by, status);
 	}
 
 	private UUID ingredient(UUID tenantId, String name, String category) {

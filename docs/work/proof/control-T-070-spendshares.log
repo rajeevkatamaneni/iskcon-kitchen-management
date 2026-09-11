@@ -1,0 +1,24 @@
+ANCHOR: "WHERE po.status NOT IN ('DRAFT', 'CANCELLED')" matches 1 site(s) in GivingPageController.java (expected 1)
+CONTEXT: the bare word DRAFT appears 2 time(s) in the file (SQL + prose)
+STRIPPED: spendShares back to counting every order, whatever became of it
+=== git diff --stat proving the tree changed ===
+ .../iskcon/kms/donation/GivingPageController.java  | 23 ++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+=== GivingPageIT as written, against the stripped tree ===
+GivingPageIT > separate meals do add up; it is the preparations within one that do not PASSED
+GivingPageIT > a temple that has not cooked or bought yet is quoted nothing rather than a made-up number PASSED
+GivingPageIT > an order nobody sent and one that was cancelled are not money that went anywhere FAILED
+    java.lang.AssertionError: JSON path "$.spendShares.length()" expected:<2> but was:<3>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+GivingPageIT > a bill the vendor reduced still counts, at what is left of it rather than at nothing PASSED
+GivingPageIT > the figures a devotee is shown are their own temple's, and never the temple next door's PASSED
+GivingPageIT > a temple that has cooked and bought is quoted its own plates, cost per plate and shares PASSED
+GivingPageIT > a bill struck as never owed stops counting as kitchen spend, and the plate gets cheaper PASSED
+  Total:    7
+  Passed:   6
+  Failed:   1
+BUILD FAILED in 14s
+=== control done; the trap restores now ===
+TRAP: GivingPageController restored from the cp snapshot
+TRAP: byte-for-byte identical to the verified copy

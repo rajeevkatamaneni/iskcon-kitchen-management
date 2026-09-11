@@ -1,0 +1,64 @@
+ANCHOR: '.subtract(v.creditedAmount())' matches 1 site(s) in VendorInvoiceService.java (expected 1)
+STRIPPED A: variance back on the gross amount
+ANCHOR: 'AND voided_at IS NULL' matches 1 site(s) in DonationReconciliationService.java (expected 1)
+STRIPPED B: reconciliation back to selecting struck gifts
+ANCHOR: 'return row.status === "COMPLETED" && !row.voided;' matches 1 site(s) in page.tsx (expected 1)
+ANCHOR: '{r.voided ? <Badge>Voided</Badge> : STATUS_LABEL[r.status] ?? r.status}' matches 1 site(s) in page.tsx (expected 1)
+STRIPPED C: a struck gift now lists as an ordinary COMPLETED one — the T-070 defect, rebuilt
+=== git diff --stat proving the tree changed ===
+ .../java/org/iskcon/kms/donation/DonationReconciliationService.java   | 2 +-
+ .../src/main/java/org/iskcon/kms/invoice/VendorInvoiceService.java    | 2 +-
+ frontend/app/donations/[id]/page.tsx                                  | 4 ++--
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+=== BACKEND: tests as written, against the stripped tree ===
+OneTimeDonationIT > a gift the donor really paid for is completed by the sweep, not written off PASSED
+OneTimeDonationIT > a duplicate captured webhook does not double-record or double-thank PASSED
+OneTimeDonationIT > checkout creates a PENDING record; a captured webhook completes it and thanks the donor PASSED
+OneTimeDonationIT > reconciliation flags a completed donation the provider can't confirm PASSED
+OneTimeDonationIT > every recurring-donation endpoint is gone from the application — each answers 404 PASSED
+OneTimeDonationIT > an order belonging to a gateway the temple no longer uses is expired, not asked about PASSED
+OneTimeDonationIT > a checkout with no webhook stays PENDING — the client can't mark it complete PASSED
+OneTimeDonationIT > a provider that cannot be reached leaves the donation pending rather than expiring it PASSED
+OneTimeDonationIT > abandoned PENDING donations expire PASSED
+OneTimeDonationIT > the gateway is never asked about a struck gift — the wasted call is half the defect FAILED
+    org.mockito.exceptions.verification.NeverWantedButInvoked: 
+OneTimeDonationIT > a struck gift is not reported as a mismatch, however unconfirmable it is FAILED
+    java.lang.AssertionError: a struck gift must never be reported, was [pay_bogus_standing, pay_bogus_struck]
+VendorInvoiceIT > a price mismatch surfaces an informational variance without blocking PASSED
+VendorInvoiceIT > an invoice against a received PO is captured PENDING and joins the payment queue PASSED
+VendorInvoiceIT > the order picker offers one vendor's open orders — never a draft, a cancellation or another vendor's PASSED
+VendorInvoiceIT > a second standing bill under one number still warns, struck ones aside PASSED
+VendorInvoiceIT > a direct invoice without a description is rejected PASSED
+VendorInvoiceIT > a direct (no-PO) invoice is recordable with a description and has no variance PASSED
+VendorInvoiceIT > an order that does not exist at all is still a not-found, not a mismatch PASSED
+VendorInvoiceIT > a partial credit leaves the part of the variance that is still in dispute FAILED
+    java.lang.AssertionError: JSON path "$.variance" expected:<30.0> but was:<50.0>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+VendorInvoiceIT > an overdue PENDING invoice is flagged and filterable PASSED
+VendorInvoiceIT > a volunteer cannot capture invoices PASSED
+VendorInvoiceIT > a repeated invoice number for the same vendor warns softly but still records PASSED
+VendorInvoiceIT > re-entering the number of a bill that was struck does not warn PASSED
+VendorInvoiceIT > the variance is computed from the order actually on the invoice PASSED
+VendorInvoiceIT > an invoice quoting another vendor's purchase order is refused, and nothing is recorded PASSED
+VendorInvoiceIT > a credit note against the bill settles the variance it was raised for FAILED
+    java.lang.AssertionError: JSON path "$.variance" expected:<0.0> but was:<50.0>
+        at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:59)
+        at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:122)
+> Task :test FAILED
+  Total:    26
+  Passed:   22
+  Failed:   4
+BUILD FAILED in 17s
+=== FRONTEND: tests as written, against the stripped tree ===
+   × one donation, its receipt, and what else this donor has given > what else this donor has given > opens on the good gifts alone, and the toggle reveals the rest
+expected document not to contain element, found <td
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  __tests__/donation-receipt.test.tsx > one donation, its receipt, and what else this donor has given > what else this donor has given > opens on the good gifts alone, and the toggle reveals the rest
+expected document not to contain element, found <td
+      Tests  1 failed | 13 passed (14)
+=== controls done; the trap restores now ===
+TRAP: all three files restored from the cp snapshot
+TRAP: VendorInvoiceService identical
+TRAP: DonationReconciliationService identical
+TRAP: donations/[id]/page.tsx identical
