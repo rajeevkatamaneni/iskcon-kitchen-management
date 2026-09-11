@@ -494,6 +494,95 @@ it. **To see the tiles populated again, cancel `PO-2026-0044`.**
 
 ---
 
+## ✅ WAVE C — SHIPPED AND DRIVEN ON STAGING, 2026-09-11
+
+**T-137**, one commit `22b2fd7` plus ledger `ece2bcd`. CI run **34583241000** green on the first run,
+no job re-run. Staging is now **`kms-staging-api-00149-s94` / `web-00137-tzx` /
+`worker-00131-flw`**, schema **`V125`**. Next free migration number is **`V126`**.
+
+### The Quartz trigger was proved from the table, not from a log line
+
+The worker's startup log **does not name individual trigger registrations** — Quartz's clustered
+`LocalDataSourceJobStore` logs the scheduler starting and nothing per job — so there was no line to
+quote for any of the six jobs. Rather than offer `Scheduler ... started.` as if it proved something,
+the release agent queried `qrtz_triggers` through a throwaway psql job on the VPC:
+
+```
+purchase-order-auto-cancel-daily | purchase-order-auto-cancel | WAITING | 0 30 4 ? * * | Asia/Kolkata | 2026-09-12 04:30
+```
+
+**Six triggers, the other five unchanged.** A job that silently failed to register would be absent
+from that table, which is the positive evidence. *A scheduled job that did not register looks exactly
+like a job with nothing to do* — this is how to tell them apart.
+
+### Driven as the Temple Admin, using Rajeev's own worked example
+
+Heritage Fresh Dairy's **Curd carries a 3-day lead time** on staging — his D-25 example, already in
+the data. `PO-2026-0045` was raised against it needing 12 September, so the order-by date was
+**9 September** and sending it on the 11th is past the cutoff.
+
+**The API computed the zone before anything was pressed:**
+`neededBy 2026-09-12 · leadTimeDays 3 · orderBy 2026-09-09 · orderUrgency TOO_LATE`.
+
+**On the screen, before Mark sent**, a `Past the order-by date` badge and this sentence:
+
+> *"This had to be ordered by 9 Sept 2026 to arrive in time. Heritage Fresh Dairy asked for 3 days'
+> notice. Sending it now is a favour we are asking, and a late delivery on it won't count against
+> them."*
+
+**That is D-25's reasoning on a screen, in plain English, naming the vendor and their number** —
+not a generic warning.
+
+**Pressing Mark sent refused**, showing `KMS-400148`'s own words and its code to quote, and offered a
+second, deliberate press — *"Send it anyway"* — restating the consequence beside it. **Overriding
+sent the order**, and afterwards:
+
+- `sentAfterLeadTime = true` and `leadTimeDays = 3` **stamped on the order**, which is the
+  no-retroactive rule made real.
+- **The "vendor never delivered" tick is not offered** on the cancel block.
+- **And it is not merely hidden.** Posting `{"vendorAbandoned": true}` **straight at the endpoint,
+  bypassing the screen entirely**, answers **`KMS-400149`, HTTP 409**. That is the gap the builder
+  named and was sent back to close, and the reason is the project's own, already written three lines
+  above the new code: *"a rule that lives only in a form is not a rule."*
+
+### The scorecard says what it left out, and answers the open question on the screen
+
+Heritage's row reads `ordersPlaced 3 · ordersJudged 2 · ordersSentLate 1`, and the screen carries the
+badge **"1 order we sent late — not counted"** beside the figure, on both the vendor's row and the
+All-vendors row.
+
+**The explainer resolves the question T-137 raised for Rajeev without him having to answer it**, by
+saying it on the screen:
+
+> *"The fill rate still counts it: ordering late excuses lateness, not a half-empty delivery."*
+
+That is the standard D-25 and D-26 both set — **a number whose exclusions are invisible cannot be
+checked** — met in the reader's own words rather than in a release note.
+
+### Two things the builder got right against the brief
+
+- **It refused to take an `AuditAction` constant I had suggested**, establishing that
+  `audit_events.actor_user_id` is `NOT NULL` and `AuditService` reads a verified user, so **there is
+  no system principal and the constant could not have been used**. The sweep writes `AUTO_CANCELLED`
+  on the order's own append-only trail **with no actor**, and asserts that in a test — the absence is
+  how the trail says a machine acted. *My suspicion was right about the reader and wrong about the
+  mechanism.*
+- **`LEAD_BUFFER_DAYS` is deleted.** `leadTimeWarning` hard-coded *"the 2 days a vendor usually
+  gets"* — a second answer to the question the task exists to make single. Three things fell out of
+  reading the real figure: **null now means silence rather than two days**, because the old default
+  **invented a promise on a supplier's behalf**; zero means cash-and-carry and warns about nothing;
+  and the parameter is required-and-nullable so no caller holding the figure can forget to pass it.
+
+### Test data left on staging, labelled
+
+- **`PO-2026-0045`** — Heritage Fresh Dairy, 10 L Curd, needed 12 Sept, **sent late on purpose**,
+  notes *"VERIFY T-137 — coordinator test 2026-09-11, deliberately past the cutoff"*. It is what
+  makes `ordersSentLate: 1` visible on the scorecard. **Leave it until Rajeev has seen the badge.**
+- The auto-cancel sweep **cannot be observed until 04:30 IST on 12 September** unless somebody nudges
+  `next_fire_time`. It was left alone rather than fired against a live tenant's drafts.
+
+---
+
 ## ▶ THE RUN PLAN — ordered by Rajeev 2026-09-10, for the session that picks this up
 
 **His instruction, in his words:** *"Assign these tasks to Subagents and run them parallelly whenever
