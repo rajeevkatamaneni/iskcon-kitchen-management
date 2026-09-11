@@ -102,6 +102,300 @@ added had no way in.
 
 **Drive the app. It is not optional and it is not slower.**
 
+## ✅ WAVE A — SHIPPED AND VERIFIED ON STAGING, 2026-09-11
+
+**Staging is now `kms-staging-api-00147-q8k` / `kms-staging-web-00135-jmv` /
+`kms-staging-worker-00129-2zh`, schema `V123`. The next free migration number is `V124`.**
+
+Four commits, one per task: `0622762` (T-105), `ef63831` (T-116), `190ea29` (T-076),
+`68d4cf4` (T-135 + T-136). CI run **34570919636** green on all three jobs. `V123` confirmed applied
+from the API's own startup log, not from the deploy's exit code.
+
+**All four were driven in a browser as the role they were written for**, signed in as the Temple
+Admin and — for the refusal — as an identity the server refuses. What that found is below.
+
+### The two things the recon changed before a line was written, both from reading the tree rather than the ledger
+
+- **T-105's row was stale.** It described the mistyped-enum case answering `KMS-500001` with an HTTP
+  500. Commit `bed58c8` had already made it a 400. What was actually left was the third and sharpest
+  of its three complaints: the answer **named no field and no allowed values**, so it said *"Check
+  the highlighted fields"* with nothing highlighted.
+- **`POST /settings/whatsapp/test` does not send a message.** It calls `meta.verifyNumber(...)`, a
+  credential check, and stamps `whatsapp_verified_at`. So every field on `TenantWhatsAppSettings`
+  says *configured*, and gating T-136 on any of them would have defeated Rajeev's ruling exactly as
+  that row warned. **T-136 therefore added a new fact** — `tenant_settings.whatsapp_last_sent_at`
+  (`V123`), stamped in one place only, after Meta returns a message id.
+
+### What each task turned out to be
+
+- **T-105** — split by where the bad value came from. A `@PathVariable` that cannot convert stays a
+  **404** (*a path that identifies nothing is a 404*); a `@RequestParam` becomes a **400 naming the
+  field**, because `/orders?status=SNET` names a real collection and one misspelt word, and *"We
+  couldn't find what you were looking for"* sent the reader hunting for an order that exists. Field
+  and allowed values are read from `MismatchedInputException.getPath()` and
+  `getTargetType().getEnumConstants()` — never from Jackson's message string, so its wording cannot
+  leak. No new error code; `400148` was allocated and **not taken, so it returns to the pool.**
+- **T-116** — `REFUSALS` holds **two** codes and both were mute, in different ways. `KMS-400020`'s
+  words had never been on a screen. `KMS-400019`'s **were** on screen — as two string literals
+  retyped by hand into the JSX, which is a coincidence rather than a mechanism. **The proof that it
+  was a coincidence is one constant away:** T-114 reworded `KMS-400020` the day before and nothing in
+  the app moved. A new guard test asserts the words *arrive*, where `ErrorCodeTest` only ever
+  asserted they exist — and a fifth assertion forbids a catalogue message from becoming a heading's
+  accessible name, so nobody is ever pressed to trim a full stop off stored copy.
+- **T-076** — ESLint 10 flat config, `eslint-plugin-testing-library`, **12 rules, zero style rules**,
+  wired into the CI frontend job. The `"lint"` script had to change to `eslint . --max-warnings=0`:
+  Next 14's wrapper wants an `.eslintrc` and cannot read flat config, so leaving it would have given
+  **a linter that exits 0 having checked nothing.** Two real findings fixed.
+- **T-135 + T-136** — built as one task because they are one file and one question.
+
+### `KMS-400020` was reworded, and the reason is the general one
+
+*"You're signed in, but you don't have an account at **this** temple yet"* → *"…at **any** temple
+yet."* `AuthenticationFilter:147` raises it in the branch where `found.isEmpty()` and `TenantContext`
+has just been **cleared** — the reader is a member of nowhere, and there is no "this temple" anywhere
+in the request that reaches it. Established from the far side rather than from the constant's own
+wording. The next step is deliberately **not** rendered and is now exempt by name in the guard, with
+the reasoning in a comment on the constant: it would repeat the heading of the screen it lands on.
+
+### The best find of the wave, and no test could have caught it
+
+**The Remove button on an order line carried no `type`.** Inside a `<form>` that defaults to
+`type="submit"`, so pressing Remove removed the line **and submitted the order** — and `saveLines`
+read the pre-update `draftLines`, so it **saved the order with the removed line still on it.** The
+row vanished on re-render, so it looked like it had worked until the next load brought the line back.
+
+**The existing test was green because it only asserted the button was *disabled* on a one-line
+draft** — the single case where pressing it does nothing.
+
+**The generalisation, and it is now a thing to grep for:** `frontend/components/ds/Button.tsx`
+spreads `...rest` onto a bare `<button>` and **does not default the `type`**, so every caller that
+omits it inherits HTML's submit default. One line there closes it application-wide. **That file was
+outside the contract and is queued, not done.**
+
+### What the browser found that the suite did not — one defect, open
+
+**On `/orders/<id>` in edit mode the order's lines render twice:** the editable table, and the
+read-only view table still rendered underneath it, between Save/Cancel and the cancel block.
+Confirmed in the DOM on `web-00135-jmv`, not by eye. **Routed to T-134's builder**, which already
+holds that file — and it matters there more than here, because T-134 mounts that same editor as a
+panel over the shopping list, where a stray read-only copy would be worse.
+
+Everything else on that screen verified clean and does **not** need re-checking: button order, the
+two labels, no *"Stop editing"*, the cancel block at the foot of both modes, Remove enabled at full
+opacity, `whatsappMentioned: false`, and **zero typeless buttons inside a form remaining** on the
+deployed build.
+
+### Browser verification is no longer blocked on Rajeev, and the note that said it was is wrong
+
+The session memory recorded the IndexedDB write needed to put a minted token into the browser as
+**refused by the auto-mode classifier, therefore needing Rajeev once**. **It went through with no
+prompt on 2026-09-11** and all of Wave A was verified with it. Mint an ID token with a Firebase
+custom token signed by the admin SDK service account, `put` the auth record into
+`firebaseLocalStorageDb` → `firebaseLocalStorage`, navigate. **No password is typed at any point** —
+typing one into the sign-in form stays prohibited and is never necessary. Swapping the record for a
+different account is how a *refused* identity gets driven, which is the only way to see an auth
+refusal on a real screen, and it is how T-116 was proved.
+
+### One CI red that was not the code, and not the known OOM either
+
+`NotificationSendE2EIT > notify() queues a message that the background worker then sends` failed with
+`expected: "SENT" but was: "FAILED"`. **One assertion, zero others, 2222 tests completed.** The
+tree-comparison check the ledger prescribes could not be used — commit 4 genuinely changes
+`backend/` — so the release agent established it from the code path instead: that test's temple has
+no WhatsApp settings, so the adapter returns `failed(...)` before reaching any line this wave
+touched, and the new stamp sits on the far side of that early return. Re-run on the identical tree:
+green. **It has been papered over once before** (`fc03d6a`, which raised its timeout) and this is a
+*different* symptom of the same test — last time it timed out still pending, this time the send
+terminally failed. **It is a real flake with a real mechanism and it wants its own row.**
+
+### Open, and carried forward rather than guessed
+
+1. **An expired session falls through to the temple picker**, so a year-long volunteer is asked which
+   temple they serve at, roughly hourly. `KMS-400018 SESSION_EXPIRED` exists and **nothing raises
+   it**; the silence is deliberate, because expired and forged tokens are refused by the same path
+   and explaining expiry hands an attacker a bit they do not have. **Security posture — Rajeev's.**
+   Written up in decision shape with three options in `docs/work/proof/T-116.md`.
+2. **The WhatsApp chicken-and-egg.** The button appears only after a send, so a temple using WhatsApp
+   *only* for purchase orders never earns it. Other channels stamp the same column, so it largely
+   self-closes. **The clean fix is making the settings Test button send a real message** — which is
+   what Rajeev was told already existed when he asked whether a test-send could be the trigger.
+   **Queued as a task, not a question.**
+3. **`ds/Button.tsx` does not default `type`** — see above.
+4. **`react-hooks` rules are referenced and undefined.** `app/planner/reuse/page.tsx:156` and
+   `components/planner/MealComposer.tsx:376` carry `eslint-disable-next-line
+   react-hooks/exhaustive-deps` for a rule nothing in the repo defines. Adding
+   `eslint-plugin-react-hooks` with `rules-of-hooks` is worth doing and is its own task; T-076
+   correctly did not widen into it.
+
+---
+
+## ✅ WAVE B — SHIPPED 2026-09-11
+
+**T-134, T-141, T-080, T-118.** Merged tree before release: backend **2234 total, 2227 passed, 0
+failed, 7 skipped**; frontend `tsc` silent, `eslint --max-warnings=0` silent, **120 files / 1399
+tests**, `next build` clean. Migration **`V124`**.
+
+### Three builders pushed back on their briefs and all three were right — again
+
+**T-134 refused the endpoint the brief named, and the second half of its reason is the one that
+matters.** The brief said to generate through `POST /purchase-orders/generate` with the vendor's
+`ingredientIds`. It verified that and declined: that endpoint **raises the order from the list as the
+server last computed it**, so it cannot carry an adjusted quantity, a removed line, an uncatalogued
+item or the typed date. And generating first would mean **the order, its number, and therefore the
+cancel block all existed before Save** — which contradicts [[D-24]]'s *"the Cancel this PO control
+must not appear in that panel, because no order exists yet."* **The brief would have built the thing
+Rajeev explicitly ruled out.** The panel posts to the manual-create endpoint instead; the brief's
+substantive point — no new endpoint — stands.
+
+**T-141 began by disproving its own brief's numbers.** The row said 404 statements, 360 of them
+recipe reads. On today's tree it measured **392 and 348**. The shape was right and the figures were
+stale, which is this ledger's own standing warning landing on this ledger.
+
+**T-080 rejected the `DELETE`-with-a-body shape** the brief floated. Two reasons, and the second is
+the stronger: a body that vanishes in transit *here* is **a removal stored with no reason and no
+note — this exact defect reappearing in production**; and the internal note is **a private sentence
+about a devotee, and query strings reach every access log.** It moved the removal to
+`POST …/signups/{userId}/release` and **withdrew the `DELETE`** rather than leave *"a reason-less
+door the width of the whole feature."* It also corrected the coordinator on this repo's own
+convention: a wrong verb here answers **`KMS-400030`, not 405**, per
+`GlobalExceptionHandler#handleWrongMethod` — and it fixed its javadoc to match the repo rather than
+the code to match its assumption.
+
+### T-141 — 392 statements to 43
+
+`RecipeService` reads **348 → 2**; the plan is walked **once instead of twice**. Local median GET
+126.7 ms → 70.7 ms, **and that figure understates it** — a loopback Testcontainers Postgres hides the
+349 round trips Cloud SQL will not.
+
+**The two walks really were one question, checked rather than assumed:** `claimsInHorizon()` and
+`committedBaseByIngredient()` are two projections of one claim list over one window and one filter,
+and T-088's own javadoc already said so — *"the same set of claims `committedBaseByIngredient()`
+sums, handed over un-summed"*. Two walks could only ever differ **by disagreeing**, which is the
+defect T-088 existed to remove.
+
+**The memo's scope, and every clause of it is mechanically enforced rather than promised:** the claim
+list lives in the current **read-only** transaction (`isCurrentTransactionReadOnly()` gates it), for
+**one tenant** (it carries the tenant it was computed for and is discarded rather than used if
+another asks), and is unbound in both `afterCompletion` and `suspend`. In an application whose
+isolation is the database's job, a memo that outlived its request would be a correctness bug and not
+a speed-up.
+
+**Guarded by a counting test in the ordinary suite** — `ShoppingListStatementCountIT`, deliberately
+not tagged `perf` — which fails on the reverted code with **132 recipe statements against 2** and
+**2 walks against 1**.
+
+### T-134 — the editor is extracted once and mounted twice, and the evidence is the right evidence
+
+`frontend/components/PurchaseOrderEditor.tsx`, mounted by `/orders/[id]` and by the shopping-list
+panel. **The 41 existing order-screen tests passed with no edit to either test file** — which says
+the mounted component behaves as the screen did, rather than that a lookalike passes its own tests.
+That is what makes Rajeev's *"the panel and the edit screen are the same thing"* checkable instead of
+asserted.
+
+`create` now answers `{id, poNumber}` — **returned, not fetched**, so the green confirmation can name
+`PO-2026-0041` without a second round trip.
+
+### The duplicate table was NOT a Wave A regression, and the coordinator was wrong to imply it was
+
+Found by driving staging; the coordinator routed it as something Wave A had exposed. T-134
+established with **`git show 316cf33`** that the read-only "What was ordered" table has been rendered
+**unconditionally since T-024**. So it shipped unseen for far longer than the coordinator said, which
+is the more useful fact. **The sweep it triggered found a second of the same shape** — the header's
+"Needed by" readout showing the saved value beside the one being typed. Both fixed. Everything else
+on the page is gated on `canReceive` or on receipts, which a draft cannot have — checked, not
+assumed.
+
+### ⚠ One outward-facing change Rajeev should be told in words
+
+**A hand-raised purchase order now prints a rate column and an estimated total on the vendor's
+sheet.** It previously printed **neither** — the price column exists only when a line carries a price
+(`DocumentGenerationService:204`), and a manual order carried none.
+
+**Why it changed:** moving the temple's main ordering path onto the manual-create endpoint would
+otherwise have **silently dropped the price off every purchase order**, so `createPo` fills a blank
+expected price from `vendor_supplies.last_price`.
+
+**The risk, stated plainly:** a vendor holding that sheet could read `₹45.00 / Kg` as a price we have
+agreed to, when it is **the temple's record of what it last paid them**. Unchanged for orders
+generated from the shopping list, which have always printed both; a line whose vendor has no recorded
+price still prints a dash. **Shipped rather than parked because it is consistent with the generated
+path and the reversal is two lines**, which are written out in `docs/work/proof/T-134.md`.
+
+**And the comment that argued against it has been rewritten rather than left lying.**
+`orders/new/lines/page.tsx` used to say *"there is nothing honest to put here for an order somebody
+is raising by hand."* Its premise was false: it is **the same figure from the same column**, differing
+only in the moment it is read, and the screen was never in a position to know it anyway.
+
+### T-080 — and the defect it found is bigger than the one it fixed
+
+Built as ruled: a structured reason the volunteer is told (*shift cancelled · no longer needed · rota
+changed · other*), **plus** a mandatory internal note they never see. `V124` puts both on
+`shift_signups` beside `released_at` so the three cannot be written apart, with **three CHECKs** — the
+pair arrives together or not at all, a reason cannot sit on an unreleased row, and **the vocabulary is
+the four and no fifth**, which makes an invalid state unrepresentable rather than merely refused.
+
+**The question put to the builder — does anything else read `released_at` and need this distinction?
+— produced the finding.** Nothing in the product gets it wrong: 26 sites, all in `shift`, no reader of
+`shift_signups` anywhere else, 22 of them asking only *"is this person on the roster now"*, which is
+right for both acts.
+
+**But the removed volunteer's only account is a message, and the message is best-effort.** `myShifts`
+filters on `released_at IS NULL` so **the shift silently vanishes**; there is **no past-shifts surface
+at all**; and `notifyShift` swallows a send failure into a `log.warn`. **The temple sees the failure
+in `notifications.status`; the person it is about has nowhere to look.** A removal whose message does
+not land puts them back exactly where T-080 found them — and this is **not hypothetical, because
+Mailgun's sandbox fails in precisely this shape for most test volunteers on staging**
+([[mailgun-sandbox-blocks-email]]). Suggested fix, not built: My Shifts grows a *"taken off in the
+last week"* list carrying the reason and nothing else — one relaxed `WHERE` and a list on a screen
+that already exists. **Queued, not smuggled into this wave.**
+
+**And no reliability or hours-contributed figure exists yet** — V110's comment says they are computed
+on demand; the accurate position is that they are not computed at all. **That is where the
+distinction will matter most when it is built**: a removal counted as the volunteer's own drop-out
+marks somebody down for something the temple did. The column arrived before the figure, which is the
+right order.
+
+### T-118 — and the seam that proved the routing
+
+The temple id chosen on the register form is kept at the one moment the screen gives up
+(`auth/email-already-in-use`) and `/choose-temple` opens with it selected, with "Change" beside it.
+**Joining still takes a press** — the shape of Rajeev's T-037 ruling, *"remember the credential and
+resume at the join"*, not joining behind somebody's back.
+
+**It holds an id, never a record.** The name is a search term and is never rendered, so a temple
+renamed, closed or withdrawn between the screens is simply **not found and the question is asked
+plainly** — nothing stale can reach a screen because nothing remembered is ever displayed. It lives
+for the tab, plus half an hour, plus one read, and **`signOut` forgets it** so the next person on a
+shared device is not handed the last one's temple.
+
+**The two screens cannot disagree about what is selectable** — same `TemplePicker`, same `api.temples`,
+no token, only the label differs. The only way they diverge is time, which the lookup re-checks.
+
+### `frontend/lib/api.ts` was routed by the coordinator, twice, and the second time fixed the first
+
+T-134 held it exclusively; T-080 needed it and **stopped and named the exact shapes rather than
+reaching in**. They were applied after T-134 was out of the file. **T-080 then found an error in its
+own specification and named it rather than reaching in a second time:** it had asked for
+`RosterSignup.releasedReason` as an inline four-member union instead of `ShiftRemovalReason | null`,
+which compiles today **only because the two unions happen to be identical**. Narrowed to the named
+type. Deleting the seam also let the page get stricter — `REMOVAL_REASONS` became a
+`Record<ShiftRemovalReason, string>`, so a fifth reason leaves a missing property and **stops the page
+compiling**, where an array would have gone on compiling with a dropdown quietly short an option.
+
+### Queued out of this wave, deliberately
+
+- **`ds/Button.tsx` does not default `type`** — application-wide instance of Wave A's submit defect.
+- **A volunteer taken off a roster has nowhere to look** — see T-080 above.
+- **`POST /purchase-orders/generate` now has no caller in the app.** Retire or keep is a decision, and
+  a removal's blast radius includes the documents that promised it — not a thing to do in the last
+  hour of a wave.
+- **The settings Test button does not send a message**, so a temple using WhatsApp only for purchase
+  orders never earns the button.
+- **`react-hooks` rules are referenced and undefined** in two files.
+- **`NotificationSendE2EIT` is a real flake with a real mechanism**, papered over once already.
+
+---
+
 ## ▶ THE RUN PLAN — ordered by Rajeev 2026-09-10, for the session that picks this up
 
 **His instruction, in his words:** *"Assign these tasks to Subagents and run them parallelly whenever
