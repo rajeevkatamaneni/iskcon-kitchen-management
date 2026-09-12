@@ -26,6 +26,153 @@ Three, in his words. Recorded by the work manager at dispatch.
    A removal task, under README's removal-wave rules. **Built as T-153.** If a locked document
    promises the endpoint, the builder stops and reports rather than editing it.
 
+## ▶ WAVE 2 (2026-09-12) — two halves, 2a then 2b, because the Button sweep reaches the other two tasks' files
+
+**State at dispatch:** HEAD `2d748de`, tree clean, no locks held, Gradle daemon stopped. Staging
+`api-00154-svm` / `web-00142-whs` / `worker-00136-2bl`, schema `V127`. Nothing deploys; builders run
+targeted backend tests only, through `tools/work-lock.sh run verify`.
+
+**Why two halves.** The Button sweep has to reach every file that renders `ds/Button` inside a
+`<form>`. That list (checked by `grep` at dispatch: 32 files import `ds/Button` and contain `<form`)
+includes all three T-154 screens (`app/donations/new/page.tsx`, `app/inventory/[id]/page.tsx`,
+`components/IngredientRequestForm.tsx`) and both vendor screens the phone task needs. So T-154 and
+T-157 run together in **2a** (their paths are disjoint, checked), and T-156 runs alone in **2b** after
+both land, with a broad contract that is safe only because nobody else is in the tree.
+
+**Reservations: none.** No migration (next free still `V128`), no error code (`KMS-400003` exists and
+is reused; next free still `400151` / `500008`), no permission, nav or route. **`api.ts` is not
+expected:** T-154 reads `fieldErrors`, which `ApiError` already carries; T-157 changes no request
+shape. A builder that needs it stops.
+
+**Merged-tree checks for wave 2**, run by the work manager after T-156 landed and before T-155 was dispatched:
+- **Frontend, all wave-2 files final, no builder in the tree:** `tsc --noEmit` clean; `vitest run` **127 files, 1,518 tests, all passing** (up from 124 / 1,488 in wave 1); `eslint . --max-warnings=0` clean. Log: `scratchpad/merged-frontend-wave2.log`.
+- **Backend:** T-157's eight classes plus `ErrorCodeTest`, `--rerun-tasks`, through the lock, daemon stopped before and after. Result: **933 passed, 0 failed, 0 skipped** (`PhoneNormalisationIT` 84, `PhoneValidationIT` 9, `WhatsAppTestSendIT` 8, `StaffEmploymentIT` 17, `MembershipIT` 9, `TenantProvisioningIT` 13, `VendorIT` 19, `VendorWithoutPhoneIT` 7, `ErrorCodeTest` 767). Log: `scratchpad/merged-backend-wave2.log`.
+- **Wave 2 (T-154, T-156, T-157) is proven and not released.** Every changed file in `git status` belongs to one of the three contracts or to this ledger. Nothing committed. T-155 was dispatched after these runs and its files are not part of wave 2's release.
+
+### T-154 — see its block under wave 1; placed in **2a** and dispatched 2026-09-12.
+
+### T-156 — `ds/Button` defaults to `type="button"`, and every in-form caller says `type="submit"`
+
+- **source:** the main session, 2026-09-12, from the defect that removed an order line and saved the
+  order with the line still on it: a `Button` inside a `<form>` with no `type` is a submit button.
+- **wave:** 2b — alone, after T-154 and T-157 land.
+- **state:** **proven** 2026-09-12. `Button` now defaults `type = "button"` in its props, written after `{...rest}` so a forwarded `type={undefined}` cannot bring the submit back. **The sweep changed no caller:** parsing every `.tsx` with the TypeScript compiler found 181 `Button`s; every one inside a form, or pointing at one with `form=`, already said `type="submit"` or `type="button"`, and the 85 untyped ones are all outside forms (parent/child placements traced both ways). All 21 forms with no internal submit still submit (18 by a header `form=` button, one by its own `form=` button, one by a row button, and the communications composer never submits on purpose). Raw `<button>`s in forms with no type: 0. Control A (default removed): 4 of 6 new tests red; the 2 green pass either way. Control B (no typed caller existed, so run on the two Settings Add forms whose only submit is an explicit `type="submit"`): 5 existing tests red. All restores by `cmp`. Builder's final run over the tree with T-154 and T-157 in it: `tsc` clean, vitest 127 files / 1,518, ESLint clean. **Deviations, both accepted:** `@testing-library/user-event` is not installed and `package.json` was outside the contract, so the test uses `fireEvent.click` (jsdom's own button activation decides submission); jsdom cannot press Enter, so the test asserts the form's default button is save, not an earlier remove. **Follow-up, not queued:** adding `user-event` so tests can press Tab and Enter — a dependency decision.
+- **what:** `frontend/components/ds/Button.tsx` spreads `...rest` onto a `<button>` with no `type`, so
+  every `Button` inside a form submits it. Default `type` to `"button"` (a caller's explicit `type`
+  still wins). Then sweep every caller that sits inside a `<form>` — in the same file, or rendered by a
+  component that a parent places inside a form — and that relied on the implicit submit, so each says
+  `type="submit"` explicitly. For each file the proof lists which buttons became `type="submit"` and
+  why each is the form's submit. Raw `<button>` elements are out of scope; count those in forms with no
+  `type` and report the number, but do not change them. **Negative control:** a new test renders a
+  `Button` inside a `<form>` and asserts pressing it does not submit; remove the default and show that
+  test go red. Anchor, `cp` snapshot, `cmp -s`, `trap … EXIT`, artefacts named `control-T-156.*`.
+- **paths:** `frontend/components/ds/Button.tsx` · every file under `frontend/app/` and
+  `frontend/components/` that imports `ds/Button` (re-checked at dispatch after T-157: 68 files import `ds/Button"`, plus `components/ds/ButtonLink.tsx` via `./Button`; list at `scratchpad/button-importers-T-156.txt`) · every test
+  under `frontend/__tests__/` (granted as a glob because the task runs alone) ·
+  `frontend/__tests__/button-type.test.tsx` *(new)*.
+- **reservations:** none.
+- **proof:** `docs/work/proof/T-156.md`
+
+### T-157 — A phone number typed with spaces is refused, including the example in the error itself
+
+- **source:** found by T-151, 2026-09-12 · the main session's line-up for wave 2.
+- **wave:** 2a
+- **state:** **proven** 2026-09-12. Backend 166/166 across eight classes (`PhoneNormalisationIT` 84, through the app's own `ObjectMapper` and `Validator`: nine fields times seven ways of typing, plus typo, `(0)` and blank boundaries). Frontend `tsc` and ESLint clean, 9 files 123/123. **Mechanism:** `config/PhoneNumberDeserializer`, put with `@JsonDeserialize` beside each `@Pattern`, so validation sees the stripped value; the regexp and `GlobalExceptionHandler` are unchanged. It strips whitespace (including non-breaking), dashes (`\p{Pd}`) and invisible format characters; **not brackets** (a `(0)` trunk digit kept would store a number that rings nobody) and not dots. Frontend `lib/phone.ts` (`normalizePhone`, `isE164`) is used by register, sign-in, choose-temple, settings test box, staff hire and edit, vendor add and edit, and tenants/new; Firebase gets the bare number. Server control (stripping removed): 71 red, restore by `cmp`. Frontend control (trim only): 19 red, restore by `cmp`. **Nine fields, not eight** as this row first said. **Behaviour change to tell Rajeev:** Add a temple used to strip everything but digits, so `+91 98765 4321X` or `+91 (0) 80…` became a well-formed wrong number; both are now refused with `KMS-400003`. **Follow-ups, not queued:** `GlobalExceptionHandler`'s comment still says eight fields; the Java and JS separator lists are kept in step by hand only. Out of scope and unchanged: kitchen, event contact, equipment service company and donor phones (no E.164 rule). No hand test.
+- **what:** `KMS-400003` says *"Include the country code, for example +91 98765 43210"*, and that
+  number is refused. The server's rule is `@Pattern("^\+[1-9][0-9]{7,14}$")` on nine fields (corrected from eight by T-157):
+  `HireStaffRequest` (phone, emergencyContactPhone), `UpdateStaffRequest` (same two),
+  `JoinTempleRequest`, `ProvisionTenantRequest.adminPhone`, `Create/UpdateVendorRequest`,
+  `SendWhatsAppTestRequest`. The frontend trims but keeps inner spaces, and repeats the regex in
+  `register/page.tsx:83` and `JoinTempleForm.tsx:48`; only `tenants/new/page.tsx` strips
+  (`normalizePhone`). Accept spaces and hyphens (and the invisible characters `normalizePhone` already
+  handles) by stripping them before validation on both sides, so what is stored is canonical E.164.
+  The regexp itself stays exactly as it is, because `GlobalExceptionHandler` recognises a phone error by
+  that string. Firebase phone sign-in must receive the stripped number too. Fields with no `@Pattern`
+  (a kitchen's contact number, a donor's phone) are out of scope. The proof names every input this
+  reaches, server and screen.
+- **paths:** backend — the seven request records above under `backend/src/main/java/org/iskcon/kms/`
+  (`staff/HireStaffRequest.java`, `staff/UpdateStaffRequest.java`, `tenant/JoinTempleRequest.java`,
+  `tenant/ProvisionTenantRequest.java`, `vendor/CreateVendorRequest.java`,
+  `vendor/UpdateVendorRequest.java`, `notification/SendWhatsAppTestRequest.java`),
+  `config/PhoneNumberDeserializer.java` *(new, only if a shared deserializer is the chosen mechanism)*;
+  tests `error/PhoneValidationIT.java`, `tenant/TenantProvisioningIT.java`, `tenant/MembershipIT.java`,
+  `notification/WhatsAppTestSendIT.java`, `staff/StaffEmploymentIT.java`, `vendor/VendorIT.java`,
+  `vendor/VendorWithoutPhoneIT.java` (existing, granted), `error/PhoneNormalisationIT.java` *(new)*.
+  Frontend — `frontend/lib/phone.ts` *(new)*, `app/register/page.tsx`, `app/sign-in/page.tsx`,
+  `components/JoinTempleForm.tsx`, `app/settings/page.tsx` (the test-number box only),
+  `components/staff/StaffForm.tsx`, `app/vendors/new/page.tsx`, `app/vendors/[id]/page.tsx`,
+  `app/tenants/new/page.tsx`; tests `register.test.tsx`, `signin.test.tsx`, `choose-temple.test.tsx`,
+  `settings-payments.test.tsx`, `staff-hire.test.tsx`, `vendors.test.tsx`,
+  `vendor-without-phone.test.tsx`, `tenant-new.test.tsx` (existing, granted), `phone.test.ts` *(new)*.
+- **reservations:** none (`KMS-400003` exists).
+- **proof:** `docs/work/proof/T-157.md`
+
+## ▶ WAVE 2c — T-155, approved 2026-09-12, dispatched after T-156
+
+### T-155 — The planner's "Ask for volunteers" opens the real shift form in a layer
+
+- **source:** Rajeev, 2026-09-12, in his words:
+  > *"Clicking htat button open the EXACT same form that create a volenteer shit would open. Only difference here in this case is, we show the form in a layer on top of the crate meal plan screen and once the user saves, it just closes bringing the user back to the meal planner and the 'Ask for volunteers' button will be replaed by Hyper link text OR a button that lets the user to view and edit the Volenteer shift. In case there is already an existing shift that covers this meal, then show that instead of the 'Ask for volunteers' button and the meal planner can view it and edit it too."*
+- **approved:** Rajeev, 2026-09-12, relayed by the main session: *"The planner rebuild: Yes please. Proceed."*
+- **wave:** 2c — after T-156, because T-156's contract holds every `ds/Button` importer (including `ShiftLayer.tsx`) and all of `frontend/__tests__/`, which this task needs.
+- **state:** **building** (dispatched 2026-09-12, after T-156 was proven and the wave-2 frontend merged run was green)
+- **what:** Replace T-019's three-field `ShiftLayer` with the full shift form from
+  `app/volunteers/shift-form.tsx`, shown as a layer over the planner. Saving closes the layer onto the
+  same day; the button is replaced by a link or button that opens the shift in the same layer to view
+  and edit. Where a shift already covers the meal, show that instead of the button. This now matches
+  `DESIGN_SYSTEM.md` v1.8 §4 (a record from another part of the app opens as a layer showing its own
+  full form), so the locked-document objection recorded under wave 1 is gone.
+  **Carry these into the brief, all found on staging or in T-019's proof:**
+  - Typing 20:00 → 02:00 in the current layer shows no *"(next day)"* (T-146 made an end before the
+    start mean the next day). The real form must show it.
+  - The button shows on a meal already fully crewed (*"6 of 6"*). Rajeev's P6 says it appears when a
+    meal is short.
+  - `shift-form.tsx` sets its `aria-label` to *"Edit a shift"* whenever it is prefilled (T-019's proof,
+    lines 101-104), so a prefilled **new** shift announces itself as an edit to a screen reader. The
+    rebuild must fix that.
+- **checked against the tree 2026-09-12, while T-156 runs:**
+  - The button's condition (`MealServices.tsx` ~:437) is `canRaiseShift && !readOnly && meal.crewRequired != null && shifts.length === 0`. It never compares the crew to the number needed, which is why it shows on a 6-of-6 meal.
+  - `shift-form.tsx` already prints *"Ends the next day — this shift runs through midnight"* (:114), and `lib/format.ts` has `(next day)`. Reusing the real form should close the first finding; a test must prove it in the layer.
+  - `ShiftFields` (`shift-form.tsx:21`) is used by `app/volunteers/new/page.tsx` and `app/volunteers/[id]/edit/page.tsx`. Its label is `shift ? "Edit a shift" : "Post a shift"` (:56).
+  - `ShiftLayer.tsx` (262 lines) currently has its own three-field form labelled "Ask for volunteers" / "Change a shift".
+- **paths (re-check at dispatch, since T-156 may touch them first):** `frontend/components/planner/ShiftLayer.tsx`,
+  `frontend/components/planner/MealServices.tsx`, `frontend/app/volunteers/shift-form.tsx`,
+  `frontend/app/volunteers/new/page.tsx` and `frontend/app/volunteers/[id]/edit/page.tsx` (only if the label fix changes how they call `ShiftFields`) ·
+  tests (existing, granted): `planner.test.tsx`, `planner-shift.test.tsx`, `planner-day-routes.test.tsx`, `meal-recording.test.tsx`,
+  `meal-correction.test.tsx`, `volunteer-shifts.test.tsx`, `crew-pebble.test.tsx` (all under `frontend/__tests__/`).
+- **proof:** —
+
+## 🔎 WAVE 1 — DRIVEN ON STAGING 2026-09-12, by the main session, as the Temple Admin (`ikms.temple-admin.1`)
+
+- **T-147 — verified.** On `/planner` the crew count carries an (i) hint named *"More about crew for
+  Lunch"*; a real click opens *"6 staff and 0 volunteers, of 6 needed"*.
+- **T-148 — verified for the scale preview only.** Akki Rotti reads *"SCALED TO 1 piece"* at 1 and
+  *"2 pieces"* at 2. The *"₹80 / piece"* half was **not driven**: generating a vendor sheet on staging
+  stores a document. It rests on the tests and on `DocumentGenerationService:229` using
+  `label(BigDecimal.ONE)`.
+- **T-150 — verified for the stock adjustment.** `POST /api/v1/inventory/items/{Rice}/adjustments` with
+  `unit: "L"` answered **400 `KMS-400013`**, field error *"Rice is measured in Kg, and there is no way to
+  turn L into Kg."*; on-hand was 783.298 before and after. The gift and the ingredient request were not
+  driven.
+- **T-153 — verified.** The release agent confirmed `POST /purchase-orders/generate` answers 404 signed in.
+- **T-149 — not driven.** Needs a volunteer session.
+- **T-151 — blocked, and not a code defect.** Staging logs show every WhatsApp send for South Bengaluru
+  in the last month failed with Meta *"Authentication Error"*, including shift confirmations, removals
+  and the low-stock digest. The stored settings are Meta's test number (+1 555-675-7366), with
+  `verifiedAt`, `webhookSeenAt` and `templatesSubmittedAt` all null. Rajeev: *"I never managed to make
+  the wattsapp setup work. As far as I know, it is broken for South Bangalore."* Likely cause: an
+  expired temporary access token. **Needs Rajeev:** generate a permanent System User token in Meta
+  Business, save it in Settings → WhatsApp, and add his phone as a test recipient. He said **yes** to
+  submitting the `connection_test` template once that is done. Nobody has pressed Save or Test.
+- **T-152 — test-only**, nothing to drive.
+- **Two findings on the planner's existing "Ask for volunteers" layer (T-019)**, carried into T-155:
+  no *"(next day)"* for 20:00 → 02:00, and the button shows on a fully crewed meal.
+
+**DESIGN_SYSTEM v1.8 (`2d748de`, committed by the main session).** Rajeev restated §4: four fields or
+fewer inline, five or more a screen; a record opened from its own list gets a screen; a record from
+another part of the app (a shift raised from the planner) opens as a layer showing that record's own
+full form. **Not retroactive, at his instruction** — existing screens are not swept to it.
+
 ## ✅ WAVE 1 — SHIPPED TO STAGING 2026-09-12, not yet driven in a browser
 
 **Staging is now `kms-staging-api-00154-svm` / `kms-staging-web-00142-whs` / `kms-staging-worker-00136-2bl`,
@@ -209,10 +356,11 @@ A removal proves the accepted consequence instead.
 ### T-154 — The three unit-family refusals name the ingredient on screen
 
 - **source:** found by T-150, 2026-09-12 · `docs/uat/UAT-081` step 17.
-- **wave:** not yet placed. Queued by the work manager and **not dispatched**, because it was not in the approved line-up.
-- **state:** queued
-- **what:** After T-150, the stock adjustment, the gift of goods and the ingredient request answer `KMS-400013` with a field error: *"Ghee is measured in L, and there is no way to turn Kg into L."* No screen shows it. `app/orders/[id]/page.tsx:815-819` already renders the same field line for an order and is the pattern to copy. Paths expected: `frontend/app/donations/new/page.tsx`, `frontend/components/IngredientRequestForm.tsx`, the inventory adjust form (`frontend/app/inventory/[id]/page.tsx` or `frontend/components/InventoryItemForm.tsx`, check which), and their existing tests. Frontend only, no reservations.
-- **proof:** —
+- **wave:** 2a (placed 2026-09-12 in the main session's wave-2 line-up).
+- **state:** **proven** 2026-09-12. `tsc` clean; the new test file plus the three granted ones, 4 files, 51/51; ESLint clean on the new test. Control removed the list from all three screens (anchor asserted once per file, change proved by `cmp`): 3 of 3 new tests red, *"Unable to find an element with the text: Ghee is measured in L…"*; restore proved by `cmp` against verified copies. **The field key is the ingredient's own name**, not `unit`, because all three refuse through `IngredientUnits.requireSameFamily`. So the screens show the message only: the key would print the name twice, and validation keys like `ingredients[0].quantity` are Java paths. The three granted test files were not edited. No hand test; UAT-081 step 17 still to drive after deploy. **Follow-ups, not queued:** the same list now sits in four screens, and a shared `FieldErrorList` would replace them. Receiving (`ReceivingService:210`) and ingredient issue (`IngredientIssueService:123`) also send field errors, and their screens were not checked.
+- **what:** After T-150, the stock adjustment, the gift of goods and the ingredient request answer `KMS-400013` with a field error: *"Ghee is measured in L, and there is no way to turn Kg into L."* No screen shows it. `app/orders/[id]/page.tsx:815-819` already renders the same field line for an order and is the pattern to copy. `ErrorNotice` is not changed: the order screen renders its own list beside it, and changing the shared box would double it there.
+- **paths (checked against the tree at dispatch):** `frontend/app/donations/new/page.tsx`, `frontend/components/IngredientRequestForm.tsx`, `frontend/app/inventory/[id]/page.tsx` (`AdjustForm` is defined in this file at :361 and its error is the page's `actionError`) · tests (existing, granted): `frontend/__tests__/donations.test.tsx`, `frontend/__tests__/ingredient-request-new.test.tsx`, `frontend/__tests__/inventory-correction.test.tsx` · `frontend/__tests__/unit-refusal-names-ingredient.test.tsx` *(new)*. Frontend only, no reservations.
+- **proof:** `docs/work/proof/T-154.md`
 
 ### T-151 — The WhatsApp Test button sends a real message to a number the admin types
 

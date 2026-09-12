@@ -1,5 +1,6 @@
 package org.iskcon.kms.tenant;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Email;
@@ -8,6 +9,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
+import org.iskcon.kms.config.PhoneNumberDeserializer;
 
 /**
  * Everything needed to bring a temple onto the platform, including its first administrator.
@@ -63,6 +65,7 @@ public record ProvisionTenantRequest(
 		String adminEmail,
 
 		@NotBlank(message = "Enter the administrator's phone number.")
+		@JsonDeserialize(using = PhoneNumberDeserializer.class)
 		@Pattern(
 				regexp = "^\\+[1-9][0-9]{7,14}$",
 				message = "Include the country code, for example +919876543210.")

@@ -324,6 +324,27 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		assertThat(claimedUid).isEqualTo("uid-first-login");
 	}
 
+	@Test
+	@DisplayName("the administrator's number typed with spaces and hyphens is stored as the bare number (T-157)")
+	void administratorsSpacedNumberIsStoredBare() {
+		// KMS-400003 writes a number "+91 98765 43210", and the provisioning screen always cleaned
+		// what it sent — but the API is the rule, and it has to accept what its own message suggests.
+		signInAsSuperAdmin();
+		Map<String, Object> body = validRequest();
+		body.put("adminPhone", "+91 98765-43210");
+
+		assertThat(post("/api/v1/tenants", body).getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+		assertThat(admin.queryForObject(
+				"SELECT phone FROM users WHERE role = 'TEMPLE_ADMIN'", String.class))
+				.isEqualTo("+919876543210");
+		assertThat(admin.queryForObject("""
+				SELECT sp.phone FROM staff_profiles sp JOIN users u ON u.id = sp.user_id
+				WHERE u.role = 'TEMPLE_ADMIN'
+				""", String.class))
+				.isEqualTo("+919876543210");
+	}
+
 	// ---------------------------------------------------------------------
 
 	private Map<String, Object> validRequest() {

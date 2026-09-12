@@ -206,6 +206,25 @@ class PhoneValidationIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("spacing moves neither boundary: a spaced typo is KMS-400003, a box of spaces is a missing number")
+	void spacesDoNotMoveTheBoundary() throws Exception {
+		// Since T-157 spaces and hyphens are removed before the rule is checked, so KMS-400003's own
+		// example is accepted. That must not make a wrong number right: a letter is still a letter.
+		expectPhoneCode(post("/api/v1/temples/{id}/join", temple).content("""
+				{"firstName":"Nitai","lastName":"Das","phone":"+91 98765 4321X"}
+				"""));
+
+		// And a box of nothing but spaces is still somebody who typed nothing, answered with the
+		// words for a missing number rather than advice about country codes.
+		mvc.perform(authed(post("/api/v1/temples/{id}/join", temple))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"firstName\":\"Nitai\",\"lastName\":\"Das\",\"phone\":\"   \"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				.andExpect(jsonPath("$.fieldErrors[?(@.message=='Enter a phone number.')]").exists());
+	}
+
+	@Test
 	@DisplayName("a kitchen's contact number is not held to E.164, so it is never told about country codes")
 	void aKitchensNumberIsADifferentKindOfNumber() throws Exception {
 		// A kitchen's number is dialled by somebody standing in the temple and an internal

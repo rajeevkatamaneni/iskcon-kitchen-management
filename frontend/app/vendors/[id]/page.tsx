@@ -19,6 +19,7 @@ import { ALL_LANGUAGES, languageLabel } from "@/lib/languages";
 import { Loading } from "@/components/Loading";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 import type { VendorSupplyView } from "@/lib/api";
+import { normalizePhone } from "@/lib/phone";
 
 export default function VendorDetailPage() {
   return (
@@ -83,7 +84,8 @@ function VendorDetailView() {
             // emptyToNull, like every other optional field: emptying this box is how a vendor the
             // temple now only ever walks into loses a number it should no longer carry, and "" is
             // not a number — it would be refused by the E.164 pattern (T-025).
-            phone: emptyToNull(String(f.get("phone") ?? "")),
+            // Separators removed first, as on the add screen (T-157).
+            phone: emptyToNull(normalizePhone(String(f.get("phone") ?? ""))),
             contactPerson: emptyToNull(String(f.get("contactPerson") ?? "")),
             email: emptyToNull(String(f.get("email") ?? "")),
             address: emptyToNull(String(f.get("address") ?? "")),

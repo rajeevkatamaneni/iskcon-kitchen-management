@@ -1,10 +1,12 @@
 package org.iskcon.kms.vendor;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
+import org.iskcon.kms.config.PhoneNumberDeserializer;
 
 /**
  * Add a vendor.
@@ -26,6 +28,7 @@ public record CreateVendorRequest(
 		@Size(max = 200, message = "That name is too long.")
 		String name,
 		@Size(max = 200, message = "That name is too long.") String contactPerson,
+		@JsonDeserialize(using = PhoneNumberDeserializer.class)
 		@Pattern(regexp = "^\\+[1-9][0-9]{7,14}$",
 				message = "Include the country code, for example +919876543210.") String phone,
 		@Email(message = "That doesn't look like an email address.")

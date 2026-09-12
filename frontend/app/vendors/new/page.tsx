@@ -11,6 +11,7 @@ import { HintedField } from "@/components/ds/InfoHint";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { ALL_LANGUAGES } from "@/lib/languages";
+import { normalizePhone } from "@/lib/phone";
 
 /**
  * Add a vendor — nine fields, so a screen rather than a panel over the list.
@@ -55,7 +56,8 @@ function NewVendorView() {
           // Through emptyToNull like every other optional field. It was the one that was not, and
           // a blank box therefore posted "" — which fails the E.164 pattern, so the screen refused
           // the very vendor this field being optional exists to allow (T-025).
-          phone: emptyToNull(String(f.get("phone") ?? "")),
+          // Separators removed first (T-157), so a box of only spaces is still no number at all.
+          phone: emptyToNull(normalizePhone(String(f.get("phone") ?? ""))),
           contactPerson: emptyToNull(String(f.get("contactPerson") ?? "")),
           email: emptyToNull(String(f.get("email") ?? "")),
           address: emptyToNull(String(f.get("address") ?? "")),

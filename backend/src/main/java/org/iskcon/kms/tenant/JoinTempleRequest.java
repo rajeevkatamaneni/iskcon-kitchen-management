@@ -1,8 +1,10 @@
 package org.iskcon.kms.tenant;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import org.iskcon.kms.config.PhoneNumberDeserializer;
 
 /**
  * What a devotee tells us when they join a temple (E1-S17).
@@ -22,6 +24,7 @@ public record JoinTempleRequest(
 		String lastName,
 
 		@NotBlank(message = "Enter a phone number.")
+		@JsonDeserialize(using = PhoneNumberDeserializer.class)
 		@Pattern(regexp = "^\\+[1-9][0-9]{7,14}$",
 				message = "Enter the number with its country code, like +919876543210.")
 		String phone,

@@ -168,7 +168,28 @@ function ItemView() {
                 </div>
               </header>
 
-              {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
+              {actionError && (
+                <div className="mb-6 grid gap-3">
+                  <ErrorNotice error={actionError} />
+                  {/* The lines a refusal names, under the box that says what happened. A unit from the wrong
+                    family (KMS-400013) is answered with the ingredient's own sentence — "Ghee is measured
+                    in L, and there is no way to turn Kg into L." — and ErrorNotice prints only the message,
+                    next step and code, so without this the one line that says *which* ingredient was
+                    never on screen (UAT-081 step 17). Only the message is shown, never the key: for this
+                    refusal the key is the ingredient's name, which the sentence already opens with, and for
+                    a field that failed its checks it is a path like `ingredients[0].quantity`, whose
+                    message is written to stand alone. The order screen prints the key because its keys
+                    are the lines of an order; these are not. Keyed by position, since two lines can name
+                    the same ingredient. */}
+                  {actionError.fieldErrors.length > 0 && (
+                    <ul className="grid gap-1 rounded border border-hairline bg-raised px-5 py-4 text-sm">
+                      {actionError.fieldErrors.map((f, i) => (
+                        <li key={i}>{f.message}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               {/*
                 The three figures beside each other, and the level they are judged against.

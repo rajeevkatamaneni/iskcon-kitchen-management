@@ -1182,6 +1182,35 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-12 — Wave 2: phone numbers with spaces are accepted, a form button no longer submits by accident, and the unit refusal names the ingredient on screen (tasks T-154, T-156, T-157)
+
+Three tasks in one commit. Frontend and request-record changes only: no migration (the schema stays
+`V127`), no new error code. **Committed and through CI, not deployed**: it ships to staging together
+with T-155 in a later release. **None of it has been driven in a browser, and none of it has been
+seen working by Rajeev.**
+
+**A phone number typed with spaces or dashes is accepted** (T-157). `KMS-400003` told people to type
+*"+91 98765 43210"*, and that exact number was refused. Spaces (including non-breaking), dashes and
+invisible formatting characters are now stripped before the check, on the server by
+`PhoneNumberDeserializer` on all nine E.164 phone fields and on screen by `lib/phone.ts` in every form
+that sends one, so what is stored is plain E.164 and Firebase sign-in gets the bare number. The rule
+itself is unchanged. **Behaviour change:** *Add a temple* used to strip everything but digits, so a typo
+like `+91 98765 4321X` or a `(0)` became a well-formed wrong number that passed; both are now refused
+with `KMS-400003`. Brackets and dots are deliberately not stripped. Kitchen, event contact, equipment
+service company and donor phones have no E.164 rule and are untouched.
+
+**A `Button` inside a form no longer submits it unless it says so** (T-156). `ds/Button` had no
+default `type`, so any button in a form was a submit button; that is how removing an order line saved
+the order with the line still on it. It now defaults to `type="button"`, and a caller's explicit type
+still wins. The sweep found every in-form caller already typed, so no screen changed.
+
+**The stock adjustment, a gift of goods and an ingredient request show the line naming the
+ingredient** (T-154), e.g. *"Ghee is measured in L, and there is no way to turn Kg into L."*, under
+the error box. This finishes what T-150 left undone. UAT-081 step 17 is still to be driven after the
+deploy.
+
+Proofs, with negative controls, are in `docs/work/proof/T-154.md`, `T-156.md` and `T-157.md`.
+
 ### 2026-09-12 — Wave 1: a real WhatsApp test message, a volunteer can see they were taken off, and `/purchase-orders/generate` is gone (tasks T-147 to T-153)
 
 Seven tasks in one commit, because they share `api.ts` and `ErrorCode.java` and a commit per task

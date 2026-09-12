@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { HintedField, InfoHint } from "@/components/ds/InfoHint";
 import { GROUP_LABELS, EMPLOYMENT_TYPES } from "./labels";
+import { normalizePhone } from "@/lib/phone";
 import type {
   HireStaffInput,
   JobTitle,
@@ -331,7 +332,8 @@ export function readStaffForm(f: FormData): HireStaffInput {
   return {
     existingUserId: emptyToNull(String(f.get("existingUserId") ?? "")),
     fullName: String(f.get("fullName") ?? "").trim(),
-    phone: emptyToNull(String(f.get("phone") ?? "")),
+    // Both numbers without their separators (T-157): what the API stores, and what it checks.
+    phone: emptyToNull(normalizePhone(String(f.get("phone") ?? ""))),
     email: emptyToNull(String(f.get("email") ?? "")),
     jobTitle: String(f.get("jobTitle") ?? "COOK") as JobTitle,
     jobTitleOther: emptyToNull(String(f.get("jobTitleOther") ?? "")),
@@ -341,7 +343,7 @@ export function readStaffForm(f: FormData): HireStaffInput {
     address: emptyToNull(String(f.get("address") ?? "")),
     emergencyContactName: emptyToNull(String(f.get("emergencyContactName") ?? "")),
     emergencyContactRelationship: emptyToNull(String(f.get("emergencyContactRelationship") ?? "")),
-    emergencyContactPhone: emptyToNull(String(f.get("emergencyContactPhone") ?? "")),
+    emergencyContactPhone: emptyToNull(normalizePhone(String(f.get("emergencyContactPhone") ?? ""))),
     // Blank means "leave the stored one alone", which is why it is omitted rather than sent as "".
     pan: pan === "" ? undefined : pan,
     systemAccess: access === "" ? null : (access as SystemAccess),

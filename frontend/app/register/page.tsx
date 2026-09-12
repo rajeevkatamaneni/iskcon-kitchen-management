@@ -27,6 +27,7 @@ import {
   type ApiError,
   type TempleSummary,
 } from "@/lib/api";
+import { isE164, normalizePhone } from "@/lib/phone";
 import { googleProvider, rememberChosenTemple, useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth } from "@/lib/firebase";
 
@@ -80,7 +81,9 @@ export default function RegisterPage() {
    */
   const madeCredential = useRef<User | null>(null);
 
-  const phoneOk = /^\+[1-9][0-9]{7,14}$/.test(phone.trim());
+  // Separators are removed before the rule is checked, as the server does (T-157), so the number
+  // KMS-400003 gives as its example — "+91 98765 43210" — is one this button accepts.
+  const phoneOk = isE164(phone);
   const detailsOk = Boolean(temple && firstName.trim() && lastName.trim() && email.trim() && phoneOk);
   const passwordsMatch = password.length >= 8 && password === confirmPassword;
   const credentialOk =
@@ -113,7 +116,7 @@ export default function RegisterPage() {
         {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          phone: phone.trim(),
+          phone: normalizePhone(phone),
           email: email.trim() || null,
         },
         await credential.getIdToken()
@@ -208,7 +211,9 @@ export default function RegisterPage() {
       // Firebase requires a reCAPTCHA anchor for phone auth; invisible, so nobody is asked to
       // identify a traffic light before they can offer their seva.
       const verifier = new RecaptchaVerifier(auth, "recaptcha-anchor", { size: "invisible" });
-      setPendingCode(await signInWithPhoneNumber(auth, phone.trim(), verifier));
+      // Firebase has no second chance to clean the number the way the API does, so it is given the
+      // bare E.164 form here.
+      setPendingCode(await signInWithPhoneNumber(auth, normalizePhone(phone), verifier));
     } catch (e) {
       setMessage(
         readableFirebaseError(e, temple?.name ?? null) ?? "We couldn’t send that code. Check the number."
@@ -272,7 +277,7 @@ export default function RegisterPage() {
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           // The example is the whole instruction, so it sits in the box rather than in a sentence
-          // under it — and unspaced, which is the shape `phoneOk` above actually accepts.
+          // under it. Unspaced, as it always was; a spaced number is accepted too (T-157).
           placeholder="+919876543210"
           className="min-h-touch rounded-control border border-hairline px-3 text-ink"
         />

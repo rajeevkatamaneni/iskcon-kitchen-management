@@ -116,6 +116,25 @@ describe("hiring somebody", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/staff?hired=Ramesh%20Kumar"));
   });
 
+  it("sends both numbers bare when they were typed with spaces and hyphens", async () => {
+    // T-157: the way KMS-400003 writes a number is a way the server now accepts, and stores bare.
+    render(<HireStaffPage />);
+    const form = screen.getByRole("form", { name: /hire a staff member/i });
+
+    fireEvent.change(form.querySelector('input[name="fullName"]')!, { target: { value: "Ramesh Kumar" } });
+    fireEvent.change(form.querySelector('input[name="dateOfJoining"]')!, { target: { value: "2026-03-01" } });
+    fireEvent.change(form.querySelector('input[name="phone"]')!, { target: { value: "+91 98765 43210" } });
+    fireEvent.change(form.querySelector('input[name="emergencyContactPhone"]')!, {
+      target: { value: "+91-98765-43211" },
+    });
+    fireEvent.submit(form);
+
+    await waitFor(() => expect(hireMock).toHaveBeenCalled());
+    const [input] = hireMock.mock.calls[0];
+    expect(input.phone).toBe("+919876543210");
+    expect(input.emergencyContactPhone).toBe("+919876543211");
+  });
+
   it("commits from the header button, which reaches the form it is not inside", async () => {
     render(<HireStaffPage />);
     const form = screen.getByRole("form", { name: /hire a staff member/i });

@@ -198,6 +198,25 @@ class MembershipIT extends AbstractIntegrationTest {
 				"SELECT count(*) FROM users WHERE firebase_uid = 'uid-new'", Integer.class)).isZero();
 	}
 
+	/**
+	 * The number a devotee gives when joining, typed the way KMS-400003 itself writes one, is
+	 * accepted and stored bare (T-157). A different number from the one Firebase verified, so the
+	 * row can only hold it if it came from the request.
+	 */
+	@Test
+	@DisplayName("a joining devotee's number typed with spaces and hyphens is stored as the bare number")
+	void aSpacedNumberIsStoredBare() {
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+
+		assertThat(post("/api/v1/temples/" + govinda + "/join",
+				"{\"firstName\":\"Nitai\",\"lastName\":\"Das\",\"phone\":\"+91 90000-00202\"}")
+				.getStatusCode())
+				.isEqualTo(HttpStatus.CREATED);
+		assertThat(admin.queryForObject(
+				"SELECT phone FROM users WHERE firebase_uid = 'uid-new'", String.class))
+				.isEqualTo("+919000000202");
+	}
+
 	@Test
 	@DisplayName("joining a temple that does not exist is refused")
 	void unknownTempleIsRefused() {

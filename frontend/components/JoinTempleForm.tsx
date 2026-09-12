@@ -7,6 +7,7 @@ import { BusyPot } from "@/components/Loading";
 import { TemplePicker } from "@/components/TemplePicker";
 import { api, setActiveTempleId, toApiError, type ApiError, type TempleSummary } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { isE164, normalizePhone } from "@/lib/phone";
 
 /**
  * The half of registering that is ours rather than Firebase's: which temple, and what they need to
@@ -45,7 +46,9 @@ export function JoinTempleForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const ready = temple && firstName.trim() && lastName.trim() && /^\+[1-9][0-9]{7,14}$/.test(phone.trim());
+  // Spaces and hyphens are separators, removed before the rule is checked here and on the server
+  // alike (T-157), so a number typed the way KMS-400003 writes one enables the button.
+  const ready = temple && firstName.trim() && lastName.trim() && isE164(phone);
 
   async function join() {
     if (!temple) return;
@@ -57,7 +60,7 @@ export function JoinTempleForm({
         {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          phone: phone.trim(),
+          phone: normalizePhone(phone),
           email: user?.email ?? null,
         },
         await getToken()
@@ -105,8 +108,7 @@ export function JoinTempleForm({
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           // The example is the whole instruction, so it sits in the box rather than in a sentence
-          // under it — and it is written the way the field is actually validated, unspaced, which
-          // the old spaced placeholder was not.
+          // under it. Unspaced, as it always was; since T-157 a spaced number is accepted too.
           placeholder="+919876543210"
           className="min-h-touch rounded-control border border-hairline px-3 text-ink"
         />

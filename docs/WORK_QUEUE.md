@@ -246,3 +246,5 @@ where they sit; ask before assuming any of them outranks item 1.
   **Built 2026-09-12 as T-150, not yet verified by Rajeev.** All three now answer `KMS-400013` with a
   field error naming the ingredient. **No screen shows that field line yet**, so UAT-081 step 17
   still fails on the donation screen; that is queued as T-154. Proof in `docs/work/proof/T-150.md`.
+  **T-154 built 2026-09-12, not yet verified by Rajeev and not yet deployed.** All three screens now
+  show the field line under the error box. Proof in `docs/work/proof/T-154.md`.

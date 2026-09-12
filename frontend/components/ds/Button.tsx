@@ -84,6 +84,16 @@ export function Button({
   className = "",
   busy = false,
   disabled,
+  // "button", not the browser's "submit". A <button> with no type submits whatever form it sits
+  // in, so every Button in a form used to be a save button whether or not it said so — which is
+  // how pressing "remove" on an order line also saved the order with the line still on it. A
+  // screen that means to submit now says `type="submit"`; forgetting to fails safe, as a button
+  // that does nothing on Enter, rather than as a save nobody asked for.
+  //
+  // Taken out of the props here rather than written as `type="button"` ahead of `{...rest}`,
+  // because a caller passing `type={undefined}` would spread over that and put the submit back.
+  // A destructuring default covers undefined too, and the attribute is set after the spread.
+  type = "button",
   children,
   ...rest
 }: {
@@ -121,6 +131,7 @@ export function Button({
       disabled={disabled || busy}
       aria-busy={busy || undefined}
       {...rest}
+      type={type}
     >
       {icon && <i className={`ti ti-${icon} text-lg`} aria-hidden="true" />}
       {children}

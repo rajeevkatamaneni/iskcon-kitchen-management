@@ -28,6 +28,7 @@ import {
   type WebhookSubscriptionGroup,
   type WhatsAppSettingsView,
 } from "@/lib/api";
+import { normalizePhone } from "@/lib/phone";
 
 /**
  * A temple's own settings: today, how it collects donations.
@@ -668,7 +669,8 @@ function MessagingSection({
    * than a second copy of that rule here that could drift from it.
    */
   async function sendTest() {
-    const number = testNumber.trim();
+    // Separators removed, as on every E.164 box (T-157). The rule itself stays the server's.
+    const number = normalizePhone(testNumber);
     setBusy("test");
     setError(null);
     setSaved(false);
@@ -928,7 +930,7 @@ function MessagingSection({
             <button
               type="button"
               onClick={sendTest}
-              disabled={busy !== null || !testNumber.trim()}
+              disabled={busy !== null || !normalizePhone(testNumber)}
               className="btn btn-quiet min-h-touch px-5 text-sm disabled:opacity-60"
             >
               {busy === "test" ? "Sending…" : "Send"}

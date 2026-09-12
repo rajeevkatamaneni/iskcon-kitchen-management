@@ -12,6 +12,9 @@ import { CookingLoader } from "@/components/CookingLoader";
 import { AddressPicker } from "@/components/planner/AddressPicker";
 import { ApiError, api, toApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+// Shared since T-157, and narrower than the copy that lived here: it removes separators only, so a
+// letter typed where a digit belongs is refused rather than silently dropped.
+import { normalizePhone } from "@/lib/phone";
 
 /**
  * Bring a temple onto the platform.
@@ -42,15 +45,6 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 60)
     .replace(/-+$/g, "");
-}
-
-/**
- * Keep only the leading "+" and the digits. A phone typed with spaces, dashes, or an invisible
- * zero-width/non-breaking character (common from autofill or a paste) is otherwise rejected by the
- * strict E.164 check even though the number itself is fine.
- */
-function normalizePhone(value: string): string {
-  return value.replace(/[^\d+]/g, "");
 }
 
 function NewTenantForm() {

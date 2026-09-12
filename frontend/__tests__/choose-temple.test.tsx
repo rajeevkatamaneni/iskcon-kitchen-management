@@ -177,6 +177,25 @@ describe("choosing a temple, with an identity but no account", () => {
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/"));
   });
 
+  it("accepts a number written with spaces and hyphens, and joins with the bare number", async () => {
+    // KMS-400003's own example, which this button used to refuse (T-157).
+    render(<ChooseTemplePage />);
+
+    await pickMysore();
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "+91 98765-43210" } });
+    const join = screen.getByRole("button", { name: /join this temple/i });
+    await waitFor(() => expect(join).toBeEnabled());
+    fireEvent.click(join);
+
+    await waitFor(() =>
+      expect(joinTemple).toHaveBeenCalledWith(
+        "t1",
+        { firstName: "Gopal", lastName: "Das", phone: "+919876543210", email: "gopal@example.org" },
+        "token-abc"
+      )
+    );
+  });
+
   it("explains a refused join with the code to quote, and stays on the screen", async () => {
     const { ApiError } = await import("@/lib/api");
     joinTemple.mockRejectedValue(

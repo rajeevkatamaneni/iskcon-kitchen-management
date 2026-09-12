@@ -1,7 +1,9 @@
 package org.iskcon.kms.notification;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import org.iskcon.kms.config.PhoneNumberDeserializer;
 
 /**
  * A temple administrator asking for a test WhatsApp message to be sent to one phone (T-151).
@@ -16,6 +18,7 @@ import jakarta.validation.constraints.Pattern;
  */
 public record SendWhatsAppTestRequest(
 		@NotBlank(message = "Enter the phone number to send the test message to.")
+		@JsonDeserialize(using = PhoneNumberDeserializer.class)
 		@Pattern(
 				regexp = "^\\+[1-9][0-9]{7,14}$",
 				message = "Include the country code, for example +919876543210.")

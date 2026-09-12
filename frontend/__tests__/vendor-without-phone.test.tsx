@@ -191,6 +191,30 @@ describe("adding a vendor with no number", () => {
   });
 });
 
+describe("a vendor's number typed with spaces (T-157)", () => {
+  it("is added as the bare number", async () => {
+    render(<NewVendorPage />);
+
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Govind Wholesale" } });
+    fireEvent.change(screen.getByLabelText(/phone/i, PHONE_BOX), { target: { value: "+91 98450-12303" } });
+    fireEvent.submit(screen.getByRole("form", { name: /add a vendor/i }));
+
+    await waitFor(() => expect(createVendorMock).toHaveBeenCalled());
+    expect(payload(createVendorMock, 0).phone).toBe("+919845012303");
+  });
+
+  it("is saved as the bare number on an edit", async () => {
+    render(<VendorDetailPage />);
+
+    const phone = await screen.findByLabelText(/phone/i, PHONE_BOX);
+    fireEvent.change(phone, { target: { value: "+91 98450 12303" } });
+    fireEvent.submit(screen.getByRole("form", { name: /edit vendor/i }));
+
+    await waitFor(() => expect(updateVendorMock).toHaveBeenCalled());
+    expect(payload(updateVendorMock, 1).phone).toBe("+919845012303");
+  });
+});
+
 describe("editing a vendor with no number", () => {
   it("renders the empty box without demanding one, and saves the null back", async () => {
     render(<VendorDetailPage />);

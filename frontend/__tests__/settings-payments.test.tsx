@@ -417,6 +417,28 @@ describe("the WhatsApp connection", () => {
     expect(messaging().getByRole("button", { name: "Send a test message" })).toBeInTheDocument();
   });
 
+  it("sends the bare number when it was typed with spaces and hyphens", async () => {
+    // T-157. The rule stays the server's; this box only takes the separators out, as the server does.
+    whatsappSettings.mockResolvedValue(CONNECTED);
+    sendWhatsAppTestMessage.mockResolvedValue(CONNECTED);
+    render(<SettingsRoute />);
+
+    fireEvent.click((await messagingLoaded()).getByRole("button", { name: "Send a test message" }));
+    fireEvent.change(messaging().getByLabelText("Send a test message to", { selector: "input" }), {
+      target: { value: "+91 98765-00000" },
+    });
+    const send = messaging().getByRole("button", { name: "Send" });
+    expect(send).toBeEnabled();
+    fireEvent.click(send);
+
+    await waitFor(() =>
+      expect(sendWhatsAppTestMessage).toHaveBeenCalledWith("+919876500000", "token-abc")
+    );
+    expect(
+      await messaging().findByText("Test message sent to +919876500000. Check WhatsApp on that phone.")
+    ).toBeInTheDocument();
+  });
+
   it("shows WhatsApp's refusal in plain words, and never claims the message went", async () => {
     whatsappSettings.mockResolvedValue(CONNECTED);
     sendWhatsAppTestMessage.mockRejectedValue(

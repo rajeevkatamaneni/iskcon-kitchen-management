@@ -1,5 +1,6 @@
 package org.iskcon.kms.vendor;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -179,6 +180,31 @@ class VendorIT extends AbstractIntegrationTest {
 		mvc.perform(createRequest("{\"name\":\"Bad Phone\",\"phone\":\"98765\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("KMS-400003"));
+	}
+
+	/**
+	 * A number written the way KMS-400003 itself writes one is accepted, and stored bare (T-157).
+	 * The phone is what a purchase order is sent to on WhatsApp, so the stored form is the one that
+	 * has to be right: read back from the row, on the way in and on an edit.
+	 */
+	@Test
+	@DisplayName("a number typed with spaces or hyphens is stored as the bare number, when added and when edited")
+	void aSpacedNumberIsStoredBare() throws Exception {
+		UUID id = create("{\"name\":\"Govind Wholesale\",\"phone\":\"+91 98123 45678\"}");
+		assertThat(storedPhone(id)).isEqualTo("+919812345678");
+
+		mvc.perform(update(id, "{\"name\":\"Govind Wholesale\",\"phone\":\"+91-98123-45679\"}"))
+				.andExpect(status().isNoContent());
+		assertThat(storedPhone(id)).isEqualTo("+919812345679");
+
+		// And the leniency is about separators only: a typo is still the phone number's code.
+		mvc.perform(createRequest("{\"name\":\"Bad Phone\",\"phone\":\"+91 98123 4567X\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400003"));
+	}
+
+	private String storedPhone(UUID vendorId) {
+		return admin.queryForObject("SELECT phone FROM vendors WHERE id = ?", String.class, vendorId);
 	}
 
 	@Test

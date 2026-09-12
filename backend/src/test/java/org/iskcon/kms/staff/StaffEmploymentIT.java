@@ -496,6 +496,36 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 				.isEqualTo(1);
 	}
 
+	/**
+	 * Both of a hire's numbers, typed the way KMS-400003 itself writes one, are accepted and stored
+	 * bare — on the hire and on an edit of the record (T-157).
+	 */
+	@Test
+	@DisplayName("a staff member's two numbers typed with spaces or hyphens are stored bare, on a hire and an edit")
+	void spacedNumbersAreStoredBare() throws Exception {
+		String id = hireId("""
+				{"fullName":"Ramesh Kumar","phone":"+91 98765 00061","jobTitle":"HOUSEKEEPING",
+				 "employmentType":"PART_TIME","dateOfJoining":"2026-03-01",
+				 "emergencyContactName":"Sita Devi","emergencyContactPhone":"+91-98765-00062"}
+				""");
+		assertThat(admin.queryForMap(
+				"SELECT phone, emergency_contact_phone FROM staff_profiles WHERE id = ?::uuid", id))
+				.containsEntry("phone", "+919876500061")
+				.containsEntry("emergency_contact_phone", "+919876500062");
+
+		mvc.perform(authed(put("/api/v1/staff/members/{id}", id))
+						.contentType(MediaType.APPLICATION_JSON).content("""
+						{"fullName":"Ramesh Kumar","phone":"+91-98765-00063","jobTitle":"HOUSEKEEPING",
+						 "employmentType":"PART_TIME","dateOfJoining":"2026-03-01",
+						 "emergencyContactName":"Sita Devi","emergencyContactPhone":"+91 98765 00064"}
+						"""))
+				.andExpect(status().isNoContent());
+		assertThat(admin.queryForMap(
+				"SELECT phone, emergency_contact_phone FROM staff_profiles WHERE id = ?::uuid", id))
+				.containsEntry("phone", "+919876500063")
+				.containsEntry("emergency_contact_phone", "+919876500064");
+	}
+
 	@Test
 	@DisplayName("a malformed PAN never reaches the database")
 	void malformedPanRefused() throws Exception {

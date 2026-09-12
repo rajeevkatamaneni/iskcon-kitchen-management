@@ -112,7 +112,7 @@ function firebaseUser(overrides: Record<string, unknown> = {}) {
 }
 
 /** Everything above "How would you like to sign in?", which is the same for all three methods. */
-async function fillTheDetails() {
+async function fillTheDetails(phone = "+919876543210") {
   fireEvent.change(screen.getByLabelText(/which temple do you serve at/i), {
     target: { value: "Mysore" },
   });
@@ -124,7 +124,7 @@ async function fillTheDetails() {
   fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Gopal" } });
   fireEvent.change(screen.getByLabelText(/last name/i), { target: { value: "Das" } });
   fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "gopal@example.org" } });
-  fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "+919876543210" } });
+  fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: phone } });
 }
 
 function fillAPassword(value = "hare-krishna-108") {
@@ -273,6 +273,28 @@ describe("finishing registration with a password", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
+  /**
+   * KMS-400003 writes its example as "+91 98765 43210", and until T-157 this screen refused that
+   * example: the button stayed grey. The temple is sent the bare number, which is what it stores.
+   */
+  it("accepts a number written with spaces and hyphens, and joins with the bare number", async () => {
+    render(<RegisterPage />);
+    await fillTheDetails("+91 98765-43210");
+    fillAPassword();
+
+    const create = screen.getByRole("button", { name: /create my account/i });
+    await waitFor(() => expect(create).toBeEnabled());
+    fireEvent.click(create);
+
+    await waitFor(() =>
+      expect(joinTemple).toHaveBeenCalledWith(
+        "t1",
+        { firstName: "Gopal", lastName: "Das", phone: "+919876543210", email: "gopal@example.org" },
+        "id-token"
+      )
+    );
+  });
+
   it("leaves a name Google already gave alone", async () => {
     createUserWithEmailAndPassword.mockResolvedValue({
       user: firebaseUser({ displayName: "Gopal Das" }),
@@ -368,6 +390,26 @@ describe("finishing registration with Google or a phone code", () => {
     fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "+919876543210" } });
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /send a code to my phone/i })).toBeEnabled()
+    );
+  });
+
+  it("sends a code to a number written with spaces, and gives Firebase the bare number", async () => {
+    // Firebase requires E.164 and, unlike the API, has no second chance to clean what it is given.
+    signInWithPhoneNumber.mockResolvedValue({ confirm: vi.fn() });
+    render(<RegisterPage />);
+    await fillTheDetails("+91 98765 43210");
+    fireEvent.click(screen.getByRole("tab", { name: /phone and otp/i }));
+
+    const send = screen.getByRole("button", { name: /send a code to my phone/i });
+    await waitFor(() => expect(send).toBeEnabled());
+    fireEvent.click(send);
+
+    await waitFor(() =>
+      expect(signInWithPhoneNumber).toHaveBeenCalledWith(
+        expect.anything(),
+        "+919876543210",
+        expect.anything()
+      )
     );
   });
 

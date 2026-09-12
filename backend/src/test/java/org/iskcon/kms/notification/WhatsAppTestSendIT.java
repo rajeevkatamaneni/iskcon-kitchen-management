@@ -197,6 +197,24 @@ class WhatsAppTestSendIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a number typed with spaces and hyphens is sent to as the bare number, and recorded so (T-157)")
+	void aSpacedNumberIsSentBare() throws Exception {
+		connect();
+		when(meta.sendTemplate(anyString(), anyString(), anyString(), anyString(), anyString(), anyList()))
+				.thenReturn("wamid.T157");
+
+		sendTestTo("+91 98765-00000").andExpect(status().isOk());
+
+		// Meta is handed the number itself, not the spacing somebody typed around it.
+		verify(meta, times(1)).sendTemplate("phone-govinda", "token-govinda", TEST_NUMBER,
+				"connection_test", "en", List.of("Sri Sri Radha Govinda Temple"));
+		assertThat(admin.queryForObject("""
+				SELECT after_state ->> 'whatsappTestSentTo' FROM audit_events WHERE tenant_id = ?
+				""", String.class, govinda))
+				.isEqualTo(TEST_NUMBER);
+	}
+
+	@Test
 	@DisplayName("a malformed number is KMS-400003, and nothing is sent or stamped")
 	void malformedNumberIsRefusedBeforeMeta() throws Exception {
 		connect();

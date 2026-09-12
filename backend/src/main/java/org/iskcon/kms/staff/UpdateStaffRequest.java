@@ -1,5 +1,6 @@
 package org.iskcon.kms.staff;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -10,6 +11,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import org.iskcon.kms.config.PhoneNumberDeserializer;
 
 /**
  * Editing an employment record (E6-S8): a promotion, a new phone number, a corrected joining date.
@@ -29,6 +31,7 @@ public record UpdateStaffRequest(
 		@Size(max = 200, message = "That name is too long.")
 		String fullName,
 
+		@JsonDeserialize(using = PhoneNumberDeserializer.class)
 		@Pattern(
 				regexp = "^\\+[1-9][0-9]{7,14}$",
 				message = "Include the country code, for example +919876543210.")
@@ -56,6 +59,7 @@ public record UpdateStaffRequest(
 
 		@Size(max = 200, message = "That name is too long.") String emergencyContactName,
 		@Size(max = 100, message = "That relationship is too long.") String emergencyContactRelationship,
+		@JsonDeserialize(using = PhoneNumberDeserializer.class)
 		@Pattern(
 				regexp = "^\\+[1-9][0-9]{7,14}$",
 				message = "Include the country code, for example +919876543210.")

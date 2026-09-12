@@ -124,6 +124,24 @@ describe("add a temple", () => {
     );
   });
 
+  it("takes out the spaces and leaves a typo in, so the server refuses it rather than storing a stranger's number", async () => {
+    // The copy of the cleaning that used to live on this screen kept the plus and the digits and threw
+    // everything else away, so this X vanished and a well-formed wrong number was sent (T-157).
+    render(<NewTenantPage />);
+
+    fireEvent.change(screen.getByLabelText(/^name/i), {
+      target: { value: "Sri Sri Radha Govinda Temple" },
+    });
+    fireEvent.change(screen.getByLabelText(/phone number/i), {
+      target: { value: "+91 70304 3334X" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /add temple/i }));
+
+    await waitFor(() => expect(provisionSpy).toHaveBeenCalledTimes(1));
+    const sent = provisionSpy.mock.calls[0][0] as { slug: string; adminPhone: string };
+    expect(sent.adminPhone).toBe("+91703043334X");
+  });
+
   it("steers a duplicate-name web-address clash to the Name field", async () => {
     provisionSpy.mockRejectedValueOnce(
       new ApiError({

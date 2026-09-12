@@ -13,6 +13,7 @@ import { Field } from "@/components/Field";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth, firebaseConfigured } from "@/lib/firebase";
+import { normalizePhone } from "@/lib/phone";
 import { IDLE_LIMIT_MS, takeAutomaticSignOutNote } from "@/lib/session-timeout";
 import { BusyPot } from "@/components/Loading";
 
@@ -253,7 +254,8 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
     setError(null);
     setBusy(true);
 
-    const phone = String(new FormData(event.currentTarget).get("phone"));
+    // The bare E.164 form Firebase requires, however it was spaced (T-157).
+    const phone = normalizePhone(String(new FormData(event.currentTarget).get("phone") ?? ""));
 
     try {
       const auth = getFirebaseAuth();
