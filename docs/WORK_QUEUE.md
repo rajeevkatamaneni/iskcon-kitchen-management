@@ -178,12 +178,21 @@ serves a per-temple health read, and no such endpoint exists.
 These came out of the review build and its verification. Rajeev has seen each one but has not said
 where they sit; ask before assuming any of them outranks item 1.
 
-- **Local development bypasses row-level security.** `application.yml` defaults `DB_USER` to `kms`,
-  the compose superuser, and `V1`'s grants for the unprivileged `kms_app` role are gated on
+- **Local development bypasses row-level security.** ~~`application.yml` defaults `DB_USER` to
+  `kms`, the compose superuser, and `V1`'s grants for the unprivileged `kms_app` role are gated on
   `IF EXISTS` — which it does not, locally. So the application runs locally as a superuser and RLS
   does nothing, which is the exact trap `CLAUDE.md` warns about. Symptom: other temples' rows appear
   in `/users` and `/staff`. Production and CI are unaffected. Fix is a local `kms_app` role plus a
-  separate migrator role for Flyway.
+  separate migrator role for Flyway.~~
+  **Done, in two halves.** The application half was fixed on 2026-09-05 in `89777ec`:
+  `infra/local/01-roles.sql` now creates `kms_app` and `kms_migration`, `docker-compose.yml` mounts
+  it into the container's init directory, and `application.yml` defaults `DB_USER` to `kms_app`. The
+  row above was simply never updated and stayed misleading for six days. The **migrator** half was
+  fixed on 2026-09-11 as T-145: `README.md` had gone on telling every developer to run
+  `DB_MIGRATION_USER=kms`, so migrations — not the application — still ran as the superuser locally,
+  with RLS off and the tables owned by a superuser, while tests and Cloud SQL ran them unprivileged.
+  Proof, including the live before/after on a throwaway database, is in
+  `docs/work/proof/T-145.md`.
 - **A shift crossing midnight is refused** (`20:00`→`02:00`, KMS-500001), for a temple whose largest
   festival is at midnight. Found while seeding Janmashtami.
 - **A festival occasion's `defaultServings` no longer reaches the meal composer.** The head-count

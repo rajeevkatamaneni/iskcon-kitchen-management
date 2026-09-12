@@ -36,14 +36,15 @@ docs/        Requirements, design, stories
 **Prerequisites:** JDK 21, Node 22, Docker (for the local database and Testcontainers).
 
 ```bash
-# 1. Start the local Postgres. Database, user and password are all "kms", which is
-#    what the backend defaults to, so no configuration is needed for it.
+# 1. Start the local Postgres. The container's own admin account is "kms"; the two
+#    roles the application and Flyway actually use are created by
+#    infra/local/01-roles.sql the first time the data directory is made.
 docker compose up -d
 
 # 2. Backend. Three variables, and each is load-bearing — see below.
 cd backend
 KMS_FIREBASE_ENABLED=true \
-  DB_MIGRATION_USER=kms DB_MIGRATION_PASSWORD=kms \
+  DB_MIGRATION_USER=kms_migration DB_MIGRATION_PASSWORD=kms_migration \
   ./gradlew bootRun                            # http://localhost:8080/health
 
 # 3. Backend tests (Testcontainers spins up its own Postgres; Docker must be running)
@@ -69,7 +70,54 @@ returned every temple's rows. It surfaced as a theme that would not stick (`SELE
 FROM tenant_settings` carries no `WHERE`, because RLS is meant to supply one, so it read five temples'
 rows and took the first) and it could as easily have surfaced as one temple's meals on another
 temple's planner. `infra/local/01-roles.sql` creates the roles when the container's data directory is
-first made; a database created before that date needs them added by hand. Without `KMS_FIREBASE_ENABLED=true` the application boots perfectly and
+first made; a database created before that date needs them added by hand.
+
+**Why `kms_migration` and not the `kms` superuser.** The application role was fixed on 2026-09-05 but
+the migrator was not: this file went on naming `kms` for `DB_MIGRATION_*` until 2026-09-11, so
+migrations kept running as a superuser locally while tests and production ran them unprivileged. The
+application was never affected — it connects as `kms_app` either way — but a *migration* was, and
+migrations on this project are subject to RLS on purpose: a seed or a backfill adopts each tenant in
+turn rather than sweeping every row. Run as the superuser, a backfill with no tenant adopted sees
+every temple's rows and looks like it works; run as `kms_migration` the same statement sees none,
+which is what it will see in `./gradlew test` and on Cloud SQL. The other half is ownership. Flyway
+gets its own connection (`FlywayMigrationRoleConfiguration`), so whoever it connects as ends up
+owning the tables and the four `SECURITY DEFINER` functions — `delete_tenant_cascade`,
+`tenant_user_count`, `match_employment_bans`, `employment_ban_raising_tenant`. Those run as their
+owner, so with a superuser owner they are exempt from the very policies they were written to work
+within, and the lift `V45`/`V46` exist for is never exercised.
+
+**If your database predates 2026-09-11** its tables are owned by `kms` and switching the variable
+alone will not re-own them. Either drop the volume — `docker compose down -v && docker compose up -d`,
+which loses your local data — or, keeping the data, re-own it in place as `kms`:
+
+```sql
+DO $$
+DECLARE obj RECORD;
+BEGIN
+    FOR obj IN SELECT format('%I', c.relname) AS name,
+                      CASE c.relkind WHEN 'S' THEN 'SEQUENCE' WHEN 'v' THEN 'VIEW'
+                                     WHEN 'm' THEN 'MATERIALIZED VIEW' ELSE 'TABLE' END AS kind
+               FROM pg_class c
+               WHERE c.relnamespace = 'public'::regnamespace
+                 AND c.relkind IN ('r','p','S','v','m')
+                 AND pg_get_userbyid(c.relowner) <> 'kms_migration'
+    LOOP
+        EXECUTE format('ALTER %s public.%s OWNER TO kms_migration', obj.kind, obj.name);
+    END LOOP;
+
+    FOR obj IN SELECT p.oid::regprocedure AS sig FROM pg_proc p
+               WHERE p.pronamespace = 'public'::regnamespace
+                 AND pg_get_userbyid(p.proowner) <> 'kms_migration'
+    LOOP
+        EXECUTE format('ALTER FUNCTION %s OWNER TO kms_migration', obj.sig);
+    END LOOP;
+END $$;
+GRANT ALL ON SCHEMA public TO kms_migration;
+```
+
+It moves `flyway_schema_history` too, which is what lets the next `bootRun` migrate at all.
+
+Without `KMS_FIREBASE_ENABLED=true` the application boots perfectly and
 nobody can ever sign in: `FirebaseConfiguration` is conditional on it, so `RejectingTokenVerifier`
 takes over and refuses every token. Without `NEXT_PUBLIC_API_URL` the frontend renders and every
 API call fails. Neither announces itself.

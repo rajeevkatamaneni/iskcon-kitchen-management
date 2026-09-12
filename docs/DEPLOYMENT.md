@@ -139,7 +139,7 @@ The operator then signs in with that exact email (or phone) via the web app. Fir
 
 Notes:
 - The email must be one the operator will verify with Firebase (Google sign-in, or email/password with a verified address); an unverified email cannot claim the row.
-- This works locally too, but local development connects as a superuser that bypasses RLS, so the write escape isn't exercised there — the production path is what the tests cover.
+- This works locally too, and since 2026-09-05 it exercises the same path production does: local development connects as `kms_app` and, since 2026-09-11, migrates as `kms_migration` — neither bypasses RLS. Run the insert itself as the compose container's `kms` admin (`docker exec -it kms-postgres psql -U kms -d kms`), which does bypass RLS and stands in for the Cloud SQL admin connection. The sign-in that follows then goes through the real write escape.
 
 ---
 
