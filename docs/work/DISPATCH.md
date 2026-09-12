@@ -26,6 +26,33 @@ Three, in his words. Recorded by the work manager at dispatch.
    A removal task, under README's removal-wave rules. **Built as T-153.** If a locked document
    promises the endpoint, the builder stops and reports rather than editing it.
 
+## ✅ WAVE 1 — SHIPPED TO STAGING 2026-09-12, not yet driven in a browser
+
+**Staging is now `kms-staging-api-00154-svm` / `kms-staging-web-00142-whs` / `kms-staging-worker-00136-2bl`,
+schema still `V127` (no migration in this wave). The next free migration number is still `V128`.**
+
+One commit, `dd0d765`, for T-147 to T-153. CI run **34723056493** green on all three jobs. Before
+pushing, `HEAD` was archived into a clean directory (with `git init && git add -A`) and the whole
+suite run there: backend **2,344 tests, 0 failed, 7 skipped** (4m28s, not killed); frontend `tsc`
+clean, vitest **124 files / 1,488 passed**, `next build` **72 pages**. API and worker image
+`sha256:84c9b66b…` (was `2161952b…`), web image `sha256:888674f5…` (was `855688c3…`). Each new
+revision serves 100% of traffic. The new API's own startup log reads *"Current version of schema
+"public": 127"* and *"No migration necessary"*, not taken from the deploy's exit code.
+
+**Live checks, as the Temple Admin, nothing saved:**
+- `POST /api/v1/purchase-orders/generate`, body naming a nonexistent ingredient so nothing could be
+  created even on old code, answers **HTTP 404 `KMS-400030`**. (Unauthenticated, any path answers 401,
+  so the probe was signed in; a read-only `GET /purchase-orders` with the same token answered 200.)
+- `GET /api/v1/my-shifts/released` answers **200**.
+- The served settings bundle carries *"Test message sent to"* and `myReleasedShifts`.
+
+**Deliberately not done:** the WhatsApp Test button was not pressed, WhatsApp settings were not saved,
+and no message was sent, so the `connection_test` template has not been submitted to Meta. That waits
+on Rajeev's say-so. No labelled test data was touched.
+
+**Still to do:** drive each one as its role. T-154 (the three unit-family refusals naming the
+ingredient on screen) is queued and not in this release.
+
 ## ▶ WAVE 1 (2026-09-12) — dispatched in two halves, 1a then 1b, because the machine allows four builders
 
 **State at dispatch:** HEAD `b2009b6`, tree clean before reservations. Staging `api-00153-nzz` /
@@ -97,7 +124,7 @@ A removal proves the accepted consequence instead.
   - The third batch was **killed by the OS for low memory before a test ran**. Re-run as three smaller runs with the daemon stopped between them: `shift` **104 / 104** (includes `VolunteerSignupIT`, which T-149 had not run), `notification` + `jobs` **36 / 36**, `auth.AccessControlEnforcementIT` **10 / 10.**
   - Logs: `scratchpad/merged-backend-wave1.log`, `scratchpad/merged-backend-wave1-C.log`.
 - **Wave 1 is proven and not released.** All seven tasks are proven; every changed file in `git status` belongs to one of the seven contracts or to the coordinator's reservations. Nothing is committed. The release agent's clean-archive full suite and `next build` are still to run.
-- **2026-09-12, release agent: committed to `main` as one commit for all seven**, with the changelog entry and `WORK_QUEUE.md` marked built and not yet verified. Tree cross-checked against the seven proofs' file lists before staging; the only file no proof names is `ErrorCode.java`, which is the coordinator's `KMS-500007` reservation above. The clean-archive gate, CI and staging revisions are recorded after the deploy.
+- **2026-09-12, release agent: committed to `main` as one commit for all seven**, with the changelog entry and `WORK_QUEUE.md` marked built and not yet verified. Tree cross-checked against the seven proofs' file lists before staging; the only file no proof names is `ErrorCode.java`, which is the coordinator's `KMS-500007` reservation above. **Released as `dd0d765` and on staging** — see the shipped block above this wave.
 
 ### T-147 — The crew count's breakdown reachable without a mouse
 
