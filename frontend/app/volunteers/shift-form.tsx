@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { HintedField } from "@/components/ds/InfoHint";
 import type { ShiftInput, ShiftView } from "@/lib/api";
+import { crossesMidnight } from "@/lib/format";
 
 /**
  * The eight fields a seva shift is made of, shared by posting one and correcting one.
@@ -24,12 +26,44 @@ export function ShiftFields({
   shift?: ShiftView;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
+  // The two times are held in state for one reason: the form has to say, while somebody is typing,
+  // what an end time before a start time means (T-146). Everything else on this form is
+  // uncontrolled and stays that way — a defaultValue that the browser owns is fewer moving parts
+  // than a controlled input, and only these two have anything to say about each other.
+  //
+  // Seeded from the props once, which is safe for the same reason the `defaultValue`s it replaces
+  // were: the edit screen renders this component only after the shift has loaded, so the props are
+  // never the empty placeholder that a later load would have to correct.
+  const [startTime, setStartTime] = useState(hhmm(shift?.startTime));
+  const [endTime, setEndTime] = useState(hhmm(shift?.endTime));
+
+  // Equal times are the one pairing the product refuses: 20:00 to 20:00 is either a shift of no
+  // length or one of twenty-four hours and nothing can say which. The server refuses it too
+  // (KMS-400001, naming the field), and this is that same rule said before the press rather than
+  // after it — the failure notice on these screens shows the code's own sentence and does not
+  // highlight fields, so a refusal that only came back from the server would leave a coordinator
+  // staring at a form with nothing marked on it.
+  const sameTime = startTime !== "" && startTime === endTime;
+  // And where the shift genuinely runs through the night, the form says so rather than leaving
+  // "20:00" above "02:00" for a reader to interpret. `crossesMidnight` is true of equal times as
+  // well, so the refusal above wins and only one of the two lines is ever shown.
+  const overnight = !sameTime && startTime !== "" && endTime !== "" && crossesMidnight(startTime, endTime);
+
   return (
     <form
       id={SHIFT_FORM}
       className="grid grid-cols-2 gap-4"
       aria-label={shift ? "Edit a shift" : "Post a shift"}
-      onSubmit={onSubmit}
+      onSubmit={(event) => {
+        // Held here rather than in each of the two screens that use this form, so neither can
+        // forget it. A submit blocked here never reaches the API, so nothing is saved and nothing
+        // is reported — the sentence under the End box is already on screen saying why.
+        if (sameTime) {
+          event.preventDefault();
+          return;
+        }
+        onSubmit(event);
+      }}
     >
       <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Title</span>
@@ -47,11 +81,38 @@ export function ShiftFields({
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Start</span>
-        <input name="startTime" type="time" required defaultValue={hhmm(shift?.startTime)} className={FIELD} />
+        <input
+          name="startTime"
+          type="time"
+          required
+          value={startTime}
+          onChange={(e) => setStartTime(e.target.value)}
+          className={FIELD}
+        />
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">End</span>
-        <input name="endTime" type="time" required defaultValue={hhmm(shift?.endTime)} className={FIELD} />
+        <input
+          name="endTime"
+          type="time"
+          required
+          value={endTime}
+          onChange={(e) => setEndTime(e.target.value)}
+          className={FIELD}
+        />
+        {/* One line, never both: the refusal replaces the explanation, because a form cannot at
+            once be telling somebody their shift runs to the next morning and that it is not a
+            shift at all. `role="alert"` on the refusal only — "Ends the next day" is an
+            explanation of what was typed, and announcing it on every keystroke would talk over
+            somebody still choosing the time. */}
+        {sameTime ? (
+          <span role="alert" className="pl-field-inset text-danger">
+            A shift cannot start and end at the same time. For one that runs through the night, give
+            the time it ends the next morning.
+          </span>
+        ) : overnight ? (
+          <span className="pl-field-inset text-ink-muted">Ends the next day — this shift runs through midnight</span>
+        ) : null}
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Location</span>

@@ -14,6 +14,52 @@ export function hhmm(time: string | null | undefined): string {
   return m ? `${m[1].padStart(2, "0")}:${m[2]}` : time;
 }
 
+/**
+ * Does this shift run through midnight — that is, does it end on the day after its own date?
+ *
+ * <p>**`shiftDate` is the date a shift STARTS.** Everything about an overnight shift follows from
+ * that one sentence, and this is where the screens say it. A shift whose end time is at or before
+ * its start time — 20:00 to 02:00, the Janmashtami midnight offering — ends the next morning.
+ *
+ * <p>The same rule is written in exactly two other places and nowhere else, because the most
+ * expensive recurring defect in this project is one sum implemented three times and disagreeing:
+ * `shift_ends_at()` in SQL (migration V127) and `ShiftWindow` in Java. A fourth copy should not be
+ * written; call this one.
+ *
+ * <p>Compares "HH:mm" prefixes as strings, which is a chronological comparison because both are
+ * fixed-width and zero-padded — the same trick the roster already uses to decide whether a shift
+ * has started. The API sends "HH:mm:ss" and a form sends "HH:mm", so both are cut to five
+ * characters first and the two agree.
+ */
+export function crossesMidnight(
+  startTime: string | null | undefined,
+  endTime: string | null | undefined
+): boolean {
+  if (!startTime || !endTime) return false;
+  return endTime.slice(0, 5) <= startTime.slice(0, 5);
+}
+
+/**
+ * A shift's hours as a person reads them — "08:00–12:00", or "20:00–02:00 (next day)" where it runs
+ * through the night.
+ *
+ * <p>The parenthesis is the point of it. "20:00–02:00" read cold is a shift that ends sixteen hours
+ * before it begins, and a volunteer deciding whether they can make it, or a coordinator scanning a
+ * roster, should not have to work out which of the two readings the temple meant. Before T-146 an
+ * overnight shift could not be posted at all, so no screen had ever had to say this.
+ *
+ * <p>The same sentence the server puts in a reminder and a signup confirmation
+ * (`ShiftWindow.describe`), so the message on somebody's phone and the screen it came from say the
+ * shift's hours the same way.
+ */
+export function shiftWindow(
+  startTime: string | null | undefined,
+  endTime: string | null | undefined
+): string {
+  const window = `${hhmm(startTime)}–${hhmm(endTime)}`;
+  return crossesMidnight(startTime, endTime) ? `${window} (next day)` : window;
+}
+
 /** "2026-08-14" → "Friday, 14 August 2026", in the reader's own locale. */
 /**
  * "Saturday, 15 August" — a day the way it is said aloud in a kitchen. No year: the planner and the

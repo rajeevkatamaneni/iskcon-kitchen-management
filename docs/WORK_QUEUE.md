@@ -195,6 +195,10 @@ where they sit; ask before assuming any of them outranks item 1.
   `docs/work/proof/T-145.md`.
 - **A shift crossing midnight is refused** (`20:00`→`02:00`, KMS-500001), for a temple whose largest
   festival is at midnight. Found while seeding Janmashtami.
+  **Built 2026-09-12 as T-146, on staging, not yet verified by Rajeev.** A shift's date is the day it
+  starts; an end time at or before the start means the next day, and screens print
+  *"20:00–02:00 (next day)"*. Equal start and end times are refused by name (`KMS-400001`). Proof in
+  `docs/work/proof/T-146.md`.
 - **A festival occasion's `defaultServings` no longer reaches the meal composer.** The head-count
   change (E4-S7 D14) made all three counters open at zero unconditionally. Rajeev's rule was that the
   application does not *guess* a head count — but an occasion's stored default is a figure the temple

@@ -182,6 +182,83 @@ class ShiftIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a shift from 20:00 to 02:00 is posted, not refused with a 500 (T-146)")
+	void overnightShiftIsPosted() throws Exception {
+		// The defect, exactly as Rajeev found it while seeding Janmashtami: V34's
+		// CHECK (end_time > start_time) refused this insert, nothing caught the constraint violation,
+		// and GlobalExceptionHandler.handleUnexpected answered with KMS-500001 — "something went
+		// wrong at our end, try again in a moment" — to a temple whose largest festival is at
+		// midnight. The advice could never have worked.
+		String id = createId("{\"title\":\"Janmashtami midnight offering\",\"shiftDate\":\"2026-09-04\","
+				+ "\"startTime\":\"20:00\",\"endTime\":\"02:00\",\"location\":\"Main kitchen\",\"capacity\":12}");
+
+		mvc.perform(authed(get("/api/v1/shifts/{id}", id)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.startTime").value("20:00:00"))
+				// Stored as given. The end is 02:00 on the following day, which is what shift_date
+				// plus the new rule says — nothing rewrites the times into a "next day" column, and
+				// there is no such column to rewrite them into.
+				.andExpect(jsonPath("$.endTime").value("02:00:00"))
+				.andExpect(jsonPath("$.capacity").value(12));
+	}
+
+	@Test
+	@DisplayName("a shift that starts and ends at the same time is a named refusal, never a 500 (T-146)")
+	void sameStartAndEndRefused() throws Exception {
+		// The one pairing still refused, because 20:00 to 20:00 is ambiguous between a shift of no
+		// length and one of twenty-four hours. What matters as much as the refusal is its shape: a
+		// validation failure naming the field, not the bare KMS-500001 the CHECK used to produce.
+		mvc.perform(create("{\"title\":\"Nothing at all\",\"shiftDate\":\"2026-09-04\","
+						+ "\"startTime\":\"20:00\",\"endTime\":\"20:00\",\"capacity\":4}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("endTimeDifferentFromStartTime"))
+				.andExpect(jsonPath("$.fieldErrors[0].message")
+						.value(org.hamcrest.Matchers.containsString("cannot start and end at the same time")));
+	}
+
+	@Test
+	@DisplayName("an ordinary shift can be edited into an overnight one and back (T-146)")
+	void editIntoAndOutOfTheNight() throws Exception {
+		String id = createId("{\"title\":\"Janmashtami prep\",\"shiftDate\":\"2026-09-04\","
+				+ "\"startTime\":\"20:00\",\"endTime\":\"22:00\",\"capacity\":6}");
+
+		// The temple realises the offering runs until two in the morning. Being unable to correct
+		// this would mean cancelling the shift and emptying the roster over a time.
+		mvc.perform(authed(put("/api/v1/shifts/{id}", id)).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"title\":\"Janmashtami prep\",\"shiftDate\":\"2026-09-04\","
+								+ "\"startTime\":\"20:00\",\"endTime\":\"02:00\",\"capacity\":6}"))
+				.andExpect(status().isNoContent());
+		mvc.perform(authed(get("/api/v1/shifts/{id}", id)))
+				.andExpect(jsonPath("$.endTime").value("02:00:00"));
+
+		// And back, because a correction has to work in both directions.
+		mvc.perform(authed(put("/api/v1/shifts/{id}", id)).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"title\":\"Janmashtami prep\",\"shiftDate\":\"2026-09-04\","
+								+ "\"startTime\":\"20:00\",\"endTime\":\"22:00\",\"capacity\":6}"))
+				.andExpect(status().isNoContent());
+		mvc.perform(authed(get("/api/v1/shifts/{id}", id)))
+				.andExpect(jsonPath("$.endTime").value("22:00:00"));
+	}
+
+	@Test
+	@DisplayName("an edit to equal times is refused by name too, and the shift keeps its old hours")
+	void editToEqualTimesRefused() throws Exception {
+		String id = createId("{\"title\":\"Janmashtami prep\",\"shiftDate\":\"2026-09-04\","
+				+ "\"startTime\":\"20:00\",\"endTime\":\"02:00\",\"capacity\":6}");
+
+		mvc.perform(authed(put("/api/v1/shifts/{id}", id)).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"title\":\"Janmashtami prep\",\"shiftDate\":\"2026-09-04\","
+								+ "\"startTime\":\"20:00\",\"endTime\":\"20:00\",\"capacity\":6}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"));
+
+		// Nothing was half-applied: the refusal happens before the service is reached at all.
+		mvc.perform(authed(get("/api/v1/shifts/{id}", id)))
+				.andExpect(jsonPath("$.endTime").value("02:00:00"));
+	}
+
+	@Test
 	@DisplayName("a volunteer cannot post shifts")
 	void volunteerForbidden() throws Exception {
 		signIn("uid-vol-1");

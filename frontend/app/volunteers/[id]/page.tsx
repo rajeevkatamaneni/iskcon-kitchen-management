@@ -13,7 +13,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
 import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
-import { dateWithYear, hhmm, moment, templeDay, templeZone, todayIso } from "@/lib/format";
+import { dateWithYear, moment, shiftWindow, templeDay, templeZone, todayIso } from "@/lib/format";
 
 /**
  * Why a volunteer is coming off a roster — the four Rajeev named, in the words the coordinator picks
@@ -263,7 +263,7 @@ function ShiftRosterView() {
                 <div>
                   <h1>{shift.title}</h1>
                   <p className="mt-1 text-ink-secondary tabular-nums">
-                    {dateWithYear(shift.shiftDate)} · {hhmm(shift.startTime)}–{hhmm(shift.endTime)}{shift.location ? ` · ${shift.location}` : ""}
+                    {dateWithYear(shift.shiftDate)} · {shiftWindow(shift.startTime, shift.endTime)}{shift.location ? ` · ${shift.location}` : ""}
                   </p>
                   <p className="mt-1 text-sm text-ink-muted tabular-nums">
                     {activeSignups.length}/{shift.capacity} filled{roster!.waitlist.length > 0 ? ` · ${roster!.waitlist.length} waiting` : ""}

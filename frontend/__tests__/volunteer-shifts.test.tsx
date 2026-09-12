@@ -107,6 +107,24 @@ describe("volunteer shift management", () => {
     );
   });
 
+  it("says when a posted shift runs through midnight (T-146)", () => {
+    // "20:00–02:00" read cold is a shift that ends sixteen hours before it begins. The coordinator
+    // scanning this list should not have to work out which of the two readings the temple meant.
+    queryRef.current = {
+      data: [shift({ title: "Janmashtami midnight offering", startTime: "20:00:00", endTime: "02:00:00" })],
+      error: null,
+      loading: false,
+    };
+    render(<VolunteerShiftsPage />);
+    expect(screen.getByText(/20:00–02:00 \(next day\)/)).toBeInTheDocument();
+  });
+
+  it("leaves an ordinary shift's hours alone", () => {
+    render(<VolunteerShiftsPage />);
+    expect(screen.getByText(/08:00–12:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/next day/i)).not.toBeInTheDocument();
+  });
+
   it("offers no duplicate action — the feature was withdrawn", () => {
     render(<VolunteerShiftsPage />);
     expect(screen.queryByRole("button", { name: /duplicate/i })).not.toBeInTheDocument();
@@ -141,6 +159,55 @@ describe("posting a shift", () => {
     await waitFor(() => expect(createShiftMock).toHaveBeenCalled());
     expect(createShiftMock.mock.calls[0][0].title).toBe("Sunday prep");
     expect(pushMock).toHaveBeenCalledWith("/volunteers?posted=Sunday%20prep");
+  });
+
+  it("says the shift runs into the next morning as soon as the times say so (T-146)", () => {
+    render(<NewShiftPage />);
+    const form = screen.getByRole("form", { name: /post a shift/i });
+
+    fireEvent.change(form.querySelector('input[name="startTime"]')!, { target: { value: "20:00" } });
+    expect(screen.queryByText(/next day/i)).not.toBeInTheDocument();
+    fireEvent.change(form.querySelector('input[name="endTime"]')!, { target: { value: "02:00" } });
+
+    expect(screen.getByText(/Ends the next day/i)).toBeInTheDocument();
+  });
+
+  it("refuses a shift that starts and ends at the same time, without calling the API (T-146)", async () => {
+    render(<NewShiftPage />);
+    const form = screen.getByRole("form", { name: /post a shift/i });
+
+    fireEvent.change(form.querySelector('input[name="title"]')!, { target: { value: "Nothing at all" } });
+    fireEvent.change(form.querySelector('input[name="shiftDate"]')!, { target: { value: "2026-12-06" } });
+    fireEvent.change(form.querySelector('input[name="startTime"]')!, { target: { value: "20:00" } });
+    fireEvent.change(form.querySelector('input[name="endTime"]')!, { target: { value: "20:00" } });
+
+    // 20:00 to 20:00 is either a shift of no length or one of twenty-four hours, and nothing can
+    // say which. The server refuses it too (KMS-400001 naming the field) — this is that same rule
+    // said before the press, because the failure notice on this screen shows the code's sentence
+    // and highlights nothing.
+    expect(screen.getByRole("alert")).toHaveTextContent(/cannot start and end at the same time/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /post shift/i }));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(createShiftMock).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("lets the shift through once the end time is a different time", async () => {
+    render(<NewShiftPage />);
+    const form = screen.getByRole("form", { name: /post a shift/i });
+
+    fireEvent.change(form.querySelector('input[name="title"]')!, { target: { value: "Midnight offering" } });
+    fireEvent.change(form.querySelector('input[name="shiftDate"]')!, { target: { value: "2026-12-06" } });
+    fireEvent.change(form.querySelector('input[name="startTime"]')!, { target: { value: "20:00" } });
+    fireEvent.change(form.querySelector('input[name="endTime"]')!, { target: { value: "02:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /post shift/i }));
+
+    await waitFor(() => expect(createShiftMock).toHaveBeenCalled());
+    // Sent exactly as typed. There is no "next day" field to fill in — the rule is the arithmetic,
+    // and the server, the database and this screen each read it from the same two times.
+    expect(createShiftMock.mock.calls[0][0].startTime).toBe("20:00");
+    expect(createShiftMock.mock.calls[0][0].endTime).toBe("02:00");
   });
 
   it("offers Cancel rather than a back-link", () => {

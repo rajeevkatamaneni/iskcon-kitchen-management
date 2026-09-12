@@ -9,7 +9,7 @@ import { api, toApiError, type ApiError, type AvailableShiftView } from "@/lib/a
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { dateWithYear, hhmm } from "@/lib/format";
+import { dateWithYear, shiftWindow } from "@/lib/format";
 
 export default function AvailableShiftsPage() {
   return (
@@ -96,7 +96,7 @@ function AvailableShiftsView() {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <h3 className="font-medium">{s.title}</h3>
-                            <p className="text-sm text-ink-secondary tabular-nums">{hhmm(s.startTime)}–{hhmm(s.endTime)}</p>
+                            <p className="text-sm text-ink-secondary tabular-nums">{shiftWindow(s.startTime, s.endTime)}</p>
                             {s.location && <p className="text-sm text-ink-muted">{s.location}</p>}
                           </div>
                           {actionFor(s, busy, signUp,

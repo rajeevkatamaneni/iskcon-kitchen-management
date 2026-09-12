@@ -12,7 +12,7 @@ import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { dateWithYear, hhmm } from "@/lib/format";
+import { dateWithYear, shiftWindow } from "@/lib/format";
 import { Button } from "@/components/ds/Button";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 
@@ -155,7 +155,7 @@ function VolunteerShiftsView() {
                         {s.location && <span className="ml-2 text-xs text-ink-muted">{s.location}</span>}
                       </td>
                       <td className={`${TD_DATE} text-ink-secondary tabular-nums`}>
-                        {dateWithYear(s.shiftDate)} {hhmm(s.startTime)}–{hhmm(s.endTime)}
+                        {dateWithYear(s.shiftDate)} {shiftWindow(s.startTime, s.endTime)}
                       </td>
                       <td className={TD_NUM}>
                         {s.signedUpCount}/{s.capacity}{s.waitlistCount > 0 ? ` (+${s.waitlistCount})` : ""}

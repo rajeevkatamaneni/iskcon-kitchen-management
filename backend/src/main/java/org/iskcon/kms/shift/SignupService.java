@@ -35,6 +35,15 @@ import org.springframework.transaction.annotation.Transactional;
  * promotion for a shift serialises on that one row, so two simultaneous signups for the last spot
  * can never both succeed. An overlapping-time signup is allowed but flagged — real families share
  * duties, so it warns rather than blocks.
+ *
+ * <p><strong>Since T-146 a shift may run through midnight, and that divides the clock arithmetic in
+ * this class in two.</strong> Everything here that asks <em>has this shift begun?</em> — the signup
+ * and waitlist guard, both release guards, and the two attendance gates — is anchored on the
+ * shift's <em>start</em>, which is {@code (shift_date, start_time)} whatever the end does, and so
+ * was already right. They go through {@link ShiftWindow#startsAt} now rather than building the
+ * instant inline, so that a reader finds one statement of what a shift's start is instead of five
+ * identical ones and a question about whether the end works the same way. The one thing that reads
+ * the <em>end</em> is {@link #overlaps}, and it was wrong; see its own note.
  */
 @Service
 public class SignupService {
@@ -130,7 +139,7 @@ public class SignupService {
 	public Removal releaseVolunteer(AuthenticatedUser actor, UUID shiftId, UUID volunteerUserId,
 			RemoveVolunteerRequest request) {
 		LockedShift shift = lockShift(shiftId);
-		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
+		LocalDateTime start = ShiftWindow.startsAt(shift.shiftDate(), shift.startTime());
 		if (!start.isAfter(LocalDateTime.now(clock.zone()))) {
 			throw new ApplicationException(ErrorCode.SHIFT_ALREADY_STARTED, Map.of("shiftId", shiftId));
 		}
@@ -251,7 +260,7 @@ public class SignupService {
 	public void recordAttendance(UUID shiftId, List<RecordAttendanceRequest.Mark> marks) {
 		LockedShift shift = lockShift(shiftId); // serialise against a concurrent signup, release or marking
 
-		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
+		LocalDateTime start = ShiftWindow.startsAt(shift.shiftDate(), shift.startTime());
 		if (start.isAfter(LocalDateTime.now(clock.zone()))) {
 			throw new ApplicationException(ErrorCode.SHIFT_NOT_STARTED, Map.of("shiftId", shiftId));
 		}
@@ -331,7 +340,7 @@ public class SignupService {
 	public void correctAttendance(AuthenticatedUser actor, UUID shiftId, UUID volunteerUserId, boolean attended) {
 		LockedShift shift = lockShift(shiftId); // serialise against a concurrent marking, signup or release
 
-		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
+		LocalDateTime start = ShiftWindow.startsAt(shift.shiftDate(), shift.startTime());
 		if (start.isAfter(LocalDateTime.now(clock.zone()))) {
 			throw new ApplicationException(ErrorCode.SHIFT_NOT_STARTED, Map.of("shiftId", shiftId));
 		}
@@ -406,7 +415,7 @@ public class SignupService {
 	/** The one release, reached by the volunteer's own endpoint and the coordinator's alike. */
 	private List<UUID> releaseSignup(UUID shiftId, UUID volunteerUserId) {
 		LockedShift shift = lockShift(shiftId);
-		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
+		LocalDateTime start = ShiftWindow.startsAt(shift.shiftDate(), shift.startTime());
 		if (!start.isAfter(LocalDateTime.now(clock.zone()))) {
 			throw new ApplicationException(ErrorCode.SHIFT_ALREADY_STARTED, Map.of("shiftId", shiftId));
 		}
@@ -633,7 +642,7 @@ public class SignupService {
 		if (!"OPEN".equals(shift.status())) {
 			throw new ApplicationException(ErrorCode.SHIFT_NOT_OPEN, Map.of());
 		}
-		LocalDateTime start = LocalDateTime.of(shift.shiftDate(), shift.startTime());
+		LocalDateTime start = ShiftWindow.startsAt(shift.shiftDate(), shift.startTime());
 		if (!start.isAfter(LocalDateTime.now(clock.zone()))) {
 			throw new ApplicationException(ErrorCode.SHIFT_ALREADY_STARTED, Map.of());
 		}
@@ -651,18 +660,37 @@ public class SignupService {
 	 * them, and nothing does. Anything a template must not send simply is not passed here — the
 	 * parameter map is what lands in {@code notifications.params}, so it is the boundary, not a
 	 * formatting step before one.
+	 *
+	 * <p>The {@code time} parameter goes through {@link ShiftWindow#describe}, which says "(next
+	 * day)" where the shift runs through midnight (T-146). It used to be the two raw column values
+	 * with an en dash between them, so the Janmashtami midnight offering would have reached a
+	 * volunteer's phone as "20:00:00–02:00:00" — a shift that ends sixteen hours before it begins,
+	 * for somebody deciding whether they can make it. The screens print the same sentence, so the
+	 * message and the roster it came from agree word for word.
 	 */
 	void notifyShift(UUID volunteerUserId, UUID shiftId, NotificationTemplate template,
 			Map<String, Object> extra) {
 		try {
-			Map<String, Object> s = jdbc.queryForMap(
-					"SELECT title, shift_date, start_time, end_time, location FROM shifts WHERE id = ?", shiftId);
+			// Read through a RowMapper rather than queryForMap, because the two times are needed as
+			// LocalTime and not as whatever the driver hands back for a TIME column: the old string
+			// concatenation worked on java.sql.Time's toString() and so could not have been asked
+			// the one question that matters here — does this shift cross midnight?
+			Map<String, Object> s = jdbc.queryForObject("""
+					SELECT title, shift_date, start_time, end_time, location FROM shifts WHERE id = ?
+					""", (rs, n) -> {
+				Map<String, Object> row = new java.util.LinkedHashMap<>();
+				row.put("title", rs.getString("title"));
+				row.put("date", rs.getObject("shift_date", LocalDate.class));
+				row.put("time", ShiftWindow.describe(
+						rs.getObject("start_time", LocalTime.class), rs.getObject("end_time", LocalTime.class)));
+				row.put("location", rs.getString("location"));
+				return row;
+			}, shiftId);
 			String temple = templeName();
 			String location = s.get("location") != null ? s.get("location").toString() : temple;
-			String time = s.get("start_time") + "–" + s.get("end_time");
 			Map<String, Object> params = new java.util.LinkedHashMap<>(Map.of(
-					"title", str(s.get("title")), "date", str(s.get("shift_date")),
-					"time", time, "location", location, "temple", temple));
+					"title", str(s.get("title")), "date", str(s.get("date")),
+					"time", str(s.get("time")), "location", location, "temple", temple));
 			params.putAll(extra);
 			notificationService.notify(NotificationRecipient.user(volunteerUserId), template, params, null);
 		} catch (RuntimeException e) {
@@ -670,12 +698,61 @@ public class SignupService {
 		}
 	}
 
+	/**
+	 * Is this volunteer already on a shift running at the same time as the one they are claiming?
+	 *
+	 * <p>It warns and never blocks — real families share duties — but it has to be right in both
+	 * directions, because a wrong answer is either a volunteer double-booked with nobody told or a
+	 * volunteer warned off a shift that clashes with nothing.
+	 *
+	 * <p><strong>Rewritten for T-146, and this is where an overnight shift did real damage.</strong>
+	 * The old query was same-day interval arithmetic:
+	 *
+	 * <pre>AND s2.shift_date = ? AND s2.start_time &lt; ? AND s2.end_time &gt; ?</pre>
+	 *
+	 * <p>That compares clock times within one calendar date, which is only a comparison of moments
+	 * while every shift begins and ends on its own date. It is wrong when <em>either</em> shift
+	 * crosses midnight, and in opposite ways. As the subject: claiming 20:00–02:00 against a
+	 * 23:00–01:00 spot already held reads "23:00 &lt; 02:00" as false and reports no clash, so the
+	 * volunteer is double-booked for the whole of the festival's busiest night. As the neighbour: a
+	 * 22:00–06:00 shift already held would be compared on {@code end_time} of 06:00, which sits
+	 * before its own start and matches morning shifts on the following day that it has nothing to do
+	 * with — a clash invented out of arithmetic.
+	 *
+	 * <p>So both sides are compared as <em>moments</em>. The subject's two instants are built in Java
+	 * through {@link ShiftWindow}; the neighbour's end is built in SQL through {@code
+	 * shift_ends_at()} (V127), because it belongs to a row the query is looking at rather than to a
+	 * shift this method is holding. Its start needs no function — {@code shift_date + start_time} is
+	 * the start instant by definition, since {@code shift_date} is the date a shift begins.
+	 *
+	 * <p>The standard half-open overlap test: two windows overlap when each begins before the other
+	 * ends. Touching ends do not overlap, which is deliberate and unchanged — a volunteer finishing
+	 * at 12:00 and starting again at 12:00 is doing two shifts back to back, not two at once, and
+	 * warning them about it would teach them to ignore the warning.
+	 *
+	 * <p>The {@code shift_date = ?} equality that used to narrow this is gone with the arithmetic it
+	 * belonged to, so the check now reads every active signup this volunteer holds rather than only
+	 * that day's. That is a handful of rows per person — a volunteer's roster, not the temple's —
+	 * and the join is by primary key. A date window could be put back as an optimisation if a
+	 * temple ever has a devotee with thousands of open signups; narrowing it by a day would
+	 * reintroduce exactly the defect above, since the shift that clashes with a midnight shift is
+	 * usually dated the day before.
+	 *
+	 * <p>A cancelled shift still counts as a clash here, unchanged from before T-146: cancelling
+	 * does not release the signups, so a volunteer is still "on" it as far as this query is
+	 * concerned. Left alone deliberately — it is a separate question from the one this task was
+	 * given, it errs towards warning rather than towards silence, and it is noted rather than
+	 * quietly changed under cover of a different fix.
+	 */
 	private boolean overlaps(UUID volunteerUserId, UUID shiftId, LockedShift shift) {
+		LocalDateTime startsAt = ShiftWindow.startsAt(shift.shiftDate(), shift.startTime());
+		LocalDateTime endsAt = ShiftWindow.endsAt(shift.shiftDate(), shift.startTime(), shift.endTime());
 		Integer n = jdbc.queryForObject("""
 				SELECT count(*) FROM shift_signups ss JOIN shifts s2 ON s2.id = ss.shift_id
 				WHERE ss.volunteer_user_id = ? AND ss.released_at IS NULL AND s2.id <> ?
-				  AND s2.shift_date = ? AND s2.start_time < ? AND s2.end_time > ?
-				""", Integer.class, volunteerUserId, shiftId, shift.shiftDate(), shift.endTime(), shift.startTime());
+				  AND (s2.shift_date + s2.start_time) < ?
+				  AND shift_ends_at(s2.shift_date, s2.start_time, s2.end_time) > ?
+				""", Integer.class, volunteerUserId, shiftId, endsAt, startsAt);
 		return n != null && n > 0;
 	}
 

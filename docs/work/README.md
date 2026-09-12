@@ -312,6 +312,26 @@ So: `grep -c` the anchor before patching, assert it equals the number of sites y
 and abort otherwise. This gets more likely, not less, as a wave stacks fixes into one file — which is
 exactly what a batch of corrections to the same service does.
 
+**Three refinements from T-146, 2026-09-12, all found by controls that aborted or lied rather than by
+a reader.**
+
+- **Anchor on the whole statement, never a fragment.** T-146's control A asserted exactly one match
+  for `CHECK (end_time > start_time)` after patching and found three: the migration's own comment
+  quotes the old constraint it replaces. The guard aborted, which is it working — but a migration that
+  replaces something almost always explains what it replaced, so the fragment was never a safe anchor.
+  Use the full `ALTER TABLE … ADD CONSTRAINT …;` line.
+- **`git diff --stat` does not prove a control applied, in either of the two cases a control is
+  normally run in.** For a **new** file — every migration — it prints nothing, because the file is
+  untracked, so the guard can never pass. For a **modified** file whose fix is not yet committed it
+  prints a diff before the patch is applied at all, so the guard can never fail. Snapshot the file
+  with `cp` and prove the change with `cmp -s snapshot file`, which answers the actual question: did
+  this script change this file.
+- **The restore is trapped, every time, including in a script that "only runs one test".** The same
+  control A restored with a plain `cp` on its last line. A watchdog killed it mid-Gradle-run, the line
+  never ran, and the next session found the fix patched out of an uncommitted migration with nothing
+  but the snapshot to recover it from. Lesson 4 already says *trapped rather than trusted*; this is the
+  instance that shows why — the kill comes from outside the script, and only `trap … EXIT` survives it.
+
 **Two counting rules that come with it, both learned the same day.** A negative control's failure
 count needs its own explanation **whenever any test asserts an absence** — such a test passes
 vacuously once the feature is gone, so "four new tests, three failures" looks like a hole and is not

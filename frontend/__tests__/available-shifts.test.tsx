@@ -55,6 +55,24 @@ describe("available shifts", () => {
     expect(screen.getByText(/2\/5 filled/i)).toBeInTheDocument();
   });
 
+  it("says when a shift on offer runs through midnight (T-146)", () => {
+    // What a volunteer decides on. Before T-146 this shift could not be posted at all, so no
+    // screen had ever had to say it.
+    queryRef.current = {
+      data: [shift({ title: "Janmashtami midnight offering", startTime: "20:00", endTime: "02:00" })],
+      error: null,
+      loading: false,
+    };
+    render(<AvailableShiftsPage />);
+    expect(screen.getByText(/20:00–02:00 \(next day\)/)).toBeInTheDocument();
+  });
+
+  it("says nothing extra about an ordinary shift", () => {
+    render(<AvailableShiftsPage />);
+    expect(screen.getByText(/08:00–12:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/next day/i)).not.toBeInTheDocument();
+  });
+
   it("offers the waitlist on a full shift", () => {
     queryRef.current = { data: [shift({ callerState: "FULL", signedUpCount: 5 })], error: null, loading: false };
     render(<AvailableShiftsPage />);

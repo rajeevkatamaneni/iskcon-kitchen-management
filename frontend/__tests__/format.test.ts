@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { leadTimeWarning, moment, money, templeDay, todayIso } from "@/lib/format";
+import {
+  crossesMidnight,
+  leadTimeWarning,
+  moment,
+  money,
+  shiftWindow,
+  templeDay,
+  todayIso,
+} from "@/lib/format";
 
 describe("the temple's today", () => {
   afterEach(() => vi.useRealTimers());
@@ -120,5 +128,45 @@ describe("the temple's money", () => {
   it("is an em dash for money nobody has a figure for, never ₹0", () => {
     expect(money(null, "INR")).toBe("—");
     expect(money(0, "INR")).toBe("₹0");
+  });
+});
+
+describe("a shift that runs through midnight", () => {
+  // `shiftDate` is the date a shift STARTS, so an end time at or before the start belongs to the
+  // next morning. The same rule is written in SQL (shift_ends_at, V127) and in Java (ShiftWindow);
+  // these are the cases that prove this copy of it agrees with them.
+
+  it("is an ordinary shift when it ends later the same day", () => {
+    expect(crossesMidnight("08:00:00", "12:00:00")).toBe(false);
+    expect(shiftWindow("08:00:00", "12:00:00")).toBe("08:00–12:00");
+  });
+
+  it("says so for the Janmashtami midnight offering", () => {
+    expect(crossesMidnight("20:00:00", "02:00:00")).toBe(true);
+    // The whole point: "20:00–02:00" read cold is a shift that ends sixteen hours before it begins.
+    expect(shiftWindow("20:00:00", "02:00:00")).toBe("20:00–02:00 (next day)");
+  });
+
+  it("reads a form's HH:mm the same as the API's HH:mm:ss", () => {
+    expect(crossesMidnight("20:00", "02:00")).toBe(true);
+    expect(shiftWindow("23:00", "01:00")).toBe("23:00–01:00 (next day)");
+  });
+
+  it("treats a shift starting at midnight as an ordinary early one", () => {
+    // The comparison is on the end, never on the start: 00:00–04:00 ends the same day.
+    expect(crossesMidnight("00:00:00", "04:00:00")).toBe(false);
+    expect(shiftWindow("00:00:00", "04:00:00")).toBe("00:00–04:00");
+  });
+
+  it("treats a shift ending exactly at midnight as running into the next day", () => {
+    expect(crossesMidnight("20:00:00", "00:00:00")).toBe(true);
+  });
+
+  it("claims nothing when a time is missing", () => {
+    // Half a window is not an overnight shift. Unreachable through the API — every shift view sends
+    // both times and neither is nullable — but a helper that answered `true` to a half-filled form
+    // would put "(next day)" under a box somebody has not finished typing in.
+    expect(crossesMidnight(null, "02:00")).toBe(false);
+    expect(crossesMidnight("20:00", undefined)).toBe(false);
   });
 });

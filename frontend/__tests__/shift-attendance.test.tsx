@@ -105,15 +105,19 @@ const AFTER_THE_SHIFT_STARTED = new Date("2026-12-06T09:30:00+05:30");
  */
 const NOTE = "He has missed three Sundays without telling anyone.";
 
-function roster(signups: RosterSignup[], status: "OPEN" | "CANCELLED" = "OPEN"): RosterView {
+function roster(
+  signups: RosterSignup[],
+  status: "OPEN" | "CANCELLED" = "OPEN",
+  hours: { startTime: string; endTime: string } = { startTime: "08:00:00", endTime: "12:00:00" }
+): RosterView {
   return {
     shift: {
       id: "shift-1",
       title: "Sunday prep",
       description: null,
       shiftDate: "2026-12-06",
-      startTime: "08:00:00",
-      endTime: "12:00:00",
+      startTime: hours.startTime,
+      endTime: hours.endTime,
       location: "Main kitchen",
       capacity: 5,
       reminderOffsetsMinutes: [1440],
@@ -153,6 +157,25 @@ describe("marking attendance on a roster", () => {
       error: null,
       loading: false,
     };
+  });
+
+  it("says in the roster heading when the shift runs through midnight (T-146)", () => {
+    queryRef.current = {
+      data: roster([signup()], "OPEN", { startTime: "20:00:00", endTime: "02:00:00" }),
+      error: null,
+      loading: false,
+    };
+    render(<ShiftRosterPage />);
+    // The coordinator's own copy of the shift's hours. It sits above the attendance controls, and
+    // "20:00–02:00" alone would leave the person marking who turned up to work out for themselves
+    // which morning the shift ended on.
+    expect(screen.getByText(/20:00–02:00 \(next day\)/)).toBeInTheDocument();
+  });
+
+  it("leaves an ordinary roster heading as it was", () => {
+    render(<ShiftRosterPage />);
+    expect(screen.getByText(/08:00–12:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/next day/i)).not.toBeInTheDocument();
   });
 
   it("offers a tick per volunteer, ticked to start", () => {

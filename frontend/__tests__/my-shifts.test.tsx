@@ -72,6 +72,22 @@ describe("my shifts", () => {
     expect(screen.getByText(/position 2/i)).toBeInTheDocument();
   });
 
+  it("tells a volunteer their shift runs into the next morning (T-146)", () => {
+    // The half a tester notices first. A devotee looking at "20:00–02:00" on their own list of
+    // commitments is the person who most needs to be told which day they finish on.
+    returnsRef.current = [
+      { data: [{ ...SHIFT, title: "Midnight offering", startTime: "20:00", endTime: "02:00" }], error: null, loading: false },
+      { data: [{ ...WAIT, startTime: "23:00", endTime: "03:00" }], error: null, loading: false },
+    ];
+    returnsRef.i = 0;
+    render(<MyShiftsPage />);
+
+    expect(screen.getByText(/20:00–02:00 \(next day\)/)).toBeInTheDocument();
+    // And the waitlist half of the same screen, which reads its times from a different view type
+    // and had its own copy of the dash.
+    expect(screen.getByText(/23:00–03:00 \(next day\)/)).toBeInTheDocument();
+  });
+
   it("shows an empty state with nothing signed up", () => {
     returnsRef.current = [
       { data: [], error: null, loading: false },

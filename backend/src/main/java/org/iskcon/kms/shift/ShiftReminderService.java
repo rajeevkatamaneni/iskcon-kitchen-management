@@ -67,7 +67,11 @@ public class ShiftReminderService {
 
 		String temple = templeName();
 		String location = row.get("location") != null ? row.get("location").toString() : temple;
-		String time = row.get("start_time") + "–" + row.get("end_time");
+		// Through ShiftWindow, so an overnight shift reads "20:00–02:00 (next day)" rather than as a
+		// shift that ends sixteen hours before it starts (T-146). The reminder is the last thing a
+		// volunteer reads before turning up, so it is the worst place for those hours to be
+		// ambiguous.
+		String time = ShiftWindow.describe(timeOf(row.get("start_time")), timeOf(row.get("end_time")));
 		UUID notificationId = notificationService.notify(
 				NotificationRecipient.user(volunteerUserId),
 				NotificationTemplate.VOLUNTEER_SHIFT_REMINDER,
@@ -90,5 +94,24 @@ public class ShiftReminderService {
 
 	private static String str(Object o) {
 		return o == null ? "" : o.toString();
+	}
+
+	/**
+	 * A TIME column out of {@code queryForMap}, as a {@link java.time.LocalTime}.
+	 *
+	 * <p>Two lines rather than a cast because the answer is the driver's to choose: the JDBC type
+	 * mapping for {@code TIME} is {@link java.sql.Time}, which is what PgJDBC returns today, but a
+	 * driver or a configuration that hands back a {@code LocalTime} is entitled to. A cast would
+	 * turn that into a {@code ClassCastException} thrown out of a scheduled job — a reminder
+	 * silently not sent, discovered by the volunteer who did not get one.
+	 *
+	 * <p>Anything else is genuinely a fault and is allowed to be one, loudly, rather than
+	 * disappearing into a default.
+	 */
+	private static java.time.LocalTime timeOf(Object value) {
+		if (value instanceof java.time.LocalTime t) {
+			return t;
+		}
+		return ((java.sql.Time) value).toLocalTime();
 	}
 }

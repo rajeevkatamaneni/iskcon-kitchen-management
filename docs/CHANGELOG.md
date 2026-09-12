@@ -1182,6 +1182,35 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-12 — A shift can run past midnight (task T-146)
+
+**Posting a shift from 20:00 to 02:00 used to fail with `KMS-500001`**, *"something went wrong at our
+end, try again in a moment"* — advice that could never work, for a temple whose largest festival is at
+midnight. Found while seeding Janmashtami. V34's `CHECK (end_time > start_time)` refused the insert and
+nothing caught the violation, so the database's refusal surfaced as our fault.
+
+**What a shift's date means is now written down once:** `shift_date` is the day the shift starts, and
+an end time at or before the start time means the next day. `V127` relaxes the constraint to
+`end_time <> start_time` and adds `shift_ends_at(date, start, end)` so SQL works out the end instant
+in one place; `ShiftWindow.java` does the same in Java for the reminder scheduler and service.
+
+**Equal times are still refused, and now by name.** 20:00 to 20:00 is either no shift or a 24-hour one
+and nothing can say which. Posting or editing to equal times answers `KMS-400001` naming the end-time
+field, and the shift form says so under the End box before the button is pressed. No new error code.
+
+**The double-booking warning compares real start and end instants**, not clock times on one date, so a
+volunteer holding 23:00–01:00 is warned about a 20:00–02:00 shift that night, and two shifts meeting
+at 02:00 are back to back rather than a clash.
+
+**Every shift screen prints *"20:00–02:00 (next day)"*** — the coordinator's shift list, a shift's
+roster where attendance is taken, the volunteer's open *Shifts* and *My shifts* — and the form says the
+shift ends the next day as the times are entered.
+
+Negative controls for all four halves are in `docs/work/proof/T-146.md`. **Not done:** not yet driven
+in a browser as a coordinator or a volunteer.
+
+---
+
 ### 2026-09-10 — The shopping list stops being stored, a ladder can say it never needs servicing, and the stock ledger is summed once instead of three times (wave 21; tasks T-132, T-140, T-139, T-120)
 
 **The largest single change this project has shipped, and two migrations in one push.** Four tasks

@@ -43,6 +43,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class VolunteerSignupIT extends AbstractIntegrationTest {
 
 	private static final String FUTURE = "2026-12-01";
+	/** The morning after {@link #FUTURE}, for the shifts that run into it (T-146). */
+	private static final String NEXT_DAY = "2026-12-02";
 
 	@Autowired
 	private MockMvc mvc;
@@ -146,6 +148,80 @@ class VolunteerSignupIT extends AbstractIntegrationTest {
 		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", b)))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.overlapWarning").value(true));
+	}
+
+	@Test
+	@DisplayName("a spot held from 23:00 to 01:00 clashes with a 20:00–02:00 shift that night (T-146)")
+	void midnightShiftClashesWithTheSpotAlreadyHeld() throws Exception {
+		// Rajeev's first acceptance criterion, and the case the old overlap query got wrong. It
+		// compared clock times within one calendar date — "s2.start_time < 02:00" — so 23:00 read as
+		// later than 02:00 and the clash was never reported. A volunteer was double-booked through
+		// the busiest night of the temple's year and nobody was told.
+		UUID held = shift("Late offering", FUTURE, "23:00", "01:00", 5);   // 23:00 → 01:00 next day
+		UUID claimed = shift("Midnight offering", FUTURE, "20:00", "02:00", 5); // 20:00 → 02:00 next day
+		signIn("uid-vol-1");
+
+		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", held)))
+				.andExpect(jsonPath("$.overlapWarning").value(false));
+		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", claimed)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.overlapWarning").value(true));
+	}
+
+	@Test
+	@DisplayName("an overnight shift is found as the neighbour too, across the date boundary (T-146)")
+	void anOvernightNeighbourIsFound() throws Exception {
+		// The same defect with the two shifts swapped, and the reason the old query's
+		// `s2.shift_date = ?` equality had to go rather than merely be widened. The spot already
+		// held runs 22:00 on the 1st to 06:00 on the 2nd; the shift being claimed is 05:00–09:00 on
+		// the 2nd. They genuinely overlap by an hour, and they are stored under different dates, so
+		// a check that only ever looked at one date could not have seen it at all.
+		UUID held = shift("Night watch", FUTURE, "22:00", "06:00", 5);
+		UUID claimed = shift("Early breakfast", NEXT_DAY, "05:00", "09:00", 5);
+		signIn("uid-vol-1");
+
+		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", held)))
+				.andExpect(jsonPath("$.overlapWarning").value(false));
+		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", claimed)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.overlapWarning").value(true));
+	}
+
+	@Test
+	@DisplayName("two shifts that meet at 02:00 across midnight are back to back, not a clash (T-146)")
+	void backToBackAcrossMidnightDoesNotWarn() throws Exception {
+		// The negative control, and it has to be a genuinely overnight one — a fixture whose shifts
+		// all end on their own day proves nothing about any of this. A devotee finishing the
+		// midnight offering at 02:00 and starting the early cooking at 02:00 is doing two shifts one
+		// after the other, and warning them would teach them to ignore the warning. Touching ends do
+		// not overlap, which is the same rule the ordinary same-day case has always followed.
+		UUID held = shift("Midnight offering", FUTURE, "20:00", "02:00", 5);
+		UUID claimed = shift("Early cooking", NEXT_DAY, "02:00", "06:00", 5);
+		signIn("uid-vol-1");
+
+		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", held)))
+				.andExpect(jsonPath("$.overlapWarning").value(false));
+		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", claimed)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.overlapWarning").value(false));
+	}
+
+	@Test
+	@DisplayName("an overnight shift and a morning shift the day before do not clash (T-146)")
+	void anEarlierDayDoesNotClash() throws Exception {
+		// The other half of the negative control: the overnight shift as the *neighbour*, against a
+		// shift that is nowhere near it. Worth stating because the new query no longer narrows by
+		// date at all, so "every shift this volunteer holds" is now genuinely compared — and a
+		// comparison that answered true here would warn about everything.
+		UUID held = shift("Midnight offering", FUTURE, "20:00", "02:00", 5);
+		UUID claimed = shift("Morning prep", FUTURE, "08:00", "12:00", 5);
+		signIn("uid-vol-1");
+
+		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", held)))
+				.andExpect(jsonPath("$.overlapWarning").value(false));
+		mvc.perform(authed(post("/api/v1/shifts/{id}/signup", claimed)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.overlapWarning").value(false));
 	}
 
 	@Test

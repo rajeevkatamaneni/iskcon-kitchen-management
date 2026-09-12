@@ -82,6 +82,10 @@ public class ShiftReminderScheduler {
 			return List.of();
 		}
 		UUID shiftId = (UUID) shift.get("shift_id");
+		// The start instant, and only the start. Checked rather than assumed for T-146: a reminder is
+		// an offset *before the shift begins*, so a shift that runs through midnight changes nothing
+		// here — 20:00–02:00 with the default 1440-minute offset still fires at 20:00 the day before,
+		// and the end_time this class never selects is the reason it needs no change.
 		Instant start = LocalDateTime.of(
 				((java.sql.Date) shift.get("shift_date")).toLocalDate(),
 				((java.sql.Time) shift.get("start_time")).toLocalTime()).atZone(clock.zone()).toInstant();
