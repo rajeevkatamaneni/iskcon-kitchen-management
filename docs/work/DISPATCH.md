@@ -102,6 +102,28 @@ added had no way in.
 
 **Drive the app. It is not optional and it is not slower.**
 
+## ✅ T-146 — A SHIFT CAN RUN PAST MIDNIGHT — SHIPPED 2026-09-12, not yet driven in a browser
+
+**Staging is now `kms-staging-api-00153-nzz` / `kms-staging-web-00141-94b` / `kms-staging-worker-00135-vt9`, schema `V127`. The next free migration number is
+`V128`.**
+
+One commit, `f6ca83e`. CI run **34718724136** green on all three jobs. Before pushing, `HEAD` was archived
+into a clean directory (with `git init && git add -A`) and the whole suite run there: backend 2,314
+tests, 0 failed, 7 skipped; frontend `tsc` clean, vitest 123 files / 1,475 passed, `next build` 72
+pages. API image `sha256:2161952b…`, web image `sha256:855688c3…`. `V127` confirmed from the API's own startup log,
+not from the deploy's exit code.
+
+**Live check, as the Temple Admin, with nothing saved.** Posting a shift with equal times
+(20:00→20:00) answered **HTTP 500 `KMS-500001`** on the old revision and **HTTP 400 `KMS-400001`**
+naming the end-time rule on the new one. Neither created a row. An actual overnight shift was
+deliberately **not** posted: it would sit on the screens Rajeev is testing and there is no delete.
+
+**What it is:** a shift's date is the day it starts, and an end time at or before the start means the
+next day. Proof, including four negative controls, in `docs/work/proof/T-146.md`.
+
+**Still to do:** drive it — post a 20:00→02:00 shift as a coordinator, see *"(next day)"* on the
+list, the roster, *Shifts* and *My shifts*, and cancel it afterwards.
+
 ## ✅ WAVE A — SHIPPED AND VERIFIED ON STAGING, 2026-09-11
 
 **Staging is now `kms-staging-api-00147-q8k` / `kms-staging-web-00135-jmv` /

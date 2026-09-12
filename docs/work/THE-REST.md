@@ -129,8 +129,7 @@ outranks the rest.** Two are worth reading first:
   does nothing** — the exact trap `CLAUDE.md` warns about. Symptom: other temples' rows appear in
   `/users` and `/staff`. **Production and CI are unaffected.** Fix: a local `kms_app` role plus a
   separate migrator role for Flyway.
-- **⚠ A shift crossing midnight is refused** (`20:00`→`02:00`, `KMS-500001`) — **for a temple whose
-  largest festival is at midnight.** Found while seeding Janmashtami.
+- *A shift crossing midnight is refused* — **built:** shipped as T-146 on 2026-09-12 in `f6ca83e`.
 
 - **A festival occasion's `defaultServings` no longer reaches the meal composer.** The head-count
   change made all three counters open at zero unconditionally. His rule was that the application does
