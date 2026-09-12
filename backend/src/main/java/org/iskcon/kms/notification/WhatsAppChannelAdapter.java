@@ -72,9 +72,11 @@ public class WhatsAppChannelAdapter implements ChannelAdapter {
 			return SendResult.failed(e.getMessage());
 		}
 
-		// The one place in the application where "this temple's WhatsApp actually works" becomes a
-		// fact (T-136, V123). It is stamped here and nowhere else, on the far side of the one call
-		// that puts a message in front of a real person.
+		// Where "this temple's WhatsApp actually works" becomes a fact for a real notification (T-136,
+		// V123). The column is written only by TenantWhatsAppSettingsService.markMessageSent, and that
+		// method has two callers, each on the far side of a Meta call that put a message in front of a
+		// real person: this one, and the settings screen's Test button (T-151, sendTestMessage on the
+		// same service), which since T-151 sends a real message rather than only checking the number.
 		//
 		// Rajeev, 2026-09-10, on the Send on WhatsApp button on the purchase-order screen: it is
 		// shown "only after a message has actually gone through it successfully", not merely

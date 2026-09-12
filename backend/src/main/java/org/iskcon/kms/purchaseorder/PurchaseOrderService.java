@@ -19,8 +19,6 @@ import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.error.ErrorResponse;
 import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.notification.TenantWhatsAppSettingsService;
-import org.iskcon.kms.shoppinglist.ShoppingListLineView;
-import org.iskcon.kms.shoppinglist.ShoppingListService;
 import org.iskcon.kms.tenancy.TempleClock;
 import org.iskcon.kms.vendor.LeadTimes;
 import org.iskcon.kms.vendor.OrderLeadTime;
@@ -32,8 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Purchase orders and their lifecycle (E5-S3): DRAFT → SENT → PARTIALLY_RECEIVED → RECEIVED /
- * CLOSED / CANCELLED. Approved shopping-list lines are grouped into one draft PO per vendor; manual creation is
- * also allowed. Every PO carries a per-tenant sequential number and an append-only activity trail;
+ * CLOSED / CANCELLED. An order is raised against one vendor at a time — at {@code /orders/new}, or
+ * from a vendor tile on the shopping list (T-134); the bulk generator that grouped the whole list by
+ * vendor was retired in T-153. Every PO carries a per-tenant sequential number and an append-only activity trail;
  * illegal transitions (editing after SENT, receiving a DRAFT) are refused at this layer.
  */
 @Service
@@ -45,7 +44,6 @@ public class PurchaseOrderService {
 	private final AuditService auditService;
 	private final org.iskcon.kms.document.DocumentService documentService;
 	private final IngredientUnits ingredientUnits;
-	private final ShoppingListService shoppingListService;
 	/**
 	 * Only ever asked one question: has this temple's WhatsApp ever actually sent anything (T-136)?
 	 *
@@ -83,7 +81,7 @@ public class PurchaseOrderService {
 
 	public PurchaseOrderService(JdbcTemplate jdbc, AuditService auditService,
 			org.iskcon.kms.document.DocumentService documentService,
-			IngredientUnits ingredientUnits, ShoppingListService shoppingListService,
+			IngredientUnits ingredientUnits,
 			TenantWhatsAppSettingsService whatsappSettings,
 			LeadTimes leadTimes,
 			VendorPerformanceService vendorPerformance,
@@ -95,7 +93,6 @@ public class PurchaseOrderService {
 		this.auditService = auditService;
 		this.documentService = documentService;
 		this.ingredientUnits = ingredientUnits;
-		this.shoppingListService = shoppingListService;
 		this.whatsappSettings = whatsappSettings;
 	}
 
@@ -238,92 +235,13 @@ public class PurchaseOrderService {
 	@Transactional
 	public CreatedPurchaseOrder createManual(AuthenticatedUser actor, CreatePurchaseOrderRequest request) {
 		// A new order is dated the temple's today, so that is the floor a hand-typed needed-by is
-		// measured against. Checked here and not in createPo, because generation is not a person
-		// typing: see requireNeededByOnOrAfter.
+		// measured against. It sits here rather than in createPo only because createPo once had a
+		// second caller, the shopping-list generator, whose computed dates were exempt. That caller
+		// was retired in T-153, so this is now the check on every order created: see
+		// requireNeededByOnOrAfter.
 		requireNeededByOnOrAfter(request.neededBy(), LocalDate.now(clock.zone()), null);
 		return createPo(actor, request.vendorId(), request.neededBy(),
 				request.deliveryLocation(), request.notes(), toLines(request.lines()));
-	}
-
-	/**
-	 * One draft PO per distinct vendor from the selected, included shopping-list lines (E5-S3).
-	 *
-	 * <p><strong>The lines are asked for, not selected.</strong> Until T-132 this read
-	 * {@code shopping_list_lines} directly — {@code WHERE included = true AND suggested_vendor_id IS
-	 * NOT NULL} — because that table held the whole list. It now holds only what a person decided
-	 * about a line: an edited quantity, an untick, something typed in by hand. The same query against
-	 * the same table would therefore raise orders containing the hand-added lines and nothing else —
-	 * no rice, no curd, no oil — and would do it silently, with a 201 and a plausible-looking order.
-	 *
-	 * <p>A database view over the decisions could not have saved that query, and it is worth saying
-	 * why rather than leaving somebody to try it: the shortfall stream is
-	 * {@code SufficiencyService.allocateAcrossWindow()}, a Java walk that allocates the store to every
-	 * claim in the buying window in draw-down order, meal by meal. Reimplementing it in SQL would put
-	 * the temple's most important arithmetic in two places.
-	 *
-	 * <p>So the derivation stays in one place and this asks it for the list. One consequence follows
-	 * immediately and is D-24a working as ruled: the orders created here are drafts, and a draft
-	 * covers its ingredients, so those lines are off the shopping list on the very next read without
-	 * anything being deleted.
-	 *
-	 * <p>The needed-by date on each order is still the <strong>earliest</strong> across that vendor's
-	 * lines — the order is only useful if it arrives in time for the first meal that wants any of it.
-	 * D-25's separate ruling, that the <em>longest</em> lead time governs a multi-line order, is about
-	 * a different quantity: the last day the order can be placed. The two do not conflict and neither
-	 * replaces the other. Stamping that lead time onto the order is T-134's, not this method's.
-	 */
-	@Transactional
-	public List<UUID> generateFromShoppingList(AuthenticatedUser actor, List<UUID> ingredientIds) {
-		Map<UUID, Map<UUID, BigDecimal>> lastPrices = lastPricesByVendor();
-
-		Map<UUID, List<OrderLineRow>> byVendor = new LinkedHashMap<>();
-		for (ShoppingListLineView line : shoppingListService.list()) {
-			if (!line.included() || line.suggestedVendorId() == null) {
-				continue;
-			}
-			if (ingredientIds != null && !ingredientIds.isEmpty()
-					&& !ingredientIds.contains(line.ingredientId())) {
-				continue;
-			}
-			BigDecimal lastPrice = lastPrices
-					.getOrDefault(line.suggestedVendorId(), Map.of())
-					.get(line.ingredientId());
-			byVendor.computeIfAbsent(line.suggestedVendorId(), k -> new ArrayList<>())
-					.add(new OrderLineRow(line.ingredientId(), line.suggestedQty(), line.unit(),
-							line.suggestedVendorId(), line.neededBy(), lastPrice));
-		}
-
-		List<UUID> created = new ArrayList<>();
-		for (Map.Entry<UUID, List<OrderLineRow>> e : byVendor.entrySet()) {
-			List<OrderLineRow> vlines = e.getValue();
-			LocalDate neededBy = vlines.stream().map(OrderLineRow::neededBy)
-					.filter(java.util.Objects::nonNull).min(LocalDate::compareTo).orElse(null);
-			// Never a described line: the shopping list is computed from demand for catalogue
-			// ingredients, so everything it generates has an ingredient_id by construction.
-			List<LineDraft> lines = vlines.stream()
-					.map(r -> new LineDraft(r.ingredientId(), null, r.quantity(), r.unit(), r.lastPrice()))
-					.toList();
-			created.add(createPo(actor, e.getKey(), neededBy, null,
-					"Generated from the shopping list", lines).id());
-		}
-		return created;
-	}
-
-	/**
-	 * What each vendor last charged for each thing it supplies, so a generated line carries a price
-	 * somebody can sanity-check. One read for the catalogue rather than a join onto a list that is no
-	 * longer a table.
-	 */
-	private Map<UUID, Map<UUID, BigDecimal>> lastPricesByVendor() {
-		Map<UUID, Map<UUID, BigDecimal>> map = new LinkedHashMap<>();
-		jdbc.query("""
-				SELECT vendor_id, ingredient_id, last_price
-				FROM vendor_supplies WHERE last_price IS NOT NULL
-				""", rs -> {
-			map.computeIfAbsent(rs.getObject("vendor_id", UUID.class), k -> new LinkedHashMap<>())
-					.put(rs.getObject("ingredient_id", UUID.class), rs.getBigDecimal("last_price"));
-		});
-		return map;
 	}
 
 	/**
@@ -331,11 +249,12 @@ public class PurchaseOrderService {
 	 *
 	 * <p><strong>A line that arrives without an expected price is given the vendor's last-known
 	 * one.</strong> That figure is what the sheet prints beside the quantity and what the delivery
-	 * and the vendor's bill are both checked against, and until T-134 only generation from the
-	 * shopping list carried it — generation looked the prices up and manual creation sent nulls.
+	 * and the vendor's bill are both checked against, and until T-134 only the shopping-list
+	 * generator carried it — generation looked the prices up and manual creation sent nulls.
 	 * The shopping list now raises its orders through this path (one order per vendor tile, created
 	 * by the panel's Save), so leaving the fill in the generator would have quietly dropped the
-	 * price column off every order the temple raises in the ordinary way.
+	 * price column off every order the temple raises in the ordinary way. The generator itself was
+	 * retired in T-153, which leaves this the only place a last-known price reaches an order.
 	 *
 	 * <p>It fills only what was left blank, and only for a line naming a catalogue ingredient: a
 	 * price the caller sent is the caller's, and a described line — four plastic stools — has no
@@ -1131,11 +1050,12 @@ public class PurchaseOrderService {
 	 * late from the moment it was raised. Null passes: the column is nullable, an order with nothing
 	 * to meet is a real thing, and the scorecard counts those aside rather than judging them.
 	 *
-	 * <p><strong>Only what a person types is checked.</strong> Generation from the shopping list
-	 * derives the date from demand — the earliest meal that needs the ingredient, less the lead
-	 * buffer — and that arithmetic can land legitimately in the past when a meal is planned for
-	 * tomorrow. Refusing it there would break the shopping list rather than protect anything, so the
-	 * rule is about a date that was asked for, not about one that was worked out.
+	 * <p><strong>It applies to every date an order is created or edited with, and that was not always
+	 * so.</strong> This rule used to be described as checking only what a person types, because the
+	 * shopping-list generator wrote a date it had worked out from demand and that date was exempt.
+	 * T-153 retired the generator, so every order now arrives through {@link #createManual} with a
+	 * date somebody submitted. A vendor tile on the shopping list pre-fills the box from the list, but
+	 * the person saves it, and the panel warns before the round trip when that day has already gone.
 	 */
 	private void requireNeededByOnOrAfter(LocalDate neededBy, LocalDate floor, UUID poId) {
 		if (neededBy == null || floor == null || !neededBy.isBefore(floor)) {
@@ -1195,11 +1115,6 @@ public class PurchaseOrderService {
 	/** Exactly one of {@code ingredientId} and {@code description} is set — see insertLines. */
 	private record LineDraft(UUID ingredientId, String description, BigDecimal quantity, String unit,
 			BigDecimal expectedPrice) {
-	}
-
-	private record OrderLineRow(
-			UUID ingredientId, BigDecimal quantity, String unit, UUID vendorId, LocalDate neededBy,
-			BigDecimal lastPrice) {
 	}
 
 	private static final String HEADER_SELECT = """

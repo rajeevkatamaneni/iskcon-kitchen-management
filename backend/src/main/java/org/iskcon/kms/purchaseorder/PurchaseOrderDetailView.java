@@ -35,8 +35,10 @@ public record PurchaseOrderDetailView(
 		 * permissions and nothing to do with WhatsApp. A permission that was right for an endpoint's
 		 * original job and wrong the moment something else read it is a known defect class here.
 		 *
-		 * <p>Derived from {@code tenant_settings.whatsapp_last_sent_at} (V123), which is written in
-		 * exactly one place — {@code WhatsAppChannelAdapter}, after Meta hands back a message id.
+		 * <p>Derived from {@code tenant_settings.whatsapp_last_sent_at} (V123), which is written by one
+		 * method, {@code TenantWhatsAppSettingsService.markMessageSent}, and only after Meta hands back
+		 * a message id. That method has two callers: {@code WhatsAppChannelAdapter}, for a real
+		 * notification, and the settings screen's Test button (T-151), which sends a real message too.
 		 */
 		boolean whatsappEverSent,
 

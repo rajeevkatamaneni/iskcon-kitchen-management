@@ -245,7 +245,7 @@ run there, or on paper and then there — whichever suits you.
 |---|---|---|---|
 | [UAT-037](UAT-037-vendors.md) · [#100](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/100) | Vendors and what they supply | Kitchen staff | E5-S1 |
 | [UAT-038](UAT-038-the-shopping-list.md) · [#101](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/101) | The suggested shopping list | Kitchen staff | E5-S2 |
-| [UAT-039](UAT-039-generate-purchase-orders.md) · [#102](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/102) | Turn the shopping list into purchase orders | Kitchen staff | E5-S3, E5-S2 |
+| [UAT-039](UAT-039-generate-purchase-orders.md) · [#102](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/102) | Turn the shopping list into purchase orders — **partly withdrawn 2026-09-12 (T-153):** steps 1–5 and 9, the removed tick-and-generate flow, do not run; rewrite wanted for the vendor-tile flow | Kitchen staff | E5-S3, E5-S2 |
 | [UAT-040](UAT-040-purchase-order-lifecycle.md) · [#103](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/103) | Send and cancel a purchase order | Kitchen staff | E5-S3 |
 | [UAT-041](UAT-041-the-po-sheet.md) · [#104](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/104) | The purchase-order sheet: print and PDF | Kitchen staff | E5-S4 |
 | [UAT-042](UAT-042-po-in-the-vendors-language.md) · [#105](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/105) | The order in the vendor's language | Kitchen staff | E5-S5 |

@@ -8,11 +8,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
@@ -33,9 +34,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * Purchase orders (E5-S3): generation of one draft PO per vendor from the approved shopping list,
- * manual creation, the lifecycle guards (edit only a draft, valid transitions only), per-tenant
- * monotonic numbering, and the append-only activity trail.
+ * Purchase orders (E5-S3): creation — by hand, and from a vendor tile on the shopping list (T-134) —
+ * the lifecycle guards (edit only a draft, valid transitions only), per-tenant monotonic numbering,
+ * and the append-only activity trail.
+ *
+ * <p>Orders raised from the shopping list go through {@code POST /purchase-orders}, exactly as a
+ * tile's Save does, via {@link #raiseFromTheList}. They used to go through
+ * {@code POST /purchase-orders/generate}, which T-153 retired; {@link #generateIsGone} asserts that.
  */
 @AutoConfigureMockMvc
 @Import(PurchaseOrderIT.StubVerifierConfiguration.class)
@@ -113,33 +118,36 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM tenants");
 	}
 
+	/**
+	 * The bulk generator is gone, and its absence is asserted rather than assumed (T-153).
+	 *
+	 * <p>This replaces "three checked lines across two vendors generate exactly two correct draft
+	 * POs", whose only subject was the generator grouping the whole list by vendor. That grouping now
+	 * happens on the shopping-list screen, one tile per vendor, and is proved by
+	 * {@code frontend/__tests__/shopping-list.test.tsx}; each tile raises its own order through
+	 * {@code POST /purchase-orders}, which the tests below exercise.
+	 *
+	 * <p>The fixture puts real lines with a preferred vendor on the list first, and the body is the
+	 * one the old endpoint accepted, so a route left registered would have something to create. It
+	 * is answered as a wrong address — {@code KMS-400030} and a 404, the same answer
+	 * {@code GlobalExceptionHandler} gives any withdrawn route — and no order exists afterwards.
+	 */
 	@Test
-	@DisplayName("three checked lines across two vendors generate exactly two correct draft POs")
-	void generatesOnePoPerVendor() throws Exception {
+	@DisplayName("there is no generate endpoint any more, and posting to it creates nothing")
+	void generateIsGone() throws Exception {
 		orderLine(rice, "9", vendorA, "45.00");
-		orderLine(dal, "6", vendorA, "120.00");
 		orderLine(sugar, "12", vendorB, "42.00");
 
-		String body = mvc.perform(authed(post("/api/v1/purchase-orders/generate")))
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.purchaseOrderIds.length()").value(2))
-				.andReturn().getResponse().getContentAsString();
-		List<String> ids = readIds(body);
+		mvc.perform(authed(post("/api/v1/purchase-orders/generate"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"ingredientIds\":[\"" + rice + "\",\"" + sugar + "\"]}"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("KMS-400030"));
+		mvc.perform(authed(post("/api/v1/purchase-orders/generate")))
+				.andExpect(status().isNotFound());
 
-		Map<String, JsonNode> byVendor = new HashMap<>();
-		for (String id : ids) {
-			JsonNode po = getDetail(id);
-			byVendor.put(po.get("order").get("vendorName").asText(), po);
-		}
-
-		JsonNode a = byVendor.get("Govind Wholesale");
-		JsonNode b = byVendor.get("Sri Traders");
-		assert a != null && b != null : "expected one PO per vendor";
-		assert a.get("order").get("status").asText().equals("DRAFT");
-		assert a.get("lines").size() == 2 : "vendor A PO should carry both its lines";
-		assert b.get("lines").size() == 1 : "vendor B PO should carry its single line";
-		// The expected price rides across from the order line.
-		assert b.get("lines").get(0).get("expectedPrice").asDouble() == 42.0;
+		assert admin.queryForObject("SELECT count(*) FROM purchase_orders", Integer.class) == 0
+				: "nothing may be created through a retired route";
 	}
 
 	/**
@@ -645,22 +653,43 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 				: "the date the vendor was given still stands";
 	}
 
+	/**
+	 * An order raised from a vendor's lines on the shopping list is dated for the first of them, and
+	 * carries the vendor's last-known prices although the tile sent none.
+	 *
+	 * <p><strong>Re-routed in T-153, and what moved.</strong> This was "generation still takes the
+	 * earliest needed-by across a vendor's lines", asserted through the retired generator, which
+	 * worked the minimum out on the server. Since T-134 that rule lives in the tile's panel — it
+	 * opens with the earliest date the vendor's lines carry, proved in
+	 * {@code shopping-list.test.tsx} — and the order is created through {@code POST /purchase-orders}
+	 * with that date. What the server still owns, and this asserts through the path the tiles use:
+	 * the list gives each line its own date from demand, a two-line order posted with the earliest
+	 * keeps it, and {@code createPo} fills both blank prices from {@code vendor_supplies.last_price}.
+	 * That last part was the price assertion in the removed per-vendor grouping test; it is kept here,
+	 * on an order that really came off the list, rather than lost with that test.
+	 */
 	@Test
-	@DisplayName("generation still takes the earliest needed-by across a vendor's lines")
-	void generationStillComputesTheEarliestNeededBy() throws Exception {
+	@DisplayName("an order raised from the list takes the earliest needed-by of its lines, and their last prices")
+	void anOrderRaisedFromTheListTakesTheEarliestNeededBy() throws Exception {
 		LocalDate soon = LocalDate.now(TEMPLE_ZONE).plusDays(3);
 		LocalDate later = LocalDate.now(TEMPLE_ZONE).plusDays(9);
 		orderLine(rice, "9", vendorA, "45.00", soon);
 		orderLine(dal, "6", vendorA, "120.00", later);
 
-		String body = mvc.perform(authed(post("/api/v1/purchase-orders/generate")))
-				.andExpect(status().isCreated())
-				.andReturn().getResponse().getContentAsString();
-		String id = JSON.readTree(body).get("purchaseOrderIds").get(0).asText();
+		JsonNode po = getDetail(raiseFromTheList(vendorA));
 
-		// Unchanged by the field existing: the computation still wins the argument between its own
-		// lines, and an override is something a person does afterwards.
-		assert getDetail(id).get("order").get("neededBy").asText().equals(soon.toString());
+		assert po.get("order").get("neededBy").asText().equals(soon.toString())
+				: "the order is only useful if it arrives for the first meal that wants any of it";
+		assert po.get("order").get("status").asText().equals("DRAFT");
+		assert po.get("lines").size() == 2 : "both of the vendor's lines are on its one order";
+		Map<String, JsonNode> byName = new HashMap<>();
+		for (JsonNode l : po.get("lines")) {
+			byName.put(l.get("ingredientName").asText(), l);
+		}
+		assert byName.get("Rice").get("expectedPrice").asDouble() == 45.0
+				: "a line raised from the list takes the vendor's last-known price";
+		assert byName.get("Toor Dal").get("expectedPrice").asDouble() == 120.0
+				: "a line raised from the list takes the vendor's last-known price";
 	}
 
 	/**
@@ -679,18 +708,20 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 	 * <p>So the case that needed excusing no longer exists: the demand query only looks at meals
 	 * from today onwards, and the date is now the meal's own day. What is asserted is that, which is
 	 * a stronger statement than the one it replaces. The floor on a typed date is still real and
-	 * still tested — it belongs to a person choosing a date, not to a computation reporting one.
+	 * still tested.
+	 *
+	 * <p><strong>Re-routed in T-153.</strong> The order used to come from the retired generator, which
+	 * was exempt from that floor. It now comes through {@code POST /purchase-orders}, as a tile's Save
+	 * sends it, and that path <em>is</em> held to the floor ({@code KMS-400014}) — so this also proves
+	 * the date the list works out for tomorrow's meal is one the tile can actually save.
 	 */
 	@Test
-	@DisplayName("a generated needed-by is the meal's own day, and is never in the past")
-	void generationDatesTheOrderForTheMealItself() throws Exception {
+	@DisplayName("an order raised from the list is dated for the meal itself, and the floor lets it through")
+	void anOrderRaisedFromTheListIsDatedForTheMealItself() throws Exception {
 		LocalDate meal = LocalDate.now(TEMPLE_ZONE).plusDays(1);
 		orderLine(rice, "9", vendorA, "45.00", meal);
 
-		String body = mvc.perform(authed(post("/api/v1/purchase-orders/generate")))
-				.andExpect(status().isCreated())
-				.andReturn().getResponse().getContentAsString();
-		String id = JSON.readTree(body).get("purchaseOrderIds").get(0).asText();
+		String id = raiseFromTheList(vendorA);
 		assert getDetail(id).get("order").get("neededBy").asText().equals(meal.toString())
 				: "the order asks for delivery on the day of the meal, not two days before it";
 	}
@@ -742,9 +773,46 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 		return JSON.readTree(body);
 	}
 
-	private List<String> readIds(String body) throws Exception {
-		JsonNode arr = JSON.readTree(body).get("purchaseOrderIds");
-		return List.of(arr.get(0).asText(), arr.get(1).asText());
+	/**
+	 * Raises one vendor's order from the shopping list the way the vendor's tile does (T-134): read
+	 * the list as the screen reads it, take that vendor's included lines with the quantity and unit
+	 * the list suggests, open with the earliest needed-by any of them carries, send no price, and
+	 * post it to {@code POST /purchase-orders}. Nothing here is generated on the server — that route
+	 * was retired in T-153 — so the test exercises the only door an order now comes through.
+	 *
+	 * @return the created order's id
+	 */
+	private String raiseFromTheList(UUID vendor) throws Exception {
+		String list = mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		ObjectNode order = JSON.createObjectNode();
+		order.put("vendorId", vendor.toString());
+		order.put("notes", "Generated from the shopping list");
+		ArrayNode lines = order.putArray("lines");
+		LocalDate earliest = null;
+		for (JsonNode l : JSON.readTree(list)) {
+			if (!l.get("included").asBoolean() || !vendor.toString().equals(l.get("suggestedVendorId").asText())) {
+				continue;
+			}
+			ObjectNode line = lines.addObject();
+			line.put("ingredientId", l.get("ingredientId").asText());
+			line.set("quantity", l.get("suggestedQty"));
+			line.put("unit", l.get("unit").asText());
+			if (!l.get("neededBy").isNull()) {
+				LocalDate d = LocalDate.parse(l.get("neededBy").asText());
+				earliest = earliest == null || d.isBefore(earliest) ? d : earliest;
+			}
+		}
+		assert lines.size() > 0 : "the list should carry at least one line for this vendor";
+		order.put("neededBy", earliest == null ? null : earliest.toString());
+
+		String created = mvc.perform(authed(post("/api/v1/purchase-orders"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(order.toString()))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		return JSON.readTree(created).get("id").asText();
 	}
 
 	/** Whether this order was cancelled with "Vendor Never Delivered this Order" ticked (T-124). */
@@ -790,8 +858,8 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 	 *
 	 * <p><strong>This used to insert straight into {@code shopping_list_lines}, and that was the most
 	 * dangerous thing in this file.</strong> The table survived T-132 — it holds human decisions now
-	 * — so those inserts went on succeeding and every test here stayed green while
-	 * {@code generateFromShoppingList} was reading a table that no longer held the list. A suite that
+	 * — so those inserts went on succeeding and every test here stayed green while the shopping-list
+	 * generator (retired since, in T-153) was reading a table that no longer held the list. A suite that
 	 * passes while the product is broken is worse than one that fails, because nothing tells you.
 	 *
 	 * <p>So the fixture builds real demand instead: a reorder threshold the store room has fallen

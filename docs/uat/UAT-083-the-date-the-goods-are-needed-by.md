@@ -8,6 +8,8 @@
 | **Depends on** | UAT-038 (the shopping list), UAT-039 (turning it into purchase orders), UAT-040 (sending and cancelling), UAT-077 (vendor performance) |
 | **Environment needs** | None |
 
+*Note, 2026-09-12 (T-153): the "generate purchase orders (UAT-039)" set-up step refers to a flow that was removed, and its UAT-039 steps are withdrawn. Raise the two drafts from each vendor tile's **Generate purchase order** button on **/shopping-list** instead (T-134). Those orders are held to the same `KMS-400014` floor as a typed date, so the watch-out below about a generated date is withdrawn too (marked in place), and a rewrite is wanted.*
+
 ## What this feature is for
 
 Every purchase order carries the date the temple needs the goods by. The shopping list works one out
@@ -115,9 +117,15 @@ supplier's record after the deliveries had already happened.
   time, look at this specifically.
 - **"That day has already gone"** — a different warning, for a draft raised on an earlier day whose
   needed-by date is now in the past. It warns; it does not refuse. If you see it, note which draft.
-- A **`KMS-400014`** you did not expect: on an order generated from the shopping list, the date is
+- ~~A **`KMS-400014`** you did not expect: on an order generated from the shopping list, the date is
   worked out from the meal that needs it and can legitimately land in the past. It should generate
-  without complaint. Being refused there is a defect, not correct strictness.
+  without complaint. Being refused there is a defect, not correct strictness.~~
+  **Withdrawn 2026-09-12 (T-153): this is no longer a defect.** Orders are not generated from the
+  shopping list any more. A vendor tile's **Generate purchase order** opens a panel with the date
+  pre-filled from the list, and saving it is a person submitting that date. So a date that has
+  already gone is warned about in the panel (*That day has already gone*) and refused on save with
+  `KMS-400014`, exactly like a typed date. That is correct: change the date in the box and save
+  again. *(Taken from the code and its tests. Not yet seen in a browser.)*
 - Money on these screens carrying Indian digit grouping — **₹1,15,000**, not ₹115,000.
 
 ## Report anything wrong

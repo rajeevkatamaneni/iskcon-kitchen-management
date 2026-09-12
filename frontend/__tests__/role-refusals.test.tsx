@@ -42,6 +42,8 @@ const { authRef, api } = vi.hoisted(() => ({
     today: vi.fn(),
     myShifts: vi.fn(),
     myWaitlist: vi.fn(),
+    // T-149's "taken off in the last week" list, the page's third query.
+    myReleasedShifts: vi.fn(),
     // Only so that section (3) can render the destination /my-shifts sends its reader to, and
     // prove the reader is admitted there. Never asserted on for its own sake.
     availableShifts: vi.fn(),
@@ -272,6 +274,7 @@ describe("my shifts is the volunteer's seva board and refuses everybody else", (
     signedInAs("KITCHEN_STAFF");
     api.myShifts.mockReset().mockResolvedValue([]);
     api.myWaitlist.mockReset().mockResolvedValue([]);
+    api.myReleasedShifts.mockReset().mockResolvedValue([]);
     api.availableShifts.mockReset().mockResolvedValue([]);
   });
 
@@ -287,6 +290,7 @@ describe("my shifts is the volunteer's seva board and refuses everybody else", (
       // that refuses politely while still fetching the reader's shifts would be a different bug.
       expect(api.myShifts).not.toHaveBeenCalled();
       expect(api.myWaitlist).not.toHaveBeenCalled();
+      expect(api.myReleasedShifts).not.toHaveBeenCalled();
     });
   }
 

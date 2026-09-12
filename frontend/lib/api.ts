@@ -3284,6 +3284,26 @@ export interface MyShiftView {
   signedUpAt: string;
 }
 
+/**
+ * A shift the volunteer was on and is no longer, because somebody else took them off it or the whole
+ * shift was called off — the last seven days of them, for *My shifts* (T-149). Their own release is
+ * not here: they know about that one. Carries the structured reason only; the coordinator's internal
+ * note stays inside the temple.
+ */
+export interface MyReleasedShiftView {
+  signupId: string;
+  shiftId: string;
+  title: string;
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  location: string | null;
+  /** When they came off it: the removal, or the shift's cancellation. */
+  releasedAt: string;
+  /** The reason the coordinator picked. A shift cancelled whole arrives as `SHIFT_CANCELLED`. */
+  reason: "SHIFT_CANCELLED" | "NO_LONGER_NEEDED" | "ROTA_CHANGED" | "OTHER";
+}
+
 export interface MyWaitlistView {
   shiftId: string;
   title: string;
@@ -5189,13 +5209,6 @@ export const api = {
       token,
     }),
 
-  generatePurchaseOrders: (ingredientIds: string[] | null, token?: string) =>
-    request<{ purchaseOrderIds: string[] }>("/api/v1/purchase-orders/generate", {
-      method: "POST",
-      body: JSON.stringify({ ingredientIds }),
-      token,
-    }),
-
   updatePurchaseOrder: (
     id: string,
     input: {
@@ -5904,6 +5917,10 @@ export const api = {
   myShifts: (token?: string) =>
     request<MyShiftView[]>("/api/v1/my-shifts", { method: "GET", token }),
 
+  /** Shifts I was taken off, or that were cancelled, in the last seven days (T-149). */
+  myReleasedShifts: (token?: string) =>
+    request<MyReleasedShiftView[]>("/api/v1/my-shifts/released", { method: "GET", token }),
+
   myWaitlist: (token?: string) =>
     request<MyWaitlistView[]>("/api/v1/my-waitlist", { method: "GET", token }),
 
@@ -6159,8 +6176,16 @@ export const api = {
       token,
     }),
 
-  testWhatsAppSettings: (token?: string) =>
-    request<WhatsAppSettingsView>("/api/v1/settings/whatsapp/test", { method: "POST", token }),
+  /**
+   * Sends a real test message from the temple's WhatsApp number to the number typed (T-151). It
+   * replaced a button that only re-checked the credentials and sent nothing.
+   */
+  sendWhatsAppTestMessage: (phoneNumber: string, token?: string) =>
+    request<WhatsAppSettingsView>("/api/v1/settings/whatsapp/test", {
+      method: "POST",
+      body: JSON.stringify({ phoneNumber }),
+      token,
+    }),
 
   /**
    * The temple's own address, used as Reply-To. Sending is always from the platform's address,

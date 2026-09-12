@@ -4,6 +4,260 @@ Read `docs/work/README.md` first — it explains what this file is and who is al
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
 
+## ⚖️ RAJEEV'S RULINGS — 2026-09-12
+
+Three, in his words. Recorded by the work manager at dispatch.
+
+1. **The operator's audit log view — CLOSED WITHOUT BUILDING.**
+   > *"I will verify during my UAT and let you know if I need nay changes. Consider it good for now and mark it done and remvoe it from the list."*
+
+   Removed from `THE-REST.md` §1 with a line saying so. Do not reopen it unless he does.
+
+2. **The WhatsApp Test button sends a real message.**
+   > *"Ask the use for a phone number to send a test message."*
+
+   The button asks for a phone number and sends a real test message to it. **Built as T-151.** Rajeev
+   gave the main session a number for live staging checks only; **it must never appear in a committed
+   file, test or doc** — tests use fake numbers.
+
+3. **Retire `POST /purchase-orders/generate`.**
+   > *"Go ahead and clean it up."*
+
+   A removal task, under README's removal-wave rules. **Built as T-153.** If a locked document
+   promises the endpoint, the builder stops and reports rather than editing it.
+
+## ▶ WAVE 1 (2026-09-12) — dispatched in two halves, 1a then 1b, because the machine allows four builders
+
+**State at dispatch:** HEAD `b2009b6`, tree clean before reservations. Staging `api-00153-nzz` /
+`web-00141-94b` / `worker-00135-vt9`, schema `V127`. The main session is driving staging; **no builder
+touches staging and nothing deploys.** Builders run targeted backend tests only, through
+`tools/work-lock.sh run verify`, never the full suite.
+
+### Checked against the tree before dispatch — three line-up items were already built
+
+The lists were wrong again, the same way as always: finished work described as undone.
+
+- **P6 + P7 are built. T-019, `4e35d6c`, shipped 2026-09-09/10 and on staging.** `ShiftLayer.tsx`
+  opens over the planner beside the shortfall, derives the title, prefills date and capacity, posts
+  with the meal link, closes back onto the same day, shows the raised shift beside the crew count
+  (`ShiftPebble`, "2 of 5 signed up") and reopens it in the same layer to edit.
+  `planner-shift.test.tsx` covers all of that. `OUTSTANDING_BUILD_LIST.md` still says **NOT BUILT**,
+  and it is stale.
+  **What was built differs from his words in two ways, on purpose:** the layer asks **three** fields
+  (start, end, how many), not the full eight-field *Post a shift* form. T-019's comment gives the
+  reason: `DESIGN_SYSTEM.md`'s rule that a form of four fields or more becomes a screen, which is
+  locked. The title is also day-first (*"Lunch preparation on Tuesday, 1 September 2026"*) to match
+  the project's settled date format. The line-up asked for the layer to reuse `shift-form.tsx`.
+  **That would reverse a deliberate decision that rests on a locked document, so it is NOT
+  dispatched.** Whether the three-field layer is right is Rajeev's to test and rule on. **Only the
+  `CrewPebble` tooltip was genuinely undone → T-147.** One loose end to check when it is driven:
+  T-146 made an end time before the start mean the next day, and the layer has its own time fields,
+  so it may post an overnight shift without printing *"(next day)"*.
+- **Kitchen staff, all three claims closed as findings:**
+  - *"`REQUEST_OWN_LEAVE` has no menu route."* Kitchen staff ask for leave on **My profile**, the
+    Sidebar's profile menu → `/profile`, in its *My leave* section (`MyLeave`, `api.requestLeave`).
+    That page's `RequireRole` includes `KITCHEN_STAFF`, and it has done since `e7e4b67`
+    (2026-08-19). There is no row in the main menu. Whether leave deserves one is a matter of taste,
+    and that is left to Rajeev.
+  - *"Download/Print on their own approved request 403s."* **Fixed in `81fd72f`.** The work-order card
+    renders only when `mayIssue` is true, with a comment explaining the 403 it avoids.
+  - *"A Temple Admin has no route to their own shifts."* **Stale.** `nav.ts` gives `/my-schedule` to
+    `ADMIN, MANAGER, KITCHEN`. It matches what the main session saw on staging.
+
+### Reservations made by the work manager before dispatch
+
+- **Migrations: none.** No wave-1 task needs one (`ls` shows `V127` highest). **Next free is still
+  `V128`.**
+- **`ErrorCode.java`:** `WHATSAPP_TEST_NOT_DELIVERED` **`KMS-500007`** (502), for T-151. Its wording
+  was provisional; **reworded after T-151 landed** to the builder's recommendation.
+  `KMS-400151` was **not** allocated and is still the next free 400-band code.
+- **`frontend/lib/api.ts`:**
+  - **removed** `generatePurchaseOrders` (T-153). Nothing in the app called it.
+  - **added** `MyReleasedShiftView` and `myReleasedShifts(token)` → `GET /api/v1/my-shifts/released`
+    (T-149).
+  - **added** `sendWhatsAppTestMessage(phoneNumber, token)` → `POST /api/v1/settings/whatsapp/test`
+    with body `{ phoneNumber }` (T-151). **`testWhatsAppSettings` was left in place, and deleted after T-151 landed,** so the tree
+    type-checks for every other builder mid-wave. **The work manager removes it after T-151 lands**,
+    before the merged-tree run.
+- **Permissions, nav, routes: none.**
+
+### Negative-control conditions every brief carried (README lesson 4, all five conditions plus the three T-146 refinements)
+
+Anchor on the whole statement and `grep -c` it to the exact site count. Snapshot with `cp` and prove
+the change with `cmp -s`. Restore through `trap … EXIT`. Name every artefact for the task
+(`control-T-nnn.*`) and read the top of the log, not its exit code. Run against the tests as written.
+A removal proves the accepted consequence instead.
+
+### Merged-tree checks for wave 1
+
+- **Frontend, after every frontend file in the wave was final** (T-152 is backend-only): `tsc --noEmit` clean; `vitest run` **124 files, 1,488 tests, all passing** (up from 123 / 1,475 at `f6ca83e`). Log: `scratchpad/merged-frontend-wave1.log`. `eslint . --max-warnings=0` clean (no findings, exit 0). `next build` is left to the release agent's clean-archive run.
+- **Backend, after T-152 landed and every builder was out of the tree:** targeted package runs, `--rerun-tasks`, through the lock, never the full suite.
+  - `recipe`, `ingredient`, `document`, `error`: **985 total, 984 passed, 0 failed, 1 skipped.**
+  - `purchaseorder`, `shoppinglist`, `inventory`, `donation`, `ingredientrequest`: **308 / 308.**
+  - The third batch was **killed by the OS for low memory before a test ran**. Re-run as three smaller runs with the daemon stopped between them: `shift` **104 / 104** (includes `VolunteerSignupIT`, which T-149 had not run), `notification` + `jobs` **36 / 36**, `auth.AccessControlEnforcementIT` **10 / 10.**
+  - Logs: `scratchpad/merged-backend-wave1.log`, `scratchpad/merged-backend-wave1-C.log`.
+- **Wave 1 is proven and not released.** All seven tasks are proven; every changed file in `git status` belongs to one of the seven contracts or to the coordinator's reservations. Nothing is committed. The release agent's clean-archive full suite and `next build` are still to run.
+- **2026-09-12, release agent: committed to `main` as one commit for all seven**, with the changelog entry and `WORK_QUEUE.md` marked built and not yet verified. Tree cross-checked against the seven proofs' file lists before staging; the only file no proof names is `ErrorCode.java`, which is the coordinator's `KMS-500007` reservation above. The clean-archive gate, CI and staging revisions are recorded after the deploy.
+
+### T-147 — The crew count's breakdown reachable without a mouse
+
+- **source:** `THE-REST.md` §4 (raised 2026-09-01) · folded into the line-up's P6+P7 item by the main session 2026-09-12.
+- **wave:** 1b
+- **state:** **proven** 2026-09-12, widening included. After the widening: 5 files, 61 tests; the control re-ran with 5 of 8 red and a `cmp`-proved restore. The hint reads *"More about crew for Lunch"*, or the event's name for an event, taken the same way the meal header names it. First pass: `tsc` clean; 5 files / 59 tests including `design-system.test.ts`. Control: `title=` restored and InfoHint removed → 3 of 6 new tests red (the other 3 pin count, tone and absence, which the control does not change); restore proved by `cmp`. The hint sits beside the pill in a non-wrapping wrapper; inside the pill, the button would make it taller than the Recorded badge. **Widened by the coordinator 2026-09-12, same file (nobody else holds it):** a `name` prop passed at the call site, so each hint reads *"More about crew for Lunch"* rather than three identical *"More about crew"* on one day. **Follow-ups, not queued:** `ShiftPebble` hides from sighted keyboard and touch users which shift a pill is, worst on a past day where it cannot be opened. `Tooltip.tsx` puts `aria-describedby` on a wrapper span rather than the button, and may clip at the left edge on a phone. That affects every InfoHint.
+- **what:** `CrewPebble` in `MealServices.tsx` puts *"N staff and M volunteers, of R needed"* in a native
+  `title=` tooltip. That works on hover only, with no keyboard or touch route, which is exactly the
+  failure `InfoHint` exists to avoid. Convert it to `InfoHint`. `ShiftPebble` is out of scope: its
+  `title=` repeats text already in its `sr-only` span. A builder that thinks otherwise says so in the
+  proof and does not change it.
+- **paths:** `frontend/components/planner/MealServices.tsx` · `frontend/__tests__/planner-shift.test.tsx`,
+  `frontend/__tests__/meal-recording.test.tsx`, `frontend/__tests__/meal-correction.test.tsx` (existing,
+  granted) · `frontend/__tests__/crew-pebble.test.tsx` *(new)*
+- **reservations:** none.
+- **proof:** `docs/work/proof/T-147.md`
+
+### T-148 — "1 pieces" in the scale preview, and "₹80 / pieces" on the order sheet
+
+- **source:** `THE-REST.md` §3, two bullets (2026-09-11 run).
+- **wave:** 1a
+- **state:** **proven** 2026-09-12. 73/73 across the eight granted classes; control 3 of 22 failing (sheet printed `₹250.00 / pieces`), restore proved by `cmp`. Server-side only; `api.ts` and the recipe page untouched. `UnitLabelAgreementTest`'s claim that `label(count)` could not fix a rate was tested and was wrong (a rate is a count of one); three stale allow-list entries removed. **Follow-ups outside its contract, not yet queued:** `frontend/app/orders/[id]/page.tsx:951` reads "Price paid per pieces of …" to a screen reader (`unitLabelFor(1, l.unit)` fixes it); `Unit.java`'s `label()` javadoc still names "/ Kg after a price" as a plural site.
+- **what:** `RecipeScaler.scale` ships `unit.label()` as `ScaledQuantity.displayUnit`, and
+  `app/recipes/[id]/page.tsx:360` prints it beside the number, so one piece reads *"1 pieces"*.
+  `DocumentGenerationService:224` builds a rate as `money + " / " + label()`, and a rate wants the
+  singular: *"₹80 / piece"*. `UnitLabelAgreementTest:60-63` claims `label(count)` cannot fix the rate.
+  That claim is to be tested, not trusted. `displayUnit` stays a string, so no `api.ts` change is
+  expected; a builder that needs one stops.
+- **paths:** `backend/src/main/java/org/iskcon/kms/recipe/RecipeScaler.java`,
+  `backend/src/main/java/org/iskcon/kms/recipe/ScaledQuantity.java`,
+  `backend/src/main/java/org/iskcon/kms/document/DocumentGenerationService.java`,
+  `frontend/app/recipes/[id]/page.tsx` · tests (existing, granted): `recipe/RecipeScalerTest.java`,
+  `recipe/RecipeIT.java`, `ingredient/UnitLabelAgreementTest.java`, `ingredient/QuantitiesTest.java`,
+  `document/PurchaseOrderSheetTemplateTest.java`, `document/PurchaseOrderDocumentIT.java`,
+  `document/DocumentGenerationIT.java`, `purchaseorder/DescribedPurchaseLineIT.java` (all under
+  `backend/src/test/java/org/iskcon/kms/`), `frontend/__tests__/recipe-detail.test.tsx`
+- **reservations:** none.
+- **proof:** `docs/work/proof/T-148.md`
+
+### T-149 — A volunteer taken off a shift can see it on My shifts
+
+- **source:** `THE-REST.md` §3 (2026-09-11 run).
+- **wave:** 1a
+- **state:** **proven** 2026-09-12. `MyReleasedShiftsIT` + `ReleaseIT` 10/10; `tsc` clean, `my-shifts` + `role-refusals` 20/20. Two controls, both restored by `cmp`: query broken three ways → 3 of 6 failing, one per break; mapping removed → 6 of 6. The schema matched the suggested rules: only the coordinator removal sets a reason, a cancellation releases nobody, and a test pins the response to exactly 9 fields, so `released_note` cannot be among them. **It did not run `VolunteerSignupIT` or `AccessControlEnforcementIT`, and changed neither, so the merged-tree run must include both.** **For Rajeev, all reversible:** the page prints the removal message's own sentences ("Reason: the rota changed."), not the coordinator's short labels; the section sits under upcoming shifts and above the waitlist and is absent when empty (no mockup exists); when they came off and a cancellation's reason are returned but not shown.
+- **what:** `SignupService.myShifts` filters `released_at IS NULL AND s.status = 'OPEN'`, so a volunteer a
+  coordinator removed, or whose shift was cancelled, simply disappears from their list. The removal
+  notice is best-effort, and Mailgun's sandbox drops it on staging. Add
+  `GET /api/v1/my-shifts/released` behind `VIEW_OWN_SHIFTS`: the caller's own signups released by
+  **somebody else** (`released_reason IS NOT NULL`) or on a shift since cancelled (`cancelled_at`),
+  in the last seven days by `releasedAt`. Show them as a *taken off in the last week* list on
+  `/my-shifts`. A volunteer's own release is not listed. `released_note` never leaves the temple.
+- **paths:** `backend/src/main/java/org/iskcon/kms/shift/SignupService.java`,
+  `backend/src/main/java/org/iskcon/kms/shift/VolunteerShiftController.java`,
+  `backend/src/main/java/org/iskcon/kms/shift/MyReleasedShiftView.java` *(new)*,
+  `frontend/app/my-shifts/page.tsx` · tests: `backend/src/test/java/org/iskcon/kms/shift/ReleaseIT.java`,
+  `shift/VolunteerSignupIT.java`, `auth/AccessControlEnforcementIT.java` (existing, granted),
+  `shift/MyReleasedShiftsIT.java` *(new)*; `frontend/__tests__/my-shifts.test.tsx`,
+  `frontend/__tests__/role-refusals.test.tsx` (existing, granted)
+- **reservations:** `api.ts` — `MyReleasedShiftView` and `myReleasedShifts(token)`, as written.
+- **proof:** `docs/work/proof/T-149.md`
+
+### T-150 — The three inline unit-family checks use the one rule
+
+- **source:** `THE-REST.md` §4 · `BL-9`.
+- **wave:** 1b
+- **state:** **proven** 2026-09-12. Six classes 86/86; the new `UnitFamilyRefusalIT` has 9 tests. Control with the inline checks restored: 8 failing, each `expected:<KMS-400013> but was:<KMS-400001>`. The 3 same-family-accepted tests passed both ways, as they should. Restores proved by a separate `cmp`. Refusal order: unchanged on the adjustment and the request; on the gift, every line is now checked before the donation row is inserted. **Gap found → T-154:** none of the three screens renders the field line that names the ingredient. The shared error box prints only the message, next step and code, so UAT-081 step 17 ("names Ghee") fails on the donation screen.
+- **what:** `InventoryItemService.adjust` (:318), `DonationRecorder` (:72) and `IngredientRequestService`
+  (:440) each refuse a unit from the wrong family with the generic `KMS-400001`.
+  `IngredientUnits.requireSameFamily` is the rule, and it answers `KMS-400013` with a line naming the
+  ingredient. Use it in all three. `docs/uat/UAT-081` **already tells testers to expect `KMS-400013`**
+  on the adjustment and gift screens, so today those steps would fail. Read-only for this task. If a
+  screen maps field errors by the old `lines[i].unit` key, report it; do not edit it.
+- **paths:** `backend/src/main/java/org/iskcon/kms/inventory/InventoryItemService.java`,
+  `backend/src/main/java/org/iskcon/kms/donation/DonationRecorder.java`,
+  `backend/src/main/java/org/iskcon/kms/ingredientrequest/IngredientRequestService.java` · tests
+  (existing, granted): `inventory/StockAdjustmentIT.java`, `donation/DonationIntakeIT.java`,
+  `donation/DonorCaptureIT.java`, `donation/DonationVoidIT.java`, `ingredientrequest/IngredientRequestIT.java`;
+  `ingredient/UnitFamilyRefusalIT.java` *(new)*
+- **reservations:** none (`KMS-400013` exists).
+- **proof:** `docs/work/proof/T-150.md`
+
+### T-154 — The three unit-family refusals name the ingredient on screen
+
+- **source:** found by T-150, 2026-09-12 · `docs/uat/UAT-081` step 17.
+- **wave:** not yet placed. Queued by the work manager and **not dispatched**, because it was not in the approved line-up.
+- **state:** queued
+- **what:** After T-150, the stock adjustment, the gift of goods and the ingredient request answer `KMS-400013` with a field error: *"Ghee is measured in L, and there is no way to turn Kg into L."* No screen shows it. `app/orders/[id]/page.tsx:815-819` already renders the same field line for an order and is the pattern to copy. Paths expected: `frontend/app/donations/new/page.tsx`, `frontend/components/IngredientRequestForm.tsx`, the inventory adjust form (`frontend/app/inventory/[id]/page.tsx` or `frontend/components/InventoryItemForm.tsx`, check which), and their existing tests. Frontend only, no reservations.
+- **proof:** —
+
+### T-151 — The WhatsApp Test button sends a real message to a number the admin types
+
+- **source:** Rajeev, 2026-09-12, ruling 2 above · `THE-REST.md` §3 · Wave A open item 2 (the chicken-and-egg) · folds in `THE-REST.md` §4 *"settings-payments 'connects to WhatsApp' passes for the wrong reason"*, because it is the same screen and the same test file.
+- **wave:** 1a
+- **state:** **proven** 2026-09-12. Backend 30/30, frontend 38/38, `tsc` clean. Control A (restores the verify-only behaviour): the three new send tests go red. Control B (restores the unstable `getToken` mock): the connected-panel test goes red, 1 of 1. Both restores proved by `cmp`. `markMessageSent()` is still the only UPDATE of `whatsapp_last_sent_at`, now with two callers, both after Meta returns an id. A successful send also refreshes `whatsapp_verified_at`. **What it established about Meta, with sources in the proof:** a temple-initiated message must be an approved template, never free text; a new template needs Meta's approval, which can take up to 24 hours; `hello_world` is documented only on Meta's automatic test account, so it cannot be relied on; the five-recipient limit on test numbers comes from third-party sources only. **So it added a template, `NotificationTemplate.WHATSAPP_TEST` (Meta name `connection_test`).** **Before the live staging check:** press Save once on Settings → WhatsApp with the secrets blank, so an already-connected temple submits the new template. Wait for Meta's approval; until then the test answers `KMS-500007`, which is expected. If staging uses Meta's test number, the receiving phone may need adding as a recipient. **Coordinator actions taken after it landed:** `KMS-500007` reworded to the builder's recommendation (the usual cause is the template still in review, not the number), and `testWhatsAppSettings` deleted from `api.ts`, with no callers left. **Follow-ups:** two now-false comments (`WhatsAppChannelAdapter.java:76`, `PurchaseOrderDetailView.java:38`) folded into T-152. Phone inputs across the app trim but keep inner spaces, so `KMS-400003`'s own example *"+91 98765 43210"* is refused. That predates this task, and it is Rajeev's call whether it matters.
+- **what:** `POST /settings/whatsapp/test` calls `meta.verifyNumber`, a credential check, and sends
+  nothing. Make it take `{ phoneNumber }`, send a real message through `MetaWhatsAppClient`, and on
+  success stamp through the **one** writer of `whatsapp_last_sent_at`. That closes the chicken-and-egg
+  where the order screen's Send-on-WhatsApp button never appears. The settings screen asks for the
+  number. Separately, `settings-payments` *"connects to WhatsApp"* passes only because a hint string
+  contains "message templates". Make it assert the connected panel genuinely renders. **The builder
+  must establish from code and Meta's docs what Meta constrains** (a template versus free text, the
+  24-hour window, test recipients on an unpublished account, template approval for a new template)
+  and say so in the proof, not guess.
+- **paths:** `backend/src/main/java/org/iskcon/kms/notification/TenantWhatsAppSettingsService.java`,
+  `.../notification/WhatsAppSettingsController.java`, `.../notification/MetaWhatsAppClient.java`,
+  `.../notification/NotificationTemplate.java` (only if unavoidable, and justified in the proof),
+  `.../notification/SendWhatsAppTestRequest.java` *(new)*, `frontend/app/settings/page.tsx` · tests:
+  `notification/WhatsAppLastSentIT.java`, `notification/WhatsAppChannelAdapterTest.java`,
+  `notification/NotificationTemplateTest.java`, `purchaseorder/PurchaseOrderWhatsAppIT.java` (existing,
+  granted), `notification/WhatsAppTestSendIT.java` *(new)*; `frontend/__tests__/settings-payments.test.tsx`,
+  `frontend/__tests__/settings-warnings.test.tsx` (existing, granted)
+- **reservations:** `api.ts` `sendWhatsAppTestMessage(phoneNumber, token)`; `KMS-500007
+  WHATSAPP_TEST_NOT_DELIVERED`; the existing `KMS-400003 INVALID_PHONE_NUMBER` for a malformed number.
+- **proof:** `docs/work/proof/T-151.md`
+
+### T-152 — `NotificationSendE2EIT` flakes, and the timeout is not the fix
+
+- **source:** `WORK_QUEUE.md` / `THE-REST.md` §3 · Wave A's CI red (run 34570919636) · `fc03d6a` papered over the first symptom.
+- **wave:** 1b — after T-151, because the likely mechanism lives in the same package.
+- **state:** **proven** 2026-09-12. **The mechanism, which the ledger had wrong:** the test's comment said it shared a context with `BackgroundJobIT`, but its `@MockBean` and extra property give it its own. So two schedulers named `kms-scheduler` polled one clustered Quartz store. `notify()` writes the job inside the caller's transaction, and Quartz nudges its thread before commit, so the thread finds nothing and sleeps 24-30s. Whichever node woke first sent the message: its own scheduler, 24-30s late (the old timeout); or the other context's, which has no mail sender or from address, so every channel failed (the CI `FAILED`). **Far-side evidence:** CI run 34570919636's report shows the send 20s after queueing with "from address unset", an address the E2E context does set. A local reproduction held the transaction open and watched the other node take the job and fail. **Fix, test configuration only:** a scheduler name of its own (`kms-scheduler-notification-e2e`) and a 1s idle wait. The test now holds its transaction open for a second on every run, so the race is always exercised. The await dropped from 30s to 10s, and a failure message now lists each attempt. `NotificationService` was deliberately untouched: the API runs no scheduler in production, and scheduling after commit would give up atomicity. **5 consecutive runs** of both classes with `--rerun-tasks`: 6/6 each time. Control, both settings removed and idle wait alone removed: `PENDING`, 1 of 1 each; restore proved by `cmp`. The wrong-node half has no deterministic control; it rests on the CI log and the reproduction, and the proof says so. Comments corrected in `WhatsAppChannelAdapter`, `PurchaseOrderDetailView` and `BackgroundJobIT`. **Follow-up, not queued:** `RecipeDocumentE2EIT` may carry the same late-pickup shape; unchecked.
+- **what:** It has failed two ways: timed out still pending, and terminally `FAILED` where `SENT` was
+  expected. Its recipient prefers WhatsApp, and its temple has no WhatsApp settings, so the adapter
+  fails and the message must cascade to email (a mocked `JavaMailSender`). It shares a
+  scheduler-enabled context with `jobs/BackgroundJobIT`. Find the mechanism, with evidence from the
+  far side (the `notification_attempts` rows for a failing run), and fix that. Raising the timeout
+  again is not a fix.
+- **paths:** `backend/src/test/java/org/iskcon/kms/notification/NotificationSendE2EIT.java`,
+  `backend/src/test/java/org/iskcon/kms/jobs/BackgroundJobIT.java`; main code in
+  `backend/src/main/java/org/iskcon/kms/notification/` **only** where the mechanism is proved to be,
+  each file named in the proof. The work manager checked that no other 1b contract is in that package.
+- **reservations:** none.
+- **proof:** `docs/work/proof/T-152.md`
+
+### T-153 — Retire `POST /purchase-orders/generate`
+
+- **source:** Rajeev, 2026-09-12, ruling 3 above · `THE-REST.md` §3.
+- **wave:** 1a
+- **state:** **proven** 2026-09-12, widening included. The UAT-083 watch-out and E5-S3's criterion are struck through with dated notes; D3 is kept word for word with a dated note beneath it. **Still stale, and recorded in the proof as part of the UAT-083 rewrite:** a bullet in UAT-083's *How it is supposed to work* saying a computed date is exempt from the typed-date rule. `PurchaseOrderIT` + `ShoppingListIT` + `HandAddedLineIT` + the four untouched neighbouring PO ITs: 100/100. `tsc` clean; shopping-list tests 28/28. `/generate` now answers **404 `KMS-400030`** and creates nothing, which a test asserts. Control 1: restoring the endpoint → that test red with 201. Control 2: disabling `createPo`'s last-price fill → the re-routed test red. Both restores were proved by `cmp`. Also removed: `OrderLineRow` and the service's `ShoppingListService` dependency (generate was its only use). No locked document named the endpoint; the builder grepped all four. **UAT-039 is withdrawn in part** (steps 1-5 and 9 and their pass criteria struck through in place; 6-8 and 10-12 still test real things). **It wants a rewrite for the tile flow, and none was written.** **Widened by the coordinator 2026-09-12**, after checking ownership against T-147, T-150 and T-151: UAT-083's "watch out for" section, and E5-S3's acceptance criterion and decision D3, both still describing generate. Left, as briefed: `TRACEABILITY.md` and `github-import/`.
+- **what:** Nothing in the app calls it since T-134 moved raising orders onto vendor tiles. Remove the
+  endpoint, `generateFromShoppingList`, `lastPricesByVendor` (its only caller) and `GeneratePosRequest`.
+  **Keep what the tests proved through it:** the needed-by date, drafts covering the shopping list,
+  and hand-added lines are re-routed through `POST /purchase-orders`, not deleted. **What promised
+  this, checked by the work manager:** no locked document names it. `REQUIREMENTS.md:170`'s *"Purchase
+  order generation and tracking"* is still met by the tiles. It is promised by `UAT-039` (the whole
+  script), four dependent UAT scripts, `EPIC-5` E5-S3's *"Generate POs for selected"*, and the
+  `github-import` mirror. Withdraw with a dated note; do not delete. The `github-import` mirror and
+  `TRACEABILITY.md` are left to their own later passes. No error code is used only by this path.
+- **paths:** `backend/src/main/java/org/iskcon/kms/purchaseorder/PurchaseOrderController.java`,
+  `.../purchaseorder/PurchaseOrderService.java`, `.../purchaseorder/GeneratePosRequest.java` *(delete)* ·
+  tests: `purchaseorder/PurchaseOrderIT.java`, `shoppinglist/ShoppingListIT.java`,
+  `shoppinglist/HandAddedLineIT.java` · `frontend/app/shopping-list/page.tsx` (comments at :135 and
+  :187 only), `frontend/__tests__/shopping-list.test.tsx`, `frontend/__tests__/shopping-list-add.test.tsx`
+  (granted) · docs: `docs/uat/UAT-039-generate-purchase-orders.md`, `docs/uat/README.md` (the UAT-039
+  row), `docs/uat/UAT-040-purchase-order-lifecycle.md`, `docs/uat/UAT-077-vendor-performance.md`,
+  `docs/uat/UAT-081-a-unit-the-ingredient-cannot-be-measured-in.md`,
+  `docs/uat/UAT-083-the-date-the-goods-are-needed-by.md` (dependency notes only),
+  `docs/stories/EPIC-5-ordering-vendors.md` (the E5-S3 line only)
+- **reservations:** `api.ts` — `generatePurchaseOrders` already removed by the work manager.
+- **proof:** `docs/work/proof/T-153.md`
+
 ## Picking this up in a fresh session — rewritten 2026-09-10
 
 **Read this block, then `docs/work/README.md`, then `docs/work/DECISIONS.md` from D-24 onwards.**

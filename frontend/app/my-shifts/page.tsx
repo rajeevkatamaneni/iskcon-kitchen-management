@@ -4,12 +4,33 @@ import { useCallback } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError } from "@/lib/api";
+import { api, toApiError, type ApiError, type MyReleasedShiftView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { useState } from "react";
 import { Loading } from "@/components/Loading";
 import { dateWithYear, shiftWindow } from "@/lib/format";
+
+/**
+ * Why a volunteer is no longer on a shift, in the words the volunteer was sent (T-149).
+ *
+ * <p>Deliberately not the coordinator's labels on the volunteer page ("Shift cancelled", "No longer
+ * needed", "Rota changed", "Other"). Those are what a coordinator picks between, and that file says
+ * so: "the label is the coordinator's; the sentence the volunteer reads is the server's". "Other" is
+ * a fine option on a form and tells the person it happened to nothing. These are the four clauses of
+ * `RemoveVolunteerRequest.Reason.volunteerText()`, copied exactly, which the REMOVED_FROM_SHIFT
+ * message prints after "Reason:" — so a volunteer who did get the message reads the same words here
+ * as on their phone. If one is reworded there it must be reworded here.
+ *
+ * <p>A `Record` over the reason union, so a fifth reason added to the API type stops this compiling
+ * rather than rendering "Reason: undefined".
+ */
+const TAKEN_OFF_BECAUSE: Record<MyReleasedShiftView["reason"], string> = {
+  SHIFT_CANCELLED: "the shift was cancelled",
+  NO_LONGER_NEEDED: "help is no longer needed for this shift",
+  ROTA_CHANGED: "the rota changed",
+  OTHER: "a change at the temple",
+};
 
 export default function MyShiftsPage() {
   return (
@@ -31,6 +52,8 @@ function MyShiftsView() {
 
   const shifts = useAuthedQuery(useCallback((t: string | undefined) => api.myShifts(t), []));
   const waitlist = useAuthedQuery(useCallback((t: string | undefined) => api.myWaitlist(t), []));
+  // Third, and kept third: my-shifts.test.tsx hands its mocked queries out in call order.
+  const released = useAuthedQuery(useCallback((t: string | undefined) => api.myReleasedShifts(t), []));
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
@@ -51,6 +74,7 @@ function MyShiftsView() {
 
   const myShifts = shifts.data ?? [];
   const myWaitlist = waitlist.data ?? [];
+  const takenOff = released.data ?? [];
 
   return (
     <div className="flex min-h-screen">
@@ -103,6 +127,36 @@ function MyShiftsView() {
                 </li>
               ))}
             </ul>
+          )}
+
+          {/*
+            Taken off in the last week (T-149). Without it, a volunteer a coordinator removed — or
+            whose shift was cancelled with them on it — simply vanished from the list above, and the
+            notice telling them why is best-effort and can be lost (on staging the mail sandbox drops
+            exactly these). Absent when there is nothing to say, rather than an empty state: this is
+            news when it happens and noise when it has not. A failed load is shown, though, because
+            a quiet blank here would look exactly like "nothing happened", which is the one wrong
+            thing this section must not tell somebody.
+          */}
+          {released.error ? (
+            <section className="mt-10">
+              <h2 className="mb-3 text-lg">Taken off in the last week</h2>
+              <ErrorNotice error={released.error} />
+            </section>
+          ) : takenOff.length > 0 && (
+            <section className="mt-10">
+              <h2 className="mb-3 text-lg">Taken off in the last week</h2>
+              <ul className="space-y-3">
+                {takenOff.map((r) => (
+                  <li key={r.signupId} className="card px-5 py-4">
+                    <p className="font-medium">{r.title}</p>
+                    <p className="text-sm text-ink-secondary tabular-nums">{dateWithYear(r.shiftDate)} · {shiftWindow(r.startTime, r.endTime)}</p>
+                    {r.location && <p className="text-sm text-ink-muted">{r.location}</p>}
+                    <p className="mt-1 text-sm">Reason: {TAKEN_OFF_BECAUSE[r.reason]}.</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
 
           {myWaitlist.length > 0 && (

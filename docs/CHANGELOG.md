@@ -1182,6 +1182,50 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-12 — Wave 1: a real WhatsApp test message, a volunteer can see they were taken off, and `/purchase-orders/generate` is gone (tasks T-147 to T-153)
+
+Seven tasks in one commit, because they share `api.ts` and `ErrorCode.java` and a commit per task
+could have left `main` not compiling. No migration; the schema stays `V127`. **None of it has been
+driven in a browser yet, and none of it has been seen working by Rajeev.**
+
+**The WhatsApp *Test* button sends a real message** (T-151). Ruled by Rajeev on 2026-09-12: *"Ask the
+use for a phone number to send a test message."* It used to re-check the credentials and send
+nothing. It now asks for a number and sends the new `connection_test` template to it. Meta only lets
+a temple start a conversation with an approved template, and a new one can take up to a day to
+approve, so **until Meta approves it the button answers the new code `KMS-500007`**, *"WhatsApp didn't
+send the test message to that number"*, with a next step that says so. The template is submitted when
+a connected temple presses Save on its WhatsApp settings; that has not been done on staging. The same
+task fixed a settings test that had been passing for the wrong reason.
+
+**A volunteer taken off a shift can see it on *My shifts*** (T-149). A list of shifts from the last
+seven days they were removed from, or that were cancelled, with the reason the coordinator picked. A
+removal message that never arrived used to leave them no way to find out. Their own releases are not
+listed, and the coordinator's internal note never leaves the temple.
+
+**`POST /api/v1/purchase-orders/generate` is retired** (T-153). Ruled by Rajeev: *"Go ahead and clean
+it up."* Nothing in the app called it since orders are raised from the shopping list's tiles. It now
+answers 404 and creates nothing. UAT-039 is withdrawn in part and wants a rewrite for the tile flow;
+UAT-083 and E5-S3 are corrected with dated notes.
+
+**"1 pieces" and "₹80 / pieces" are gone** (T-148). The recipe scale preview and the purchase order
+sheet now get the singular or plural from the server.
+
+**The stock adjustment, a gift of goods and an ingredient request refuse a unit from the wrong family
+with `KMS-400013`** (T-150), the same rule and code as everywhere else, instead of a generic
+`KMS-400001`. **Not done:** none of the three screens shows the field line naming the ingredient yet;
+that is T-154.
+
+**The crew count's breakdown is reachable without a mouse** (T-147). It was a hover-only `title=`
+tooltip; it is now an `InfoHint`.
+
+**`NotificationSendE2EIT` stops flaking** (T-152). Its context ran a second Quartz scheduler with the
+same name on the same clustered store, so the wrong one could pick up the message and fail it. The
+test now has a scheduler name of its own and a one-second idle wait. Test configuration only.
+
+Proofs, with negative controls, are in `docs/work/proof/T-147.md` to `T-153.md`.
+
+---
+
 ### 2026-09-12 — A shift can run past midnight (task T-146)
 
 **Posting a shift from 20:00 to 02:00 used to fail with `KMS-500001`**, *"something went wrong at our

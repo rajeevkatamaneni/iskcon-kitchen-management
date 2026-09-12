@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import type { MyShiftView, MyWaitlistView } from "@/lib/api";
+import type { MyReleasedShiftView, MyShiftView, MyWaitlistView } from "@/lib/api";
 
-// my-shifts issues two useAuthedQuery calls in order: my shifts, my waitlist.
+// my-shifts issues three useAuthedQuery calls in order: my shifts, my waitlist, taken off (T-149).
 const { authRef, returnsRef, reloadMock } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "VOLUNTEER", userId: "me" } } as {
@@ -52,12 +52,25 @@ const WAIT: MyWaitlistView = {
   joinedAt: "2026-08-01T00:00:00Z",
 };
 
+const REMOVED: MyReleasedShiftView = {
+  signupId: "su9",
+  shiftId: "s9",
+  title: "Janmashtami midnight offering",
+  shiftDate: "2026-12-10",
+  startTime: "20:00",
+  endTime: "02:00",
+  location: "Temple hall",
+  releasedAt: "2026-09-10T06:00:00Z",
+  reason: "ROTA_CHANGED",
+};
+
 describe("my shifts", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER", userId: "me" } };
     returnsRef.current = [
       { data: [SHIFT], error: null, loading: false },
       { data: [WAIT], error: null, loading: false },
+      { data: [], error: null, loading: false },
     ];
     returnsRef.i = 0;
     reloadMock.mockReset();
@@ -78,6 +91,7 @@ describe("my shifts", () => {
     returnsRef.current = [
       { data: [{ ...SHIFT, title: "Midnight offering", startTime: "20:00", endTime: "02:00" }], error: null, loading: false },
       { data: [{ ...WAIT, startTime: "23:00", endTime: "03:00" }], error: null, loading: false },
+      { data: [], error: null, loading: false },
     ];
     returnsRef.i = 0;
     render(<MyShiftsPage />);
@@ -92,9 +106,43 @@ describe("my shifts", () => {
     returnsRef.current = [
       { data: [], error: null, loading: false },
       { data: [], error: null, loading: false },
+      { data: [], error: null, loading: false },
     ];
     returnsRef.i = 0;
     render(<MyShiftsPage />);
     expect(screen.getByText(/no upcoming shifts/i)).toBeInTheDocument();
+  });
+
+  it("lists the shifts a volunteer was taken off, with the day, the hours and the reason (T-149)", () => {
+    returnsRef.current = [
+      { data: [SHIFT], error: null, loading: false },
+      { data: [], error: null, loading: false },
+      {
+        data: [REMOVED, { ...REMOVED, signupId: "su10", shiftId: "s10", title: "Ekadashi prep", startTime: "06:00", endTime: "09:00", location: null, reason: "SHIFT_CANCELLED" }],
+        error: null,
+        loading: false,
+      },
+    ];
+    returnsRef.i = 0;
+    render(<MyShiftsPage />);
+
+    const section = screen.getByRole("heading", { name: /taken off in the last week/i }).closest("section")!;
+    expect(section).toHaveTextContent("Janmashtami midnight offering");
+    expect(section).toHaveTextContent("10 Dec 2026 · 20:00–02:00 (next day)");
+    expect(section).toHaveTextContent("Temple hall");
+    // The volunteer's words, as the removal message prints them after "Reason:", not the
+    // coordinator's label.
+    expect(section).toHaveTextContent("Reason: the rota changed.");
+    expect(section).toHaveTextContent("Ekadashi prep");
+    expect(section).toHaveTextContent("Reason: the shift was cancelled.");
+    // Nothing to act on: they are no longer on it, so no release button rides along. The one
+    // button on the page belongs to the upcoming shift above.
+    expect(screen.getAllByRole("button", { name: /release my spot/i })).toHaveLength(1);
+  });
+
+  it("says nothing about being taken off when nobody was", () => {
+    render(<MyShiftsPage />);
+    expect(screen.getByText("Sunday prep")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /taken off/i })).not.toBeInTheDocument();
   });
 });

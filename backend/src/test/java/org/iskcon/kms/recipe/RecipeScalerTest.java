@@ -64,6 +64,66 @@ class RecipeScalerTest {
 		assertThat(q.displayUnit()).isEqualTo("pieces");
 	}
 
+	/**
+	 * "1 pieces" on the recipe scale preview (T-148).
+	 *
+	 * <p>Not a unit-choice case, so it belongs here rather than in {@code QuantitiesTest.UnitChoice}:
+	 * which unit a count is said in never changes, only which <em>word</em> of it agrees with the
+	 * figure. The recipe page prints {@code displayQuantity} and {@code displayUnit} as one phrase,
+	 * so these two fields are the whole of what the cook reads.
+	 */
+	@Test
+	@DisplayName("a count that scales to exactly one says \"piece\", and two says \"pieces\"")
+	void countAgreesWithItsFigure() {
+		ScaledQuantity one = RecipeScaler.scale(new BigDecimal("10"), Unit.PIECES, new BigDecimal("0.1"));
+		assertThat(one.displayQuantity()).isEqualByComparingTo("1");
+		assertThat(one.displayUnit()).isEqualTo("piece");
+
+		ScaledQuantity two = RecipeScaler.scale(new BigDecimal("10"), Unit.PIECES, new BigDecimal("0.2"));
+		assertThat(two.displayQuantity()).isEqualByComparingTo("2");
+		assertThat(two.displayUnit()).isEqualTo("pieces");
+
+		// A one read back from JDBC wears its column's scale; equals() would call 1.000 not one.
+		ScaledQuantity fromDb = RecipeScaler.scale(new BigDecimal("1.000"), Unit.PIECES, BigDecimal.ONE);
+		assertThat(fromDb.displayUnit()).isEqualTo("piece");
+	}
+
+	@Test
+	@DisplayName("the word agrees with the ROUNDED figure the page prints, not the raw one")
+	void countAgreesWithTheRoundedFigure() {
+		// 0.999 is shown "1" (two places, half up), so it must read "1 piece". The raw value is
+		// untouched, and is not one.
+		ScaledQuantity nearlyOne = RecipeScaler.scale(new BigDecimal("0.999"), Unit.PIECES, BigDecimal.ONE);
+		assertThat(nearlyOne.rawQuantity()).isEqualByComparingTo("0.999");
+		assertThat(nearlyOne.displayQuantity()).isEqualByComparingTo("1");
+		assertThat(nearlyOne.displayUnit()).isEqualTo("piece");
+
+		// And from above: 1.004 is shown "1" too.
+		ScaledQuantity justOver = RecipeScaler.scale(new BigDecimal("1.004"), Unit.PIECES, BigDecimal.ONE);
+		assertThat(justOver.displayQuantity()).isEqualByComparingTo("1");
+		assertThat(justOver.displayUnit()).isEqualTo("piece");
+
+		// 1.005 rounds to 1.01, which is not one, so it stays plural.
+		ScaledQuantity overOne = RecipeScaler.scale(new BigDecimal("1.005"), Unit.PIECES, BigDecimal.ONE);
+		assertThat(overOne.displayQuantity()).isEqualByComparingTo("1.01");
+		assertThat(overOne.displayUnit()).isEqualTo("pieces");
+
+		// Nothing of a count is still plural: "0 pieces".
+		ScaledQuantity none = RecipeScaler.scale(BigDecimal.ZERO, Unit.PIECES, new BigDecimal("500"));
+		assertThat(none.displayUnit()).isEqualTo("pieces");
+	}
+
+	@Test
+	@DisplayName("weights and volumes of exactly one are unchanged: \"1 Kg\", \"1 L\"")
+	void massAndVolumeHaveNoSingular() {
+		assertThat(RecipeScaler.scale(BigDecimal.ONE, Unit.KG, BigDecimal.ONE).displayUnit()).isEqualTo("Kg");
+		assertThat(RecipeScaler.scale(BigDecimal.ONE, Unit.L, BigDecimal.ONE).displayUnit()).isEqualTo("L");
+		// 1000 gm is promoted to 1 Kg, and is still "Kg".
+		ScaledQuantity promoted = RecipeScaler.scale(new BigDecimal("1000"), Unit.GM, BigDecimal.ONE);
+		assertThat(promoted.displayQuantity()).isEqualByComparingTo("1");
+		assertThat(promoted.displayUnit()).isEqualTo("Kg");
+	}
+
 	@Test
 	@DisplayName("a 50,000-serving scale computes with no overflow or precision loss")
 	void festivalScale() {

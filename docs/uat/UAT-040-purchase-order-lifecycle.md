@@ -26,6 +26,7 @@ has an answer.
 
 - **Sign in as:** `ikms.kitchen-staff.1@trading4good.org` (kitchen staff)
 - **Start at:** **/orders** (menu: **Purchase orders**), with the two draft orders from UAT-039.
+- *Note, 2026-09-12 (T-153): UAT-039's tick-lines-and-generate steps are withdrawn, because that flow was removed. Raise the two drafts instead from each vendor tile's **Generate purchase order** button on **/shopping-list** (T-134).*
 - **Keep the Sri Balaji order for UAT-044** (you will receive a delivery against it). Use the Nandini
   order, or a fresh one, for the cancellation steps.
 

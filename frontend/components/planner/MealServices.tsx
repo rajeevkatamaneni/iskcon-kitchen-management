@@ -425,7 +425,7 @@ function MealBlock({
             {/* Beside the time rather than over the buttons: whether this meal has been written
                 down yet is part of what the meal is, and it reads with the name and the hour. */}
             {meal.recorded ? <Badge tone="success">Recorded</Badge> : <Badge>Not yet recorded</Badge>}
-            <CrewPebble crew={crew} required={meal.crewRequired} />
+            <CrewPebble crew={crew} required={meal.crewRequired} name={meal.eventName || meal.mealKind} />
             {/* What has been asked for, and the way to ask — both beside the number that says it is
                 needed, because that number is the only reason either exists. A second place on the
                 screen to talk about crew would be a second place to look for this one. */}
@@ -1177,22 +1177,56 @@ function CorrectMeal({
  * before anybody is rostered must not be drawn as short of a number it was never given. Short, it
  * takes the warning tone and nothing more: it is telling the kitchen something, not refusing it.
  */
-function CrewPebble({ crew, required }: { crew: MealCrewView | null; required: number | null }) {
+function CrewPebble({
+  crew,
+  required,
+  name,
+}: {
+  crew: MealCrewView | null;
+  required: number | null;
+  /** The meal as the header names it, so the "i" beside the count says whose crew it is about. */
+  name: string;
+}) {
   if (required == null) return null;
   const rostered = crew?.rostered ?? 0;
   const short = rostered < required;
 
   return (
-    <span
-      title={`${crew?.staffIn ?? 0} staff and ${crew?.volunteers ?? 0} volunteers, of ${required} needed`}
-      className={[
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums",
-        short ? "bg-warning-bg text-warning" : "bg-sunken text-ink",
-      ].join(" ")}
-    >
-      <i aria-hidden="true" className="ti ti-users" />
-      {rostered} of {required}
-      <span className="sr-only"> people rostered of the number this meal takes</span>
+    // The breakdown behind the number lives in an "i" rather than a native `title`, which is what it
+    // used to be (T-147). A `title` only appears under a mouse pointer that rests on it: a phone
+    // never shows it and a keyboard never reaches it, the exact failure `InfoHint` was written to
+    // close. The pebble itself is left drawn exactly as it was.
+    //
+    // The "i" sits *beside* the pebble, not inside it, and the two share one wrapper that does not
+    // wrap. Inside, the 20px button would make the pill taller than the 16px line it is sized to,
+    // lift it out of line with the Recorded badge beside it, set the button's grey ring on the
+    // warning fill, and hand the pill's semibold weight down to the tip's sentence. Beside it, loose
+    // in the row, the row's `flex-wrap` would at phone width happily put the "i" at the start of the
+    // next line, answering a question asked on the line above. One non-wrapping wrapper avoids both.
+    //
+    // Nothing is said twice to a screen reader. The pebble reads "5 of 8 people rostered of the
+    // number this meal takes"; the button reads its own name; and the staff-and-volunteers sentence
+    // exists in the page only while the tip is open, and nowhere else.
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className={[
+          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums",
+          short ? "bg-warning-bg text-warning" : "bg-sunken text-ink",
+        ].join(" ")}
+      >
+        <i aria-hidden="true" className="ti ti-users" />
+        {rostered} of {required}
+        <span className="sr-only"> people rostered of the number this meal takes</span>
+      </span>
+      {/* "More about crew for Lunch", named for the meal so a day of three meals is not three
+          buttons all called "More about crew" — the trade `InfoHint` itself argues against. The name
+          is handed in from the header rather than read off the crew row, because that row is matched
+          on the meal kind alone (every event would be "crew for Event") and is null where the count
+          was refused. */}
+      <InfoHint
+        text={`${crew?.staffIn ?? 0} staff and ${crew?.volunteers ?? 0} volunteers, of ${required} needed`}
+        label={`crew for ${name}`}
+      />
     </span>
   );
 }

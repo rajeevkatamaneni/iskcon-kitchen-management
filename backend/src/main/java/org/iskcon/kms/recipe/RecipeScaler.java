@@ -53,8 +53,16 @@ public final class RecipeScaler {
 
 		// A count is a whole thing measured in itself — three idlis is three idlis. It has no larger
 		// or smaller sibling to be promoted into.
+		//
+		// The word is chosen from the ROUNDED figure, because that is the figure the recipe page
+		// prints in front of it (app/recipes/[id]/page.tsx renders displayQuantity and displayUnit
+		// side by side with no formatter between them). A line that scales to 0.999 pieces is shown
+		// "1", so it must say "1 piece"; choosing from the raw 0.999 would say "1 pieces", which is
+		// the defect this line used to have for every count of exactly one (T-148). Rounding once
+		// and handing the same value to both fields keeps the two from ever disagreeing.
 		if (unit.family() == Unit.Family.COUNT) {
-			return new ScaledQuantity(raw, unit.name(), round(raw), unit.label());
+			BigDecimal shown = round(raw);
+			return new ScaledQuantity(raw, unit.name(), shown, unit.label(shown));
 		}
 
 		// Convert to the family's base unit (grams or millilitres), then ask the one place that knows
@@ -64,7 +72,12 @@ public final class RecipeScaler {
 		Unit displayUnit = Quantities.displayUnit(unit, inBase);
 		BigDecimal displayValue = inBase.divide(BigDecimal.valueOf(displayUnit.baseFactor()), PRECISION);
 
-		return new ScaledQuantity(raw, unit.name(), round(displayValue), displayUnit.label());
+		// Kg, gm, L and ml are one word at every count, so label(shown) and label() say the same thing
+		// here today. It asks with the figure anyway: this is a number and a word printed as one
+		// phrase, and the next counted-but-convertible unit anybody adds should not have to find
+		// this line to be right.
+		BigDecimal shown = round(displayValue);
+		return new ScaledQuantity(raw, unit.name(), shown, displayUnit.label(shown));
 	}
 
 	private static BigDecimal round(BigDecimal value) {

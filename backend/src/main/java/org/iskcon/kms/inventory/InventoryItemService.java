@@ -19,6 +19,7 @@ import org.iskcon.kms.auth.Permission;
 import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.shift.TenantSettingsService;
 import org.iskcon.kms.tenancy.TempleClock;
@@ -77,11 +78,13 @@ public class InventoryItemService {
 	private final StockMovementService stockMovementService;
 	private final TenantSettingsService tenantSettings;
 	private final CommittedStockService committedStockService;
+	private final IngredientUnits ingredientUnits;
 
 	public InventoryItemService(
 			JdbcTemplate jdbc, AuditService auditService, StockMovementService stockMovementService,
 			TenantSettingsService tenantSettings, CommittedStockService committedStockService,
-			TempleClock clock) {
+			TempleClock clock, IngredientUnits ingredientUnits) {
+		this.ingredientUnits = ingredientUnits;
 		this.clock = clock;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
@@ -315,10 +318,13 @@ public class InventoryItemService {
 				.stream().findFirst().orElseThrow(() -> notFound(itemId));
 		Unit canonical = Unit.valueOf(item.canonicalUnit());
 		Unit unit = parseUnit(request.unit());
-		if (unit.family() != canonical.family()) {
-			throw new ApplicationException(
-					ErrorCode.VALIDATION_FAILED, Map.of("field", "unit", "value", request.unit()));
-		}
+		// The one rule about units (BL-9), asked here rather than left to the ledger. The ledger does
+		// ask it too, in StockMovementService.record, but only after the batch, the negative-stock
+		// and the large-adjustment guards below have run — so "-150 L of dal" would come back as
+		// "that needs an admin" or "that takes the batch below zero", which is a confusing way to be
+		// told the figure is nonsense. It reads the canonical unit from the same ingredient row
+		// ITEM_SELECT joined to, so it compares against exactly what the inline check used to.
+		ingredientUnits.requireSameFamily(item.ingredientId(), unit);
 		if (request.quantity() == null || request.quantity().signum() == 0) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "quantity"));
 		}

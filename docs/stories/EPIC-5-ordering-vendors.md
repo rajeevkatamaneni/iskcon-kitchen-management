@@ -188,6 +188,14 @@ a meal planned for tomorrow, less two days, is yesterday. Refusing it there woul
 list rather than protect anything, so the floor is applied on manual creation and on the draft edit
 only. Generation's own computation is untouched.
 
+*Withdrawn 2026-09-12 (T-153). The decision above is kept as the record of what was decided at the
+time; it no longer describes the product.* The computed path it exempted was the shopping-list
+generator, and that generator and its endpoint were removed on Rajeev's ruling "Go ahead and clean it
+up". Since T-134 every order, including one raised from a vendor tile on the shopping list, is created
+through the manual create path. The tile pre-fills the date from the list, but a person saves it, so
+the `KMS-400014` floor now applies to every order created. The panel warns *That day has already
+gone* before saving.
+
 **D4 — An order is dated the temple's day.** `order_date` was `CURRENT_DATE`, which the driver
 evaluates in whatever time zone the JVM happens to run in — so an order raised at 02:00 in Bengaluru
 was dated the previous day by a server in UTC. It is now `LocalDate.now(Asia/Kolkata)`, matching
@@ -199,7 +207,12 @@ than omitting it. E5-S9 counts those aside as *orders without a needed-by date* 
 them a silent hundred per cent, so the honest empty is already handled downstream.
 
 **Requirements:**
-- "Generate POs for selected" → one draft PO per distinct vendor from checked lines (wireframe flow); manual PO creation also possible.
+- ~~"Generate POs for selected" → one draft PO per distinct vendor from checked lines (wireframe flow)~~; manual PO creation also possible.
+  **Withdrawn 2026-09-12 (T-153), on Rajeev's ruling "Go ahead and clean it up":** the bulk
+  tick-and-generate flow and its endpoint, `POST /api/v1/purchase-orders/generate`, were removed.
+  Since T-134 (D-24 §6) orders are raised one vendor at a time from each vendor tile's **Generate
+  purchase order** on the shopping list, through the same create path as a manual order, and nothing
+  called the endpoint any more. Struck rather than deleted, so the original requirement stays readable.
 - PO: header (vendor, dates, delivery location free-text), lines (ingredient, qty, unit, optional expected price), notes; editable in DRAFT only.
 - The needed-by date is editable on a DRAFT, pre-filled with whatever is there, and may be cleared.
   Refused if it falls before the order's own date (`KMS-400014`); warned but accepted inside the lead
@@ -208,7 +221,11 @@ them a silent hundred per cent, so the honest empty is already handled downstrea
 - PO list with status filters; per-PO activity trail.
 
 **Acceptance criteria:**
-- [ ] Three checked lines across two vendors → exactly two correct draft POs.
+- [ ] ~~Three checked lines across two vendors → exactly two correct draft POs.~~
+      **Withdrawn 2026-09-12 (T-153)** with the "Generate POs for selected" requirement above: there
+      is no longer a flow that turns checked lines into several orders at once. Each vendor tile
+      raises its own order. `PurchaseOrderIT.generateIsGone` asserts the old endpoint is gone, and the
+      per-vendor grouping on the screen is covered by `frontend/__tests__/shopping-list.test.tsx`.
 - [ ] Illegal transitions (e.g. edit after SENT, receive a DRAFT) rejected at service layer.
 - [ ] PO numbering monotonic per tenant, gap-tolerant, never duplicated (concurrency test).
 - [x] A draft's needed-by date can be set, changed and cleared; the change is refused on a sent

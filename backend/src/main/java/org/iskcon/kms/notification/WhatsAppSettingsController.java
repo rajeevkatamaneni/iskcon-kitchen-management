@@ -52,11 +52,20 @@ public class WhatsAppSettingsController {
 				request.accessToken(), request.appSecret());
 	}
 
-	/** Proves the stored credentials still reach Meta. Says nothing about whether callbacks arrive. */
+	/**
+	 * Sends a real test message from the temple's number to the phone typed (T-151), and answers with
+	 * the settings as they stand after it.
+	 *
+	 * <p>Same path and permission as the credential check it replaced, so nothing about who may press
+	 * the button changed — only what pressing it does. Says nothing about whether callbacks arrive;
+	 * that is the second status line on the screen, and only Meta calling us can settle it.
+	 */
 	@PostMapping("/test")
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
-	public TenantWhatsAppSettings test() {
-		return settings.test();
+	public TenantWhatsAppSettings test(
+			@Valid @RequestBody SendWhatsAppTestRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		return settings.sendTestMessage(actor, request.phoneNumber());
 	}
 
 	/**

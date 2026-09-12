@@ -3,7 +3,6 @@ package org.iskcon.kms.donation;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
@@ -12,6 +11,7 @@ import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.equipment.EquipmentService;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.MovementReference;
 import org.iskcon.kms.inventory.MovementType;
@@ -44,11 +44,13 @@ public class DonationRecorder {
 	private final StockMovementService stockMovementService;
 	private final EquipmentService equipmentService;
 	private final org.iskcon.kms.wishlist.WishlistService wishlistService;
+	private final IngredientUnits ingredientUnits;
 
 	public DonationRecorder(
 			JdbcTemplate jdbc, AuditService auditService,
 			StockMovementService stockMovementService, EquipmentService equipmentService,
-			org.iskcon.kms.wishlist.WishlistService wishlistService) {
+			org.iskcon.kms.wishlist.WishlistService wishlistService, IngredientUnits ingredientUnits) {
+		this.ingredientUnits = ingredientUnits;
 		this.wishlistService = wishlistService;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
@@ -62,17 +64,26 @@ public class DonationRecorder {
 		List<EquipmentDonationLine> equipment = request.equipment() == null ? List.of() : request.equipment();
 		validate(request, ingredients, equipment);
 
+		// Every line is judged before anything is written, so a gift is refused whole. The
+		// transaction would roll a half-written gift back anyway; checking first means there is
+		// never a donation row and a first line's movement sitting in the transaction waiting to be
+		// undone because the second line was "2 Kg of ghee". The rule is the one every quantity
+		// obeys (BL-9): it refuses an ingredient this temple cannot see as not found, and a unit
+		// from another family as KMS-400013 naming the ingredient, which on a many-line gift is the
+		// difference between "fix Ghee" and "one of these is wrong".
+		List<Unit> units = new java.util.ArrayList<>(ingredients.size());
+		for (IngredientDonationLine line : ingredients) {
+			Unit unit = parseUnit(line.unit());
+			ingredientUnits.requireSameFamily(line.ingredientId(), unit);
+			units.add(unit);
+		}
+
 		String donorName = request.anonymous() ? null : request.donorName().trim();
 		UUID donationId = insertDonation(actor, request, donorName);
 
-		for (IngredientDonationLine line : ingredients) {
-			IngredientRef ref = findIngredient(line.ingredientId()).orElseThrow(() ->
-					new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("ingredientId", line.ingredientId())));
-			Unit unit = parseUnit(line.unit());
-			if (unit.family() != ref.canonicalUnit().family()) {
-				throw new ApplicationException(
-						ErrorCode.VALIDATION_FAILED, Map.of("field", "unit", "value", line.unit()));
-			}
+		for (int i = 0; i < ingredients.size(); i++) {
+			IngredientDonationLine line = ingredients.get(i);
+			Unit unit = units.get(i);
 			stockMovementService.record(actor, new RecordMovement(
 					line.ingredientId(), null, UUID.randomUUID(),
 					line.quantity(), unit, MovementType.DONATION_IN_KIND,
@@ -182,12 +193,6 @@ public class DonationRecorder {
 		return id;
 	}
 
-	private Optional<IngredientRef> findIngredient(UUID id) {
-		return jdbc.query("SELECT name, canonical_unit FROM ingredients WHERE id = ?",
-				(rs, n) -> new IngredientRef(rs.getString("name"), Unit.valueOf(rs.getString("canonical_unit"))),
-				id).stream().findFirst();
-	}
-
 	private String templeName() {
 		return jdbc.query("""
 				SELECT name FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
@@ -222,8 +227,5 @@ public class DonationRecorder {
 		}
 		String trimmed = value.trim();
 		return trimmed.isEmpty() ? null : trimmed;
-	}
-
-	private record IngredientRef(String name, Unit canonicalUnit) {
 	}
 }

@@ -8,6 +8,8 @@
 | **Depends on** | UAT-037 (vendors), UAT-038 (the shopping list), UAT-039 and UAT-040 (orders), **UAT-044 (receiving)** |
 | **Environment needs** | None |
 
+*Note, 2026-09-12 (T-153): wherever a step says to generate purchase orders (UAT-039), that tick-lines-and-generate flow was removed and its UAT-039 steps are withdrawn. Raise each order from that vendor tile's **Generate purchase order** button on **/shopping-list** instead (T-134).*
+
 ## What this feature is for
 
 Deciding who to keep buying from should be a reading, not a recollection. Everything this screen

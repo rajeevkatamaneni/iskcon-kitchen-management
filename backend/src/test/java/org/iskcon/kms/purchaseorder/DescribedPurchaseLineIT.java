@@ -526,6 +526,12 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 		assert html.contains("Plastic stool") : "the described line must be on the sheet";
 		assert html.contains("Rice");
 
+		// The rate is a price for ONE of the unit, so it takes the singular: four stools at ₹250 each
+		// print "₹250.00 / piece", never "/ pieces" (T-148). Rice's rate is unchanged, "/ Kg".
+		assert html.contains("₹250.00 / piece<") : "a rate per piece reads \"/ piece\"; got " + html;
+		assert !html.contains("/ pieces") : "no rate may read \"/ pieces\"; got " + html;
+		assert html.contains("₹45.00 / Kg<") : "a rate per kilo still reads \"/ Kg\"; got " + html;
+
 		// Non-English is where it was loud: translateLines called toLowerCase() on each name for the
 		// glossary lookup, and a null name threw NullPointerException — a 500 on a screen somebody
 		// presses to hand a vendor a piece of paper.

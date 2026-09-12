@@ -227,9 +227,11 @@ class IngredientRequestIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("three litres of a rice the temple holds in kilograms is refused")
 	void refusesACrossFamilyUnit() throws Exception {
+		// The one rule every quantity obeys (BL-9, T-150): KMS-400013, naming the line's ingredient.
 		mvc.perform(createFor(body(kitchenA, line(riceA, "3", "L"), dish("Khichdi", "200", "KG"))))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-400001"));
+				.andExpect(jsonPath("$.code").value("KMS-400013"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("Rice"));
 	}
 
 	@Test

@@ -37,7 +37,7 @@ const {
   setTempleLanguage,
   saveTempleContactEmail,
   saveWhatsAppSettings,
-  testWhatsAppSettings,
+  sendWhatsAppTestMessage,
   revealWhatsAppVerifyToken,
   savePaymentSettings,
   testPaymentSettings,
@@ -62,12 +62,26 @@ const {
   setTempleLanguage: vi.fn(),
   saveTempleContactEmail: vi.fn(),
   saveWhatsAppSettings: vi.fn(),
-  testWhatsAppSettings: vi.fn(),
+  sendWhatsAppTestMessage: vi.fn(),
   revealWhatsAppVerifyToken: vi.fn(),
   savePaymentSettings: vi.fn(),
   testPaymentSettings: vi.fn(),
   revealWebhookSecret: vi.fn(async () => ({ webhookSecret: "whsec-abc123" })),
 }));
+
+/**
+ * One `getToken` for the life of the file, as the real one is.
+ *
+ * <p>`AuthProvider` wraps it in `useCallback` keyed on the signed-in user, so a real screen sees the
+ * same function on every render and `SettingsView`'s load effect runs once. This mock used to build a
+ * fresh function inside `useAuth()`, so every render handed the effect a new dependency, the effect
+ * ran again, and whatever a test had just saved was overwritten with the stubbed settings. The
+ * "connects to WhatsApp" test below could not see its connected panel because of it, and asserted a
+ * tooltip instead — passing whether or not the panel ever rendered (T-151). The mock was the defect,
+ * not the effect: an effect that refetches when the token source changes is correct for a real
+ * sign-in change.
+ */
+const { getToken } = vi.hoisted(() => ({ getToken: async () => "token-abc" }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -87,7 +101,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       setTempleLanguage,
       saveTempleContactEmail,
       saveWhatsAppSettings,
-      testWhatsAppSettings,
+      sendWhatsAppTestMessage,
       revealWhatsAppVerifyToken,
       savePaymentSettings,
       testPaymentSettings,
@@ -103,7 +117,7 @@ vi.mock("@/components/RequireRole", () => ({
 vi.mock("@/components/Sidebar", () => ({ Sidebar: () => <nav aria-label="Main" /> }));
 
 vi.mock("@/lib/auth-context", () => ({
-  useAuth: () => ({ getToken: async () => "token-abc", appUser: { role: "TEMPLE_ADMIN" } }),
+  useAuth: () => ({ getToken, appUser: { role: "TEMPLE_ADMIN" } }),
 }));
 
 import SettingsRoute from "@/app/settings/page";
@@ -278,6 +292,9 @@ describe("the WhatsApp connection", () => {
   };
 
   const messaging = () => within(screen.getByRole("region", { name: "WhatsApp" }));
+  // The screen shows a loader until all of its requests have answered, so a test that starts by
+  // pressing something in this section has to wait for the section before it can look inside it.
+  const messagingLoaded = async () => within(await screen.findByRole("region", { name: "WhatsApp" }));
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -329,16 +346,18 @@ describe("the WhatsApp connection", () => {
         "token-abc"
       )
     );
-    // Templates are ours to register, not the temple's to write, and the field that owns them says
-    // so — from behind its "i" now rather than on a line under the box. Asserted on the field
-    // rather than on the connected panel: this screen refetches its settings on every render (the
-    // useAuth mock hands back a fresh getToken each time), so the saved value is overwritten by the
-    // stubbed WHATSAPP_NONE before an assertion can see it. That is the same effect-loop trap the
-    // page's own comment warns about, and it is older than this test.
-    fireEvent.mouseOver(
-      messaging().getByRole("button", { name: "More about WhatsApp Business Account ID" })
-    );
-    expect(messaging().getByRole("tooltip")).toHaveTextContent(/message templates/i);
+    // What the saved answer puts on the screen, which is the whole of what connecting is for. This
+    // used to be asserted on a tooltip instead, because the old useAuth mock made the screen refetch
+    // and overwrite the saved settings before anything could see them (see `getToken` above). Every
+    // line below is only on the page once the connected answer has been rendered.
+    expect(await messaging().findByText(/We can send as Temple Kitchen/)).toBeInTheDocument();
+    expect(messaging().getByText("Connected, and Meta accepted the credentials.")).toBeInTheDocument();
+    expect(messaging().getByText(/Tell Meta where to reach us/)).toBeInTheDocument();
+    // The secrets are behind dots now, not in boxes waiting to be retyped.
+    expect(messaging().getByRole("button", { name: "Replace" })).toBeInTheDocument();
+    // And templates are ours to register, not the temple's to write: the panel says they went.
+    expect(messaging().getByText(/Your message templates went to Meta on/)).toBeInTheDocument();
+    expect(messaging().getByRole("button", { name: "Send a test message" })).toBeEnabled();
   });
 
   it("shows a connected temple the callback steps, and hides the verify token until asked", async () => {
@@ -366,6 +385,72 @@ describe("the WhatsApp connection", () => {
     );
     // Sending works; the return path has not been proven and must not claim to be.
     expect(messaging().getByText(/Meta has not called us back yet/)).toBeInTheDocument();
+  });
+
+  /**
+   * The Test button sends a real message to a number the administrator types (T-151). Rajeev,
+   * 2026-09-12: "Ask the use for a phone number to send a test message." It used to re-check the
+   * credentials and send nothing, which could never prove WhatsApp works.
+   */
+  it("asks for a number in place, sends a real test message to it, and says it was sent", async () => {
+    whatsappSettings.mockResolvedValue(CONNECTED);
+    sendWhatsAppTestMessage.mockResolvedValue({ ...CONNECTED, verifiedAt: "2026-09-12T06:00:00Z" });
+    render(<SettingsRoute />);
+
+    fireEvent.click((await messagingLoaded()).getByRole("button", { name: "Send a test message" }));
+    const box = messaging().getByLabelText("Send a test message to", { selector: "input" });
+    // Nothing to send until there is a number to send it to.
+    expect(messaging().getByRole("button", { name: "Send" })).toBeDisabled();
+
+    fireEvent.change(box, { target: { value: " +919876500000 " } });
+    fireEvent.click(messaging().getByRole("button", { name: "Send" }));
+
+    await waitFor(() =>
+      expect(sendWhatsAppTestMessage).toHaveBeenCalledWith("+919876500000", "token-abc")
+    );
+    expect(sendWhatsAppTestMessage).toHaveBeenCalledTimes(1);
+    expect(
+      await messaging().findByText("Test message sent to +919876500000. Check WhatsApp on that phone.")
+    ).toBeInTheDocument();
+    // The box goes away once it has done its job, and the button is back for another go.
+    expect(messaging().queryByLabelText("Send a test message to", { selector: "input" })).not.toBeInTheDocument();
+    expect(messaging().getByRole("button", { name: "Send a test message" })).toBeInTheDocument();
+  });
+
+  it("shows WhatsApp's refusal in plain words, and never claims the message went", async () => {
+    whatsappSettings.mockResolvedValue(CONNECTED);
+    sendWhatsAppTestMessage.mockRejectedValue(
+      new ApiError({
+        code: "KMS-500007",
+        message: "WhatsApp didn't accept the test message for that number.",
+        action: "Check the number, with its country code.",
+        fieldErrors: [],
+      })
+    );
+    render(<SettingsRoute />);
+
+    fireEvent.click((await messagingLoaded()).getByRole("button", { name: "Send a test message" }));
+    fireEvent.change(messaging().getByLabelText("Send a test message to", { selector: "input" }), {
+      target: { value: "+919876500001" },
+    });
+    fireEvent.click(messaging().getByRole("button", { name: "Send" }));
+
+    expect(await messaging().findByRole("alert")).toHaveTextContent(
+      "WhatsApp didn't accept the test message for that number."
+    );
+    expect(messaging().queryByText(/Test message sent/)).not.toBeInTheDocument();
+    // The number stays in the box to be corrected rather than typed again.
+    expect(messaging().getByLabelText("Send a test message to", { selector: "input" })).toHaveValue(
+      "+919876500001"
+    );
+  });
+
+  it("cannot send a test from a temple that has connected nothing, and says why", async () => {
+    render(<SettingsRoute />);
+
+    expect((await messagingLoaded()).getByRole("button", { name: "Send a test message" })).toBeDisabled();
+    expect(messaging().getByText(/Press Connect first/)).toBeInTheDocument();
+    expect(sendWhatsAppTestMessage).not.toHaveBeenCalled();
   });
 });
 

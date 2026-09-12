@@ -18,11 +18,14 @@ ruling **comes back to him** rather than being guessed.
 
 | | What is missing |
 |---|---|
-| **P6** | **A volunteer shortfall cannot raise a shift from the planner.** When the crew a meal needs exceeds the staff on duty, there should be a link that opens *Post a shift* as a layer over the planner — title derived from the date and meal (*"Lunch preparation on September 1 2026"*), date and capacity pre-filled — and lands the admin back where they were. |
-| **P7** | **An existing shift request is invisible from the planner.** *"Who will run it"* must show when a request already exists for that day and time, and let the admin open, edit and save it, or close without changes, without leaving the planner. |
-| **Audit log** | **No operator view.** Narrower than `TRACEABILITY.md` G9 — a `/audit` screen, per-tenant. Operators read audit per tenant, never as a cross-tenant firehose. |
-| **Kitchen staff** | **The least finished role in the product.** Two of its five gaps shipped; still open: they hold `REQUEST_OWN_LEAVE` with **no menu route to it**, and Download and Print are unresolved. Note the wider hole recorded on 2026-09-01: a **Temple Admin** holds `VIEW_OWN_SHIFTS` too and has no *My shifts* entry either. |
+| **P6** | **Built — T-019, `4e35d6c`, on staging; found at dispatch 2026-09-12. The row below is kept only until Rajeev has tested it**, because it was built as a three-field layer rather than the full form (see `DISPATCH.md`, Wave 1). **A volunteer shortfall cannot raise a shift from the planner.** When the crew a meal needs exceeds the staff on duty, there should be a link that opens *Post a shift* as a layer over the planner — title derived from the date and meal (*"Lunch preparation on September 1 2026"*), date and capacity pre-filled — and lands the admin back where they were. |
+| **P7** | **Built — T-019, as P6.** **An existing shift request is invisible from the planner.** *"Who will run it"* must show when a request already exists for that day and time, and let the admin open, edit and save it, or close without changes, without leaving the planner. |
+| ~~**Kitchen staff**~~ | **Dropped 2026-09-12, all three claims found already true at dispatch.** Leave is requested on *My profile* (`/profile`, open to `KITCHEN_STAFF` since `e7e4b67`, 2026-08-19); it has no main-menu row, which is a matter of taste left to Rajeev. Download/Print is hidden from a reader who cannot issue (`81fd72f`). A Temple Admin has *My schedule* in the menu. |
 | **Blank fields** | **Required fields are refused by the browser's own grey bubble.** Ruled by Rajeev 2026-09-11: `required` stays on the element, every form gains `noValidate`, and the message is per-field — *"Quantity is required"*, in red. See §3 for why the wording is the free half. |
+
+**The operator's audit log view was closed without building by Rajeev's ruling on 2026-09-12:**
+*"I will verify during my UAT and let you know if I need nay changes. Consider it good for now and
+mark it done and remvoe it from the list."*
 
 ---
 
@@ -74,7 +77,7 @@ ruling **comes back to him** rather than being guessed.
 
 **Two that are the same defect in a second place, which is why they are first:**
 
-- **The recipe scale preview still says *"1 pieces"*.** `RecipeScaler` ships `unit.label()` as a
+- **Dispatched as T-148, 2026-09-12.** **The recipe scale preview still says *"1 pieces"*.** `RecipeScaler` ships `unit.label()` as a
   **wire field** and the recipe screen prints it beside a number — invisible to T-108's guard (it
   never calls `unitLabel`) and to T-144's fix (the word comes from Java). **Not a one-liner: it
   changes an API response and its screen together.**
@@ -95,25 +98,25 @@ ruling **comes back to him** rather than being guessed.
 
 **The rest:**
 
-- **A volunteer taken off a roster has nowhere to look.** `myShifts` filters released rows out, there
+- **Dispatched as T-149, 2026-09-12.** **A volunteer taken off a roster has nowhere to look.** `myShifts` filters released rows out, there
   is no past-shifts surface, and a send failure is swallowed into a `log.warn`. **Mailgun's sandbox
   fails in exactly this shape on staging**, so a removal whose message does not land leaves the
   person with no way at all to find out. Fix: a *"taken off in the last week"* list on My Shifts —
   one relaxed `WHERE` and a list on a screen that exists.
-- **The WhatsApp *Test* button does not send a message** — it verifies credentials. So a temple using
+- **Ruled by Rajeev 2026-09-12 — *"Ask the use for a phone number to send a test message."* Dispatched as T-151.** **The WhatsApp *Test* button does not send a message** — it verifies credentials. So a temple using
   WhatsApp only for purchase orders never earns the Send button. Rajeev was told a test-send existed
   when he asked for it to be the trigger; making it send one is the faithful build.
-- **`POST /purchase-orders/generate` now has no caller in the app.** Retire or keep is a decision, and
+- **Ruled by Rajeev 2026-09-12 — *"Go ahead and clean it up."* Dispatched as T-153.** **`POST /purchase-orders/generate` now has no caller in the app.** Retire or keep is a decision, and
   a removal's blast radius includes the documents that promised it.
 - **The 90 remaining Spring test-context collapses.** 119 contexts → 12 is achievable and was proved
   on `staff/` (9 → 1). **Its own wave, needing three consecutive full runs**, because two beans hold
   mutable state for a context's life and JUnit's class order is not fixed. The suite's live set is
   **1187 MB against a 2 GB ceiling**, where the build comment still says 886 MB.
-- **`NotificationSendE2EIT` is a real flake with a real mechanism**, papered over once already with a
+- **Dispatched as T-152, 2026-09-12.** **`NotificationSendE2EIT` is a real flake with a real mechanism**, papered over once already with a
   timeout rise. It has failed two different ways.
 - **Two files carry `eslint-disable` comments for `react-hooks/exhaustive-deps`**, a rule nothing in
   the repo defines. Adding `eslint-plugin-react-hooks` with `rules-of-hooks` is worth a task.
-- **`"₹80 / pieces"`** on the generated sheet — *per* wants the singular and there is no count to
+- **Dispatched as T-148, 2026-09-12.** **`"₹80 / pieces"`** on the generated sheet — *per* wants the singular and there is no count to
   pass, so it is a different fix from T-144's.
 
 ---
@@ -140,18 +143,18 @@ outranks the rest.** Two are worth reading first:
   E6-S10 onward are missing. One pass of its own.
 - **`docs/stories/github-import/` has been behind since E1-S12**, and `CLAUDE.md` calls it a job of
   its own.
-- **A settings test has been passing for the wrong reason.** `settings-payments`' *"connects to
+- **Dispatched inside T-151, 2026-09-12.** **A settings test has been passing for the wrong reason.** `settings-payments`' *"connects to
   WhatsApp"* only passed because a **hint string** contained the words "message templates". The
   connected panel it appears to assert never renders: `SettingsView`'s fetch effect depends on
   `getToken`, the `useAuth` mock returns a fresh one every render, so the effect re-runs and
   overwrites the just-saved settings with the stub. **The connect-then-render path is untested.**
-- **`CrewPebble` uses a native `title=` tooltip** (`MealServices.tsx`) — hover-only, no keyboard and
+- **Dispatched as T-147, 2026-09-12.** **`CrewPebble` uses a native `title=` tooltip** (`MealServices.tsx`) — hover-only, no keyboard and
   no touch route, which is the failure `InfoHint` exists to avoid. One small conversion.
 - **The job card no longer filters equipment by kind.** It used to print only MACHINE and TOOL to keep
   trestle tables off the sheet; the category went on 2026-09-04 at his instruction, so the card now
   lists everything not scrapped. **If that is noise on a real card, the fix is a flag on the
   equipment, not the category coming back.**
-- **Three inline copies of the unit-family rule** remain in `InventoryItemService.adjust`,
+- **Dispatched as T-150, 2026-09-12.** **Three inline copies of the unit-family rule** remain in `InventoryItemService.adjust`,
   `DonationRecorder` and `IngredientRequestService`, each refusing with the generic `KMS-400001`
   rather than `IngredientUnits.requireSameFamily`'s `KMS-400013`. Recorded under `BL-9`.
 

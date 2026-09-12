@@ -49,8 +49,13 @@ public class MetaWhatsAppClient {
 
 	/**
 	 * Asks Meta to describe the temple's business phone number, and reads nothing from the answer
-	 * but the fact that it came. A read rather than a write: pressing Test must never put a message
-	 * in front of anybody.
+	 * but the fact that it came. A read rather than a write: connecting an account must never put a
+	 * message in front of anybody.
+	 *
+	 * <p>This used to be the whole of the Settings Test button too, and that was the defect T-151
+	 * fixed. A number Meta will describe is not a number that can deliver — an unapproved template, a
+	 * recipient outside a test account's list, a spent messaging limit all leave this answering
+	 * perfectly. The Test button now sends a real message through {@link #sendTemplate}.
 	 *
 	 * @return the number as Meta displays it, for the screen to show back — proof to an
 	 *     administrator that they configured the number they meant to

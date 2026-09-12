@@ -221,7 +221,12 @@ public class DocumentGenerationService {
 				// could infer it. Now that a 0.6 Kg line reads "600 gm", inferring it gives the
 				// wrong answer by a factor of a thousand, so the sheet says it: "₹45.00 / Kg".
 				// Untranslated, like every other number and unit on this sheet.
-				price = money(l.expectedPrice()) + " / " + Unit.valueOf(l.unit()).label();
+				//
+				// A rate is a price for ONE of the unit, so the unit is asked for its word at a count
+				// of one: "₹80 / piece", not "₹80 / pieces" (T-148). That is not a trick to reach the
+				// singular — the one is really there, it is the "per" read aloud. Kg, gm, L and ml
+				// have one word at every count, so a KG line still reads "₹45.00 / Kg".
+				price = money(l.expectedPrice()) + " / " + Unit.valueOf(l.unit()).label(BigDecimal.ONE);
 				total = total.add(l.expectedPrice().multiply(l.quantity()));
 				anyTotal = true;
 			}

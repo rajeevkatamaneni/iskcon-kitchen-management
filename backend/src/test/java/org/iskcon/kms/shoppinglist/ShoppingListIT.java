@@ -7,6 +7,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashMap;
@@ -48,6 +51,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class ShoppingListIT extends AbstractIntegrationTest {
 
 	private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+
+	private static final ObjectMapper JSON = new ObjectMapper();
 
 	@Autowired
 	private MockMvc mvc;
@@ -371,6 +376,11 @@ class ShoppingListIT extends AbstractIntegrationTest {
 	 *
 	 * <p>There is no restore path anywhere in this feature and none is needed. The list is a function
 	 * of current state; cancelling changes that state, and the next read says so.
+	 *
+	 * <p>The order is raised the way a vendor tile raises it — {@link #raiseOrderFor} posts the
+	 * list's own line to {@code POST /purchase-orders}. Until T-153 this went through
+	 * {@code POST /purchase-orders/generate}, which was retired; the predicate under test was never
+	 * about which door the order came through, and now it is proved on the door the screen uses.
 	 */
 	@Test
 	@DisplayName("a draft purchase order takes its ingredients off the list, and cancelling gives them back")
@@ -379,15 +389,12 @@ class ShoppingListIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.length()").value(2))
 				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')]").exists());
 
-		String body = mvc.perform(authed(post("/api/v1/purchase-orders/generate")))
-				.andExpect(status().isCreated())
-				.andReturn().getResponse().getContentAsString();
-		String poId = body.substring(body.indexOf("[\"") + 2, body.indexOf("\"]"));
+		String poId = raiseOrderFor("Rice");
 		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
 				.andExpect(jsonPath("$.order.status").value("DRAFT"));
 
-		// Garlic has no preferred vendor, so no order was raised for it and it is still here. Rice
-		// is on a draft nobody has sent, and it is gone.
+		// Garlic has no preferred vendor, so it is on no order and it is still here. Rice is on a
+		// draft nobody has sent, and it is gone.
 		mvc.perform(authed(get("/api/v1/shopping-list")))
 				.andExpect(jsonPath("$.length()").value(1))
 				.andExpect(jsonPath("$[0].ingredientName").value("Garlic"));
@@ -423,10 +430,8 @@ class ShoppingListIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a sent order suppresses its ingredients too, not just a draft")
 	void aSentOrderAlsoTakesTheLineOff() throws Exception {
-		String body = mvc.perform(authed(post("/api/v1/purchase-orders/generate")))
-				.andExpect(status().isCreated())
-				.andReturn().getResponse().getContentAsString();
-		String poId = body.substring(body.indexOf("[\"") + 2, body.indexOf("\"]"));
+		// Raised as a vendor tile raises it; re-routed off the retired generate endpoint in T-153.
+		String poId = raiseOrderFor("Rice");
 		mvc.perform(authed(post("/api/v1/purchase-orders/{id}/send", poId)))
 				.andExpect(status().isNoContent());
 
@@ -456,6 +461,45 @@ class ShoppingListIT extends AbstractIntegrationTest {
 	}
 
 	// ---------------------------------------------------------------------
+
+	/**
+	 * Raises an order for one line of the list the way that line's vendor tile does (T-134): read the
+	 * list as the screen reads it, take the line's own vendor, suggested quantity, unit and needed-by,
+	 * send no price, and post it to {@code POST /purchase-orders}. That is the only way an order is
+	 * created since T-153 retired {@code POST /purchase-orders/generate}.
+	 *
+	 * @return the created order's id
+	 */
+	private String raiseOrderFor(String ingredientName) throws Exception {
+		String list = mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		JsonNode line = null;
+		for (JsonNode l : JSON.readTree(list)) {
+			if (ingredientName.equals(l.get("ingredientName").asText())) {
+				line = l;
+			}
+		}
+		assertThat(line).as("%s should be on the list to be ordered", ingredientName).isNotNull();
+		assertThat(line.get("suggestedVendorId").isNull())
+				.as("%s needs a vendor for a tile to order it from", ingredientName).isFalse();
+
+		ObjectNode order = JSON.createObjectNode();
+		order.put("vendorId", line.get("suggestedVendorId").asText());
+		order.set("neededBy", line.get("neededBy"));
+		order.put("notes", "Generated from the shopping list");
+		ObjectNode orderLine = order.putArray("lines").addObject();
+		orderLine.put("ingredientId", line.get("ingredientId").asText());
+		orderLine.set("quantity", line.get("suggestedQty"));
+		orderLine.put("unit", line.get("unit").asText());
+
+		String created = mvc.perform(authed(post("/api/v1/purchase-orders"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(order.toString()))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		return JSON.readTree(created).get("id").asText();
+	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder b) {
 		return b.header("Authorization", "Bearer valid-token");

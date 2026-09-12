@@ -1035,7 +1035,21 @@ public enum ErrorCode {
 
 	PAYMENT_GATEWAY_ERROR(500005, 502,
 			"We couldn't reach the payment provider just now.",
-			"Please try again in a moment; you haven't been charged.");
+			"Please try again in a moment; you haven't been charged."),
+
+	// The settings screen's Test button sends a real message to a number the admin types (Rajeev,
+	// 2026-09-12), and Meta can refuse one for reasons that are the admin's to fix rather than ours:
+	// a number not registered as a test recipient while the account is unpublished, a template not
+	// yet approved. Its own code rather than WHATSAPP_SEND_FAILED, whose next step tells the reader to
+	// download a document and share it by hand — which is nonsense on a settings screen.
+	// Reserved by the coordinator for T-151 and worded from what T-151 established about Meta: the usual
+	// cause on a fresh connection is the connection_test template still in Meta's review (up to a day),
+	// not the number. See docs/work/proof/T-151.md for the sources.
+	WHATSAPP_TEST_NOT_DELIVERED(500007, 502,
+			"WhatsApp didn't send the test message to that number.",
+			"Check the number has its country code. If you connected in the last day, Meta may still "
+					+ "be approving the message, so try again later. On a test account, add the number as "
+					+ "a recipient in your Meta account first.");
 
 	private final int number;
 	private final int httpStatus;

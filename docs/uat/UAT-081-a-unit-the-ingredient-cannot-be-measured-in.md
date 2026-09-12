@@ -8,6 +8,8 @@
 | **Depends on** | UAT-013 (ingredients), UAT-022 (stock), UAT-028 (a gift of goods), UAT-039 (a draft purchase order) |
 | **Environment needs** | None for steps 1–17. Step 18 needs the person who set up the environment |
 
+*Note, 2026-09-12 (T-153): UAT-039's tick-lines-and-generate steps are withdrawn, because that flow was removed. For the draft purchase order step 18 needs, raise one from a vendor tile's **Generate purchase order** button on **/shopping-list** (T-134), or create one by hand on **/orders/new**.*
+
 ## What this feature is for
 
 Rice is weighed. Ghee is poured. Coconuts are counted. Until now nothing in this application checked

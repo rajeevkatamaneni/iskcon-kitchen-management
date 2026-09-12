@@ -55,6 +55,21 @@ public class VolunteerShiftController {
 		return signupService.myShifts(actor.getUserId());
 	}
 
+	/**
+	 * The shifts I came off in the last week without choosing to (T-149): a coordinator took me off,
+	 * or the shift was cancelled with me on it. The other half of My Shifts, where those simply
+	 * disappear — see {@link SignupService#myReleasedShifts} for the rules.
+	 *
+	 * <p>The same permission as {@code /my-shifts} because it is the same thing read differently: a
+	 * person's own roster. It takes no "whose" parameter, for the reason {@code release} gives — the
+	 * caller's id is the whole of its scoping.
+	 */
+	@GetMapping("/api/v1/my-shifts/released")
+	@PreAuthorize("hasAuthority('VIEW_OWN_SHIFTS')")
+	public List<MyReleasedShiftView> myReleasedShifts(@AuthenticationPrincipal AuthenticatedUser actor) {
+		return signupService.myReleasedShifts(actor.getUserId());
+	}
+
 	/** Release my own spot (E6-S4); frees capacity and promotes the waitlist head (E6-S5). */
 	@PostMapping("/api/v1/shifts/{id}/release")
 	@PreAuthorize("hasAuthority('SIGN_UP_FOR_SHIFTS')")

@@ -32,16 +32,17 @@ import org.junit.jupiter.api.Test;
  * bug here, and no regex recognises either as "a number next to a word".
  *
  * <p>So this inverts the test. Rather than trying to spot the bad composition, it enumerates every
- * call site of the plural label and holds that list fixed. The list is four lines long across the
- * whole of {@code src/main}, which is what makes this practical: a fifth appearing is a thing a
- * person should look at once, and a person looking at it once is all this defect has ever needed.
+ * call site of the plural label and holds that list fixed. The list is one line long across the
+ * whole of {@code src/main} (it was four until T-148 fixed three of them), which is what makes this
+ * practical: a second appearing is a thing a person should look at once, and a person looking at it
+ * once is all this defect has ever needed.
  *
  * <p><strong>The one thing that makes the scan precise:</strong> twelve unrelated enums in this
  * codebase expose a {@code label()} — {@code BanCategory}, {@code LeaveType}, {@code JobTitle},
  * {@code PaymentMode} and the rest — so scanning for {@code .label()} across the tree matches
  * twenty-odd innocent lines and proves nothing. It is restricted to files that mention {@code Unit}
- * at all, and at that width it currently matches four lines, all four of which really are
- * {@code Unit.label()} and none of which belongs to another enum. If that ever stops being true the
+ * at all, and at that width it currently matches one line, which really is {@code Unit.label()} and
+ * does not belong to another enum. If that ever stops being true the
  * failure is a false alarm on a new file, which is cheap; the alternative — a scan so loose nobody
  * believes it — is how a guard becomes noise and gets deleted.
  */
@@ -57,41 +58,26 @@ class UnitLabelAgreementTest {
 	 */
 	private static final Set<String> ALLOWED = new LinkedHashSet<>(List.of(
 
-			// A price per unit of the thing, on a purchase-order sheet: "₹120 / Kg". There is a number
-			// in the line but it is the money, not a count of the unit — "per" names the unit itself,
-			// and the unit named after "per" wants the singular whatever the figures around it say.
-			// "₹80 / pieces" is wrong, but it is wrong in a way label(count) cannot fix, because there
-			// is no count to give it. T-108 found the same three strings on the purchase-order screen
-			// ("Price paid per pieces of Plastic stool") and reported them rather than inventing a
-			// third idea in the shared formatter. Same decision here, same reason: see T-144's proof.
-			"document/DocumentGenerationService.java|price = money(l.expectedPrice()) + \" / \" + Unit.valueOf(l.unit()).label();",
-
 			// An error message about a unit mismatch — "Rice is kept in Kg; this asks for L". It names
 			// two units and counts neither.
-			"ingredient/IngredientUnits.java|ref.name(), ref.canonical().label(), given.label(), ref.canonical().label())));",
+			"ingredient/IngredientUnits.java|ref.name(), ref.canonical().label(), given.label(), ref.canonical().label())));"
 
-			// ---- The two below are NOT a clean bill of health. -----------------------------------
+			// ---- Removed by T-148, and why, so nobody puts them back. ----------------------------
 			//
-			// RecipeScaler hands the recipe scale preview a number and a word in two separate record
-			// fields, and app/recipes/[id]/page.tsx:360 prints them straight back out as one phrase:
+			// The purchase-order rate, "₹80 / pieces". This list used to allow it with the reasoning
+			// that the rate is wrong "in a way label(count) cannot fix, because there is no count to
+			// give it". That did not hold. A rate is a price for ONE of the unit — "per" is "for each
+			// one" — so the count is there, and it is one: label(BigDecimal.ONE) says "piece" for a
+			// count and "Kg" for a kilo, which is exactly the sheet's right answer. No third idea in
+			// the formatter was needed. DocumentGenerationService asks for label(BigDecimal.ONE) now,
+			// and DescribedPurchaseLineIT checks the printed sheet reads "/ piece" and "/ Kg".
 			//
-			//     `${scaled.ingredients[i]?.displayQuantity} ${scaled.ingredients[i]?.displayUnit}`
-			//
-			// So a recipe line that scales to one of a counted thing reads "1 pieces" on that screen
-			// today. It is the same defect in a third place, and it is invisible to both of the other
-			// guards: the frontend's regex only knows about unitLabel(), which this phrase does not
-			// call, and the word is chosen in Java where that regex cannot see it.
-			//
-			// It is left alone deliberately. RecipeScaler and that page are both outside T-144's
-			// contract, and the fix is not the one-liner it looks like — ScaledQuantity is a wire
-			// type, so changing displayUnit changes an API response and the screen that reads it, in
-			// one step, across the seam. It wants its own task. Reported in T-144's proof.
-			//
-			// These two entries are therefore a standing note, not an approval. When somebody does fix
-			// it, this test fails and they delete these two lines — which is the point of listing them
-			// here rather than in a comment nobody runs.
-			"recipe/RecipeScaler.java|return new ScaledQuantity(raw, unit.name(), round(raw), unit.label());",
-			"recipe/RecipeScaler.java|return new ScaledQuantity(raw, unit.name(), round(displayValue), displayUnit.label());"));
+			// RecipeScaler's two lines, which gave the recipe scale preview "1 pieces". They were
+			// listed here as a standing note rather than an approval, on the reasoning that the fix
+			// would change ScaledQuantity's wire shape. It did not need to: displayUnit was always a
+			// plain word for the screen, so the scaler now chooses that word from the rounded figure
+			// it sends beside it, and the response has the same two fields of the same types.
+			));
 
 	@Test
 	@DisplayName("nobody reads the plural label in a new place without it being looked at")
@@ -126,11 +112,12 @@ class UnitLabelAgreementTest {
 
 						If a figure is printed in front of it, use unit.label(count) — that is the fix for
 						"1 pieces" and the reason label(BigDecimal) exists. If the unit is genuinely being
-						named with no count beside it (a column heading, a dropdown option, a "/ Kg" after
-						a price), that is correct: add the line to ALLOWED in this file with a sentence
-						saying which of those it is.
+						named with no count beside it (a column heading, a dropdown option), that is
+						correct: add the line to ALLOWED in this file with a sentence saying which of those
+						it is.
 
-						If this failed because you FIXED RecipeScaler, delete its two entries from ALLOWED.
+						A rate after a price is NOT one of those. "per piece" is a count of one, so it is
+						unit.label(BigDecimal.ONE) — see DocumentGenerationService.
 						""")
 				.containsExactlyInAnyOrderElementsOf(ALLOWED);
 	}

@@ -131,15 +131,16 @@ function ShoppingListView() {
    * the "Cancel this PO" control is nowhere near it: there is no order to cancel, and the editor
    * gates that block on the order having a number rather than on which screen it is.
    *
-   * <p><strong>Why this posts the order rather than asking the generator for it.</strong>
-   * {@code POST /purchase-orders/generate} raises one order per vendor from the list as the server
-   * last computed it, so it cannot carry an adjusted quantity, a line somebody removed, an
-   * uncatalogued item, or the date typed in the box — everything the panel exists to let a person
-   * do. Generating first and correcting afterwards would mean the order existed before Save, with a
-   * number, which is precisely what Rajeev ruled against.
+   * <p><strong>Why this posts the order, and why there is no generator to ask instead.</strong>
+   * The server used to offer {@code POST /purchase-orders/generate}, which raised one order per
+   * vendor from the list as the server last computed it. It could not carry an adjusted quantity, a
+   * line somebody removed, an uncatalogued item, or the date typed in the box — everything the panel
+   * exists to let a person do — and generating first and correcting afterwards would have meant the
+   * order existed before Save, with a number, which is precisely what Rajeev ruled against. Once
+   * this screen stopped calling it nothing did, and it was retired on 2026-09-12 (T-153).
    *
-   * <p>The notes line is the one the generator writes, deliberately: an order raised from this
-   * screen says where it came from whichever door it came through.
+   * <p>The notes line is the one the generator used to write, kept deliberately: an order raised
+   * from this screen still says where it came from.
    */
   async function createOrder(group: VendorGroup, draft: PurchaseOrderDraft) {
     if (!group.vendorId) return;
@@ -187,7 +188,8 @@ function ShoppingListView() {
               And there is no "Generate purchase orders" button either, which is T-134 (D-24 §6).
               One button at the top raised an order to every vendor at once: "one Generate button at
               the top tied to several vendors at once is the wrong shape". Each vendor's tile now
-              carries its own. */}
+              carries its own, and the server endpoint that button called was retired with it
+              (T-153, 2026-09-12). */}
           <header className="mb-6">
             <h1>Shopping list</h1>
             <p className="mt-1 max-w-prose text-ink-secondary">
@@ -411,7 +413,7 @@ function VendorTile({
  * {@code PurchaseOrderEditor}, exactly as {@code /orders/[id]} mounts it.
  *
  * <p><strong>The needed-by date it opens with is the earliest of the vendor's lines</strong>, which
- * is the rule generation has always used: the order is only useful if it arrives in time for the
+ * is the rule the retired generator used: the order is only useful if it arrives in time for the
  * first meal that wants any of it. Lines that nothing demanded — a top-up below the reorder level,
  * something typed in by hand — carry no date and so contribute none, and a tile made only of those
  * opens with the box empty, which is truthful: there is no date to meet.
@@ -479,7 +481,7 @@ function OrderPanel({
             quantity: String(l.suggestedQty),
             unit: l.unit,
             // The vendor's last-known price is filled in by the server when the order is created,
-            // from the same vendor_supplies figure generation has always used. The list does not
+            // from the same vendor_supplies figure the retired generator used. The list does not
             // carry it and this panel does not invent one.
             expectedPrice: null,
           }))}

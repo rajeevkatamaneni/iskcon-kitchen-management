@@ -63,6 +63,14 @@ public class PurchaseOrderController {
 	 * <p>Answers with the order's {@code poNumber} beside its id. The shopping list confirms a
 	 * created order by name — "PO-2026-0041 raised for Heritage Fresh Dairy" — and the alternative
 	 * was fetching the order back to read one string that this response already knew.
+	 *
+	 * <p><strong>This is the only way an order is created.</strong> There used to be a second door,
+	 * {@code POST /purchase-orders/generate}, which raised one draft per vendor from every ticked
+	 * line on the shopping list at once. Its one caller was the bulk button T-134 replaced with a
+	 * button per vendor tile, and the tiles post here because generation could not carry an adjusted
+	 * quantity, a removed line, an uncatalogued item or a typed date. With nothing left calling it,
+	 * Rajeev ruled on 2026-09-12 to retire it (T-153) rather than keep a route that creates orders
+	 * nobody's screen can see being made. {@code PurchaseOrderIT.generateIsGone} asserts the absence.
 	 */
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
@@ -72,17 +80,6 @@ public class PurchaseOrderController {
 		CreatedPurchaseOrder created = service.createManual(actor, request);
 		return ResponseEntity.status(HttpStatus.CREATED)
 				.body(Map.of("id", created.id(), "poNumber", created.poNumber()));
-	}
-
-	/** Generate one draft PO per vendor from the selected shopping-list lines. */
-	@PostMapping("/generate")
-	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
-	public ResponseEntity<Map<String, Object>> generate(
-			@RequestBody(required = false) GeneratePosRequest request,
-			@AuthenticationPrincipal AuthenticatedUser actor) {
-		List<UUID> ids = service.generateFromShoppingList(actor,
-				request == null ? null : request.ingredientIds());
-		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("purchaseOrderIds", ids));
 	}
 
 	@PutMapping("/{id}")

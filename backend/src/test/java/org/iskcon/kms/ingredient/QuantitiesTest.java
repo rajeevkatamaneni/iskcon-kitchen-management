@@ -326,9 +326,11 @@ class QuantitiesTest {
 		@Test
 		@DisplayName("naming the unit with no number beside it is still plural, deliberately")
 		void theLabelAloneIsUntouched() {
-			// A column heading, a dropdown option, the "/ Kg" after a price. T-108 left 22 such call
-			// sites alone on the screens for this reason and this side must match: "pieces" is the
-			// name of the unit, and only a phrase with a figure in it has anything to agree with.
+			// A column heading, a dropdown option. T-108 left 22 such call sites alone on the screens
+			// for this reason and this side must match: "pieces" is the name of the unit, and only a
+			// phrase with a figure in it has anything to agree with. (A rate after a price used to be
+			// listed here too. It is not a no-count case — "per piece" is a count of one — and since
+			// T-148 the purchase-order sheet asks label(BigDecimal.ONE) for it.)
 			assertThat(Unit.PIECES.label()).isEqualTo("pieces");
 			assertThat(Unit.PIECES.label(null)).isEqualTo("pieces");
 		}

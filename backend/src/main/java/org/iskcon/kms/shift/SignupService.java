@@ -610,6 +610,85 @@ public class SignupService {
 				toInstant(rs.getObject("signed_up_at", OffsetDateTime.class))), volunteerUserId);
 	}
 
+	/**
+	 * The shifts this volunteer came off in the last seven days without choosing to (T-149).
+	 *
+	 * <p><strong>Why this exists.</strong> {@link #myShifts} lists what a volunteer is still on, so
+	 * a volunteer a coordinator removed, or whose shift was cancelled, simply vanishes from it. The
+	 * only other word they get is a notice that is best-effort by design — {@link #notifyShift} and
+	 * {@code ShiftService.notifyCancellation} both swallow a failure into a warning so that a message
+	 * can never undo the act — and on staging the mail sandbox drops exactly these. Without this
+	 * list a devotee could turn up for a shift that no longer has them on it and have had no way at
+	 * all to find out.
+	 *
+	 * <p><strong>Two ways in, one row shape.</strong>
+	 *
+	 * <ul>
+	 *   <li><em>Removed by somebody else</em>: {@code released_reason IS NOT NULL}. V124 makes the
+	 *       presence of a reason the thing that tells the temple's act from the devotee's — the
+	 *       volunteer's own release ({@link #releaseSignup}) writes {@code released_at} alone and is
+	 *       not asked for one, and the {@code shift_signups_removal_is_whole} and
+	 *       {@code _removal_follows_release} CHECKs mean a reason cannot exist without a release. The
+	 *       only two statements in the application that write {@code released_at} are those two, so
+	 *       a released row with no reason is always a self-release. Those are left out: the person
+	 *       who pressed "Release my spot" does not need telling that they did.
+	 *   <li><em>Still on a shift that has since been cancelled</em>: cancelling a shift releases
+	 *       nobody ({@code ShiftService.cancel} changes the shift row only, and the overlap check in
+	 *       this class depends on that), so these rows are {@code released_at IS NULL} on a
+	 *       {@code CANCELLED} shift. They are reported as {@code SHIFT_CANCELLED}, and the moment
+	 *       they came off is the shift's {@code cancelled_at}. Nothing reopens a cancelled shift, so
+	 *       that pairing cannot go stale. A volunteer who had already released themselves before the
+	 *       cancellation is not on it and is not listed; one a coordinator removed first appears once,
+	 *       through the first branch, with the reason the coordinator gave.
+	 * </ul>
+	 *
+	 * <p>The two branches are disjoint on {@code released_at} (set in one, null in the other), so
+	 * {@code UNION ALL} cannot list a signup twice and the de-duplicating {@code UNION} would be work
+	 * for nothing.
+	 *
+	 * <p><strong>"The last seven days" is measured on when they came off, not on the shift's
+	 * date.</strong> The question the list answers is "what has changed for me recently", and a
+	 * removal made yesterday from a shift three weeks away is exactly the one a volunteer has not yet
+	 * noticed. Both sides of the comparison are database time ({@code now()} wrote
+	 * {@code released_at} and {@code cancelled_at} in the first place), so no application clock can
+	 * put the edge of the window somewhere different from the edge of the data.
+	 *
+	 * <p><strong>{@code released_note} is not selected, in either branch.</strong> It is the
+	 * coordinator's internal account and V124 promises it goes nowhere but the audit trail and the
+	 * roster. Not reading it is stronger than reading it and dropping it: there is then no variable
+	 * that a later edit to the mapper could pass through by mistake.
+	 *
+	 * <p>Tenant isolation is RLS on both tables, as on every read here; {@code volunteer_user_id}
+	 * comes from the verified caller and scopes it to their own rows within the temple.
+	 */
+	@Transactional(readOnly = true)
+	public List<MyReleasedShiftView> myReleasedShifts(UUID volunteerUserId) {
+		return jdbc.query("""
+				SELECT ss.id AS signup_id, s.id AS shift_id, s.title, s.shift_date, s.start_time,
+					   s.end_time, s.location, ss.released_at AS came_off_at, ss.released_reason AS reason
+				FROM shift_signups ss JOIN shifts s ON s.id = ss.shift_id
+				WHERE ss.volunteer_user_id = ?
+				  AND ss.released_reason IS NOT NULL
+				  AND ss.released_at >= now() - interval '7 days'
+				UNION ALL
+				SELECT ss.id, s.id, s.title, s.shift_date, s.start_time,
+					   s.end_time, s.location, s.cancelled_at, 'SHIFT_CANCELLED'
+				FROM shift_signups ss JOIN shifts s ON s.id = ss.shift_id
+				WHERE ss.volunteer_user_id = ?
+				  AND ss.released_at IS NULL
+				  AND s.status = 'CANCELLED'
+				  AND s.cancelled_at >= now() - interval '7 days'
+				ORDER BY came_off_at DESC
+				""", (rs, n) -> new MyReleasedShiftView(
+				rs.getObject("signup_id", UUID.class), rs.getObject("shift_id", UUID.class),
+				rs.getString("title"), rs.getObject("shift_date", LocalDate.class),
+				rs.getObject("start_time", LocalTime.class), rs.getObject("end_time", LocalTime.class),
+				rs.getString("location"),
+				toInstant(rs.getObject("came_off_at", OffsetDateTime.class)),
+				RemoveVolunteerRequest.Reason.valueOf(rs.getString("reason"))),
+				volunteerUserId, volunteerUserId);
+	}
+
 	/** Best-effort signup confirmation to the volunteer (E6-S3). */
 	public void notifyConfirmation(UUID volunteerUserId, UUID shiftId) {
 		notifyShift(volunteerUserId, shiftId, NotificationTemplate.SHIFT_SIGNUP_CONFIRMED);

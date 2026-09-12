@@ -5,6 +5,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -50,6 +53,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @AutoConfigureMockMvc
 @Import(HandAddedLineIT.StubVerifierConfiguration.class)
 class HandAddedLineIT extends AbstractIntegrationTest {
+
+	private static final ObjectMapper JSON = new ObjectMapper();
 
 	@Autowired
 	private MockMvc mvc;
@@ -232,6 +237,11 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 	 * own strength, so it is the one that could plausibly have been left behind — and a cylinder
 	 * still sitting on the list after somebody ordered it is precisely the "same ingredients, 2 PO's"
 	 * confusion the ruling exists to prevent.
+	 *
+	 * <p>The order is raised as the jaggery vendor's tile raises it, through
+	 * {@code POST /purchase-orders}. Until T-153 it went through {@code POST /purchase-orders/generate}
+	 * with the jaggery's id; that route was retired, and the hand-added line is now proved to leave on
+	 * the path the screen actually uses.
 	 */
 	@Test
 	@DisplayName("a hand-added line goes off the list once an order covers it")
@@ -240,14 +250,11 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/shopping-list")))
 				.andExpect(jsonPath("$[?(@.ingredientName=='Jaggery')]").exists());
 
-		mvc.perform(authed(post("/api/v1/purchase-orders/generate"))
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"ingredientIds\":[\"" + jaggery + "\"]}"))
-				.andExpect(status().isCreated());
+		raiseOrderFor("Jaggery");
 
 		mvc.perform(authed(get("/api/v1/shopping-list")))
 				.andExpect(jsonPath("$[?(@.ingredientName=='Jaggery')]").doesNotExist())
-				// Rice is untouched: it has no preferred vendor here, so no order was raised for it.
+				// Rice is untouched: it has no preferred vendor here, so it is on no order.
 				.andExpect(jsonPath("$[?(@.ingredientName=='Rice')]").exists());
 	}
 
@@ -284,6 +291,40 @@ class HandAddedLineIT extends AbstractIntegrationTest {
 		return authed(post("/api/v1/shopping-list"))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"ingredientId\":\"" + ingredientId + "\",\"suggestedQty\":" + qty + "}");
+	}
+
+	/**
+	 * Raises an order for one line of the list the way that line's vendor tile does (T-134): read the
+	 * list as the screen reads it, take the line's own vendor, suggested quantity, unit and needed-by,
+	 * send no price, and post it to {@code POST /purchase-orders} — the only way an order is created
+	 * since T-153 retired {@code POST /purchase-orders/generate}.
+	 */
+	private void raiseOrderFor(String ingredientName) throws Exception {
+		String list = mvc.perform(authed(get("/api/v1/shopping-list")))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		JsonNode line = null;
+		for (JsonNode l : JSON.readTree(list)) {
+			if (ingredientName.equals(l.get("ingredientName").asText())) {
+				line = l;
+			}
+		}
+		assert line != null : ingredientName + " should be on the list to be ordered";
+		assert !line.get("suggestedVendorId").isNull() : ingredientName + " needs a vendor to order from";
+
+		ObjectNode order = JSON.createObjectNode();
+		order.put("vendorId", line.get("suggestedVendorId").asText());
+		order.set("neededBy", line.get("neededBy"));
+		order.put("notes", "Generated from the shopping list");
+		ObjectNode orderLine = order.putArray("lines").addObject();
+		orderLine.put("ingredientId", line.get("ingredientId").asText());
+		orderLine.set("quantity", line.get("suggestedQty"));
+		orderLine.put("unit", line.get("unit").asText());
+
+		mvc.perform(authed(post("/api/v1/purchase-orders"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(order.toString()))
+				.andExpect(status().isCreated());
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder b) {

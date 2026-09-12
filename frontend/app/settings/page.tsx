@@ -239,8 +239,8 @@ function PaymentGatewaySection({
   }
 
   return (
-    // Named, because the WhatsApp section below has a Test connection button of its own, and a
-    // screen reader — or a test — needs to know which one it is on.
+    // Named, because the WhatsApp section below has a test button of its own, and a screen reader
+    // — or a test — needs to know which one it is on.
     <section className="card mt-10 px-7 py-7" aria-label="Payment gateway">
       <h2 className="text-lg font-semibold text-ink">Payment gateway</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
@@ -629,6 +629,12 @@ function MessagingSection({
   const [error, setError] = useState<ApiError | null>(null);
   const [saved, setSaved] = useState(false);
   const [verifyToken, setVerifyToken] = useState<string | null>(null);
+  // The test send (T-151). Rajeev, 2026-09-12: "Ask the use for a phone number to send a test
+  // message." The number is asked for in place, where the button was, rather than on a screen of its
+  // own: it is one box, used once or twice in a temple's life.
+  const [askingForNumber, setAskingForNumber] = useState(false);
+  const [testNumber, setTestNumber] = useState("");
+  const [sentTo, setSentTo] = useState<string | null>(null);
 
   async function save() {
     setBusy("save");
@@ -656,14 +662,23 @@ function MessagingSection({
     }
   }
 
-  async function test() {
+  /**
+   * Sends a real WhatsApp message to the number typed. Whether the number is well formed is the
+   * server's to say, with the same rule and the same KMS-400003 as every other phone number, rather
+   * than a second copy of that rule here that could drift from it.
+   */
+  async function sendTest() {
+    const number = testNumber.trim();
     setBusy("test");
     setError(null);
     setSaved(false);
+    setSentTo(null);
     try {
-      onChanged(await api.testWhatsAppSettings(await getToken()));
+      onChanged(await api.sendWhatsAppTestMessage(number, await getToken()));
+      setSentTo(number);
+      setAskingForNumber(false);
     } catch (e) {
-      setError(toApiError(e, "We couldn’t reach Meta."));
+      setError(toApiError(e, "We couldn’t send the test message."));
     } finally {
       setBusy(null);
     }
@@ -882,19 +897,71 @@ function MessagingSection({
       {saved && !error && (
         <p className="mt-6 text-sm text-success">Connected, and Meta accepted the credentials.</p>
       )}
+      {sentTo && !error && (
+        <p className="mt-6 text-sm text-success">
+          Test message sent to {sentTo}. Check WhatsApp on that phone.
+        </p>
+      )}
 
-      <div className="mt-7 flex flex-wrap items-center gap-3 border-t border-hairline pt-6">
-        <button
-          type="button"
-          onClick={test}
-          disabled={busy !== null || !settings.connected}
-          className="btn btn-quiet min-h-touch px-5 text-sm disabled:opacity-60"
-        >
-          {busy === "test" ? "Checking…" : "Test connection"}
-        </button>
+      <div className="mt-7 flex flex-wrap items-end gap-3 border-t border-hairline pt-6">
+        {askingForNumber ? (
+          <>
+            <div className="min-w-0 flex-1 sm:max-w-xs">
+              <HintedField
+                label="Send a test message to"
+                hint="A WhatsApp number, with its country code. Meta must approve the test message first, which can take up to a day after you connect."
+              >
+                {(id) => (
+                  <input
+                    id={id}
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    placeholder="+919876543210"
+                    value={testNumber}
+                    onChange={(e) => setTestNumber(e.target.value)}
+                    className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
+                  />
+                )}
+              </HintedField>
+            </div>
+            <button
+              type="button"
+              onClick={sendTest}
+              disabled={busy !== null || !testNumber.trim()}
+              className="btn btn-quiet min-h-touch px-5 text-sm disabled:opacity-60"
+            >
+              {busy === "test" ? "Sending…" : "Send"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAskingForNumber(false);
+                setError(null);
+              }}
+              disabled={busy !== null}
+              className="btn btn-quiet min-h-touch px-3 text-sm disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setAskingForNumber(true);
+              setSentTo(null);
+              setSaved(false);
+            }}
+            disabled={busy !== null || !settings.connected}
+            className="btn btn-quiet min-h-touch px-5 text-sm disabled:opacity-60"
+          >
+            Send a test message
+          </button>
+        )}
         {!settings.connected && (
           <span className="text-sm text-ink-muted">
-            Press Connect first. It checks your credentials, and this button re-checks them later.
+            Press Connect first. Then this sends a real message to a phone you choose.
           </span>
         )}
         <span className="flex-1" />

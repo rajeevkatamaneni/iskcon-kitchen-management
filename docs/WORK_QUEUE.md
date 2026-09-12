@@ -63,11 +63,14 @@ Full register, with the 31 unrecorded gaps and the 9 built-but-never-proven item
 the UAT Docket artifact (ask Rajeev for the link, or `/artifacts` in Claude Code).
 
 1. ~~**The broadcast limit has no screen.**~~ **BUILT 2026-09-07.** Settings → Volunteer messages.
-2. **No operator view of the audit log.** Narrower than `TRACEABILITY.md` G9 records: `/audit`
+2. ~~**No operator view of the audit log.** Narrower than `TRACEABILITY.md` G9 records: `/audit`
    exists and is in the menu for Temple Admins. Only the operator's per-temple drill-in is missing,
    and its design is already agreed — drill into one temple, never a cross-tenant firehose.
    `drillIntoTenantAudit` is written and uncalled. **Rajeev asked to see what is there before
-   anything is built.**
+   anything is built.**~~ **CLOSED WITHOUT BUILDING, 2026-09-12, by Rajeev:** *"I will verify during
+   my UAT and let you know if I need nay changes. Consider it good for now and mark it done and
+   remvoe it from the list."* Left struck through rather than deleted because this list's numbering
+   is quoted elsewhere.
 3. ~~**No screen manages festival occasions** (G3).~~ **BUILT 2026-09-07** (`67d5f05`, task T-004),
    deployed to staging, **not yet seen working by Rajeev**. Settings → Festival occasions, at
    `/settings/occasions`: add, rename and remove, Temple Admin only. A screen over a backend that
@@ -221,9 +224,14 @@ where they sit; ask before assuming any of them outranks item 1.
   `getToken` every render, so the effect re-runs and overwrites the just-saved settings with the
   stub. Same effect-identity trap as the flash-capture loop, different state. **The connect-then-
   render path is currently untested.**
+  **Built 2026-09-12 inside T-151, not yet verified by Rajeev.** The mock now returns one stable
+  `getToken`, and the connected panel is asserted directly. Proof in `docs/work/proof/T-151.md`.
 - **`CrewPebble` uses a native `title=` tooltip** (`MealServices.tsx`) — hover-only, no keyboard and
   no touch route, which is the failure `InfoHint` was built to avoid. Found during the hint sweep and
   left alone because it is not sub-text under a control. One small conversion.
+  **Built 2026-09-12 as T-147, not yet verified by Rajeev.** The breakdown is an `InfoHint` beside
+  the pill, reading *"More about crew for Lunch"* (or the event's name). Proof in
+  `docs/work/proof/T-147.md`.
 - **The job card no longer filters equipment by kind.** It used to print only MACHINE and TOOL, to
   keep trestle tables off the sheet; the category was removed on 2026-09-04 at Rajeev's instruction
   and there is now no way to tell a table from a grinder, so the card lists everything not scrapped.
@@ -235,3 +243,6 @@ where they sit; ask before assuming any of them outranks item 1.
 - **Three inline copies of the unit-family rule remain** in `InventoryItemService.adjust`,
   `DonationRecorder` and `IngredientRequestService`, each refusing with the generic `KMS-400001` rather
   than `IngredientUnits.requireSameFamily`'s `KMS-400013`. Recorded under `BL-9`.
+  **Built 2026-09-12 as T-150, not yet verified by Rajeev.** All three now answer `KMS-400013` with a
+  field error naming the ingredient. **No screen shows that field line yet**, so UAT-081 step 17
+  still fails on the donation screen; that is queued as T-154. Proof in `docs/work/proof/T-150.md`.

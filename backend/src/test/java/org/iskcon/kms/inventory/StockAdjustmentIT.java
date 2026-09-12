@@ -171,9 +171,13 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("the adjustment unit must belong to the ingredient's measurement family")
 	void unitMustMatchFamily() throws Exception {
+		// The one rule every quantity obeys (BL-9, T-150): a unit from another family is
+		// KMS-400013 naming the ingredient, not the generic "check your input".
 		mvc.perform(adjust(batch, "-1", "L", "SPOILAGE", null))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("KMS-400001"));
+				.andExpect(jsonPath("$.code").value("KMS-400013"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("Toor Dal"));
+		assertThat(batchStock()).as("nothing was written on the refusal").isEqualByComparingTo("100");
 	}
 
 	@Test

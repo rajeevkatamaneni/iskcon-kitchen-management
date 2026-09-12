@@ -38,6 +38,15 @@ public class TenantWhatsAppSettingsService {
 	private static final Logger log = LoggerFactory.getLogger(TenantWhatsAppSettingsService.class);
 	private static final SecureRandom RANDOM = new SecureRandom();
 
+	/**
+	 * The one language every template is registered in, so the one a test send must ask for.
+	 *
+	 * <p>A template exists at Meta per language, and asking for a language it was not registered in
+	 * fails as "the template does not exist in the specified language". Registration and the test
+	 * send share this constant so the two cannot drift.
+	 */
+	private static final String TEMPLATE_LANGUAGE = "en";
+
 	private final JdbcTemplate jdbc;
 	private final TenantSecretStore secrets;
 	private final AuditService auditService;
@@ -145,9 +154,37 @@ public class TenantWhatsAppSettingsService {
 		return read();
 	}
 
-	/** Re-proves the stored credentials, for the Test button on a temple already connected. */
+	/**
+	 * Sends a real test message from the temple's WhatsApp number to the phone an administrator
+	 * typed, for the Test button on Settings (T-151).
+	 *
+	 * <p>Rajeev, 2026-09-12: <em>"Ask the use for a phone number to send a test message."</em> This
+	 * replaced a Test button that asked Meta to describe the number and sent nothing, and it had to:
+	 * the purchase-order screen offers Send on WhatsApp only once a message has actually gone out
+	 * (T-136), so a temple using WhatsApp for orders alone had no way to earn the button except by
+	 * sending an order the screen would not let it send.
+	 *
+	 * <p><strong>What it sends, and why it can be refused on a temple whose credentials are
+	 * perfect.</strong> {@link NotificationTemplate#WHATSAPP_TEST}, a template of our own, because Meta
+	 * sends nothing but an approved template to somebody who has not written to the temple in the last
+	 * day. That template is registered at Connect like the others and Meta reviews it in its own time,
+	 * so a fresh connection's first test can be refused for a reason that fixes itself. Every refusal
+	 * — that, a number outside a test account's recipient list, an expired token, Meta unreachable —
+	 * answers {@code KMS-500007} with the same next step, and Meta's own wording goes to the log
+	 * under the incident id and never to the screen.
+	 *
+	 * <p><strong>What a success writes.</strong> {@code whatsapp_last_sent_at}, through
+	 * {@link #markMessageSent} and nowhere else, because a message Meta accepted with an id is
+	 * exactly the fact that column records. And {@code whatsapp_verified_at}, because Meta accepting a
+	 * send under this token proves the credentials at least as well as the read that used to stamp
+	 * it; without this, "Last checked" on the screen would never move again, since nothing but Save
+	 * would touch it. The display number is left alone: a send does not return it, and Save refreshes
+	 * it whenever the account changes.
+	 *
+	 * <p>Not connected, or connected with no stored token, is refused exactly as before this change.
+	 */
 	@Transactional
-	public TenantWhatsAppSettings test() {
+	public TenantWhatsAppSettings sendTestMessage(AuthenticatedUser actor, String phoneNumber) {
 		UUID tenantId = TenantContext.get().orElseThrow(
 				() -> new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "tenant")));
 		TenantWhatsAppSettings current = read();
@@ -157,17 +194,40 @@ public class TenantWhatsAppSettingsService {
 		String token = secrets.get(tenantId, TenantSecretStore.Kind.WHATSAPP_ACCESS_TOKEN).orElseThrow(
 				() -> new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "accessToken")));
 
-		String displayNumber;
+		String to = phoneNumber.trim();
+		String temple = jdbc.queryForObject("""
+				SELECT name FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", String.class);
+		NotificationTemplate template = NotificationTemplate.WHATSAPP_TEST;
+		Map<String, Object> params = Map.of("temple", temple == null ? "the temple" : temple);
+		// Through OutboundMessage for the positional list, the one place named parameters become
+		// Meta's {{1}}, {{2}} — so this send cannot order them differently from a real notification.
+		OutboundMessage message = new OutboundMessage(template, params, template.render(params));
+
+		String messageId;
+		// The try holds the Meta call and nothing else, for the reason WhatsAppChannelAdapter gives:
+		// a stamp or an audit write that failed inside it would be reported as Meta refusing a message
+		// Meta had in fact accepted.
 		try {
-			displayNumber = meta.verifyNumber(current.phoneNumberId(), token);
-		} catch (MetaWhatsAppClient.WhatsAppCredentialsRejected rejected) {
-			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
-					Map.of("field", "accessToken", "reason", rejected.getMessage()));
+			messageId = meta.sendTemplate(current.phoneNumberId(), token, to,
+					template.whatsappTemplateName(), TEMPLATE_LANGUAGE,
+					message.orderedParameters());
+		} catch (MetaWhatsAppClient.WhatsAppSendFailed | MetaWhatsAppClient.WhatsAppCredentialsRejected e) {
+			throw new ApplicationException(ErrorCode.WHATSAPP_TEST_NOT_DELIVERED,
+					Map.of("reason", String.valueOf(e.getMessage())), e);
 		}
+
+		markMessageSent();
 		jdbc.update("""
-				UPDATE tenant_settings SET whatsapp_display_number = ?, whatsapp_verified_at = now()
+				UPDATE tenant_settings SET whatsapp_verified_at = now()
 				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-				""", displayNumber);
+				""");
+
+		// A message went out in the temple's name to a number somebody typed, which is worth a
+		// permanent record of who and to whom. Meta's id is kept so a delivery question can be traced.
+		auditService.record(actor, AuditAction.SETTINGS_UPDATED, AuditEntityType.TENANT, tenantId,
+				null, Map.of("whatsappTestSentTo", to, "whatsappMessageId", messageId),
+				"WhatsApp test message sent.");
 		return read();
 	}
 
@@ -254,10 +314,13 @@ public class TenantWhatsAppSettingsService {
 	 * Records that a WhatsApp message from this temple actually reached Meta (T-136, V123).
 	 *
 	 * <p><strong>The only writer of {@code whatsapp_last_sent_at}, and it must stay that way.</strong>
-	 * Called from {@link WhatsAppChannelAdapter} immediately after
-	 * {@link MetaWhatsAppClient#sendTemplate} hands back a message id, and from nowhere else. The
-	 * moment anything else stamps it — a settings screen, a connection test, a backfill — the column
-	 * goes back to meaning "configured", which is the distinction it exists to draw.
+	 * Called immediately after {@link MetaWhatsAppClient#sendTemplate} hands back a message id, and
+	 * only then — from {@link WhatsAppChannelAdapter} for every notification, and from
+	 * {@link #sendTestMessage} for the Settings test (T-151), which is a real message to a real phone
+	 * and so the same fact. What must never call it is anything that proves configuration rather than
+	 * a send: a credential check, a template submission, a callback arriving, a backfill. The moment
+	 * one of those stamps it, the column goes back to meaning "configured", which is the distinction
+	 * it exists to draw.
 	 *
 	 * <p>Rajeev, 2026-09-10, on the Send on WhatsApp button: it is shown "only after a message has
 	 * actually gone through it successfully", not merely configured. The three dates V55 already
@@ -329,7 +392,7 @@ public class TenantWhatsAppSettingsService {
 			try {
 				MetaWhatsAppClient.TemplateOutcome outcome = meta.createTemplate(
 						wabaId, accessToken, template.whatsappTemplateName(), template.whatsappCategory(),
-						"en", template.whatsappBodyText(), template.whatsappExampleValues());
+						TEMPLATE_LANGUAGE, template.whatsappBodyText(), template.whatsappExampleValues());
 				if (outcome != MetaWhatsAppClient.TemplateOutcome.REFUSED) {
 					submitted++;
 				}

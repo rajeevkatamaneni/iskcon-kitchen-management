@@ -14,6 +14,7 @@ import org.iskcon.kms.auth.Permission;
 import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.ingredient.Unit;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -66,10 +67,13 @@ public class IngredientRequestService {
 
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
+	private final IngredientUnits ingredientUnits;
 
-	public IngredientRequestService(JdbcTemplate jdbc, AuditService auditService) {
+	public IngredientRequestService(
+			JdbcTemplate jdbc, AuditService auditService, IngredientUnits ingredientUnits) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
+		this.ingredientUnits = ingredientUnits;
 	}
 
 	// ---- Reading --------------------------------------------------------
@@ -420,6 +424,13 @@ public class IngredientRequestService {
 	 * holds in kilograms is 500 gm and is the same rice; three litres of it is not a quantity of rice
 	 * at all, and a request that says so would arrive at the store room as a question nobody can
 	 * answer. {@code InventoryItemService.adjust} already refuses it on the same grounds.
+	 *
+	 * <p>Whether the ingredient exists is still answered here, as a field error on the line, and
+	 * only the family is handed to {@link IngredientUnits#requireSameFamily}. That keeps an unknown
+	 * or another temple's ingredient refused exactly as it always was, and makes a unit from the
+	 * wrong family refuse the way it does on a purchase order and in the ledger: KMS-400013, with a
+	 * field error naming the ingredient, so a twenty-line request says which line. It costs one more
+	 * primary-key read per line, which on a form a person typed is nothing.
 	 */
 	private void validateLines(List<IngredientRequestLineInput> lines) {
 		if (lines == null || lines.isEmpty()) {
@@ -437,12 +448,7 @@ public class IngredientRequestService {
 				throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of(
 						"field", "lines[" + i + "].ingredientId", "value", line.ingredientId()));
 			}
-			if (line.unit().family() != ingredientUnit.family()) {
-				throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of(
-						"field", "lines[" + i + "].unit",
-						"value", line.unit().name(),
-						"expectedFamily", ingredientUnit.family().name()));
-			}
+			ingredientUnits.requireSameFamily(line.ingredientId(), line.unit());
 		}
 	}
 

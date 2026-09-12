@@ -470,6 +470,51 @@ public enum NotificationTemplate {
 		public List<String> parameterOrder() {
 			return List.of("count", "temple", "items");
 		}
+	},
+
+	/**
+	 * The test message a temple administrator sends from Settings to a phone they name (T-151).
+	 *
+	 * <p>Rajeev, 2026-09-12: <em>"Ask the use for a phone number to send a test message."</em> Until
+	 * then the Test button only re-read the number's details from Meta and put nothing in front of
+	 * anybody, and the Send on WhatsApp button on a purchase order waits for a message that actually
+	 * went out (T-136). A temple that uses WhatsApp only for orders could never earn it.
+	 *
+	 * <p><strong>Why a template of our own and not something already there.</strong> Three things were
+	 * established from Meta's documentation before this was added, and each rules out an alternative:
+	 * <ul>
+	 *   <li>Free text cannot be used. "Template messages are the only type of message that can be
+	 *       sent to WhatsApp users outside of a customer service window", and an administrator typing
+	 *       a colleague's number has no open window with them.</li>
+	 *   <li>Meta's {@code hello_world} sample cannot be relied on. Meta's documentation names it only
+	 *       inside the Get Started flow, whose test account and test number "are automatically created
+	 *       for you". Nothing Meta publishes says a temple's own production account has it, and a Test
+	 *       button that works on a developer's account and fails on a temple's is worse than none.</li>
+	 *   <li>A reminder or an order with invented values would reach a real person as a real-looking
+	 *       shift or purchase order. That is not a test, it is a false message.</li>
+	 * </ul>
+	 *
+	 * <p>The cost, stated so nobody is surprised by it: like every template here it is registered when
+	 * the temple presses Connect or Save, and "Templates must have a status of APPROVED before they can
+	 * be sent". Meta says "Review can take up to 24 hours". Until then the test is refused, and
+	 * the screen says so. A temple connected before this existed has to press Save once to register it.
+	 *
+	 * <p>UTILITY and OPERATIONAL like the rest: it is the direct consequence of an administrator
+	 * pressing a button to send it, to a number they chose, and there is nothing in it to opt out of.
+	 */
+	WHATSAPP_TEST("connection_test") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"WhatsApp test message",
+					"Hare Krishna. This is a test message from %s. If it has reached you, the temple can send WhatsApp messages."
+							.formatted(value(params, "temple")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("temple");
+		}
 	};
 
 	private final String whatsappTemplateName;
