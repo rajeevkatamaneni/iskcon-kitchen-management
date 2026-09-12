@@ -3781,6 +3781,36 @@ are untouched. Snapshot in `docs/versions/DESIGN_SYSTEM_v1.7.md`.
 
 ---
 
+## DESIGN_SYSTEM v1.8 — 2026-09-12
+
+**Which forms get a screen of their own, restated by Rajeev** (§4, *One screen, one task*). Prompted
+by the planner's *Ask for volunteers*: the layer T-019 built was cut to three fields to stay under the
+old threshold, and Rajeev wants the full *Post a shift* form there instead.
+
+**Shown the rule as written, he said the wording did not say what he meant**, on two points:
+
+- **The threshold.** v1.4–v1.7 read *"A form of four fields or more becomes a screen. Three or fewer
+  stays inline."* His ruling: *"4 fields or fewer is inline. 5 fields is a screen."*
+- **Which buttons it covers.** v1.4–v1.7 read *"Anywhere a button used to open a form on top of a list,
+  the form is its own screen."* His reading: that is about a record opened from its own list —
+  *"screens like Vendor OR Purchase order where you have alist display and clicking on an item in that
+  list should open the way this rule describes"* — and not about a record from another part of the
+  app: *"the Shift is its own thing and the meal planner is a seperate thing that is being brough into
+  the equation by necisity."*
+
+**The rule now has three parts:** a record opened from its own list gets its own screen; four fields
+or fewer is edited inline and five or more is a screen; and a record from another part of the app
+opens as a layer showing that record's own full form, closing back to where the reader was.
+
+**Not retroactive, at his instruction:** *"Just update the rule for the future. DOESNOT have to be
+applied retroactivly."* and *"DONOT make any changes except for updating the rule."* No screen was
+converted. The rule carries a dated footnote saying so, which he asked for.
+
+**Nothing else in the file changed** — the status line and §4's rule only. Snapshot in
+`docs/versions/DESIGN_SYSTEM_v1.8.md`.
+
+---
+
 ## Versioning convention
 
 - Version bumps to a **locked** document require the user's explicit approval, per the Ten Commandments (never silently edit an approved decision).
