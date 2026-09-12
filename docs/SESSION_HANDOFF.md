@@ -41,7 +41,7 @@ History is **linear on `main` — there are no merge commits**, so "since the Ep
 **Closed** (`gh issue list --state closed`): **every coding story** — E1-S1..S14 (#1–11, #56, #62, #63), E2 (#12–18), E3 (#19–25), E4 (#26–31), E5 (#32–39), E6 (#40–46), E7 (#47–55).
 
 **Closed but NOT actually done** — a story being closed means the code merged and its automated tests pass; it does **not** mean the feature works in the deployed environment. These have real gaps (evidence: deployed API env from `gcloud run services describe`, which sets **none** of the worker/provider vars, so all default to stub/off — see §4):
-- **E1-S2 / E1-S13 (infra & bootstrap):** the intended separate DDL role is not wired — migrations run as the app role `kms_app`, which therefore **owns the schema** (`application.yml` flyway comment; deployed `DB_USER=kms_app`). See §5. Also `DEPLOYMENT.md` Step 5's seed procedure is wrong for Cloud SQL (§6, live-4).
+- ~~**E1-S2 / E1-S13 (infra & bootstrap):** the intended separate DDL role is not wired — migrations run as the app role `kms_app`, which therefore **owns the schema**.~~ **RESOLVED — verified on staging 2026-09-11.** `kms_migration` owns all **86** tables; queried from the database itself rather than read off Terraform. See §5.1. Also `DEPLOYMENT.md` Step 5's seed procedure is wrong for Cloud SQL (§6, live-4).
 - **E1-S10 notifications, E5-S7 WhatsApp PO, E6-S6/S7 reminders/broadcast:** no real channel adapter exists — stub/logging only. And the **background worker is off** on deploy, so even the scheduled ones never fire. "Delivered" is unproven.
 - **E2-S5/S6, E5-S4/S5 documents & translation:** deployed on the **stub** renderer/translator; real Chromium-PDF and Google Translate are not exercised (the only two skipped backend tests are exactly these smoke tests — §3).
 - **E7-S1..S9 payments/donations:** deployed on the **stub** payment gateway (`PAYMENTS_PROVIDER` unset); Razorpay never exercised against the live app.
@@ -95,6 +95,23 @@ From `gcloud run services describe` (project `iskcon-kms-2026`, region `asia-sou
   - `docs/SYSTEM_DESIGN.md:135` — "Least privilege: app DB role has no DDL, no BYPASSRLS."
 - Reality: `backend/src/main/resources/application.yml` (flyway block, ~lines 12–24) states in its own comment *"migrations currently run as the application role … the app role is intentionally denied DDL. Wiring [the separate role] … tracked as part of the E1-S2 deployment follow-ups."* The deployed `DB_USER=kms_app` (§4), and during the live super-admin seed the table owner was observed to be `kms_app` (`SELECT pg_get_userbyid(relowner) FROM pg_class WHERE relname='users'` → `kms_app`, run by Rajeev in Cloud SQL Studio). So the app role created and **owns** the tables → it has DDL.
 - **Why code, not doc:** the design (separate `kms_migration` DDL role) is the right intent and is correct as written; the implementation simply never wired the dedicated Flyway datasource. Consequence: on the deployed DB, RLS isolation holds **only because `FORCE ROW LEVEL SECURITY` is on** (an owner is otherwise exempt) — a fragile single point rather than the intended defense-in-depth. Fix belongs in code/deploy (the E1-S2 follow-up), not the docs.
+
+> **✅ RESOLVED — verified 2026-09-11, and the observation above is kept because it was true when it was made.**
+>
+> **Staging: `kms_migration` owns all 86 tables in `public`.** Established by querying the deployed
+> database directly — a throwaway Cloud Run job on the VPC running `SELECT tableowner, count(*) FROM
+> pg_tables WHERE schemaname='public' GROUP BY tableowner` — rather than by reading
+> `infra/environment/main.tf:146`, which merely *declares* the role. The job was deleted afterwards.
+>
+> **So the defence-in-depth this section wanted is in place:** the app role connects as `kms_app` and
+> holds no DDL, the migration role owns the schema, and `FORCE ROW LEVEL SECURITY` is now the second
+> line rather than the only one.
+>
+> **The `kms_app` ownership recorded above was a real observation** — taken during the live
+> super-admin seed, by Rajeev in Cloud SQL Studio — and it has simply been overtaken. **Local
+> development was the last place still migrating as a superuser** and was closed on 2026-09-11 by
+> `1a02783`; see `docs/work/proof/T-145.md`, which also shows the divergence reproduced on demand.
+> `application.yml`'s flyway comment no longer says what this section quotes.
 
 **5.2 — Immediate token revocation is degraded to best-effort. → CODE/CONFIG BUG (narrow).**
 - `7a9d944` changed `FirebaseTokenVerifier` so that if the cross-project revocation lookup fails (it currently 403s — §6 live-3), the token is accepted on offline verification alone and a warning is logged. A Firebase-side revocation (password reset / explicit revoke) therefore persists until token expiry (~1h) instead of the next request.
@@ -172,7 +189,7 @@ From `gcloud run services describe` (project `iskcon-kms-2026`, region `asia-sou
 
 1. Finish the Operations redesign Rajeev asked for (§6, "redesign requested").
 2. *(Done 2026-08-11.)* `docs/uat/` now holds the full pack — UAT-001…UAT-061 plus TRACEABILITY.
-3. Post-UAT engineering follow-ups: wire the `kms_migration` Flyway role (§5.1), restore strict Firebase revocation (§6 live-3), correct `DEPLOYMENT.md` Step 5 (§6 live-4).
+3. Post-UAT engineering follow-ups: ~~wire the `kms_migration` Flyway role (§5.1)~~ **done — verified on staging 2026-09-11, see §5.1**; restore strict Firebase revocation (§6 live-3); correct `DEPLOYMENT.md` Step 5 (§6 live-4).
 4. Do a real live pass of `docs/uat/` to convert §7-A items from "unverified" to tested — see TRACEABILITY §3 for what is runnable before the worker and providers are switched on.
 
 *Memory files `uat-environment`, `dont-dismiss-user-observations`, `super-admin-creation-out-of-band`, and `running-backend-tests-locally` carry the operational detail behind several sections above.*
