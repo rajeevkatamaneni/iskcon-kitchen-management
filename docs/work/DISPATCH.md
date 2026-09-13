@@ -185,6 +185,27 @@ Run by the work manager 2026-09-13 after T-178, T-169b, T-172 and T-179 were all
 - **Wave 4a is proven and ready for one release**, reported to the main session 2026-09-13. The tree holds only its four tasks' files, the work manager's reservations and the ledger. It adds migration **V131**.
 - **Released** by the release agent 2026-09-13 in four commits, T-179, T-172, T-178 and T-169b. `lib/api.ts` was staged in steps so each commit carries only its own task's part and compiles: T-179's type and calls, then T-178's, then the moved `sendWhatsAppTestMessage` comment with T-169b.
 
+### ❌ Wave 4a failed the release gate, 2026-09-13; T-179b dispatched alone
+
+- **Reported by the main session.** Nothing was pushed or deployed. Staging is unchanged at `V130`, and the lock is free.
+- **Four commits sit unpushed on local `main`:** `089f0c5` (T-179), `88856f0` (T-172), `85642b3` (T-178), `a542466` (T-169b). The tree is clean.
+- **The failure:** `BaseQuantityIT` (*"no hand-written unit conversion survives anywhere in the source"*) flags `donation/MyDonationsService.java` ~190–192. A SQL `CASE m.unit` labels units for a goods gift's description, copying `ingredient/Unit.java`'s labels by hand, and gets two wrong: *"1 pieces"*, and `L` passed through. The backend gate ran 2,532 tests: 1 failed, 7 skipped. The frontend gate was all green.
+- **Why the merged-tree check missed it:** the work manager's backend runs named selected classes, and `BaseQuantityIT` scans the whole source, so no targeted run loads it. The same gap lesson 3 describes for the frontend. **From now on every merged-tree backend check also runs the repo-wide guards**; the list is in `docs/work/README.md`.
+
+### T-179b — My donations labels goods with `Unit.label`, not a hand-written SQL `CASE`
+
+- **source:** wave 4a's release gate, 2026-09-13; dispatched on the main session's instruction, **alone**, because the tree must hold only this fix while 4a is unreleased. Wave 4b waits until 4a is released.
+- **what:**
+  - Build the goods description in Java with `Unit.label(BigDecimal)`, rounded the way the page shows quantities, and drop the SQL `CASE`.
+  - The privacy logic and every privacy test in `MyDonationsIT` stay unchanged.
+  - Negative control: put the `CASE` back, and `BaseQuantityIT` goes red.
+  - The fix goes on top as a new commit via the release agent; no rebase, no amend.
+- **paths:** `backend/src/main/java/org/iskcon/kms/donation/MyDonationsService.java`; `backend/src/test/java/org/iskcon/kms/donation/MyDonationsIT.java` (a label test added only; no existing test changed).
+- **checks:** `MyDonationsIT`, `BaseQuantityIT` and the repo-wide guards.
+- **reservations:** none.
+- **state:** **proven** 2026-09-13 (`docs/work/proof/T-179b.md`). The main query no longer labels units. After `owns()` has accepted the caller's own gifts, one more query fetches the raw ingredient name, quantity and unit for those gift ids only (`reference_id = ANY(?)`), and Java writes each line as the name plus `Quantities.exact(quantity, unit)`, which chooses the word through `Unit.label(BigDecimal)`. Wording unchanged (*"Rice, 25 Kg; Wet grinder"*); privacy logic unchanged. **Rounding rule:** `Quantities.exact`, the ledger form, which does not round. The same gift already appears as a movement row on the inventory item screen through `quantity()`, its TypeScript twin, and the `Quantities` class comment puts goods receipts and movement rows under this form. **`MyDonationsIT`: no existing line removed** (checked by the work manager with `git diff -U0`); one label test added, 11/11. `BaseQuantityIT` 7/7, `UnitLabelAgreementTest` 2/2, `ErrorCodeTest` 767, `FieldErrorMessageTest` 6, `NextStepPermissionTest` 6, `RolePermissionsTest` 80. Its first run was still red, because its own comment quoted the phrase `BaseQuantityIT` searches for; reworded. Control (the service reverted byte for byte to its pre-fix copy): 2 of 18 red. `BaseQuantityIT` flagged `MyDonationsService.java`, and the label test expected *"Coconut, 1 piece; Milk, 1.5 L; Rice, 1,500 Kg"* but got *"Coconut, 1 pieces; Milk, 1.5 L; Rice, 1500 Kg"*. Restore by `cmp`. **Corrections to the gate report:** the litre was never wrong (`L` is its label); the defects were *"1 pieces"* and the missing Indian digit grouping. **A behaviour to know:** a gift stored as 0.5 Kg now reads *"500 gm"*, the same as the stock ledger row for it. Only `MyDonationsService.java` and `MyDonationsIT.java` changed; `HEAD` still `a542466`. No hand test in a real browser. **Merged backend check by the work manager, with every repo-wide guard from README lesson 3a:** `MyDonationsIT` 11, `DonationReceiptIT` 10, `DonationIntakeIT` 13, `DonationVoidIT` 7, `BaseQuantityIT` 7, `UnitLabelAgreementTest` 2, `TempleClockTest` 1, `CommunicationSendGuardSourceTest` 2, `ErrorCodeTest` 767, `FieldErrorMessageTest` 6, `NextStepPermissionTest` 6, `RolePermissionsTest` 80, `RowLevelSecurityIT` 10, `TenantLoopMigrationIT` 1, `--rerun-tasks`, **923/923**. Log: `scratchpad/merged-backend-T179b.log`. The frontend is unchanged since 4a's gate, which was green. **Ready to go on top of the four unpushed 4a commits as a new commit.**
+- **proof:** `docs/work/proof/T-179b.md`
+
 ### T-178 — Meta's status per template, per temple, and counts across temples
 
 - **source:** Rajeev's ruling above: *"…date created, updated and Meta approval status"*, step 2. **Placement and permissions decided by the main session 2026-09-13:**

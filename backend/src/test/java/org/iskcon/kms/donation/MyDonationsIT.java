@@ -198,6 +198,44 @@ class MyDonationsIT extends AbstractIntegrationTest {
 				"id", "kind", "receivedOn", "amount", "description", "receiptNumber");
 	}
 
+	/**
+	 * T-179b. The description used to be built in SQL with its own copy of the unit words, and it said
+	 * "1 pieces". Each vector here is one thing only {@code Quantities.exact} gets right: the singular
+	 * at exactly one (stored as {@code 1.000}, so a scale-sensitive comparison would miss it), the
+	 * litre's own label, and Indian digit grouping, which is how the stock ledger writes the same
+	 * donation's movement row on the inventory screen.
+	 */
+	@Test
+	@DisplayName("a goods gift writes each quantity as the stock ledger does: 1 piece, 1.5 L, 1,500 Kg")
+	void goodsQuantitiesReadAsTheLedgerWritesThem() throws Exception {
+		UUID goods = gift(temple, g -> {
+			g.put("type", "IN_KIND");
+			g.put("amount_inr", null);
+			g.put("donor_phone", VERIFIED_PHONE);
+		});
+		givenFood(goods, "Coconut", "PIECES", new BigDecimal("1.000"));
+		givenFood(goods, "Milk", "L", new BigDecimal("1.500"));
+		givenFood(goods, "Rice", "KG", new BigDecimal("1500.000"));
+
+		mvc.perform(as(GOPAL, get("/api/v1/my-donations")))
+				.andExpect(jsonPath("$", hasSize(1)))
+				.andExpect(jsonPath("$[0].kind").value("GOODS"))
+				.andExpect(jsonPath("$[0].description").value("Coconut, 1 piece; Milk, 1.5 L; Rice, 1,500 Kg"));
+	}
+
+	/** One food line received into stock as part of a goods gift, the way DonationRecorder writes it. */
+	private void givenFood(UUID donation, String name, String unit, BigDecimal quantity) {
+		UUID ingredient = admin.queryForObject("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, ?, 'Grains', ?) RETURNING id
+				""", UUID.class, temple, name, unit);
+		admin.update("""
+				INSERT INTO stock_movements (tenant_id, ingredient_id, batch_id, quantity, unit,
+						movement_type, reference_type, reference_id, actor_user_id)
+				VALUES (?, ?, gen_random_uuid(), ?, ?, 'DONATION_IN_KIND', 'DONATION', ?, ?)
+				""", temple, ingredient, quantity, unit, donation, templeAdmin);
+	}
+
 	@Test
 	@DisplayName("downloads the caller's own receipt; a gift with no receipt has no number and no download")
 	void downloadsOwnReceipt() throws Exception {

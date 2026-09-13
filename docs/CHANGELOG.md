@@ -1216,8 +1216,15 @@ with Edit, then Cancel and Save; Cancel puts back what was there. The WhatsApp s
 quiet when nothing is waiting and prominent when templates changed, were refused, or the account changed,
 saying what is waiting. The Language section is still always editable; that is T-185, queued.
 
+**A fix the release gate forced (T-179b).** The first gate run failed `BaseQuantityIT`: My donations built
+its goods description with a hand-written SQL `CASE` copying the unit labels, which said *"1 pieces"* and
+dropped the Indian digit grouping. It now uses the shared labels, so it says *"Coconut, 1 piece; Rice, 1,500
+Kg"*, and a gift stored as 0.5 Kg reads *"500 gm"*, as the stock ledger does. The work manager's merged
+backend check had run only the wave's own classes; it now always runs the repo-wide guards too
+(`docs/work/README.md`, lesson 3a).
+
 **Not done:** none of the four has been seen in a real browser. Proofs with negative controls are in
-`docs/work/proof/T-179.md`, `T-172.md`, `T-178.md` and `T-169b.md`.
+`docs/work/proof/T-179.md`, `T-172.md`, `T-178.md`, `T-169b.md` and `T-179b.md`.
 
 ### 2026-09-13 — A "(required)" box is really required, a temple can no longer be added at 0,0, and Super Admins can read every WhatsApp template (tasks T-174, T-176, T-177)
 

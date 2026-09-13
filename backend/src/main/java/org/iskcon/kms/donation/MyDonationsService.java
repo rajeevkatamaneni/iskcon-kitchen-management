@@ -2,16 +2,20 @@ package org.iskcon.kms.donation;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.StringJoiner;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.iskcon.kms.auth.TokenVerifier.VerifiedSubject;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.Quantities;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -149,9 +153,17 @@ public class MyDonationsService {
 	/** Every successful gift that is the caller's own, newest first. */
 	@Transactional(readOnly = true)
 	public List<MyDonation> list(UUID callerUserId, VerifiedContacts contacts) {
-		return candidates(callerUserId, contacts, null).stream()
+		List<Map<String, Object>> own = candidates(callerUserId, contacts, null).stream()
 				.filter(row -> owns(row, callerUserId, contacts))
-				.map(MyDonationsService::toView)
+				.toList();
+		// The food in a goods gift is looked up only for gifts owns() has already accepted, so this
+		// second read cannot widen what the caller sees: it describes rows already decided to be theirs.
+		Map<UUID, String> food = foodGiven(own.stream()
+				.filter(row -> "IN_KIND".equals(row.get("type")))
+				.map(row -> (UUID) row.get("id"))
+				.toList());
+		return own.stream()
+				.map(row -> toView(row, food.get((UUID) row.get("id"))))
 				.toList();
 	}
 
@@ -187,13 +199,6 @@ public class MyDonationsService {
 				SELECT d.id, d.type, d.donated_on, d.amount_inr, d.provider, d.receipt_number,
 					   d.donor_account_user_id, d.donor_phone, d.donor_email,
 					   wi.title AS wishlist_title,
-					   (SELECT string_agg(i.name || ', ' || trim_scale(m.quantity) || ' ' ||
-								CASE m.unit WHEN 'KG' THEN 'Kg' WHEN 'GM' THEN 'gm' WHEN 'ML' THEN 'ml'
-											WHEN 'PIECES' THEN 'pieces' ELSE m.unit END,
-								'; ' ORDER BY i.name)
-						  FROM stock_movements m JOIN ingredients i ON i.id = m.ingredient_id
-						 WHERE m.reference_type = 'DONATION' AND m.reference_id = d.id
-						   AND m.movement_type = 'DONATION_IN_KIND' AND m.quantity > 0) AS food,
 					   (SELECT string_agg(e.name, '; ' ORDER BY e.name)
 						  FROM equipment_items e WHERE e.donation_id = d.id) AS equipment
 				FROM donations d
@@ -229,14 +234,62 @@ public class MyDonationsService {
 				&& contacts.email().equals(storedEmail.trim().toLowerCase(Locale.ROOT));
 	}
 
-	private static MyDonation toView(Map<String, Object> row) {
+	/**
+	 * The food in each of these goods gifts, keyed by gift, written "Rice, 25 Kg; Coconut, 1 piece".
+	 *
+	 * <p><strong>Why this is Java and not SQL (T-179b).</strong> T-179 built this string inside the
+	 * main query, with a SQL CASE on the movement's unit column that copied
+	 * {@link org.iskcon.kms.ingredient.Unit}'s words by hand. A copy of a word has never been shown the
+	 * number beside it, so it said "1 pieces" — the exact defect {@code Unit.label(BigDecimal)} was
+	 * written to end (T-144) — and it was the kind of hand-written unit logic {@code BaseQuantityIT}
+	 * fails the build on. (That test is a plain text search, so this comment deliberately does not
+	 * spell the CASE the way the query did.)
+	 *
+	 * <p><strong>Which rounding.</strong> {@link Quantities#exact}, the ledger form, and not
+	 * {@link Quantities#cooks}. A gift of goods is stock received, and the same donation already
+	 * appears as a movement row on the inventory item screen, which writes it with {@code quantity()}
+	 * in {@code format.ts} — the TypeScript twin of {@code exact}. Rounding it here as a cook would
+	 * would let the devotee's page say "10 Kg" for a row the store room reads as "10.08 Kg". The
+	 * ledger form goes through {@code Unit.label(BigDecimal)} with the figure as shown, so the word
+	 * agrees with it.
+	 *
+	 * <p>Ordered by ingredient name, as T-179's {@code string_agg(... ORDER BY i.name)} was. The tenant
+	 * predicate is there for the reader, as on the main query; RLS is the boundary, and every id
+	 * passed in already belongs to a gift {@link #owns} accepted at this temple.
+	 */
+	private Map<UUID, String> foodGiven(List<UUID> goodsGiftIds) {
+		if (goodsGiftIds.isEmpty()) {
+			return Map.of();
+		}
+		Map<UUID, StringJoiner> lines = new HashMap<>();
+		jdbc.query(connection -> {
+			var ps = connection.prepareStatement("""
+					SELECT m.reference_id, i.name, m.quantity, m.unit
+					FROM stock_movements m JOIN ingredients i ON i.id = m.ingredient_id
+					WHERE m.tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+					  AND m.reference_type = 'DONATION' AND m.reference_id = ANY(?)
+					  AND m.movement_type = 'DONATION_IN_KIND' AND m.quantity > 0
+					ORDER BY i.name
+					""");
+			ps.setArray(1, connection.createArrayOf("uuid", goodsGiftIds.toArray()));
+			return ps;
+		}, (RowCallbackHandler) rs -> lines
+				.computeIfAbsent(rs.getObject("reference_id", UUID.class), id -> new StringJoiner("; "))
+				.add(rs.getString("name") + ", "
+						+ Quantities.exact(rs.getBigDecimal("quantity"), rs.getString("unit"))));
+		Map<UUID, String> food = new HashMap<>();
+		lines.forEach((id, joined) -> food.put(id, joined.toString()));
+		return food;
+	}
+
+	private static MyDonation toView(Map<String, Object> row, String food) {
 		boolean goods = "IN_KIND".equals(row.get("type"));
 		return new MyDonation(
 				(UUID) row.get("id"),
 				goods ? "GOODS" : "MONEY",
 				donatedOn(row.get("donated_on")),
 				goods ? null : (BigDecimal) row.get("amount_inr"),
-				goods ? goodsDescription(row) : moneyDescription(row),
+				goods ? goodsDescription(food, (String) row.get("equipment")) : moneyDescription(row),
 				(String) row.get("receipt_number"));
 	}
 
@@ -253,10 +306,8 @@ public class MyDonationsService {
 		return row.get("provider") != null ? "Online donation" : "Given at the temple";
 	}
 
-	/** What was given, e.g. "Rice, 25 Kg; Wet grinder". Units written as {@code format.ts} writes them. */
-	private static String goodsDescription(Map<String, Object> row) {
-		String food = (String) row.get("food");
-		String equipment = (String) row.get("equipment");
+	/** What was given, e.g. "Rice, 25 Kg; Wet grinder". The food half comes from {@link #foodGiven}. */
+	private static String goodsDescription(String food, String equipment) {
 		if (food != null && equipment != null) {
 			return food + "; " + equipment;
 		}
