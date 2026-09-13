@@ -14,6 +14,9 @@ const WHATSAPP_NONE: WhatsAppSettingsView = {
   verifiedAt: null,
   webhookSeenAt: null,
   templatesSubmittedAt: null,
+  // Both always come from the server (T-169a). Optional in the type only until this wave lands.
+  refusedTemplates: [],
+  templatesPending: { changed: 0, refused: 0, accountChanged: false },
 };
 
 const {
@@ -119,6 +122,8 @@ describe("the warning horizons", () => {
     render(<SettingsRoute />);
 
     await waitFor(() => expect(warnings().getByLabelText("Notice before stock expires")).toBeInTheDocument());
+    // The section opens read-only (T-169b), so a change starts with Edit.
+    fireEvent.click(warnings().getByRole("button", { name: "Edit" }));
     fireEvent.change(warnings().getByLabelText("Notice before a vendor contract ends"), {
       target: { value: "45" },
     });
@@ -139,24 +144,38 @@ describe("the warning horizons", () => {
     expect(await warnings().findByText("Saved.")).toBeInTheDocument();
   });
 
+  /**
+   * Changed by T-169b. This used to assert the box's own sentence, "A warning is between 1 and 365
+   * days.", and a greyed-out Save. The section now uses `Form`: Save stays pressable, and pressing it
+   * names the refused box in red from the box's own `min`, `max` and `required`. Every bad value is
+   * still refused before anything is sent, and each is now named by the box it is in.
+   */
   it("refuses a horizon no warning could survive, before anything is sent", async () => {
     render(<SettingsRoute />);
 
     await waitFor(() => expect(warnings().getByLabelText("Notice before stock expires")).toBeInTheDocument());
+    fireEvent.click(warnings().getByRole("button", { name: "Edit" }));
+    const box = warnings().getByLabelText("Notice before stock expires");
 
-    for (const bad of ["0", "-1", "366", ""]) {
-      fireEvent.change(warnings().getByLabelText("Notice before stock expires"), {
-        target: { value: bad },
-      });
-      expect(warnings().getAllByText("A warning is between 1 and 365 days.").length).toBeGreaterThan(0);
-      expect(warnings().getByRole("button", { name: "Save" })).toBeDisabled();
+    const said: Record<string, string> = {
+      "0": "Notice before stock expires must be at least 1",
+      "-1": "Notice before stock expires must be at least 1",
+      "366": "Notice before stock expires can be at most 365",
+      "": "Notice before stock expires is required",
+    };
+    for (const [bad, sentence] of Object.entries(said)) {
+      fireEvent.change(box, { target: { value: bad } });
+      const save = warnings().getByRole("button", { name: "Save" });
+      expect(save).toBeEnabled();
+      fireEvent.click(save);
+      const shown = await warnings().findByText(sentence);
+      expect(box).toHaveAttribute("aria-invalid", "true");
+      expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(shown.id);
     }
 
-    fireEvent.change(warnings().getByLabelText("Notice before stock expires"), {
-      target: { value: "365" },
-    });
-    expect(warnings().queryByText("A warning is between 1 and 365 days.")).not.toBeInTheDocument();
-    expect(warnings().getByRole("button", { name: "Save" })).toBeEnabled();
+    fireEvent.change(box, { target: { value: "365" } });
+    await waitFor(() => expect(warnings().queryByText(/Notice before stock expires (is|must|can)/)).not.toBeInTheDocument());
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(setWarningHorizons).not.toHaveBeenCalled();
   });
 });

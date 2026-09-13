@@ -6334,10 +6334,6 @@ export const api = {
     }),
 
   /**
-   * Sends a real test message from the temple's WhatsApp number to the number typed (T-151). It
-   * replaced a button that only re-checked the credentials and sent nothing.
-   */
-  /**
    * Sends every template that is waiting to Meta: new ones, changed wording, and ones Meta did not
    * register last time (T-169). After the first connection this is the only way templates go.
    */
@@ -6347,6 +6343,10 @@ export const api = {
       token,
     }),
 
+  /**
+   * Sends a real test message from the temple's WhatsApp number to the number typed (T-151). It
+   * replaced a button that only re-checked the credentials and sent nothing.
+   */
   sendWhatsAppTestMessage: (phoneNumber: string, token?: string) =>
     request<WhatsAppSettingsView>("/api/v1/settings/whatsapp/test", {
       method: "POST",

@@ -119,6 +119,213 @@ Run by the work manager 2026-09-13 after T-161, T-162 and T-163 were proven and 
 
 Run by the work manager 2026-09-13 after T-164, T-165 and T-166 were proven and no frontend builder was in the tree (T-173 is backend only): `tsc --noEmit` clean; `vitest run` **133 files, 1,670 tests, all passing** (up from 131 / 1,617 after 3-1 and T-171); `eslint . --max-warnings=0` clean. Log: `scratchpad/merged-frontend-wave3-2.log`. **Released by the release agent 2026-09-13 with T-173**, two commits, gated on a clean archive of HEAD, pushed and deployed to staging; no migration, staging stays at `V129`. Not driven in a browser. *(Before release:)* Wave 3-2 was proven and not released. It goes out in one release and one deploy with T-173**, on the main session's word, 2026-09-13: T-173 is now proven and its merged check green, and the work manager has reported the tree ready. **At report time T-174 phase 1 was still running, read-only;** its only permitted write is `docs/work/proof/T-174-sweep.md`, not yet present. The release stages named paths, so that file must not be staged if it appears.
 
+## ⚖️ RAJEEV'S INSTRUCTIONS AND RULINGS — 2026-09-13, relayed by the main session
+
+1. **Hand off the queue.**
+   > *"Go ahead and hand off the deployment work and any pending tasks (Except for the WattsApp templates we are currrently working on) that dont need me to agents."*
+
+   Then, lifting the template hold for exactly the listed items:
+   > *"Now that you have everything, can you setup worker agents and a work queue and hand off these items to the workers in sequence OR parallely if they are not going to collide iwth erach other. Check in once unit tests pass, let ci go green and deploy tot live cloud environment. Keep goign til lyou are fully fisnished with the list unless you need me to help woth anything."*
+
+   **How it runs:**
+   - The work manager orders and dispatches, at most four builders at a time.
+   - Each proven, non-colliding batch goes to the main session as a ready report, and the main session runs the release agent: gate, CI, deploy to staging.
+   - **No task calls Meta, Reload or Save on staging.** The main session presses Reload itself once Meta has decided on the 20 PENDING templates.
+   - **Held for Rajeev, not built:** the awkward field names, the composer's blank-subject draft, and the server/form wording mismatch.
+
+2. **Donors see their own gifts and receipts: T-179.**
+   > *"Admin can have the send recipet option BUT that should be the fall back saftny net option. Not the default. The default should be, the users should be able to see all the donations they made and receipts for each one of those donations that were sucessful."*
+
+   On matching:
+   > *"Option 2 for donor receipts."*
+
+3. **The WhatsApp template batch: T-180, T-182, T-184.** The main session relayed the agreed decisions. Rajeev's comments per template are in `~/Downloads/whatsapp-template-comments.json`, exported 2026-09-13 18:49Z. Leave withdrawal rulings:
+   > *"Leave that has already started: Cant be modified."*
+
+   > *"Should the manager be told? YES"*
+
+   On confirming to the person:
+   > *"Email and WattsApp both. If both are setup IF not, Just email."*
+
+**The order, set by the work manager on file overlaps.** `NotificationTemplate.java` gets one builder at a time.
+- **4a:** T-178, T-169b, T-172, T-179.
+- **4b:** T-180, T-175, T-170, T-185 (the Language section). The T-167 guard sits in 4c because 4b is full at four builders.
+- **4c:** T-182, and the T-167 guard beside it (disjoint files).
+- **4d:** T-184.
+- **5:** the test-context collapse, alone, with three consecutive full runs. The release gate was killed for low memory four times on 2026-09-12/13.
+
+## ▶ WAVE 4a (2026-09-13): T-178, T-169b, T-172, T-179
+
+**State at reservation:** `HEAD` `c033d4d`, with CI green on all three jobs. Tree clean. Release lock free. Staging `kms-staging-api-00160-kxq` / `kms-staging-web-00148-6xn` / `kms-staging-worker-00142-hvn`, schema **`V130`**, so the next free migration is **`V131`**.
+
+**Reservations, made by the work manager in one pass before dispatch:**
+- **Migration `V131`**, for T-178: `V131__whatsapp_template_status_copy.sql`. It is a tenant-owned table with `enable_tenant_rls()`.
+- **`audit/AuditAction.java`:** `WHATSAPP_TEMPLATE_STATUS_REFRESHED`, for T-178's operator Refresh, recorded on the temple.
+- **`auth/Permission.java`:** `VIEW_OWN_DONATIONS`, for T-179.
+- **`auth/RolePermissions.java`:** `VIEW_OWN_DONATIONS` granted to **VOLUNTEER only**. That is the one role with a Donate row today. The work manager's call, easy to reverse.
+- **`RolePermissionsTest.java`:** the matching `allowed` row.
+- **`frontend/lib/nav.ts`:** `{ href: "/my-donations", label: "My donations", icon: "receipt", roles: [VOLUNTEER] }`, after Donate.
+- **`frontend/__tests__/nav.test.ts`:** the volunteer menu expectation, in the same pass.
+- **`frontend/lib/api.ts`:**
+  - T-178 types: `TempleTemplateStatus`, `TempleTemplateStatusView {tenantId, asOf, templates}` and `TemplateStatusCounts {name, templesCounted, approved, pending, refused, marketing, formattingRefusal}`.
+  - T-178 calls:
+    - `whatsappTemplateStatusCounts` → `GET /api/v1/ops/whatsapp-templates/status-counts`, behind `VIEW_PLATFORM_OPERATIONS`;
+    - `templeTemplateStatus` → `GET /api/v1/ops/tenants/{id}/whatsapp-templates`, behind `VIEW_PLATFORM_OPERATIONS`;
+    - `refreshTempleTemplateStatus` → `POST /api/v1/ops/tenants/{id}/whatsapp-templates/refresh`, behind `MANAGE_TENANTS`, audited.
+  - T-179 type `MyDonation {id, kind, receivedOn, amount: number | null, description, receiptNumber}`.
+  - T-179 calls: `myDonations` → `GET /api/v1/my-donations`, and `downloadMyDonationReceipt` → `GET /api/v1/my-donations/{id}/receipt/download`, as a blob.
+  - **The `sendWhatsAppTestMessage` doc comment moved back above its own call.** It was the work manager's error, so T-169b no longer carries it.
+  - **`refusedTemplates` and `templatesPending` stay optional during 4a.** The settings test fixtures are typed. T-169b adds both fields to them, and the work manager makes both required in the next reservation pass.
+
+### Merged-tree check for wave 4a
+
+Run by the work manager 2026-09-13 after T-178, T-169b, T-172 and T-179 were all proven and no builder was in the tree.
+- **Frontend:** `tsc --noEmit` clean; `vitest run` **136 files, 1,742 tests, all passing**; `eslint . --max-warnings=0` clean. Log: `scratchpad/merged-frontend-wave4a.log`.
+- **Backend:** run 1, T-178's and T-179's classes plus the WhatsApp and donation tests around them (`TemplateStatusCopyIT`, `TemplateStatusCountsIT`, `OpsIT`, `WhatsAppTemplateCatalogueIT`, `WhatsAppTemplateComparisonIT`, `WhatsAppTemplateReloadIT`, `WhatsAppTemplateSubmissionIT`, `WhatsAppTestSendIT`, `MyDonationsIT`, `DonationReceiptIT`, `DonationVoidIT`, `DonationIntakeIT`, `RolePermissionsTest`, `ErrorCodeTest`), `--rerun-tasks`, **950/950**; run 2, the outside users (`RowLevelSecurityIT`, `TenantDeletionIT`, `TenantLoopMigrationIT`, `AccessControlEnforcementIT`, `NextStepPermissionTest`, `TemplateWordingRecorderIT`, `MetaTemplateOutcomeTest`, `MetaTemplateRulesTest`, `NotificationTemplateTest`, `NotificationIT`, `OneTimeDonationIT`, `DonorCaptureIT`), **90/90**. Log: `scratchpad/merged-backend-wave4a.log`.
+- **Wave 4a is proven and ready for one release**, reported to the main session 2026-09-13. The tree holds only its four tasks' files, the work manager's reservations and the ledger. It adds migration **V131**.
+- **Released** by the release agent 2026-09-13 in four commits, T-179, T-172, T-178 and T-169b. `lib/api.ts` was staged in steps so each commit carries only its own task's part and compiles: T-179's type and calls, then T-178's, then the moved `sendWhatsAppTestMessage` comment with T-169b.
+
+### T-178 — Meta's status per template, per temple, and counts across temples
+
+- **source:** Rajeev's ruling above: *"…date created, updated and Meta approval status"*, step 2. **Placement and permissions decided by the main session 2026-09-13:**
+  - **Placement:** counts across temples go on each catalogue card. Each temple's list goes in a **collapsed** WhatsApp templates section on `/tenants/[id]`, with its *"as of"* time.
+  - **Reading** the stored copy uses `VIEW_PLATFORM_OPERATIONS`.
+  - **Refresh** uses `MANAGE_TENANTS`, with an audit entry on the temple.
+  - **The refresh at the end of a temple's own Reload** runs under that temple's permission, with no operator audit entry.
+- **what:**
+  - **Stored copy:** V131 holds one copy per temple of T-173's comparison answer. Refresh replaces it on demand, and each Reload replaces it at its end.
+  - **Counts:** worked out per template by looping over temples inside each temple's own context, as `OpsService.notificationMetrics` does. Counts only, never a list of temples.
+  - **Formatting refusals:** a refusal for a formatting reason in any temple is flagged for every temple.
+  - **Nothing POSTs to Meta**, tested by counting as T-173 does.
+  - **Proof:** it records that each temple's own token is used on the operator's behalf.
+- **paths (checked at dispatch):** `notification/WhatsAppTemplateComparison.java`, `notification/TenantWhatsAppSettingsService.java` (the refresh at the end of Reload only), `ops/OpsController.java`, `ops/OpsService.java`, new `ops/` classes, V131 · tests: new ITs, plus `WhatsAppTemplateComparisonIT`, `WhatsAppTemplateReloadIT`, `WhatsAppTemplateCatalogueIT`, `OpsIT` · `frontend/app/whatsapp-templates/page.tsx`, `frontend/app/tenants/[id]/page.tsx` · `whatsapp-templates.test.tsx`, `tenant-detail.test.tsx`.
+- **state:** **proven** 2026-09-13 (`docs/work/proof/T-178.md`). **Stored copy:** V131 `whatsapp_template_status_copy` (`tenant_id`, `template_name`, `our_category`, `meta_status`, `meta_category`, `held`, `wording_matches`, `meta_rejected_reason`, `lookup_problem`, `taken_at`), primary key `(tenant_id, template_name)`, `enable_tenant_rls()` with ENABLE and FORCE, proven as `kms_app`. The foreign key cascades on temple deletion; `delete_tenant_cascade` needs no change (it finds tables by `tenant_id`), and `TenantDeletionIT` passes 9/9. **Refresh paths:** the operator's Refresh (`MANAGE_TENANTS`) replaces the copy using the temple's own token and writes exactly one `WHATSAPP_TEMPLATE_STATUS_REFRESHED` audit row on that temple. The temple's own Reload replaces it at the end with no operator audit, which adds 20 GETs to Meta, a few seconds. Zero POSTs to Meta, counted at the stub; the token never logged or returned. **Counts:** `TemplateStatusCopy.countsAcrossTemples()` loops over temples inside each one's context and clears it in `finally`, as `notificationMetrics` does. No cross-temple query, and none possible as `kms_app`. Counts only, never a temple. **Formatting refusal = status REJECTED and Meta's `rejected_reason` = `INVALID_FORMAT`**, cited from Meta's template node and webhook references; T-168's classifier is not used. **Screens:** counts line on each catalogue card; a collapsed WhatsApp templates section on `/tenants/[id]` with its *as of* time and Refresh. Backend 12 classes **859/859**; frontend `tsc` clean, full vitest **136 files / 1,742**, ESLint clean. Controls, each restored by `cmp`: Refresh without its audit write 2 of 6 red; counts without switching context 1 of 3 red, `templesCounted` expected 3 but 0 (the policy shows no rows without context, so it reads zero rather than leaking); section open by default 4 of 12 red. **Outside its contract, justified:** `MetaWhatsAppClient.findTemplate` now asks Meta for `rejected_reason` in `fields=`, and `HeldTemplate` carries it. **⚠ Nobody has checked real Meta accepts that field.** If it refused the field list, Reload's lookups and T-173's comparison would fail as not answered. **Check on staging after deploy, read-only:** run T-173's `meta-comparison` once; if every entry shows a `lookupProblem`, the field broke the lookup. The settings service gained a constructor; the old one stays package-private so two ITs compile unchanged. T-173's comparison answer carries one more key, `metaRejectedReason`. **Follow-ups:** Refresh on a temple not connected answers the generic `KMS-400001`, and the screen cannot hide the button because the view has no connected field. No hand test in a real browser.
+- **proof:** `docs/work/proof/T-178.md`
+
+### T-169b — Read-only Settings with Edit, Save and Cancel, and the Reload button
+
+- **source:** its row further down (Rajeev's rulings, option 2, and Appearance left as a live picker).
+- **paths:** `frontend/app/settings/page.tsx`, `settings-payments.test.tsx`, `settings-warnings.test.tsx`, a new settings test if needed. **`api.ts` is not T-169b's**, because the comment fix is done and making the fields required is the work manager's.
+- **state:** **proven** 2026-09-13 (`docs/work/proof/T-169b.md`). Files: `frontend/app/settings/page.tsx`, `settings-payments.test.tsx`, `settings-warnings.test.tsx`, and a new `settings-edit-mode.test.tsx` (46 tests). `api.ts` untouched. **Every section except Appearance opens read-only**, with Edit, then Cancel and Save. Cancel restores the values from before Edit. **Two sections may be open at once**, because each Save sends only its own section; allowing one at a time would mean discarding typing silently or greying out Edit with no reason. Read-only boxes are sunken and `readOnly`; the payment-provider dropdown is disabled. Replace, Test connection, Send a test message and the templates button step aside while their section is being edited, since they act on what is saved. **Save is never greyed out for a blank box**; pressing it names the box in red (*"App secret is required"*). It is still disabled while saving, and on Volunteer messages while nothing has changed. **Appearance is byte-identical** (md5 of the block before and after), and its 12 tests pass unedited. **Templates button (option 2), wordings:** nothing waiting (quiet) *"Templates last sent to Meta on 16 Aug 2026"*; account changed *"Templates not yet sent to your new WhatsApp account"*; changed and refused both waiting *"3 templates waiting to go to Meta"*; changed only *"3 templates changed since they were last sent"* (singular form too); refused only *"2 templates Meta did not accept last time"*; connected but never sent *"Templates not yet sent to Meta"*; while sending *"Sending templates to Meta…"* with *"This can take a minute or two."*; after *"Templates sent to Meta."* or *"Sent to Meta. Some templates still need attention."* Hidden when not connected. **Refused list:** *Refused* or *Not reached* with the stored reason; a template Meta holds under another category is a *Note* with *"Sending again cannot change this."* and is not counted as waiting. The old *"Your message templates went to Meta on …"* line is replaced by the button's date. `tsc` clean; touched 3 files **85/85**; run-only 4 files **77/77**; ESLint clean. Full vitest **1,730/1,734**, all 4 failures in `whatsapp-templates.test.tsx`, which is T-178's file in flight (its mock refused a request T-178's page now makes). Controls, each restored by `cmp`: sections open editable **59 red**, including all 6 read-only tests; Cancel keeps the typing **7 red**; button always primary **3 red**. The first control script misread exit codes (it printed 0 over red runs); the second recorded them correctly, and the proof keeps both. **Follow-ups:** the Language section (`components/LanguageSection.tsx`) is still always editable, now **T-185**. T-169a's stored reasons say *"Press Reload…"* but no button is labelled Reload, now **folded into T-182**. A never-connected temple's button still reads Connect, because connecting also sends the templates, which is intended. No hand test in a real browser.
+- **proof:** `docs/work/proof/T-169b.md`
+
+### T-172 — Enable the submit buttons disabled only because a box is blank
+
+- **source:** its row further down, and the main session's call.
+- **sites, checked against `c033d4d`:**
+  - `app/donations/page.tsx:638` (void a gift)
+  - `components/VendorStatusDialog.tsx:133`
+  - `app/donations/new/page.tsx` (record a donation, cash or goods)
+  - `app/orders/new/page.tsx:93`
+  - `app/invoices/[id]/page.tsx:494`, `:598`
+  - `app/staff/[id]/page.tsx:234` (Take them back on, which is in no form)
+  - `components/staff/ConductNotes.tsx:126`
+  - `components/give/DonatePage.tsx:309` (Give; the amount needs a real rule first)
+  - `components/planner/MealServices.tsx:1197` (Record this correction)
+- **Keep:** the meal composer's `firstBlocker`, and every busy-only disable.
+- **state:** **proven** 2026-09-13 (`docs/work/proof/T-172.md`). All 10 buttons press while the box is blank; each names the box in red and sends nothing, and a filled press sends once. **Take them back on** now lives in its own `components/staff/Reinstate.tsx` as a `Form`, as `BanRecord` and `ConductNotes` already do; the staff record page only decides whether to show it and makes the server call. `design-system.test.ts` went green through the move alone, with no change to the test or the rule. **Record this correction** is a `Form`, and its reason box carries `required`. **Give's amount** is a whole-rupee number box with `min="1"`, so 0 or -5 gives *"Or another amount must be at least 1"*. **Save note test** in `blank-submit-slice-d.test.tsx` now asserts the button enabled and clicks it; the rest of that file is untouched. Final run: `tsc` clean, full vitest **135 files / 1,688**, `eslint . --max-warnings=0` clean. Controls, each restored by `cmp`: void a gift, Give, Record this correction, and a fourth on `Reinstate.tsx` added because the site moved; each red on its blank-press test. No hand test in a real browser.
+- **First report 2026-09-13: not proven, stopped at its contract.**
+  - **Done:** all 10 buttons press while blank, and each names the box and sends nothing. Take them back on and Record this correction are now `Form`s. Give's amount is a whole-rupee number box with `min="1"`. `tsc` clean; the 16 granted files pass 191/191; ESLint clean. Its three controls went red and were restored by `cmp`.
+  - **Before the change, Enter could not submit a bad amount on Give:** the HTML spec lets Enter submit only when the default button is enabled. jsdom cannot show this.
+  - **Full run: 1,679 passed, 3 failed, in two files outside its contract, both caused by its change:**
+    - `blank-submit-slice-d.test.tsx:404-415` still expects Save note disabled.
+    - `design-system.test.ts` fails on the staff record screen, whose header says Close: making Take them back on a `Form` put a submit and a form in its body.
+- **Widened by the work manager 2026-09-13, after checking that no live builder holds either path:**
+  - `blank-submit-slice-d.test.tsx`, for the Save note test only.
+  - A new `components/staff/Reinstate.tsx`, taking the panel out of `app/staff/[id]/page.tsx` as `BanRecord` and `ConductNotes` already are. The design rule and `design-system.test.ts` stay unchanged.
+  - T-178, T-169b and T-179 were told both failures are T-172's, so their full runs don't mistake them for their own.
+- **Held for Rajeev, not built:**
+  - A reason of only spaces (seven places) and a credit of exactly 0 are stopped silently, with no message, as before.
+  - The cash-or-goods sentence on Record a donation is still grey, not red.
+  - Give's number box shows up/down arrows on desktop.
+  - Enter now submits on Take them back on and Record this correction.
+- **proof:** `docs/work/proof/T-172.md`
+
+### T-179 — My donations: a person's own successful gifts and their receipts
+
+- **source:** Rajeev's ruling 2 above.
+- **what:**
+  - A signed-in volunteer sees their **COMPLETED, not voided, not anonymous** gifts: those whose `donor_account_user_id` is them, plus counter gifts whose `donor_phone` or `donor_email` matches a contact **Firebase has verified** for them.
+  - "Verified" follows `TokenVerifier.VerifiedSubject`, as `PendingAccountClaim.verifiedContact` does: the token's `phone_number`, which Firebase sets only after phone sign-in, and the email only when `emailVerified`.
+  - Never match by name or PAN. RLS scopes it to the temple.
+  - They can download the receipt of each gift that has one issued.
+  - The admin's Send receipt in `DonationDetailController` stays exactly as it is, behind `VIEW_DONATIONS`.
+- **privacy tests:**
+  - A gift carrying someone else's contact, or an unverified one, is never listed, and its receipt download is refused.
+  - A second temple's gift is never shown.
+  - A negative control removes the verified-only check and shows the leak.
+- **Dependency:** T-180 changes the `donation_receipt` WhatsApp wording, *"Please ask at the temple office for a copy."*, to point at this page. It needs T-179 released first.
+- **paths (checked at dispatch):** under `backend/src/main/java/org/iskcon/kms/`, `donation/` new `MyDonations*` classes, and `donation/DonationReceiptService.java` read-only unless a shared helper is unavoidable · new ITs · `frontend/app/my-donations/page.tsx` (new), `frontend/__tests__/my-donations.test.tsx` (new).
+- **state:** **proven** 2026-09-13 (`docs/work/proof/T-179.md`). New `donation/MyDonation.java`, `MyDonationsService.java`, `MyDonationsController.java`, `MyDonationsIT.java`, `frontend/app/my-donations/page.tsx` and its test. `DonationReceiptService` and `DonationDetailController` untouched (`git diff --quiet`). The download reuses the public `DocumentService.receiptFor` and `openForDownload`. No migration, no error code. **Successful** = `status = 'COMPLETED'` and `voided_at IS NULL` and `is_anonymous = false`; every gift is one row in `donations` (V17 counter and goods, V38 online), with the receipt on the same row (V117) and its PDF a `DONATION_RECEIPT_PDF` document. **Verified:** phone is the token's `phone_number`; email only when `email_verified` is true. **The verified subject does not reach services today:** `AuthenticationFilter` keeps only the uid, and `AuthenticatedUser` carries the users-row contacts an administrator typed. So `MyDonationsController` verifies the same bearer token again through `TokenVerifier`, requires its uid to equal the principal's, and otherwise matches by account only. A test proves the users-row contacts match nothing. **The stranger answer:** 404 `KMS-400030`, the same as a gift id that does not exist, for someone else's gift, an unverified email, a struck, anonymous or incomplete gift, another temple's, or a gift with no receipt. A 403 would confirm the gift exists. **Privacy tests,** real endpoints as `kms_app` under RLS, `MyDonationsIT` 10/10. The second-temple test lists the other temple's gift when acting for that temple, so the absence cannot be an empty query. Targeted backend 8 classes **906/906**; frontend `tsc` and ESLint clean, `my-donations.test.tsx` 6/6. **Control 1** (match email regardless of `emailVerified`): 2 red, the unverified gift listed and its download 200 not 404; restore by `cmp`. **Control 2** (remove the query's tenant filter): **stayed green, correctly.** RLS on `donations` is the boundary, and the policy fails closed; showing a real leak needs RLS off (a migration) or `tenancy/*`, both outside the contract. Accepted as a named absence, per README. Its full vitest runs failed only in other builders' in-flight files (T-172's two, then T-169b's `settings-edit-mode.test.tsx`), which it did not edit. **Follow-ups, not queued:** (1) **counter gifts rarely match**: the counter form's donor phone has no E.164 rule, so `98765 43210` never matches a verified `+919876543210`; normalising it would need the counter form and possibly a backfill. (2) A second Firebase verification per call on these two endpoints; carrying `emailVerified` and the token's phone on `AuthenticatedUser` removes it. (3) The phone pattern is copied from `config/PhoneNumberDeserializer`, whose method is package-private. (4) A receipt whose PDF failed shows the donor 404 until an admin resends. (5) No audit entry when a donor downloads their own receipt. (6) Staff could reasonably have this page; the reservation is volunteers only. No hand test in a real browser.
+- **proof:** `docs/work/proof/T-179.md`
+
+## ⏸ QUEUED BEHIND 4a — the template batch and the rest, in order
+
+### T-180 — Template wordings, `shift_reminder` removed, the broadcast fixed (4b, after 4a is released)
+
+- **Items, each passing `MetaTemplateRulesTest`, with SMS and email sharing each wording:**
+  1. `waitlist_promoted` ends *"Thank you for your seva."*
+  2. `volunteer_shift_reminder` reads *"…If you can't make it, please release your spot as soon as possible so others can sign up."*
+  3. *"the app"* becomes *"the Seva Kitchen website"* in `removed_from_shift`, `shift_cancelled`, `staff_schedule_updated` and `low_stock_digest`. Sweep every other body and subject for *"app"*.
+  4. **Remove `shift_reminder`** from the enum, its tests and the catalogue's expectations. It is not deleted at Meta.
+     - **⚠ Stored-name hazard, found by the work manager 2026-09-13:** `notification/NotificationDispatcher.java:68` does `NotificationTemplate.valueOf(n.template())` for a queued or retried notification. A stored row still named `SHIFT_REMINDER` would throw once the constant is gone. Ops' failure list (`OpsService`) reads the name as text and is safe. Nothing sends it now. Tests seed rows named `SHIFT_REMINDER` in `OpsIT`, `TenantDeletionIT` and `NotificationIT`, and reference the constant in about 15 classes across notification, ops, communication and tenant deletion.
+     - **Decided by the main session 2026-09-13: option 2, the staging query skipped.** The coordinator's call, easy to reverse. With option 2 the removal is safe whatever rows exist, staging's database is reachable only from the VPC, and staging's rows say nothing about a future temple's. **Conditions for the dispatcher change in `NotificationDispatcher`:**
+       - An unknown template name marks **that one row** FAILED with a plain reason, e.g. *"This message's template no longer exists in the app"*, and logs the stored name. It never throws and never stops the batch. A test puts an unknown-name row **between two good rows**, and the good ones still send.
+       - **Retries:** a row failed this way is never retried forever. The proof says how the retry policy treats it.
+       - **Ops' failure list** shows the reason as-is.
+       - **Negative control:** put back the plain `valueOf`, and the in-between test goes red.
+       - Test seeds that use `SHIFT_REMINDER` move to a template that still exists, or to a deliberately unknown name where the test is about exactly this case.
+     - **Senders of the other changed templates**, one each: `SignupService` (waitlist promoted, removed from shift), `ShiftReminderService`, `ShiftService` (cancelled), `StaffScheduleService`, `LowStockAlertService`, `LeaveService` (revoked), `MonetaryDonationService` (both wish-list templates), `BroadcastService`, `DonationReceiptService`.
+  5. `leave_revoked` becomes the main session's agreed wording.
+  6. `wishlist_gift_split` becomes the agreed wording, with both amounts and the item in quotes.
+  7. `wishlist_sponsorship_converted` becomes the agreed wording.
+  8. `shift_broadcast`, with a **finding by the work manager 2026-09-13: volunteers cannot see a shift's updates anywhere on the website.** `shift_broadcasts` reaches only the coordinator's roster (`RosterBroadcast` on `/volunteers/[id]`). So it gets the fallback: *"Message from the coordinator of your {{title}} shift: {{message}} This message went to everyone on the shift."* Newlines in the parameter are flattened for WhatsApp only, because Meta allows none in a parameter.
+  10. `donation_receipt` points to the donor's own donations page on the Seva Kitchen website. **Folded in here because T-179 ships in 4a's release.**
+- **Collides with** T-178's `ops/` catalogue files, so it runs after 4a. The wording changes change every fingerprint, and Settings then shows them waiting.
+- **state:** queued.
+
+### T-185 — The Language section on Settings opens read-only too (4b)
+
+- **source:** found by T-169b 2026-09-13. Rajeev's ruling was *"This applies for all sections on the settinsg scree"*, with Appearance the one exception (*"No, leave the color picker as is."*). `components/LanguageSection.tsx`, shown on Settings, is still always editable.
+- **what:** the same Edit, then Cancel and Save, pattern T-169b built, using the shared `Form`. Cancel restores the previous value. Save is never greyed out for a blank box.
+- **paths (checked 2026-09-13):** `frontend/components/LanguageSection.tsx` (126 lines; mounted only by `app/settings/page.tsx`) and `frontend/__tests__/settings-language.test.tsx`, its only test. `settings/page.tsx` is edited only if the section's mount must change. **It holds no `<form>`:** it saves through `api.setTempleLanguage` from a button disabled only while busy.
+- **Ordering, corrected 2026-09-13:** the earlier reason for moving the T-167 guard (an unconverted Language form) was wrong, since there is no form there. **The guard stays in 4c anyway**, beside T-182, because 4b already holds four builders (T-180, T-175, T-170, T-185).
+- **state:** queued.
+
+### T-182 — `po_delivery` attaches the purchase-order PDF as a document header (4c)
+
+- **Rajeev:** *"PDF's survue transmission and different devices better than anything else."* The wording stays as approved.
+- **Found 2026-09-13:**
+  - `PurchaseOrderDeliveryService.sendViaWhatsApp` already finds `latestReadySheet(poId)` and puts its id in the message details.
+  - `MetaWhatsAppClient` has only `sendTemplate`, so the header is new.
+  - How a document header is registered (example media) and sent (link or media id) comes from Meta's docs and goes in the proof.
+  - If no READY sheet exists, generate one or refuse clearly; never send without it.
+- **Collides with** `NotificationTemplate`, `MetaWhatsAppClient` and `TenantWhatsAppSettingsService`, so it runs alone after T-178 and T-180.
+- **Also in T-182, found by T-169b 2026-09-13:** the refusal reasons T-169a stores in `TenantWhatsAppSettingsService` say *"Press Reload…"*, but under option 2 no button on the screen is labelled Reload. Reword them to name what is on screen, e.g. the WhatsApp templates button on Settings, following DESIGN_SYSTEM §9. Folded here because T-182 already edits that service. Entries already stored keep the old words until the next send replaces them.
+- **state:** queued.
+
+### T-184 — Staff withdraw their own leave, and two new templates (4d)
+
+- **What exists, found 2026-09-13:**
+  - My profile already has a withdraw button, through `DELETE /api/v1/leave/mine/{id}`.
+  - `LeaveService.withdraw` accepts **PENDING only**, **deletes the row**, audits `LEAVE_WITHDRAWN`, and tells nobody.
+  - Its comment reads *"Removed rather than kept as a fifth status."*
+  - `staff_leave`'s CHECK allows only PENDING, APPROVED, DECLINED and REVOKED.
+- **what, per the rulings:**
+  - Withdraw a PENDING or APPROVED request **only before its first day**.
+  - **Keep the row as a new `WITHDRAWN` status.** This is a deliberate reversal of that comment and needs a migration. The main session was told.
+  - Check every reader of `staff_leave`: `LeaveService`, `ScheduleLeaveDay`, `ScheduleResolver`, `StaffScheduleService`, the counts, the lists and the audit log.
+  - Notify the approver through the normal cascade.
+  - Send the person **both WhatsApp and email when the temple has WhatsApp connected, otherwise email only**. This is a narrow new behaviour for this one message.
+- **Wording:** the two new messages have no approved text. The builder starts from Rajeev's own guessed wording in his `leave_revoked` comment (*"…your request to withdrawn your leave request for 12 to 14 August 2026 has been successfully completed"*), and **the work manager brings the text to the main session before release.**
+- **state:** queued.
+
+### Wave 5 — the Spring test-context collapse (`THE-REST.md` §3)
+
+- Alone, after everything else.
+- Three consecutive full runs.
+- **state:** queued.
+
 ## ⚖️ RAJEEV'S RULING — 2026-09-13: a Super Admin view of the WhatsApp templates
 
 Relayed by the main session. His words:

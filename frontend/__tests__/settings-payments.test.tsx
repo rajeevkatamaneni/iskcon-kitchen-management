@@ -17,6 +17,9 @@ const WHATSAPP_NONE: WhatsAppSettingsView = {
   verifiedAt: null,
   webhookSeenAt: null,
   templatesSubmittedAt: null,
+  // Both always come from the server (T-169a). Optional in the type only until this wave lands.
+  refusedTemplates: [],
+  templatesPending: { changed: 0, refused: 0, accountChanged: false },
 };
 
 const EVENT_GROUPS = [
@@ -173,7 +176,10 @@ describe("the payment gateway settings", () => {
     paymentSettings.mockResolvedValue(CONFIGURED);
     render(<SettingsRoute />);
 
-    await waitFor(() => expect(gateway().getByRole("button", { name: "Replace" })).toBeInTheDocument());
+    // Replacing the secret is an edit, so it is offered once Edit is pressed (T-169b).
+    await waitFor(() => expect(gateway().getByRole("button", { name: "Edit" })).toBeInTheDocument());
+    fireEvent.click(gateway().getByRole("button", { name: "Edit" }));
+    expect(gateway().getByRole("button", { name: "Replace" })).toBeInTheDocument();
     expect(screen.getByText(/never shown again/)).toBeInTheDocument();
     // No password field in this section until an admin asks to replace the key secret. Scoped: the
     // WhatsApp section below has its own, and an unconnected temple shows them straight away.
@@ -190,6 +196,8 @@ describe("the payment gateway settings", () => {
     render(<SettingsRoute />);
 
     await waitFor(() => expect(screen.getByDisplayValue("rzp_test_abc123")).toBeInTheDocument());
+    // The section opens read-only (T-169b), so a correction starts with Edit.
+    fireEvent.click(gateway().getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByDisplayValue("rzp_test_abc123"), {
       target: { value: "rzp_test_corrected" },
     });
@@ -231,8 +239,9 @@ describe("the payment gateway settings", () => {
     await waitFor(() =>
       expect(gateway().getByRole("button", { name: "Test connection" })).toBeDisabled()
     );
-    // A greyed-out button with no reason reads as broken. It has to say why, and what to do.
-    expect(screen.getByText(/press save first/i)).toBeInTheDocument();
+    // A greyed-out button with no reason reads as broken. It has to say why, and what to do. The
+    // words changed with T-169b: the section opens read-only, so there is no Save to press until Edit.
+    expect(screen.getByText(/Press Edit and save your keys first/)).toBeInTheDocument();
     expect(screen.getByText(/checks your keys with Razorpay/i)).toBeInTheDocument();
     // Nothing to paste into a provider's dashboard until there is a provider.
     expect(screen.queryByText(/Tell Razorpay where to reach us/)).not.toBeInTheDocument();
@@ -289,6 +298,8 @@ describe("the WhatsApp connection", () => {
     verifiedAt: "2026-08-16T10:00:00Z",
     webhookSeenAt: null,
     templatesSubmittedAt: "2026-08-16T10:00:05Z",
+    refusedTemplates: [],
+    templatesPending: { changed: 0, refused: 0, accountChanged: false },
   };
 
   const messaging = () => within(screen.getByRole("region", { name: "WhatsApp" }));
@@ -330,6 +341,8 @@ describe("the WhatsApp connection", () => {
     render(<SettingsRoute />);
     await waitFor(() => expect(messaging().getByLabelText(/Phone number ID/, { selector: "input" })).toBeInTheDocument());
 
+    // Read-only until Edit, even before anything is connected (T-169b).
+    fireEvent.click(messaging().getByRole("button", { name: "Edit" }));
     fireEvent.change(messaging().getByLabelText(/Phone number ID/, { selector: "input" }), { target: { value: "pn-123" } });
     fireEvent.change(messaging().getByLabelText(/WhatsApp Business Account ID/, { selector: "input" }), {
       target: { value: "waba-456" },
@@ -353,10 +366,19 @@ describe("the WhatsApp connection", () => {
     expect(await messaging().findByText(/We can send as Temple Kitchen/)).toBeInTheDocument();
     expect(messaging().getByText("Connected, and Meta accepted the credentials.")).toBeInTheDocument();
     expect(messaging().getByText(/Tell Meta where to reach us/)).toBeInTheDocument();
-    // The secrets are behind dots now, not in boxes waiting to be retyped.
-    expect(messaging().getByRole("button", { name: "Replace" })).toBeInTheDocument();
-    // And templates are ours to register, not the temple's to write: the panel says they went.
-    expect(messaging().getByText(/Your message templates went to Meta on/)).toBeInTheDocument();
+    // The secrets are behind dots now, not in boxes waiting to be retyped. Changed by T-169b: this
+    // used to find the Replace button, which is now offered only after Edit, and the section is back
+    // to read-only once the save is accepted. So it asserts the dots' own words and that no password
+    // box is left, which is the fact the Replace button stood for.
+    expect(messaging().getByText(/Neither is ever shown again/)).toBeInTheDocument();
+    const section = screen.getByRole("region", { name: "WhatsApp" });
+    expect(section.querySelector('input[type="password"]')).toBeNull();
+    // And templates are ours to register, not the temple's to write. Changed by T-169b: the date they
+    // went is now the templates button's own words, and is said nowhere else on the screen.
+    expect(
+      messaging().getByRole("button", { name: "Templates last sent to Meta on 16 Aug 2026" })
+    ).toBeInTheDocument();
+    expect(messaging().queryByText(/Your message templates went to Meta on/)).not.toBeInTheDocument();
     expect(messaging().getByRole("button", { name: "Send a test message" })).toBeEnabled();
   });
 
@@ -471,7 +493,8 @@ describe("the WhatsApp connection", () => {
     render(<SettingsRoute />);
 
     expect((await messagingLoaded()).getByRole("button", { name: "Send a test message" })).toBeDisabled();
-    expect(messaging().getByText(/Press Connect first/)).toBeInTheDocument();
+    // The words changed with T-169b: there is no Connect button to press until Edit.
+    expect(messaging().getByText(/Press Edit and connect your account first/)).toBeInTheDocument();
     expect(sendWhatsAppTestMessage).not.toHaveBeenCalled();
   });
 });
@@ -517,6 +540,8 @@ describe("the email section", () => {
       expect(email().getByDisplayValue("kitchen@temple.org")).toBeInTheDocument()
     );
 
+    // The section opens read-only (T-169b), so a change starts with Edit.
+    fireEvent.click(email().getByRole("button", { name: "Edit" }));
     fireEvent.change(email().getByDisplayValue("kitchen@temple.org"), {
       target: { value: "office@temple.org" },
     });
@@ -861,6 +886,8 @@ describe("volunteer messages", () => {
     render(<SettingsRoute />);
     const section = await messages();
 
+    // The section opens read-only (T-169b), so a change starts with Edit.
+    fireEvent.click(section.getByRole("button", { name: "Edit" }));
     fireEvent.change(section.getByRole("spinbutton"), { target: { value: "6" } });
     fireEvent.click(section.getByRole("button", { name: "Save" }));
 
@@ -868,14 +895,25 @@ describe("volunteer messages", () => {
     expect(await section.findByText("Saved.")).toBeInTheDocument();
   });
 
+  /**
+   * Changed by T-169b. This used to assert the box's own sentence, "A cap is between 1 and 20
+   * messages", and a greyed-out Save. The section now uses `Form`: Save stays pressable, and pressing
+   * it names the box in red from its own `min` and `max`. Both ends are checked now, not only 0.
+   */
   it("refuses a cap outside the bounds the server enforces, before asking it", async () => {
     render(<SettingsRoute />);
     const section = await messages();
+    fireEvent.click(section.getByRole("button", { name: "Edit" }));
 
     fireEvent.change(section.getByRole("spinbutton"), { target: { value: "0" } });
+    fireEvent.click(section.getByRole("button", { name: "Save" }));
+    expect(await section.findByText("Update messages per shift, per day must be at least 1")).toBeInTheDocument();
 
-    expect(section.getByText(/A cap is between 1 and 20 messages/)).toBeInTheDocument();
-    expect(section.getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.change(section.getByRole("spinbutton"), { target: { value: "21" } });
+    fireEvent.click(section.getByRole("button", { name: "Save" }));
+    expect(await section.findByText("Update messages per shift, per day can be at most 20")).toBeInTheDocument();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(setBroadcastLimit).not.toHaveBeenCalled();
   });
 
@@ -883,6 +921,8 @@ describe("volunteer messages", () => {
     render(<SettingsRoute />);
     const section = await messages();
 
+    // Save exists only after Edit (T-169b). Unchanged is a reason of its own, so it still greys Save.
+    fireEvent.click(section.getByRole("button", { name: "Edit" }));
     expect(section.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 });

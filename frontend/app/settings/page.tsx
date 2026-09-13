@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Field } from "@/components/Field";
+import { Form } from "@/components/ds/Form";
 import { FieldRow } from "@/components/ds/FieldRow";
 import { HintedField } from "@/components/ds/InfoHint";
 import { RequireRole } from "@/components/RequireRole";
@@ -10,7 +11,7 @@ import { Loading } from "@/components/Loading";
 import { LanguageSection } from "@/components/LanguageSection";
 import { ThemeMiniature } from "@/components/ThemeMiniature";
 import { useAuth } from "@/lib/auth-context";
-import { moment } from "@/lib/format";
+import { moment, templeDay } from "@/lib/format";
 import {
   applyPalette,
   crossfadeTheme,
@@ -27,6 +28,8 @@ import {
   type PaymentSettingsView,
   type WebhookSubscriptionGroup,
   type WhatsAppSettingsView,
+  type WhatsAppTemplateIssueKind,
+  type WhatsAppTemplatesPending,
 } from "@/lib/api";
 import { normalizePhone } from "@/lib/phone";
 
@@ -37,6 +40,12 @@ import { normalizePhone } from "@/lib/phone";
  * independently — the keys reaching the provider, and the provider reaching us — and only the first
  * is something an administrator can prove by pressing a button. Put them at the foot and someone
  * presses Test, sees green, and spends a week wondering why no donation is ever confirmed.
+ *
+ * <p><b>Every section opens read-only, except Appearance (T-169).</b> Rajeev, 2026-09-13: *"The
+ * default state of the screen shuld be read only to avoid accidental mistakes."* Edit opens one
+ * section, and its button becomes Save, with Cancel beside it. Appearance stays a live picker, as he
+ * ruled: *"No, leave the color picker as is."* The Language section is `LanguageSection`, a
+ * component of its own, and is not yet under the rule. How it works is at {@link useEditMode}.
  */
 export default function SettingsRoute() {
   return (
@@ -169,6 +178,141 @@ function SettingsView() {
   );
 }
 
+// ---- Editing a section -----------------------------------------------------
+
+/**
+ * Read-only until Edit, on every section of this screen except Appearance (T-169).
+ *
+ * <p>Rajeev, 2026-09-13: *"The default state of the screen shuld be read only to avoid accidental
+ * mistakes. The way to get it to edit is using the 'Edit' button. When clicked the fields become
+ * editable and the button reads 'Save'."* Appearance is his one exception, *"No, leave the color
+ * picker as is."*, because picking a pack there is already only a preview until its own Save.
+ *
+ * <p><b>Each section keeps its own edit mode, so two can be open at once.</b> That is deliberate.
+ * Every Save sends only its own section, so an open section can never be committed by another
+ * section's button, and that is the accident the rule exists to prevent. Allowing one open section
+ * at a time would need an answer for pressing Edit on a second while the first holds typing:
+ * throwing the typing away without a word is worse than the accident, and greying the other Edit
+ * buttons out is the unexplained disabled button this screen has just stopped using.
+ *
+ * <p><b>Cancel puts back what the section showed at the moment Edit was pressed.</b> A snapshot
+ * rather than a re-read of the props, so it means the same thing in every section, whichever way each
+ * one happens to hold its values.
+ *
+ * <p><b>Closing remounts the section's `Form`</b>, through `formKey`. A red sentence goes when its
+ * box is typed in or the form is submitted again, and neither can happen once the boxes are
+ * read-only, so without the remount the sentence from a refused Save would outlive the Cancel that
+ * abandoned it.
+ */
+function useEditMode<T>(current: T, restore: (values: T) => void) {
+  const [editing, setEditing] = useState(false);
+  const [formKey, setFormKey] = useState(0);
+  const before = useRef(current);
+
+  function close() {
+    setEditing(false);
+    setFormKey((key) => key + 1);
+  }
+
+  return {
+    editing,
+    formKey,
+    open() {
+      before.current = current;
+      setEditing(true);
+    },
+    cancel() {
+      restore(before.current);
+      close();
+    },
+    /** After a Save the server accepted, when what is on the screen is what is saved. */
+    close,
+  };
+}
+
+/**
+ * Edit, or Cancel and Save, at the right-hand end of a section's footer.
+ *
+ * <p>Edit is quiet rather than primary. It commits nothing, and on the WhatsApp section the primary
+ * style belongs to the templates button whenever something is waiting, which is the one thing on this
+ * screen that asks to be pressed. Cancel comes before Save, as on every screen that commits (§4).
+ *
+ * <p>Save submits the section's `Form` from outside it with `form=`. That lets the form hold only the
+ * boxes, so a Test, Send or Reveal button elsewhere in the section can never submit it, and Enter in
+ * the test-message number box cannot save the account.
+ *
+ * <p>The buttons carry different keys so React builds a new element, rather than turning the Edit
+ * button into a submit button under the pointer that has just pressed it.
+ */
+function EditActions({
+  editing,
+  formId,
+  disabled,
+  saving,
+  saveLabel = "Save",
+  savingLabel = "Saving…",
+  saveDisabled = false,
+  onEdit,
+  onCancel,
+}: {
+  editing: boolean;
+  formId: string;
+  /** Something in this section is in flight. */
+  disabled: boolean;
+  saving: boolean;
+  saveLabel?: string;
+  savingLabel?: string;
+  /** A reason other than a box being wrong, which is `Form`'s to say. */
+  saveDisabled?: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+}) {
+  if (!editing) {
+    return (
+      <button
+        key="edit"
+        type="button"
+        onClick={onEdit}
+        disabled={disabled}
+        className="btn btn-quiet min-h-touch px-6 text-sm disabled:opacity-60"
+      >
+        Edit
+      </button>
+    );
+  }
+  return (
+    <>
+      <button
+        key="cancel"
+        type="button"
+        onClick={onCancel}
+        disabled={disabled}
+        className="btn btn-quiet min-h-touch px-5 text-sm disabled:opacity-60"
+      >
+        Cancel
+      </button>
+      <button
+        key="save"
+        type="submit"
+        form={formId}
+        disabled={disabled || saveDisabled}
+        className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
+      >
+        {saving ? savingLabel : saveLabel}
+      </button>
+    </>
+  );
+}
+
+/**
+ * A box showing a saved value that cannot be typed in until Edit. Recessed, like the masked secrets
+ * beside it, so it does not look like an empty invitation to type. `readOnly` rather than `disabled`:
+ * the value stays in the tab order, can be selected and copied, and a screen reader says "read only"
+ * rather than "dimmed". A `<select>` has no read-only state, so the one on this screen is disabled
+ * instead and takes the same fill.
+ */
+const READ_ONLY_BOX = "read-only:bg-sunken";
+
 // ---- Payment gateway -------------------------------------------------------
 
 function PaymentGatewaySection({
@@ -192,6 +336,16 @@ function PaymentGatewaySection({
   const [error, setError] = useState<ApiError | null>(null);
   const [saved, setSaved] = useState(false);
   const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
+  const secretId = useId();
+
+  const edit = useEditMode({ provider, keyId, keySecret, replacing }, (before) => {
+    setProvider(before.provider);
+    setKeyId(before.keyId);
+    setKeySecret(before.keySecret);
+    setReplacing(before.replacing);
+    setError(null);
+  });
+  const readOnly = !edit.editing;
 
   async function save() {
     setBusy("save");
@@ -206,6 +360,7 @@ function PaymentGatewaySection({
       setKeySecret("");
       setReplacing(false);
       setSaved(true);
+      edit.close();
     } catch (e) {
       setError(toApiError(e, "We couldn’t save that."));
     } finally {
@@ -281,84 +436,111 @@ function PaymentGatewaySection({
         />
       </div>
 
-      <div className="mt-6">
-        <HintedField label="Who handles your payments" hint="Ask us if yours is missing.">
-          {(id) => (
-            <select
-              id={id}
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
-            >
-              {providers.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          )}
-        </HintedField>
-      </div>
-
-      <div className="mt-5 grid gap-5 sm:grid-cols-2">
-        {/* Where to find the value is guidance — wanted once, on the day this is set up, and in the
-            way for good afterwards. The secret's own warning below is not, and stays visible. */}
-        <HintedField label="Key ID" hint="From your provider’s dashboard, under API keys.">
-          {(id) => (
-            <input
-              id={id}
-              value={keyId}
-              onChange={(e) => setKeyId(e.target.value)}
-              autoComplete="off"
-              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
-            />
-          )}
-        </HintedField>
-
-        {/*
-          Both of this field's notes stay visible while the Key ID's moved into an "i", and the
-          difference is not inconsistency. One says where to find a value; these say the value can
-          never be read back, and one of them carries a live date. A warning about something
-          irreversible that only appears under a pointer is a warning nobody was given.
-        */}
-        <div className="text-sm text-ink-secondary">
-          Key secret
-          {settings.configured && !replacing ? (
-            <>
-              {/* mt-1, not mt-1.5: HintedField sets the Key ID's label-to-box gap beside this one
-                  at gap-1, and the two boxes are in the same row of the same grid. */}
-              <div className="mt-1 flex gap-2">
-                <div className="flex min-h-touch flex-1 items-center rounded border border-hairline bg-sunken px-3 tracking-masked text-ink-muted">
-                  ••••••••••••••••
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setReplacing(true)}
-                  className="btn btn-quiet min-h-touch px-3 text-sm"
-                >
-                  Replace
-                </button>
-              </div>
-              <span className="mt-1.5 block text-xs text-ink-muted">
-                Saved {when(settings.keySecretSavedAt)}. Kept encrypted, and never shown again.
-              </span>
-            </>
-          ) : (
-            <>
-              <input
-                type="password"
-                value={keySecret}
-                onChange={(e) => setKeySecret(e.target.value)}
-                autoComplete="new-password"
-                className="mt-1 min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
-              />
-              <span className="mt-1.5 block text-xs text-ink-muted">
-                Stored encrypted, away from this temple’s records. It is never shown again.
-              </span>
-            </>
-          )}
+      {/*
+        The boxes, and only the boxes, are the form (T-169b). Key ID and a key secret being typed
+        carry `required`, so a blank one is named in red on Save. Save used to be greyed out until
+        both were filled, which told nobody which box it was waiting for.
+      */}
+      <Form
+        key={edit.formKey}
+        id="payment-gateway-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (edit.editing) void save();
+        }}
+      >
+        <div className="mt-6">
+          <HintedField label="Who handles your payments" hint="Ask us if yours is missing.">
+            {(id) => (
+              <select
+                id={id}
+                value={provider}
+                onChange={(e) => setProvider(e.target.value)}
+                disabled={readOnly}
+                className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink disabled:bg-sunken"
+              >
+                {providers.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </HintedField>
         </div>
-      </div>
+
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          {/* Where to find the value is guidance — wanted once, on the day this is set up, and in the
+              way for good afterwards. The secret's own warning below is not, and stays visible. */}
+          <HintedField label="Key ID" hint="From your provider’s dashboard, under API keys.">
+            {(id) => (
+              <input
+                id={id}
+                value={keyId}
+                onChange={(e) => setKeyId(e.target.value)}
+                readOnly={readOnly}
+                required
+                autoComplete="off"
+                className={`min-h-touch w-full rounded-control border border-hairline px-3 text-ink ${READ_ONLY_BOX}`}
+              />
+            )}
+          </HintedField>
+
+          {/*
+            Both of this field's notes stay visible while the Key ID's moved into an "i", and the
+            difference is not inconsistency. One says where to find a value; these say the value can
+            never be read back, and one of them carries a live date. A warning about something
+            irreversible that only appears under a pointer is a warning nobody was given.
+          */}
+          <div className="text-sm text-ink-secondary">
+            {settings.configured && !replacing ? (
+              <>
+                Key secret
+                {/* mt-1, not mt-1.5: HintedField sets the Key ID's label-to-box gap beside this one
+                    at gap-1, and the two boxes are in the same row of the same grid. */}
+                <div className="mt-1 flex gap-2">
+                  <div className="flex min-h-touch flex-1 items-center rounded border border-hairline bg-sunken px-3 tracking-masked text-ink-muted">
+                    ••••••••••••••••
+                  </div>
+                  {/* Replacing a secret is an edit, so it is offered only once Edit is pressed. */}
+                  {edit.editing && (
+                    <button
+                      type="button"
+                      onClick={() => setReplacing(true)}
+                      className="btn btn-quiet min-h-touch px-3 text-sm"
+                    >
+                      Replace
+                    </button>
+                  )}
+                </div>
+                <span className="mt-1.5 block text-xs text-ink-muted">
+                  Saved {when(settings.keySecretSavedAt)}. Kept encrypted, and never shown again.
+                </span>
+              </>
+            ) : (
+              <>
+                {/* A label now, not bare words beside the box. `Form` names a refused box from its
+                    label, and this box had none, so a blank secret would have been called "This
+                    field". A screen reader had no name for it either. */}
+                <label htmlFor={secretId}>Key secret</label>
+                <input
+                  id={secretId}
+                  type="password"
+                  value={keySecret}
+                  onChange={(e) => setKeySecret(e.target.value)}
+                  readOnly={readOnly}
+                  required
+                  autoComplete="new-password"
+                  className={`mt-1 min-h-touch w-full rounded-control border border-hairline px-3 text-ink ${READ_ONLY_BOX}`}
+                />
+                <span className="mt-1.5 block text-xs text-ink-muted">
+                  Stored encrypted, away from this temple’s records. It is never shown again.
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      </Form>
 
       {/*
         Where the provider lets us register the webhook ourselves, we have, and there is nothing to
@@ -480,31 +662,42 @@ function PaymentGatewaySection({
         a first-time setup never needs this button at all. That was true before and the button simply
         sat there greyed out, which reads as something broken rather than something not yet needed.
         It says why now.
+
+        While the section is being edited, the footer holds only Cancel and Save. Test connection
+        checks what is saved, not what is being typed, so offering it beside half-typed keys would
+        answer a question nobody asked.
       */}
       <div className="mt-7 flex flex-wrap items-center gap-3 border-t border-hairline pt-6">
-        <button
-          type="button"
-          onClick={test}
-          disabled={busy !== null || !settings.configured}
-          className="btn btn-quiet min-h-touch px-5 text-sm disabled:opacity-60"
-        >
-          {busy === "test" ? "Checking…" : "Test connection"}
-        </button>
-        {!settings.configured && (
-          <span className="text-sm text-ink-muted">
-            Press Save first. It checks your keys with {label(providers, provider)}, and this
-            button re-checks them later.
-          </span>
+        {!edit.editing && (
+          <>
+            <button
+              type="button"
+              onClick={test}
+              disabled={busy !== null || !settings.configured}
+              className="btn btn-quiet min-h-touch px-5 text-sm disabled:opacity-60"
+            >
+              {busy === "test" ? "Checking…" : "Test connection"}
+            </button>
+            {!settings.configured && (
+              <span className="text-sm text-ink-muted">
+                Press Edit and save your keys first. Save checks your keys with{" "}
+                {label(providers, provider)}, and this button re-checks them later.
+              </span>
+            )}
+          </>
         )}
         <span className="flex-1" />
-        <button
-          type="button"
-          onClick={save}
-          disabled={busy !== null || !keyId.trim() || (replacing && !keySecret.trim())}
-          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
-        >
-          {busy === "save" ? "Saving…" : "Save"}
-        </button>
+        <EditActions
+          editing={edit.editing}
+          formId="payment-gateway-form"
+          disabled={busy !== null}
+          saving={busy === "save"}
+          onEdit={() => {
+            setSaved(false);
+            edit.open();
+          }}
+          onCancel={edit.cancel}
+        />
       </div>
     </section>
   );
@@ -605,12 +798,63 @@ function CopyRow({ value }: { value: string }) {
 // ---- Messaging -------------------------------------------------------------
 
 /**
+ * What the view says is waiting when it carries no count. The server always sends one (T-169a); the
+ * field is optional in `api.ts` only while the settings test fixtures catch up, so this exists for
+ * the type, and reads as nothing waiting.
+ */
+const NOTHING_PENDING: WhatsAppTemplatesPending = { changed: 0, refused: 0, accountChanged: false };
+
+/** How Meta answered for one template, in words. `HELD_UNDER_ANOTHER_CATEGORY` is a note, not a fault. */
+const TEMPLATE_ISSUE_LABEL: Record<WhatsAppTemplateIssueKind, string> = {
+  REFUSED: "Refused",
+  NOT_REACHED: "Not reached",
+  HELD_UNDER_ANOTHER_CATEGORY: "Note",
+};
+
+/**
+ * What the templates button says (T-169, option 2). Rajeev chose a button that says what is waiting
+ * over a fixed "Reload WhatsApp templates": *"I like option 2. I tis clean and honest."*
+ *
+ * <p>`changed` and `refused` never count one template twice (T-169a), so when both are waiting they
+ * are added into one number. A changed account comes first, because then every template has to go to
+ * the new account whatever the counts say. A temple with no recorded send and nothing else to say is
+ * waiting too, since "last sent on" would have no date to give.
+ *
+ * <p>Every one of these is twelve words or fewer, in sentence case (§9).
+ */
+function templatesButtonLabel(pending: WhatsAppTemplatesPending, submittedAt: string | null): string {
+  if (pending.accountChanged) return "Templates not yet sent to your new WhatsApp account";
+  if (pending.changed > 0 && pending.refused > 0) {
+    return `${pending.changed + pending.refused} templates waiting to go to Meta`;
+  }
+  if (pending.changed > 0) {
+    return pending.changed === 1
+      ? "1 template changed since it was last sent"
+      : `${pending.changed} templates changed since they were last sent`;
+  }
+  if (pending.refused > 0) {
+    return pending.refused === 1
+      ? "1 template Meta did not accept last time"
+      : `${pending.refused} templates Meta did not accept last time`;
+  }
+  if (!submittedAt) return "Templates not yet sent to Meta";
+  return `Templates last sent to Meta on ${templeDay(submittedAt)}`;
+}
+
+/**
  * WhatsApp, in the same shape as the payment gateway above it, because to an administrator it is the
  * same kind of task: connect an account the temple owns, prove it works, be told what to paste where.
  *
  * <p>The two status lines are separate for the same reason as the gateway's. Whether our messages
  * reach Meta and whether Meta's receipts reach us fail independently, and only the first is settled
  * by pressing a button.
+ *
+ * <p><b>Templates go to Meta by their own button (T-169).</b> The first connection still sends them,
+ * because a temple that has just connected has nothing at Meta yet. After that Save only saves the
+ * account, and the templates button sends whatever is waiting: wording a release changed, templates
+ * Meta did not take last time, or everything, when the account itself changed. The button is shown
+ * only once the temple is connected, because pressing it before that is refused (KMS-400001, the same
+ * answer as the test message).
  */
 function MessagingSection({
   settings,
@@ -626,7 +870,7 @@ function MessagingSection({
   const [accessToken, setAccessToken] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [replacing, setReplacing] = useState(!settings.connected);
-  const [busy, setBusy] = useState<"save" | "test" | "reveal" | null>(null);
+  const [busy, setBusy] = useState<"save" | "test" | "reveal" | "reload" | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [saved, setSaved] = useState(false);
   const [verifyToken, setVerifyToken] = useState<string | null>(null);
@@ -636,6 +880,34 @@ function MessagingSection({
   const [askingForNumber, setAskingForNumber] = useState(false);
   const [testNumber, setTestNumber] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
+  // Sending templates takes as long as Meta takes to answer twenty of them, a minute or more. The
+  // ref is the guard against a second press, because a second click can land before React has
+  // re-rendered the button as disabled.
+  const [reloadError, setReloadError] = useState<ApiError | null>(null);
+  const [reloaded, setReloaded] = useState(false);
+  const reloading = useRef(false);
+
+  const edit = useEditMode({ phoneNumberId, wabaId, accessToken, appSecret, replacing }, (before) => {
+    setPhoneNumberId(before.phoneNumberId);
+    setWabaId(before.wabaId);
+    setAccessToken(before.accessToken);
+    setAppSecret(before.appSecret);
+    setReplacing(before.replacing);
+    setError(null);
+  });
+  const readOnly = !edit.editing;
+
+  // Present on every answer the server gives (T-169a); the fallbacks are for the optional type only.
+  const pending = settings.templatesPending ?? NOTHING_PENDING;
+  const issues = settings.refusedTemplates ?? [];
+  const waiting =
+    pending.accountChanged || pending.changed + pending.refused > 0 || !settings.templatesSubmittedAt;
+  const reloadStyle = waiting ? "btn-primary" : "btn-quiet";
+  // Waiting ones first. A note about a category is not something to act on, so it goes last.
+  const listed = [...issues].sort(
+    (a, b) =>
+      Number(a.kind === "HELD_UNDER_ANOTHER_CATEGORY") - Number(b.kind === "HELD_UNDER_ANOTHER_CATEGORY")
+  );
 
   async function save() {
     setBusy("save");
@@ -656,9 +928,33 @@ function MessagingSection({
       setAppSecret("");
       setReplacing(false);
       setSaved(true);
+      edit.close();
     } catch (e) {
       setError(toApiError(e, "We couldn’t connect that WhatsApp account."));
     } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Sends every template that is waiting, and shows what came back. The answer is the whole settings
+   * view, so the button's own words and the list under it are Meta's answer to this press.
+   */
+  async function reload() {
+    if (reloading.current) return;
+    reloading.current = true;
+    setBusy("reload");
+    setReloadError(null);
+    setReloaded(false);
+    setSaved(false);
+    setSentTo(null);
+    try {
+      onChanged(await api.reloadWhatsAppTemplates(await getToken()));
+      setReloaded(true);
+    } catch (e) {
+      setReloadError(toApiError(e, "We couldn’t send your templates to Meta."));
+    } finally {
+      reloading.current = false;
       setBusy(null);
     }
   }
@@ -719,7 +1015,7 @@ function MessagingSection({
           detail={
             settings.verifiedAt
               ? `Last checked ${when(settings.verifiedAt)}.`
-              : "Enter the four values below and press Connect."
+              : "Press Edit, enter the four values below, then press Connect."
           }
         />
         <Check
@@ -739,96 +1035,122 @@ function MessagingSection({
         />
       </div>
 
-      <div className="mt-6 grid gap-5 sm:grid-cols-2">
-        {/* All four of these are "go to this page in Meta's dashboard and copy that box" — read
-            once and never again, so they sit in the "i" rather than under four boxes in a row. */}
-        <HintedField
-          label="Phone number ID"
-          hint="Under WhatsApp → API Setup. Not the phone number, the id beneath it."
-        >
-          {(id) => (
-            <input
-              id={id}
-              value={phoneNumberId}
-              onChange={(e) => setPhoneNumberId(e.target.value)}
-              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
-            />
-          )}
-        </HintedField>
+      {/*
+        The four boxes are the form (T-169b). The two ids always carry `required`, and so do the token
+        and the app secret whenever they are being typed: connecting needs both, and so does
+        replacing them, because Meta checks the pair together. Save used to be greyed out until all
+        four were filled, which never said which one it was waiting for.
+      */}
+      <Form
+        key={edit.formKey}
+        id="whatsapp-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (edit.editing) void save();
+        }}
+      >
+        <div className="mt-6 grid gap-5 sm:grid-cols-2">
+          {/* All four of these are "go to this page in Meta's dashboard and copy that box" — read
+              once and never again, so they sit in the "i" rather than under four boxes in a row. */}
+          <HintedField
+            label="Phone number ID"
+            hint="Under WhatsApp → API Setup. Not the phone number, the id beneath it."
+          >
+            {(id) => (
+              <input
+                id={id}
+                value={phoneNumberId}
+                onChange={(e) => setPhoneNumberId(e.target.value)}
+                readOnly={readOnly}
+                required
+                className={`min-h-touch w-full rounded-control border border-hairline px-3 text-ink ${READ_ONLY_BOX}`}
+              />
+            )}
+          </HintedField>
 
-        <HintedField
-          label="WhatsApp Business Account ID"
-          hint="On the same screen. This is what owns your approved message templates."
-        >
-          {(id) => (
-            <input
-              id={id}
-              value={wabaId}
-              onChange={(e) => setWabaId(e.target.value)}
-              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
-            />
-          )}
-        </HintedField>
+          <HintedField
+            label="WhatsApp Business Account ID"
+            hint="On the same screen. This is what owns your approved message templates."
+          >
+            {(id) => (
+              <input
+                id={id}
+                value={wabaId}
+                onChange={(e) => setWabaId(e.target.value)}
+                readOnly={readOnly}
+                required
+                className={`min-h-touch w-full rounded-control border border-hairline px-3 text-ink ${READ_ONLY_BOX}`}
+              />
+            )}
+          </HintedField>
 
-        <div className="sm:col-span-2 grid gap-5 sm:grid-cols-2">
-          {settings.connected && !replacing ? (
-            <div className="sm:col-span-2">
-              <p className="text-sm text-ink-secondary">Access token and app secret</p>
-              <div className="mt-1.5 flex gap-2">
-                <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-masked text-ink-muted">
-                  ••••••••••••••••••••
+          <div className="sm:col-span-2 grid gap-5 sm:grid-cols-2">
+            {settings.connected && !replacing ? (
+              <div className="sm:col-span-2">
+                <p className="text-sm text-ink-secondary">Access token and app secret</p>
+                <div className="mt-1.5 flex gap-2">
+                  <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-masked text-ink-muted">
+                    ••••••••••••••••••••
+                  </div>
+                  {/* Replacing them is an edit, so it is offered only once Edit is pressed. */}
+                  {edit.editing && (
+                    <button
+                      type="button"
+                      onClick={() => setReplacing(true)}
+                      className="btn btn-quiet min-h-touch px-3 text-sm"
+                    >
+                      Replace
+                    </button>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setReplacing(true)}
-                  className="btn btn-quiet min-h-touch px-3 text-sm"
-                >
-                  Replace
-                </button>
+                {/* Stays on the page while the four field hints around it moved into an "i". It is
+                    not guidance: it says these two can never be read back. */}
+                <span className="mt-1.5 block text-xs text-ink-muted">
+                  Stored encrypted, away from this temple’s records. Neither is ever shown again.
+                </span>
               </div>
-              {/* Stays on the page while the four field hints around it moved into an "i". It is
-                  not guidance: it says these two can never be read back. */}
-              <span className="mt-1.5 block text-xs text-ink-muted">
-                Stored encrypted, away from this temple’s records. Neither is ever shown again.
-              </span>
-            </div>
-          ) : (
-            <>
-              <HintedField
-                label="Permanent access token"
-                hint="A System User token. The temporary one expires in a day."
-              >
-                {(id) => (
-                  <input
-                    id={id}
-                    type="password"
-                    value={accessToken}
-                    onChange={(e) => setAccessToken(e.target.value)}
-                    autoComplete="new-password"
-                    className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
-                  />
-                )}
-              </HintedField>
+            ) : (
+              <>
+                <HintedField
+                  label="Permanent access token"
+                  hint="A System User token. The temporary one expires in a day."
+                >
+                  {(id) => (
+                    <input
+                      id={id}
+                      type="password"
+                      value={accessToken}
+                      onChange={(e) => setAccessToken(e.target.value)}
+                      readOnly={readOnly}
+                      required
+                      autoComplete="new-password"
+                      className={`min-h-touch w-full rounded-control border border-hairline px-3 text-ink ${READ_ONLY_BOX}`}
+                    />
+                  )}
+                </HintedField>
 
-              <HintedField
-                label="App secret"
-                hint="App settings → Basic. We check every delivery receipt against it."
-              >
-                {(id) => (
-                  <input
-                    id={id}
-                    type="password"
-                    value={appSecret}
-                    onChange={(e) => setAppSecret(e.target.value)}
-                    autoComplete="new-password"
-                    className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
-                  />
-                )}
-              </HintedField>
-            </>
-          )}
+                <HintedField
+                  label="App secret"
+                  hint="App settings → Basic. We check every delivery receipt against it."
+                >
+                  {(id) => (
+                    <input
+                      id={id}
+                      type="password"
+                      value={appSecret}
+                      onChange={(e) => setAppSecret(e.target.value)}
+                      readOnly={readOnly}
+                      required
+                      autoComplete="new-password"
+                      className={`min-h-touch w-full rounded-control border border-hairline px-3 text-ink ${READ_ONLY_BOX}`}
+                    />
+                  )}
+                </HintedField>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      </Form>
 
       {settings.connected && settings.webhookUrl && (
         <>
@@ -881,12 +1203,90 @@ function MessagingSection({
               detail="On the same screen, under Webhook fields, tick messages. That one carries delivery receipts."
             />
           </ol>
+        </>
+      )}
 
-          <p className="mt-5 max-w-[60ch] text-sm text-ink-secondary">
-            {settings.templatesSubmittedAt
-              ? `Your message templates went to Meta on ${when(settings.templatesSubmittedAt)}. Until one is approved, messages using it fall back to SMS.`
-              : "Templates go to Meta for approval when you connect. You write none of them."}
+      {/*
+        The templates, once there is an account to hold them (T-169b). The date they were last sent
+        is the quiet button's own words and is said nowhere else, so it cannot be said twice.
+
+        The button steps aside while the section is being edited, for the same reason as Test: it
+        sends to the account that is saved, and beside a half-typed new account that is not the one
+        anybody would expect.
+      */}
+      {settings.connected && (
+        <>
+          <h3 className="mt-8 text-base font-semibold text-ink">Message templates</h3>
+          <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+            Until Meta approves a template, messages using it go by SMS.
           </p>
+
+          {!edit.editing && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={reload}
+                disabled={busy !== null}
+                aria-busy={busy === "reload"}
+                className={`btn ${reloadStyle} min-h-touch px-5 text-sm transition-colors duration-state disabled:opacity-60`}
+              >
+                {busy === "reload"
+                  ? "Sending templates to Meta…"
+                  : templatesButtonLabel(pending, settings.templatesSubmittedAt)}
+              </button>
+              {busy === "reload" && (
+                <span role="status" className="text-sm text-ink-muted">
+                  This can take a minute or two.
+                </span>
+              )}
+            </div>
+          )}
+
+          {reloadError && (
+            <div role="alert" className="mt-4 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
+              <p className="font-medium">{reloadError.message}</p>
+              <p className="mt-0.5">{reloadError.action}</p>
+            </div>
+          )}
+          {reloaded && !reloadError && (
+            <p role="status" className={`mt-3 text-sm ${waiting ? "text-ink-secondary" : "text-success"}`}>
+              {waiting ? "Sent to Meta. Some templates still need attention." : "Templates sent to Meta."}
+            </p>
+          )}
+
+          {/*
+            What Meta said about each template on the last send. A refusal and a template Meta never
+            answered for each give their stored plain reason, and are what the button is waiting to
+            send again. A template Meta holds under another category is a note: Meta keeps it as
+            marketing, and sending it again cannot change that, so it is not counted as waiting and
+            says so.
+          */}
+          {listed.length > 0 && (
+            <ul className="mt-5 grid gap-3" aria-label="What Meta said about each template">
+              {listed.map((issue) => {
+                const note = issue.kind === "HELD_UNDER_ANOTHER_CATEGORY";
+                return (
+                  <li key={issue.name} className="flex items-start gap-3">
+                    <span
+                      className={[
+                        "mt-0.5 shrink-0 rounded-full px-2.5 py-0.5 text-xs",
+                        note ? "bg-sunken text-ink-secondary" : "bg-warning-bg text-warning",
+                      ].join(" ")}
+                    >
+                      {TEMPLATE_ISSUE_LABEL[issue.kind]}
+                    </span>
+                    <span className="grid min-w-0">
+                      <span className="break-words font-mono text-xs text-ink">{issue.name}</span>
+                      <span className="max-w-[70ch] text-xs text-ink-secondary">
+                        {issue.reason}
+                        {note && " Sending again cannot change this."}
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </>
       )}
 
@@ -906,7 +1306,15 @@ function MessagingSection({
       )}
 
       <div className="mt-7 flex flex-wrap items-end gap-3 border-t border-hairline pt-6">
-        {askingForNumber ? (
+        {edit.editing ? (
+          // What Save does to templates, said where it is about to be pressed. A first connection
+          // sends them; after that, Save only saves, and the templates button above does the sending.
+          <span className="text-sm text-ink-muted">
+            {settings.connected
+              ? "Saving does not send templates to Meta."
+              : "Connecting also sends your message templates to Meta."}
+          </span>
+        ) : askingForNumber ? (
           <>
             <div className="min-w-0 flex-1 sm:max-w-xs">
               <HintedField
@@ -961,25 +1369,29 @@ function MessagingSection({
             Send a test message
           </button>
         )}
-        {!settings.connected && (
+        {!edit.editing && !settings.connected && (
           <span className="text-sm text-ink-muted">
-            Press Connect first. Then this sends a real message to a phone you choose.
+            Press Edit and connect your account first. Then this sends a real message to a phone you
+            choose.
           </span>
         )}
         <span className="flex-1" />
-        <button
-          type="button"
-          onClick={save}
-          disabled={
-            busy !== null ||
-            !phoneNumberId.trim() ||
-            !wabaId.trim() ||
-            (replacing && (!accessToken.trim() || !appSecret.trim()))
-          }
-          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
-        >
-          {busy === "save" ? "Connecting…" : settings.connected ? "Save" : "Connect"}
-        </button>
+        <EditActions
+          editing={edit.editing}
+          formId="whatsapp-form"
+          disabled={busy !== null}
+          saving={busy === "save"}
+          saveLabel={settings.connected ? "Save" : "Connect"}
+          savingLabel={settings.connected ? "Saving…" : "Connecting…"}
+          onEdit={() => {
+            setAskingForNumber(false);
+            setSentTo(null);
+            setSaved(false);
+            setReloaded(false);
+            edit.open();
+          }}
+          onCancel={edit.cancel}
+        />
       </div>
     </section>
   );
@@ -991,6 +1403,9 @@ function MessagingSection({
  * <p>Sending is always from the platform's address, because SPF and DKIM are records on the domain a
  * message claims to come from and a temple cannot pass them for a domain it does not own — mail sent
  * as the temple would land in spam. So what a temple sets is not who sends, but where a reply goes.
+ *
+ * <p>The box is not `required`: left empty, a reply reaches the platform instead, which is a real
+ * choice. What `Form` does refuse here is an address that is not one, from the box's `type="email"`.
  */
 function EmailSection({
   initial,
@@ -1004,6 +1419,11 @@ function EmailSection({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
+  const edit = useEditMode(email, (before) => {
+    setEmail(before);
+    setError(null);
+  });
+
   async function save() {
     setBusy(true);
     setError(null);
@@ -1011,6 +1431,7 @@ function EmailSection({
     try {
       await api.saveTempleContactEmail(email.trim(), await getToken());
       setSaved(true);
+      edit.close();
     } catch (e) {
       setError(toApiError(e, "We couldn’t save that."));
     } finally {
@@ -1039,7 +1460,15 @@ function EmailSection({
 
       {/* What happens if it is left blank — guidance, not a warning about anything irreversible,
           and the panel above already shows the live consequence as "Reply-To: not set". */}
-      <div className="mt-6 max-w-md">
+      <Form
+        key={edit.formKey}
+        id="email-form"
+        className="mt-6 max-w-md"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (edit.editing) void save();
+        }}
+      >
         <HintedField
           label="Your temple’s email address"
           hint="Leave it empty and a reply reaches us instead of you."
@@ -1050,12 +1479,13 @@ function EmailSection({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              readOnly={!edit.editing}
               placeholder="kitchen@yourtemple.org"
-              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
+              className={`min-h-touch w-full rounded-control border border-hairline px-3 text-ink ${READ_ONLY_BOX}`}
             />
           )}
         </HintedField>
-      </div>
+      </Form>
 
       {error && (
         <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
@@ -1067,14 +1497,17 @@ function EmailSection({
 
       <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
         <span className="flex-1" />
-        <button
-          type="button"
-          onClick={save}
+        <EditActions
+          editing={edit.editing}
+          formId="email-form"
           disabled={busy}
-          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
-        >
-          {busy ? "Saving…" : "Save"}
-        </button>
+          saving={busy}
+          onEdit={() => {
+            setSaved(false);
+            edit.open();
+          }}
+          onCancel={edit.cancel}
+        />
       </div>
     </section>
   );
@@ -1318,6 +1751,20 @@ const MIN_BROADCAST = 1;
 const MAX_BROADCAST = 20;
 
 /**
+ * A number box with its unit after it, laid out so `Form`'s sentence has somewhere to go.
+ *
+ * <p>`Form` puts its red sentence straight after the box it refuses. These boxes used to sit inside a
+ * 7rem wrapper, which would have squeezed the sentence into 7rem, or beside their unit, which would
+ * have put it between the box and the word "days". So the box is a direct child of a wrapping row,
+ * and the sentence's slot is sent after the unit (`order-last`) onto a line of its own
+ * (`basis-full`). The box's width is forced over `Field`'s `w-full`, whose order in the stylesheet
+ * is not ours to rely on.
+ */
+const NUMBER_ROW =
+  "flex flex-wrap items-center gap-x-2 [&>[data-form-error-slot]]:order-last [&>[data-form-error-slot]]:basis-full";
+const NUMBER_BOX = `!w-28 ${READ_ONLY_BOX}`;
+
+/**
  * How many update messages may go out about one shift in a day.
  *
  * <p><b>Why this screen exists at all.</b> `KMS-400065` has always ended "or ask a Temple Admin to
@@ -1331,6 +1778,11 @@ const MAX_BROADCAST = 20;
  * Those three are all "how long before a date do you want telling"; this is "how often may we
  * message somebody", which is a question about volunteers rather than about dates — and it is
  * answered by the same person for a different reason.
+ *
+ * <p><b>The bounds are the box's own `min`, `max` and `required` (T-169b).</b> A cap out of range
+ * used to print its own sentence under the box and grey Save out. `Form` now names the box in red
+ * when Save is pressed, from the same attributes, so there is one rule and one sentence. Save stays
+ * greyed out only while nothing has changed, which is a different reason and still a true one.
  */
 function VolunteerMessagesSection({
   initial,
@@ -1346,12 +1798,15 @@ function VolunteerMessagesSection({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const limit = asBroadcastLimit(value);
-  const limitError = limit === null ? `A cap is between ${MIN_BROADCAST} and ${MAX_BROADCAST} messages.` : undefined;
-  const unchanged = limit === initial;
+  const edit = useEditMode(value, (before) => {
+    setValue(before);
+    setError(null);
+  });
+  const unchanged = value === String(initial);
 
   async function save() {
-    if (limit === null) return;
+    // `Form` has already refused anything that is not a whole number from 1 to 20.
+    const limit = Number(value);
     setBusy(true);
     setError(null);
     setSaved(false);
@@ -1359,6 +1814,7 @@ function VolunteerMessagesSection({
       await api.setBroadcastLimit(limit, await getToken());
       onSaved(limit);
       setSaved(true);
+      edit.close();
     } catch (e) {
       setError(toApiError(e, "We couldn’t save that."));
     } finally {
@@ -1373,34 +1829,45 @@ function VolunteerMessagesSection({
         How often a shift may message the volunteers on it.
       </p>
 
-      <div className="mt-6 max-w-md">
+      <Form
+        key={edit.formKey}
+        id="volunteer-messages-form"
+        className="mt-6 max-w-md"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (edit.editing) void save();
+        }}
+      >
+        {/* `required` on the box rather than on `Field`: the box always opens on the temple's own
+            number, so a "(required)" beside its label would tell nobody anything. The attribute is
+            there so a box somebody clears is named rather than sent. */}
         <Field
           id="volunteer-broadcast-daily-limit"
           label="Update messages per shift, per day"
           hint="Reached the cap? The coordinator is told to try tomorrow, or to ask you to raise it. This is where you raise it."
-          error={limitError}
         >
           {(props) => (
-            <div className="flex items-center gap-2">
-              <span className="block w-28">
-                <input
-                  {...props}
-                  type="number"
-                  inputMode="numeric"
-                  min={MIN_BROADCAST}
-                  max={MAX_BROADCAST}
-                  value={value}
-                  onChange={(e) => {
-                    setValue(e.target.value);
-                    setSaved(false);
-                  }}
-                />
-              </span>
+            <div className={NUMBER_ROW}>
+              <input
+                {...props}
+                className={`${props.className} ${NUMBER_BOX}`}
+                type="number"
+                inputMode="numeric"
+                min={MIN_BROADCAST}
+                max={MAX_BROADCAST}
+                required
+                readOnly={!edit.editing}
+                value={value}
+                onChange={(e) => {
+                  setValue(e.target.value);
+                  setSaved(false);
+                }}
+              />
               <span className="text-sm text-ink-secondary">a day</span>
             </div>
           )}
         </Field>
-      </div>
+      </Form>
 
       <p className="mt-3 max-w-[60ch] text-sm text-ink-secondary">
         The cap is per shift, not per temple: a busy Sunday with four shifts on it can still send
@@ -1418,32 +1885,26 @@ function VolunteerMessagesSection({
 
       <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
         <span className="flex-1" />
-        <button
-          type="button"
-          onClick={save}
-          disabled={busy || unchanged || limit === null}
-          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
-        >
-          {busy ? "Saving…" : "Save"}
-        </button>
+        <EditActions
+          editing={edit.editing}
+          formId="volunteer-messages-form"
+          disabled={busy}
+          saving={busy}
+          saveDisabled={unchanged}
+          onEdit={() => {
+            setSaved(false);
+            edit.open();
+          }}
+          onCancel={edit.cancel}
+        />
       </div>
     </section>
   );
 }
 
-/** The typed cap, or null when it is not a whole number inside the bounds the server enforces. */
-function asBroadcastLimit(raw: string): number | null {
-  const n = Number(raw.trim());
-  if (!Number.isInteger(n) || n < MIN_BROADCAST || n > MAX_BROADCAST) {
-    return null;
-  }
-  return n;
-}
-
 /** The bounds the request record and the database both carry. Kept here so the box says so too. */
 const MIN_WARNING_DAYS = 1;
 const MAX_WARNING_DAYS = 365;
-const OUT_OF_RANGE = `A warning is between ${MIN_WARNING_DAYS} and ${MAX_WARNING_DAYS} days.`;
 
 /**
  * The three horizons, together.
@@ -1460,6 +1921,11 @@ const OUT_OF_RANGE = `A warning is between ${MIN_WARNING_DAYS} and ${MAX_WARNING
  *
  * <p>None of the three does anything beyond deciding which rows carry a warning badge. No vendor is
  * dropped, no batch is written off, and no machine is taken out of service by a date.
+ *
+ * <p><b>The bounds are each box's `min`, `max` and `required` (T-169b)</b>, and `Form` names a box
+ * that breaks them when Save is pressed. Each box used to print "A warning is between 1 and 365
+ * days." under itself as it was typed, and grey Save out until all three were in range, so two
+ * checks said the same thing in two places. Now there is one.
  */
 function WarningsSection({
   stockExpiryDays,
@@ -1481,15 +1947,19 @@ function WarningsSection({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const stockDays = asDays(stock);
-  const contractDays = asDays(contract);
-  const serviceDays = asDays(service);
-  const stockError = stockDays === null ? OUT_OF_RANGE : undefined;
-  const contractError = contractDays === null ? OUT_OF_RANGE : undefined;
-  const serviceError = serviceDays === null ? OUT_OF_RANGE : undefined;
+  const edit = useEditMode({ stock, contract, service }, (before) => {
+    setStock(before.stock);
+    setContract(before.contract);
+    setService(before.service);
+    setError(null);
+  });
+  const readOnly = !edit.editing;
 
   async function save() {
-    if (stockDays === null || contractDays === null || serviceDays === null) return;
+    // `Form` has already refused anything that is not a whole number of days from 1 to 365.
+    const stockDays = Number(stock);
+    const contractDays = Number(contract);
+    const serviceDays = Number(service);
     setBusy(true);
     setError(null);
     setSaved(false);
@@ -1504,6 +1974,7 @@ function WarningsSection({
       );
       onSaved(stockDays, contractDays, serviceDays);
       setSaved(true);
+      edit.close();
     } catch (e) {
       setError(toApiError(e, "We couldn’t save that."));
     } finally {
@@ -1518,88 +1989,99 @@ function WarningsSection({
         How much notice you want before a date runs out on you.
       </p>
 
-      <FieldRow className="mt-6">
-        <Field
-          id="stock-expiry-warning-days"
-          label="Notice before stock expires"
-          hint="Batches closer than this are badged on Inventory."
-          error={stockError}
-        >
-          {(props) => (
-            <div className="flex items-center gap-2">
-              <span className="block w-28">
+      {/* `required` on each box rather than on `Field`, for the reason given under Volunteer
+          messages: each opens on the temple's own number. */}
+      <Form
+        key={edit.formKey}
+        id="warnings-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (edit.editing) void save();
+        }}
+      >
+        <FieldRow className="mt-6">
+          <Field
+            id="stock-expiry-warning-days"
+            label="Notice before stock expires"
+            hint="Batches closer than this are badged on Inventory."
+          >
+            {(props) => (
+              <div className={NUMBER_ROW}>
                 <input
                   {...props}
+                  className={`${props.className} ${NUMBER_BOX}`}
                   type="number"
                   inputMode="numeric"
                   min={MIN_WARNING_DAYS}
                   max={MAX_WARNING_DAYS}
+                  required
+                  readOnly={readOnly}
                   value={stock}
                   onChange={(e) => {
                     setStock(e.target.value);
                     setSaved(false);
                   }}
                 />
-              </span>
-              <span className="text-sm text-ink-secondary">days</span>
-            </div>
-          )}
-        </Field>
+                <span className="text-sm text-ink-secondary">days</span>
+              </div>
+            )}
+          </Field>
 
-        <Field
-          id="contract-end-warning-days"
-          label="Notice before a vendor contract ends"
-          hint="Enough time to renegotiate, or to find somebody else."
-          error={contractError}
-        >
-          {(props) => (
-            <div className="flex items-center gap-2">
-              <span className="block w-28">
+          <Field
+            id="contract-end-warning-days"
+            label="Notice before a vendor contract ends"
+            hint="Enough time to renegotiate, or to find somebody else."
+          >
+            {(props) => (
+              <div className={NUMBER_ROW}>
                 <input
                   {...props}
+                  className={`${props.className} ${NUMBER_BOX}`}
                   type="number"
                   inputMode="numeric"
                   min={MIN_WARNING_DAYS}
                   max={MAX_WARNING_DAYS}
+                  required
+                  readOnly={readOnly}
                   value={contract}
                   onChange={(e) => {
                     setContract(e.target.value);
                     setSaved(false);
                   }}
                 />
-              </span>
-              <span className="text-sm text-ink-secondary">days</span>
-            </div>
-          )}
-        </Field>
+                <span className="text-sm text-ink-secondary">days</span>
+              </div>
+            )}
+          </Field>
 
-        <Field
-          id="equipment-service-warning-days"
-          label="Notice before a machine is due a service"
-          hint="Long enough to get the engineer booked."
-          error={serviceError}
-        >
-          {(props) => (
-            <div className="flex items-center gap-2">
-              <span className="block w-28">
+          <Field
+            id="equipment-service-warning-days"
+            label="Notice before a machine is due a service"
+            hint="Long enough to get the engineer booked."
+          >
+            {(props) => (
+              <div className={NUMBER_ROW}>
                 <input
                   {...props}
+                  className={`${props.className} ${NUMBER_BOX}`}
                   type="number"
                   inputMode="numeric"
                   min={MIN_WARNING_DAYS}
                   max={MAX_WARNING_DAYS}
+                  required
+                  readOnly={readOnly}
                   value={service}
                   onChange={(e) => {
                     setService(e.target.value);
                     setSaved(false);
                   }}
                 />
-              </span>
-              <span className="text-sm text-ink-secondary">days</span>
-            </div>
-          )}
-        </Field>
-      </FieldRow>
+                <span className="text-sm text-ink-secondary">days</span>
+              </div>
+            )}
+          </Field>
+        </FieldRow>
+      </Form>
 
       <p className="mt-4 max-w-[60ch] text-sm text-ink-secondary">
         All three only put a badge on a screen. Nothing is dropped or written off.
@@ -1615,29 +2097,20 @@ function WarningsSection({
 
       <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
         <span className="flex-1" />
-        <button
-          type="button"
-          onClick={save}
-          disabled={
-            busy ||
-            stockError !== undefined ||
-            contractError !== undefined ||
-            serviceError !== undefined
-          }
-          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
-        >
-          {busy ? "Saving…" : "Save"}
-        </button>
+        <EditActions
+          editing={edit.editing}
+          formId="warnings-form"
+          disabled={busy}
+          saving={busy}
+          onEdit={() => {
+            setSaved(false);
+            edit.open();
+          }}
+          onCancel={edit.cancel}
+        />
       </div>
     </section>
   );
-}
-
-/** A whole number of days inside the bounds, or null — which is the only thing that is an error. */
-function asDays(value: string): number | null {
-  if (!/^\d+$/.test(value.trim())) return null;
-  const days = Number(value.trim());
-  return days >= MIN_WARNING_DAYS && days <= MAX_WARNING_DAYS ? days : null;
 }
 
 // ---- helpers ---------------------------------------------------------------

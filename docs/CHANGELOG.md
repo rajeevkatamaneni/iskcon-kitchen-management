@@ -1182,6 +1182,43 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-13 — My donations for volunteers, Settings opens read-only, ten blank-box buttons press, and Meta's template status per temple (wave 4a; tasks T-179, T-172, T-178, T-169b)
+
+**Adds migration `V131`**; staging was at `V130`. One new permission, `VIEW_OWN_DONATIONS`, and one new
+audit action, `WHATSAPP_TEMPLATE_STATUS_REFRESHED`. No new error code. **Not driven in a browser, and not
+seen working by Rajeev.**
+
+**Volunteers see their own gifts and receipts (T-179).** Rajeev, 2026-09-13: *"The default should be, the
+users should be able to see all the donations they made and receipts for each one of those donations that
+were sucessful."* A new *My donations* row sits beside Donate for volunteers. It lists completed gifts that
+are not struck and not anonymous, each with a receipt download once one is issued. A gift is theirs when it
+was made from their account, or when its phone or email matches one Firebase has verified for them. Never
+by name or PAN. Anyone else's gift, or one that does not exist, answers 404 `KMS-400030` alike. The admin's
+Send receipt is unchanged and stays the fallback. Counter gifts rarely match yet, because the counter form
+does not store the phone in `+91` form.
+
+**Ten submit buttons press while a box is blank (T-172).** They were greyed out until something was typed,
+with nothing saying why. Pressing now names the blank box in red and sends nothing: void a gift, the vendor
+status dialog, record a donation, a new order, two on an invoice, take a staff member back on (now its own
+`Reinstate` component), save a conduct note, Give, and record a meal correction. Give's amount is a
+whole-rupee number box with a minimum of 1.
+
+**Meta's template status per temple (T-178).** Each card on the Super Admin *WhatsApp templates* screen
+shows counts across temples (approved, pending, refused, held as marketing), never which temples. Each
+temple's page gets a collapsed *WhatsApp templates* section with Meta's status, category and whether the
+wording matches, as of the time the copy was taken. `V131` stores that copy per temple, under Row-Level
+Security. Refresh needs `MANAGE_TENANTS`, uses the temple's own token and writes an audit entry on that
+temple; each temple's own Reload also replaces the copy, without one. Nothing here writes to Meta. The
+lookup now asks Meta for `rejected_reason` too, which has not yet been checked against real Meta.
+
+**Settings opens read-only (T-169b).** Rajeev's option 2. Every section except Appearance opens read-only
+with Edit, then Cancel and Save; Cancel puts back what was there. The WhatsApp section's templates button is
+quiet when nothing is waiting and prominent when templates changed, were refused, or the account changed,
+saying what is waiting. The Language section is still always editable; that is T-185, queued.
+
+**Not done:** none of the four has been seen in a real browser. Proofs with negative controls are in
+`docs/work/proof/T-179.md`, `T-172.md`, `T-178.md` and `T-169b.md`.
+
 ### 2026-09-13 — A "(required)" box is really required, a temple can no longer be added at 0,0, and Super Admins can read every WhatsApp template (tasks T-174, T-176, T-177)
 
 **Adds migration `V130`**; staging was at `V129`. No new error code; `KMS-400002`'s next step is
