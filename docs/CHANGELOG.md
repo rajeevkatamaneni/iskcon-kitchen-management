@@ -1182,6 +1182,37 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-13 — A "(required)" box is really required, a temple can no longer be added at 0,0, and Super Admins can read every WhatsApp template (tasks T-174, T-176, T-177)
+
+**Adds migration `V130`**; staging was at `V129`. No new error code; `KMS-400002`'s next step is
+reworded. **Not driven in a browser, and not seen working by Rajeev.**
+
+**A box marked "(required)" is required (T-174).** `Field` printed *"(required)"* beside a label and
+never put `required` on the box. On sign-in, Add a temple and Edit this temple a blank box was not
+refused, and a blank coordinate was sent as 0. `Field` now passes `required` to its box when given it.
+A blank one is named in red, such as *"Latitude is required"*, and nothing is sent. The sweep behind it
+(`docs/work/proof/T-174-sweep.md`) found 18 `Field`s marked required, none arguably optional.
+
+**Adding a temple at exactly 0,0 is refused (T-176).** Every coordinate rule allowed 0, and a temple's
+coordinates cannot be changed afterwards, so a temple saved at 0,0 had to be deleted and added again.
+Provisioning now answers `KMS-400002` with *"That puts the temple at 0, 0. Choose its real place."*
+under Latitude. A 0 on one axis still saves. 0,0 alongside another fault stays `KMS-400001` listing
+both. `KMS-400002` existed but was never raised; its next step now reads *"Choose the temple's place,
+or type its real latitude and longitude."* Staging holds no temple at 0,0.
+
+**Super Admins can read every WhatsApp template (T-177).** Rajeev asked for this on 2026-09-13: the
+templates were a black box. A new screen, *WhatsApp templates*, sits beside Operations under the
+existing `VIEW_PLATFORM_OPERATIONS`. For each template it shows the name, category, wording with its
+example values and which messages use it. `GET /api/v1/ops/whatsapp-templates` serves it, read-only,
+with no temple data. `V130` adds a platform table, `whatsapp_template_wording_seen`, append-only and
+without `tenant_id`, which a startup recorder on the api and worker fills with each wording the first
+time a running app sees it. So the dates are labelled *"Wording first seen by the app"* and *"Wording
+last changed"*, and the screen says *"Tracking began on <date>"*: nothing before this release is known.
+
+**Not done:** none of the three has been seen in a real browser. Meta's approval status per temple is
+T-178, queued. Proofs with negative controls are in `docs/work/proof/T-174.md`, `T-176.md` and
+`T-177.md`.
+
 ### 2026-09-13 — Thirty-one more forms on the staff, volunteer, planner, sign-in and temple screens name a refused box in red, and Meta's stored WhatsApp wording can be read back (wave 3-2; tasks T-164, T-165, T-166, T-173)
 
 No migration; staging stays at `V129`. No new error code. **Not driven in a browser, and not seen working

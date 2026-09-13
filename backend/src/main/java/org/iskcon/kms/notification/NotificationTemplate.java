@@ -586,6 +586,56 @@ public enum NotificationTemplate {
 		return whatsappTemplateName;
 	}
 
+	/**
+	 * The app messages that send this template, in plain words, for the platform operator's catalogue
+	 * of templates (T-177).
+	 *
+	 * <p><strong>Why it is written here by hand.</strong> Nothing at runtime can say who sends a
+	 * template: a send is a call to {@code NotificationService.notify} with a constant, and the
+	 * notification row stores only the constant's name. Each entry below was written by reading the
+	 * one or two places that pass the constant, and names the thing a person did or the job that ran,
+	 * not the class. It sits beside the constant so that whoever adds a sender reads it, and it is a
+	 * switch with no {@code default} so that a new constant does not compile until somebody has said
+	 * what sends it.
+	 *
+	 * <p>Only additive. The name, category, language, body and examples above are what Meta holds,
+	 * and none of them changes here.
+	 */
+	public List<String> usedBy() {
+		return switch (this) {
+			// Read 2026-09-13: no class passes this constant any more. Volunteer reminders are sent as
+			// VOLUNTEER_SHIFT_REMINDER. Said plainly rather than left blank, because an operator looking
+			// at a template Meta holds will otherwise assume something sends it.
+			case SHIFT_REMINDER -> List.of(
+					"Nothing in the app sends this today. Volunteer shift reminders use volunteer_shift_reminder.");
+			case PO_DELIVERY -> List.of("Sending a purchase order to its vendor on WhatsApp");
+			case WISHLIST_GIFT_SPLIT -> List.of(
+					"Thanking a donor whose online gift finished a wish-list item, with the rest going to the general fund");
+			case WISHLIST_SPONSORSHIP_CONVERTED -> List.of(
+					"Thanking a donor whose wish-list item was already paid for, so the gift became a general donation");
+			case DONATION_THANK_YOU -> List.of(
+					"Thanking a donor when an online donation is paid",
+					"Thanking a donor when a donation is recorded at the temple");
+			case DONATION_RECEIPT -> List.of("Sending a donor their 80G receipt from the donation's page");
+			case SHIFT_BROADCAST -> List.of("A coordinator's message to everyone on a volunteer shift");
+			case VOLUNTEER_SHIFT_REMINDER -> List.of("Reminding a volunteer before a shift they signed up for");
+			case SHIFT_SIGNUP_CONFIRMED -> List.of("Confirming a volunteer's signup for a shift");
+			case WAITLIST_PROMOTED -> List.of("Telling a volunteer on the waitlist that a spot opened and they are on the shift");
+			case REMOVED_FROM_SHIFT -> List.of("Telling a volunteer that a coordinator took them off a shift");
+			case SHIFT_CANCELLED -> List.of("Telling the volunteers and the waitlist that a shift was cancelled");
+			case STAFF_SCHEDULE_UPDATED -> List.of("Telling a member of staff that their work schedule changed");
+			case TEMPLE_COMMUNICATION -> List.of("A letter the temple writes to devotees, when it goes by email");
+			case TEMPLE_ANNOUNCEMENT -> List.of(
+					"A letter the temple writes to devotees, when it goes on WhatsApp as a short notice with a link",
+					"The WhatsApp preview on a letter before it is sent");
+			case LEAVE_APPROVED -> List.of("Telling a member of staff that their leave was approved");
+			case LEAVE_DECLINED -> List.of("Telling a member of staff that their leave was not approved");
+			case LEAVE_REVOKED -> List.of("Telling a member of staff that their approved leave was withdrawn");
+			case LOW_STOCK_DIGEST -> List.of("The daily low-stock message to the kitchen staff, kitchen managers and temple admins");
+			case WHATSAPP_TEST -> List.of("The test message a temple admin sends from WhatsApp settings");
+		};
+	}
+
 	public abstract RenderedMessage render(Map<String, Object> params);
 
 	/**

@@ -19,9 +19,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class OpsController {
 
 	private final OpsService opsService;
+	private final WhatsAppTemplateCatalogue templateCatalogue;
 
-	public OpsController(OpsService opsService) {
+	public OpsController(OpsService opsService, WhatsAppTemplateCatalogue templateCatalogue) {
 		this.opsService = opsService;
+		this.templateCatalogue = templateCatalogue;
+	}
+
+	/**
+	 * Every WhatsApp template the app sends: its name, category, language, body with example values,
+	 * what sends it, and when a running app first saw its wording (T-177). Read-only, and no temple
+	 * data: the templates are source code and the dates come from a platform table.
+	 */
+	@GetMapping("/whatsapp-templates")
+	@PreAuthorize("hasAuthority('VIEW_PLATFORM_OPERATIONS')")
+	public WhatsAppTemplateCatalogue.Catalogue whatsappTemplates() {
+		return templateCatalogue.read();
 	}
 
 	/** Platform-wide notification-send totals for today, plus a seven-day trend. */

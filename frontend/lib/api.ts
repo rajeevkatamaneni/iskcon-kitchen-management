@@ -375,6 +375,31 @@ export interface HealthStatus {
 }
 
 /** Platform-wide notification-send figures for the Super-Admin Operations page. */
+/** One WhatsApp template in the platform catalogue (T-177). Read-only; no temple data. */
+export interface WhatsAppTemplateCatalogueEntry {
+  /** Meta's template name, e.g. `shift_reminder`. */
+  name: string;
+  /** The category the app submits: UTILITY or MARKETING. */
+  category: string;
+  language: string;
+  /** The body as Meta stores it, with numbered placeholders. */
+  body: string;
+  /** One example per placeholder, in order, as given to Meta's reviewer. */
+  exampleValues: string[];
+  /** The app messages that send this template, in plain words. */
+  usedBy: string[];
+  /** When a running app first saw this template (V130). Null where nothing is recorded. */
+  wordingFirstSeenAt: string | null;
+  /** When the current wording was first seen, where it differs from the first. Null if unchanged since tracking began. */
+  wordingLastChangedAt: string | null;
+}
+
+export interface WhatsAppTemplateCatalogue {
+  /** When recording began: the earliest time any wording was first seen. Null if nothing is recorded. */
+  trackingSince: string | null;
+  templates: WhatsAppTemplateCatalogueEntry[];
+}
+
 export interface NotificationMetrics {
   sentToday: number;
   failedToday: number;
@@ -4186,6 +4211,11 @@ export const api = {
   // deeper trends and alerting still live in Cloud Monitoring.
   opsNotifications: (token?: string) =>
     request<NotificationMetrics>("/api/v1/ops/notifications", { method: "GET", token }),
+
+  // Super-Admin (VIEW_PLATFORM_OPERATIONS). Every WhatsApp template the app can send, with its
+  // wording and when a running app first saw that wording (T-177). No temple data.
+  whatsappTemplateCatalogue: (token?: string) =>
+    request<WhatsAppTemplateCatalogue>("/api/v1/ops/whatsapp-templates", { method: "GET", token }),
 
   // Temple user management (E1-S12). All behind MANAGE_USERS server-side, RLS-scoped to the tenant.
   // `role` narrows the list: the devotee register asks for VOLUNTEER, so a temple's staff never

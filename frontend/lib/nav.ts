@@ -47,6 +47,9 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/tenants", label: "Temples", icon: "building-community", roles: [OPERATOR] },
       { href: "/operations", label: "Operations", icon: "activity", roles: [OPERATOR] },
+      // Beside Operations (T-177): what the app sends on WhatsApp, read-only, for the operator who
+      // otherwise could not see inside a template (Rajeev, 2026-09-13).
+      { href: "/whatsapp-templates", label: "WhatsApp templates", icon: "messages", roles: [OPERATOR] },
       // Its own destination rather than a tab inside Operations: that screen answers "what is
       // failing", and a catalogue of five thousand recipes is not an answer to it.
       { href: "/library", label: "Recipe library", icon: "book", roles: [OPERATOR] },

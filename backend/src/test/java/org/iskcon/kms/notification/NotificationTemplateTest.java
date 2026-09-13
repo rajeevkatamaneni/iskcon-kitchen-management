@@ -83,6 +83,18 @@ class NotificationTemplateTest {
 	}
 
 	@Test
+	@DisplayName("every template says in words what in the app sends it, for the operator's catalogue")
+	void everyTemplateSaysWhatSendsIt() {
+		// T-177. The switch in usedBy() has no default, so a new constant cannot compile without an
+		// entry. This catches the other way it could go wrong: an entry that says nothing.
+		for (NotificationTemplate template : NotificationTemplate.values()) {
+			assertThat(template.usedBy()).as("%s", template).isNotEmpty();
+			assertThat(template.usedBy()).as("%s", template)
+					.allSatisfy(use -> assertThat(use).isNotBlank().matches("[A-Z].*"));
+		}
+	}
+
+	@Test
 	@DisplayName("what Meta is told a message is agrees with what a devotee may decline")
 	void metaCategoryAgreesWithOurs() {
 		// Two vocabularies for the same fact, and they must not drift. A message somebody may turn
