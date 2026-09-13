@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import java.util.Collections;
 import java.util.Map;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -30,11 +31,25 @@ public class WhatsAppSettingsController {
 
 	private final TenantWhatsAppSettingsService settings;
 	private final TenantEmailIdentityService emails;
+	private final WhatsAppTemplateComparison comparison;
 
-	public WhatsAppSettingsController(
-			TenantWhatsAppSettingsService settings, TenantEmailIdentityService emails) {
+	@Autowired
+	public WhatsAppSettingsController(TenantWhatsAppSettingsService settings,
+			TenantEmailIdentityService emails, WhatsAppTemplateComparison comparison) {
 		this.settings = settings;
 		this.emails = emails;
+		this.comparison = comparison;
+	}
+
+	/**
+	 * For the integration tests written before the comparison existed (T-173), which build this
+	 * controller by hand with two arguments and never call {@link #compareTemplatesWithMeta}.
+	 * Package-private, so nothing outside this package can build a controller without the comparison,
+	 * and Spring uses the constructor above. Those tests are other tasks' files; once they pass a
+	 * comparison, this constructor can go.
+	 */
+	WhatsAppSettingsController(TenantWhatsAppSettingsService settings, TenantEmailIdentityService emails) {
+		this(settings, emails, null);
 	}
 
 	@GetMapping
@@ -69,6 +84,25 @@ public class WhatsAppSettingsController {
 	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
 	public TenantWhatsAppSettings reloadTemplates(@AuthenticationPrincipal AuthenticatedUser actor) {
 		return settings.reloadTemplates(actor);
+	}
+
+	/**
+	 * What Meta holds for each template beside what this release would send, read and never written
+	 * (T-173).
+	 *
+	 * <p>Reload rewords any template whose body Meta holds differently from ours, and Meta allows one
+	 * edit a day. Whether Meta returns a body exactly as it was registered had not been confirmed, and a
+	 * Meta that normalised the text would have every template reworded on the first Reload. This answers
+	 * that by asking, with the same lookup Reload uses, and changes nothing: no POST to Meta, no write to
+	 * {@code tenant_settings}. See {@link WhatsAppTemplateComparison}.
+	 *
+	 * <p>A GET, and behind the same permission as the rest of this controller, because it reads this
+	 * temple's own Meta account with this temple's own token. No screen calls it; it is read by hand.
+	 */
+	@GetMapping("/templates/meta-comparison")
+	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
+	public WhatsAppTemplateComparison.Report compareTemplatesWithMeta() {
+		return comparison.compare();
 	}
 
 	/**
