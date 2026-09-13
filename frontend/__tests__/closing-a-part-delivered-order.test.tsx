@@ -265,6 +265,23 @@ describe("closing a part-delivered order", () => {
     expect(screen.getByLabelText(/^why$/i)).toBeRequired();
   });
 
+  it("names the blank Why when the outcome needs a sentence, and closes nothing (T-162)", async () => {
+    const close = vi.spyOn(api, "closePurchaseOrder").mockResolvedValue(undefined as never);
+    showOrder(detail());
+    render(<PurchaseOrderDetailPage />);
+
+    fireEvent.click(screen.getByRole("radio", { name: /the vendor let us down/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^close order$/i }));
+    });
+
+    const sentence = screen.getByText("Why is required");
+    // Added to the hint the box already points at, not in place of it.
+    const why = screen.getByLabelText(/^why$/i);
+    expect(why.getAttribute("aria-describedby")?.split(" ")).toEqual(["close-note-hint", sentence.id]);
+    expect(close).not.toHaveBeenCalled();
+  });
+
   it("sends null rather than an empty string when nothing was said", async () => {
     const close = vi.spyOn(api, "closePurchaseOrder").mockResolvedValue(undefined as never);
     showOrder(detail());

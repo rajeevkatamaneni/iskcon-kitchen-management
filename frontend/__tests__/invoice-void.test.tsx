@@ -280,3 +280,61 @@ describe("reversing a payment", () => {
     expect(screen.queryByRole("button", { name: "Reverse" })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * A blank correction (T-162).
+ *
+ * <p>Both dialogs keep their commit button disabled until the reason has words in it, and the credit
+ * note until it also has an amount above zero. That is a known, separate issue this task does not
+ * change, and it means no press can reach a blank submit today. So these submit the form directly:
+ * what is proved is that each dialog's form is a `Form` and names its own boxes, which is what a
+ * blank press will say the day those buttons are enabled.
+ *
+ * <p>The sentences are asserted exactly as they render. Each box's `<label>` holds its hint as well as
+ * its question. Until T-171, `Form` read both as the name and glued them together, as "What
+ * happened?A bounced cheque…". It now leaves out words coloured as a hint, so each name below is the
+ * question alone.
+ */
+describe("a blank correction (T-162)", () => {
+  it("names both blank boxes on a credit note, then a negative amount, and sends nothing", () => {
+    render(<InvoiceDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /record a credit note/i }));
+    const panel = screen.getByRole("form", { name: /record a credit note/i });
+    expect(within(panel).getByRole("button", { name: /record the credit note/i })).toBeDisabled();
+
+    fireEvent.submit(panel);
+    expect(within(panel).getByText("How much is being credited? is required")).toBeInTheDocument();
+    expect(within(panel).getByText("What is the credit for? is required")).toBeInTheDocument();
+
+    fireEvent.change(within(panel).getByRole("spinbutton"), { target: { value: "-50" } });
+    fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "Short by two sacks." } });
+    fireEvent.submit(panel);
+    expect(within(panel).getByText("How much is being credited? must be at least 0")).toBeInTheDocument();
+    expect(creditMock).not.toHaveBeenCalled();
+  });
+
+  it("names the blank reason on a void, and strikes nothing", () => {
+    render(<InvoiceDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /void this bill/i }));
+    const panel = screen.getByRole("form", { name: /void this invoice/i });
+    expect(within(panel).getByRole("button", { name: /void this bill/i })).toBeDisabled();
+
+    fireEvent.submit(panel);
+
+    expect(within(panel).getByText("Why was this bill never owed? is required")).toBeInTheDocument();
+    expect(voidMock).not.toHaveBeenCalled();
+  });
+
+  it("names the blank reason on a reversal, and reverses nothing", () => {
+    paymentsRef.current = [payment()];
+    render(<InvoiceDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Reverse" }));
+    const panel = screen.getByRole("form", { name: /reverse this payment/i });
+    expect(within(panel).getByRole("button", { name: /reverse this payment/i })).toBeDisabled();
+
+    fireEvent.submit(panel);
+
+    expect(within(panel).getByText("What happened? is required")).toBeInTheDocument();
+    expect(reverseMock).not.toHaveBeenCalled();
+  });
+});

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { InlineNotice } from "@/components/ds/InlineNotice";
@@ -170,7 +171,7 @@ export function KitchenForm({
   );
 
   return (
-    <form id={formId} onSubmit={handleSubmit} className="space-y-8">
+    <Form id={formId} onSubmit={handleSubmit} className="space-y-8">
       {error && <ErrorNotice error={error} />}
       {checkError && <ErrorNotice error={checkError} />}
 
@@ -325,6 +326,6 @@ export function KitchenForm({
           />
         </div>
       </section>
-    </form>
+    </Form>
   );
 }

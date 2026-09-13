@@ -11,6 +11,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, WRAP } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 
 const BUCKET_LABEL: Record<string, string> = {
   CURRENT: "Current",
@@ -119,7 +120,7 @@ function PayablesView() {
                         {paying === p.invoiceId && (
                           <tr className="border-t border-hairline bg-sunken hover:bg-sunken">
                             <td colSpan={5} className="px-5 py-4">
-                              <form className="flex flex-wrap items-end gap-3" aria-label={`Record payment for ${p.invoiceNumber}`} onSubmit={(e) => pay(e, p)}>
+                              <Form className="flex flex-wrap items-end gap-3" aria-label={`Record payment for ${p.invoiceNumber}`} onSubmit={(e) => pay(e, p)}>
                                 <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Date</span>
                                   <input name="paidOn" type="date" defaultValue={today} required className="min-h-touch rounded-control border border-hairline px-2" />
                                 </label>
@@ -138,7 +139,7 @@ function PayablesView() {
                                   <input name="reference" className="min-h-touch rounded-control border border-hairline px-2" />
                                 </label>
                                 <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Save</button>
-                              </form>
+                              </Form>
                             </td>
                           </tr>
                         )}

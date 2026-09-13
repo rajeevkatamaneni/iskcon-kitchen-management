@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -80,7 +81,7 @@ export function VendorStatusDialog({
       aria-modal="true"
       aria-labelledby="vendor-status-title"
     >
-      <form
+      <Form
         onSubmit={submit}
         aria-label={dropping ? "Make this vendor inactive" : "Bring this vendor back"}
         className="modal w-full max-w-prose px-8 py-7"
@@ -134,7 +135,7 @@ export function VendorStatusDialog({
             {dropping ? "Make inactive" : "Bring back"}
           </Button>
         </div>
-      </form>
+      </Form>
     </div>
   );
 }

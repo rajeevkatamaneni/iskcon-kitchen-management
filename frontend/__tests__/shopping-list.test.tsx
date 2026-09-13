@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { api } from "@/lib/api";
-import { todayIso } from "@/lib/format";
+import { dateWithYear, todayIso } from "@/lib/format";
 import type { ApiError, IngredientView, ShoppingListLineView } from "@/lib/api";
 
 const { authRef, queryRef, catalogueRef, reloadMock } = vi.hoisted(() => ({
@@ -427,10 +427,14 @@ describe("shopping list", () => {
       expect(within(panel).getByText("That day has already gone")).toBeInTheDocument();
 
       await act(async () => {
-        fireEvent.submit(screen.getByRole("form", { name: /purchase order for Heritage Fresh Dairy/i }));
+        fireEvent.click(within(panel).getByRole("button", { name: /^save$/i }));
       });
       expect(create).not.toHaveBeenCalled();
-      expect(within(panel).getByText(/already passed/i)).toBeInTheDocument();
+      // CHANGED AT T-162: the editor is a `Form`, so the box's `min` of today refuses the date and
+      // `Form` names it beside the box, before the editor's own "already passed" check is reached.
+      expect(
+        within(panel).getByText(`Needed by must be on or after ${dateWithYear(todayIso())}`)
+      ).toBeInTheDocument();
       expect(within(panel).getByLabelText("Needed by")).toHaveValue("2026-08-24");
     });
   });

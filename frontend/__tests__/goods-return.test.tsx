@@ -257,4 +257,26 @@ describe("returning received goods to the vendor", () => {
     // that closes on a refusal makes them start again.
     expect(screen.getByRole("form", { name: /return goods to the vendor/i })).toBeInTheDocument();
   });
+
+  it("answers a blank press in the page's words, and names a negative quantity beside its box (T-162)", async () => {
+    const send = vi.spyOn(api, "returnReceivedGoods").mockResolvedValue(RECORDED);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /return to vendor/i }));
+
+    // The quantity is not `required`, so a blank press passes the form's checks and reaches the
+    // page's own refusal, as it always did.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /record return/i }));
+    });
+    expect(screen.getByText(/how much went back/i)).toBeInTheDocument();
+    expect(send).not.toHaveBeenCalled();
+
+    // It does carry min="0", and that refusal is the form's, beside the box.
+    fireEvent.change(screen.getByLabelText(/quantity of Rice to return/i), { target: { value: "-2" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /record return/i }));
+    });
+    expect(screen.getByText("Quantity of Rice to return must be at least 0")).toBeInTheDocument();
+    expect(send).not.toHaveBeenCalled();
+  });
 });

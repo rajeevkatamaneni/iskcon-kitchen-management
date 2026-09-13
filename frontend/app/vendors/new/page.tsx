@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { HintedField } from "@/components/ds/InfoHint";
@@ -94,7 +95,7 @@ function NewVendorView() {
     >
       {error && <ErrorNotice error={error} />}
 
-      <form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Add a vendor" onSubmit={add}>
+      <Form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Add a vendor" onSubmit={add}>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Name</span>
           <input name="name" required className={FIELD} />
@@ -145,7 +146,7 @@ function NewVendorView() {
           <span className="pl-field-inset font-medium text-ink">Notes</span>
           <input name="notes" className={FIELD} />
         </label>
-      </form>
+      </Form>
     </FocusScreen>
   );
 }

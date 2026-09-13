@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { IngredientView, PurchaseOrderView, VendorView } from "@/lib/api";
-import { todayIso } from "@/lib/format";
+import { dateWithYear, todayIso } from "@/lib/format";
 
 /**
  * Raising a one-off purchase order by hand, vendor first (T-026, D-7).
@@ -268,6 +268,24 @@ describe("step one — which vendor", () => {
     // In the address, so step two is linkable and survives a reload.
     expect(pushMock).toHaveBeenCalledWith("/orders/new/lines?vendor=v1");
   });
+
+  it("names the vendor as required when the form is submitted blank, and goes nowhere (T-162)", async () => {
+    render(<NewPurchaseOrderPage />);
+    await screen.findByRole("combobox", { name: /vendor/i });
+    const pushesBefore = pushMock.mock.calls.length;
+
+    // Continue stays disabled until a vendor is chosen. That is a known, separate issue this task
+    // leaves alone, and it means no press can reach a blank submit today. So the form is submitted
+    // directly, which proves the `Form` is on it: this is what a blank press will say the day that
+    // button is enabled.
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /choose a vendor/i }));
+    });
+
+    expect(screen.getByText("Vendor is required")).toBeInTheDocument();
+    expect(pushMock.mock.calls.length).toBe(pushesBefore);
+  });
 });
 
 describe("step two — the lines", () => {
@@ -339,19 +357,21 @@ describe("step two — the lines", () => {
     fireEvent.click(screen.getByRole("button", { name: /^add line$/i }));
     fireEvent.change(screen.getByLabelText("Quantity of Rice"), { target: { value: "30" } });
 
-    // The browser refuses this itself — the box carries a `min` of the temple's today — which is
-    // why the attribute is asserted as well as the message. jsdom enforces neither, so the message
-    // below is what a person meets if anything ever does get past the box.
+    // The box carries a `min` of the temple's today, and that attribute is the rule.
     const needed = screen.getByLabelText(/needed by/i);
     expect(needed).toHaveAttribute("min", todayIso());
     fireEvent.change(needed, { target: { value: yesterday() } });
 
     await act(async () => {
-      fireEvent.submit(screen.getByRole("form", { name: /raise a purchase order/i }));
+      fireEvent.click(screen.getByRole("button", { name: /raise order/i }));
     });
 
-    // The server's own KMS-400014, said early and in plain words. Nothing was sent.
-    expect(screen.getByRole("alert")).toHaveTextContent(/that date has already passed/i);
+    // CHANGED AT T-162. This used to submit the form directly and expect the page's own "That date
+    // has already passed" alert, because jsdom never checked the `min`. The form is a `Form` now,
+    // which reads the browser's verdict on the box and names it in red beside it, so that sentence
+    // is what refuses the date — as the browser's own bubble always did in a real browser, where
+    // the page's alert was never reachable. The server's KMS-400014 is still the guard behind both.
+    expect(screen.getByText(`Needed by must be on or after ${dateWithYear(todayIso())}`)).toBeInTheDocument();
     expect(createPurchaseOrder).not.toHaveBeenCalled();
   });
 
@@ -364,6 +384,22 @@ describe("step two — the lines", () => {
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(/at least one line/i);
+    expect(createPurchaseOrder).not.toHaveBeenCalled();
+  });
+
+  it("names a negative quantity beside its box when Raise order is pressed (T-162)", async () => {
+    // No box on this form is `required` — an order with no lines is refused by the page in words,
+    // above — but every quantity carries min="0".
+    render(<NewPurchaseOrderLinesPage />);
+    await chooseRiceFromTheCatalogue();
+    fireEvent.click(screen.getByRole("button", { name: /^add line$/i }));
+    fireEvent.change(screen.getByLabelText("Quantity of Rice"), { target: { value: "-3" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /raise order/i }));
+    });
+
+    expect(screen.getByText("Quantity of Rice must be at least 0")).toBeInTheDocument();
     expect(createPurchaseOrder).not.toHaveBeenCalled();
   });
 

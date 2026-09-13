@@ -245,6 +245,58 @@ describe("correcting a movement, and stopping tracking an item", () => {
     expect(screen.getByRole("button", { name: /^correct$/i })).toBeInTheDocument();
   });
 
+  /**
+   * T-161: the sentence Form puts beside a refused box. Checked three ways so that "beside" means
+   * something: the box is marked invalid, it is described by that very sentence, and the sentence's
+   * slot sits straight after the box, or after the label wrapping it.
+   */
+  function expectSaidBeside(box: HTMLElement, sentence: string) {
+    const said = screen.getByText(sentence);
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+    expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
+  }
+
+  it("names a blank reason for a correction in red beside its box, and sends nothing (T-161)", async () => {
+    await openHistory();
+
+    fireEvent.click(screen.getByRole("button", { name: /^correct$/i }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /record the correction/i }));
+
+    expectSaidBeside(within(dialog).getByRole("textbox"), "Why it is being corrected is required");
+    expect(compensateMock).not.toHaveBeenCalled();
+  });
+
+  it("names a blank count in red beside its box, and records nothing (T-161)", async () => {
+    await openHistory();
+
+    // No batches in the fixture, so this is the opening count rather than an adjustment to a lot.
+    fireEvent.click(screen.getByRole("button", { name: /record what's on the shelf/i }));
+    const form = screen.getByRole("form", { name: /adjust stock/i });
+    fireEvent.click(within(form).getByRole("button", { name: /record the count/i }));
+
+    // The label is a question, so the sentence reads "How much is there is required". Reported in
+    // T-161's proof for Rajeev rather than reworded here.
+    expectSaidBeside(within(form).getByLabelText(/how much is there/i), "How much is there is required");
+    expect(adjustMock).not.toHaveBeenCalled();
+  });
+
+  it("says an opening count below nothing must be at least 0, and records nothing (T-161)", async () => {
+    await openHistory();
+
+    fireEvent.click(screen.getByRole("button", { name: /record what's on the shelf/i }));
+    const form = screen.getByRole("form", { name: /adjust stock/i });
+    fireEvent.change(within(form).getByLabelText(/how much is there/i), { target: { value: "-1" } });
+    fireEvent.click(within(form).getByRole("button", { name: /record the count/i }));
+
+    expectSaidBeside(
+      within(form).getByLabelText(/how much is there/i),
+      "How much is there must be at least 0"
+    );
+    expect(adjustMock).not.toHaveBeenCalled();
+  });
+
   it("says the unit and the month back exactly as the table above it wrote them", async () => {
     /*
      * Rajeev, 2026-09-07: the table said "+1.8 Kg" on "23 Aug 2026" and the dialog under it

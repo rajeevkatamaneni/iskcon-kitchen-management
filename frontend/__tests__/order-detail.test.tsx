@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { api } from "@/lib/api";
+import { dateWithYear } from "@/lib/format";
 import type {
   GoodsReceiptView, IngredientView, PurchaseOrderDetailView,
 } from "@/lib/api";
@@ -407,12 +408,17 @@ describe("purchase order detail", () => {
 
     fireEvent.change(screen.getByLabelText("Needed by"), { target: { value: "2026-07-25" } });
     await act(async () => {
-      fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     });
 
     // The server refuses this too, with KMS-400014. This only spares the round trip.
+    //
+    // CHANGED AT T-162. The editor is a `Form` now, and the box's `min` (the order date) refuses the
+    // day before the editor's own "before the order was raised" check can run — which in a real
+    // browser was already true, since the browser blocked the submit on that same `min`. The
+    // sentence is the one `Form` puts beside the box.
     expect(update).not.toHaveBeenCalled();
-    expect(screen.getByText(/before the order was raised/i)).toBeInTheDocument();
+    expect(screen.getByText(`Needed by must be on or after ${dateWithYear("2026-08-01")}`)).toBeInTheDocument();
   });
 
   it("warns about a date inside the vendor's usual notice, and saves it anyway", async () => {
@@ -628,5 +634,77 @@ describe("purchase order detail", () => {
     expect(screen.getByLabelText(/an item not in the catalogue/i, { selector: "input" }))
       .toBeInTheDocument();
     expect(screen.queryByLabelText(/describe something not in the catalogue/i)).not.toBeInTheDocument();
+  });
+
+  /**
+   * Blank and out-of-range submits (T-162). Every form on this screen is a `Form` now, which reads
+   * the browser's own verdict on each box and names the refused one in red beside it. These press
+   * the real buttons, because a press is what a person does.
+   */
+  it("names a blank reason when Cancel order is pressed, and cancels nothing (T-162)", async () => {
+    const cancel = vi.spyOn(api, "cancelPurchaseOrder").mockResolvedValue(undefined);
+    render(<PurchaseOrderDetailPage />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /cancel order/i }));
+    });
+
+    const sentence = screen.getByText("Reason is required");
+    // Beside its own box: the box points at the sentence, which is how a screen reader hears both.
+    expect(screen.getByLabelText("Reason")).toHaveAttribute("aria-describedby", sentence.id);
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it("names a negative received figure and an over-precise price, and records nothing (T-162)", async () => {
+    const receive = vi.spyOn(api, "receiveDelivery").mockResolvedValue({} as GoodsReceiptView);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /receive delivery/i }));
+
+    // Nothing on this form is `required`: a delivery is whatever arrived on at least one line, and
+    // the page says so in words. What the boxes do carry is min="0", and step="0.01" on the price.
+    fireEvent.change(screen.getByLabelText("Received Rice"), { target: { value: "-1" } });
+    fireEvent.change(screen.getByLabelText(/price paid per Kg of Rice/i), { target: { value: "45.505" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^record delivery$/i }));
+    });
+
+    expect(screen.getByText("Received Rice must be at least 0")).toBeInTheDocument();
+    expect(
+      screen.getByText("Price paid per Kg of Rice, optional can have at most 2 decimal places")
+    ).toBeInTheDocument();
+    expect(receive).not.toHaveBeenCalled();
+  });
+
+  it("keeps the editor's Save and the cancellation apart: each names only its own box (T-162)", async () => {
+    // The editor is its own component mounted inside this page, beside the cancellation's form.
+    // `Form` checks only the controls of the form that was submitted, so a blank Reason further
+    // down must never stop a Save, and a bad quantity must never stop a cancellation.
+    const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
+    const cancel = vi.spyOn(api, "cancelPurchaseOrder").mockResolvedValue(undefined);
+    withDetail(DRAFT);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    fireEvent.change(screen.getByLabelText("Quantity of Rice"), { target: { value: "-5" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+    expect(screen.getByText("Quantity of Rice must be at least 0")).toBeInTheDocument();
+    expect(screen.queryByText("Reason is required")).not.toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /cancel order/i }));
+    });
+    expect(screen.getByText("Reason is required")).toBeInTheDocument();
+    expect(cancel).not.toHaveBeenCalled();
+
+    // And a good quantity saves, with the blank Reason still sitting below it.
+    fireEvent.change(screen.getByLabelText("Quantity of Rice"), { target: { value: "12" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    });
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(cancel).not.toHaveBeenCalled();
   });
 });

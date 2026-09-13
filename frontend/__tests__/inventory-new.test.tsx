@@ -118,7 +118,9 @@ describe("adding to inventory", () => {
     // the store keeps in kilograms. What is stored is always the ingredient's own.
     fireEvent.change(unit, { target: { value: "GM" } });
     fireEvent.change(level, { target: { value: "500" } });
-    fireEvent.submit(screen.getByRole("form", { name: /add to inventory/i }));
+    // The header button, as a person presses it (T-161). This used to fire a synthetic submit at
+    // the form, which skips every check a click is subject to — the same checks Form now answers.
+    fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
 
     await waitFor(() => expect(createItemMock).toHaveBeenCalledTimes(1));
     expect(createItemMock.mock.calls[0][0]).toMatchObject({
@@ -126,6 +128,40 @@ describe("adding to inventory", () => {
       reorderThreshold: 0.5,
     });
     // Nothing was typed into the count, so no lot is opened.
+    expect(adjustMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * T-161: the sentence Form puts beside a refused box. Checked three ways so that "beside" means
+   * something: the box is marked invalid, it is described by that very sentence, and the sentence's
+   * slot sits straight after the box, or after the label wrapping it.
+   */
+  function expectSaidBeside(box: HTMLElement, sentence: string) {
+    const said = screen.getByText(sentence);
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+    expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
+  }
+
+  it("names a blank ingredient in red beside its box, and adds nothing (T-161)", () => {
+    render(<NewInventoryItemPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
+
+    expectSaidBeside(screen.getByLabelText(/^ingredient$/i), "Ingredient is required");
+    expect(createItemMock).not.toHaveBeenCalled();
+    expect(adjustMock).not.toHaveBeenCalled();
+  });
+
+  it("says a count below nothing must be at least 0, and adds nothing (T-161)", () => {
+    render(<NewInventoryItemPage />);
+    fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+    fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "-1" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
+
+    expectSaidBeside(screen.getByPlaceholderText("e.g. 40"), "How much is on the shelf now must be at least 0");
+    expect(createItemMock).not.toHaveBeenCalled();
     expect(adjustMock).not.toHaveBeenCalled();
   });
 

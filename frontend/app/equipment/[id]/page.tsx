@@ -8,6 +8,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import {
@@ -488,7 +489,7 @@ function ChangeConditionForm({
         the item stays on the register, drops out of the list, and only a Temple Admin can bring it
         back.
       </p>
-      <form
+      <Form
         className="mt-4 grid grid-cols-2 gap-4"
         aria-label="Change condition"
         onSubmit={(e) => {
@@ -529,7 +530,7 @@ function ChangeConditionForm({
             Cancel
           </Button>
         </div>
-      </form>
+      </Form>
 
       {pending && (
         <ConfirmScrap
@@ -669,7 +670,7 @@ function ReinstateForm({
         beside your name and the date, and it shows in the audit trail below as a move out of
         scrapped.
       </p>
-      <form
+      <Form
         className="mt-4 grid grid-cols-2 gap-4"
         aria-label="Bring it back"
         onSubmit={(e) => {
@@ -706,7 +707,7 @@ function ReinstateForm({
             Cancel
           </Button>
         </div>
-      </form>
+      </Form>
     </section>
   );
 }
@@ -749,7 +750,7 @@ function RecordServiceForm({
         Once written down it stays written down. There is no way to edit or remove a service, and no
         last-serviced date anybody can type into — the newest row here is what that date means.
       </p>
-      <form
+      <Form
         className="mt-4 grid grid-cols-2 gap-4"
         aria-label="Record a service"
         onSubmit={(e) => {
@@ -808,7 +809,7 @@ function RecordServiceForm({
             Cancel
           </Button>
         </div>
-      </form>
+      </Form>
     </section>
   );
 }

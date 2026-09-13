@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { api, toApiError, type ApiError, type PurchaseOrderView } from "@/lib/api";
@@ -145,7 +146,7 @@ function NewInvoiceView() {
         Direct, with no purchase order
       </label>
 
-      <form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Record an invoice" onSubmit={record}>
+      <Form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Record an invoice" onSubmit={record}>
         {/* Vendor first, and that order is now load-bearing rather than cosmetic: it is what the
             purchase orders below are drawn from. */}
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -222,7 +223,7 @@ function NewInvoiceView() {
           <span className="pl-field-inset font-medium text-ink">Scan reference</span>
           <input name="scanRef" placeholder="Uploaded scan id or link" className={FIELD} />
         </label>
-      </form>
+      </Form>
     </FocusScreen>
   );
 }

@@ -163,7 +163,7 @@ describe("a vendor's lead time", () => {
 
     fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "ing2" } });
     fireEvent.change(screen.getByLabelText(/lead time/i, BOX), { target: { value: "7" } });
-    fireEvent.submit(screen.getByRole("form", { name: /add a supply/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add supply/i }));
 
     await waitFor(() => expect(setVendorSupplyMock).toHaveBeenCalled());
     const body = setVendorSupplyMock.mock.calls[0][1] as Record<string, unknown>;
@@ -177,7 +177,7 @@ describe("a vendor's lead time", () => {
     await screen.findByText("Rice");
 
     fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "ing2" } });
-    fireEvent.submit(screen.getByRole("form", { name: /add a supply/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add supply/i }));
 
     await waitFor(() => expect(setVendorSupplyMock).toHaveBeenCalled());
     const body = setVendorSupplyMock.mock.calls[0][1] as Record<string, unknown>;
@@ -192,7 +192,7 @@ describe("a vendor's lead time", () => {
 
     fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "ing2" } });
     fireEvent.change(screen.getByLabelText(/lead time/i, BOX), { target: { value: "0" } });
-    fireEvent.submit(screen.getByRole("form", { name: /add a supply/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add supply/i }));
 
     await waitFor(() => expect(setVendorSupplyMock).toHaveBeenCalled());
     const body = setVendorSupplyMock.mock.calls[0][1] as Record<string, unknown>;

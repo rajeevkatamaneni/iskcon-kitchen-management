@@ -282,6 +282,52 @@ describe("raising an ingredient request", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/ingredient-requests/ir-new"));
   });
 
+  /**
+   * T-161: the sentence Form puts beside a refused box. Checked three ways so that "beside" means
+   * something: the box is marked invalid, it is described by that very sentence, and the sentence's
+   * slot sits straight after the box, or after the label wrapping it.
+   */
+  function expectSaidBeside(box: HTMLElement, sentence: string) {
+    const said = screen.getByText(sentence);
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+    expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
+  }
+
+  /**
+   * T-161. No box on this form carries `required`: the kitchen and the date are refused by the
+   * form's own check instead, in one sentence at the top, because a draft goes through the same
+   * check from a button that is not a submit. So a blank Submit for review still gets that sentence
+   * and no "is required" beside any box. Whether the two should also carry `required` is listed in
+   * the proof for Rajeev; the brief did not allow adding rules.
+   */
+  it("answers a blank request with its own sentence, since no box here is marked required (T-161)", async () => {
+    render(<NewIngredientRequestPage />);
+    await screen.findByLabelText(/^kitchen$/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /submit for review/i }));
+
+    expect(await screen.findByText(/choose which kitchen/i)).toBeInTheDocument();
+    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+    expect(createMock).not.toHaveBeenCalled();
+    expect(submitMock).not.toHaveBeenCalled();
+  });
+
+  it("says a quantity below nothing must be at least 0, and sends nothing (T-161)", async () => {
+    render(<NewIngredientRequestPage />);
+    await screen.findByLabelText(/^kitchen$/i);
+
+    fillTheBasics();
+    addAnIngredient();
+    addADish();
+    fireEvent.change(screen.getByLabelText(/^quantity 1$/i), { target: { value: "-1" } });
+    fireEvent.click(screen.getByRole("button", { name: /submit for review/i }));
+
+    expectSaidBeside(screen.getByLabelText(/^quantity 1$/i), "Quantity 1 must be at least 0");
+    expect(createMock).not.toHaveBeenCalled();
+    expect(submitMock).not.toHaveBeenCalled();
+  });
+
   it("refuses a volunteer the page", () => {
     authRef.current = {
       ...authRef.current,

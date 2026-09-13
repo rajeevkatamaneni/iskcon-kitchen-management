@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type InvoicePaymentView, type VendorInvoiceView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -426,7 +427,7 @@ function CorrectionDialog({
       aria-modal="true"
       aria-labelledby="correction-title"
     >
-      <form
+      <Form
         onSubmit={submit}
         aria-label={striking ? "Void this invoice" : "Record a credit note"}
         className="modal w-full max-w-prose px-8 py-7"
@@ -494,7 +495,7 @@ function CorrectionDialog({
             {striking ? "Void this bill" : "Record the credit note"}
           </Button>
         </div>
-      </form>
+      </Form>
     </div>
   );
 }
@@ -556,7 +557,7 @@ function ReverseDialog({
       aria-modal="true"
       aria-labelledby="reverse-title"
     >
-      <form onSubmit={submit} aria-label="Reverse this payment" className="modal w-full max-w-prose px-8 py-7">
+      <Form onSubmit={submit} aria-label="Reverse this payment" className="modal w-full max-w-prose px-8 py-7">
         <h2 id="reverse-title" className="text-lg">
           Reverse the {money(payment.amount, "INR")} paid on {dateWithYear(payment.paidOn)}?
         </h2>
@@ -598,7 +599,7 @@ function ReverseDialog({
             Reverse this payment
           </Button>
         </div>
-      </form>
+      </Form>
     </div>
   );
 }

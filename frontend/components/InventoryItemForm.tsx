@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { Form } from "@/components/ds/Form";
 import { HintedField } from "@/components/ds/InfoHint";
 import { unitLabel } from "@/lib/format";
 import type { ApiError, IngredientView, StockItemView } from "@/lib/api";
@@ -105,7 +106,7 @@ export function InventoryItemForm({
         <p className="text-sm text-ink-secondary">Every ingredient is already in your inventory.</p>
       )}
 
-      <form
+      <Form
         id={formId}
         className="grid grid-cols-2 gap-4"
         aria-label="Add to inventory"
@@ -183,7 +184,7 @@ export function InventoryItemForm({
           <span className="pl-field-inset font-medium text-ink">Notes</span>
           <input name="notes" className={FIELD} />
         </label>
-      </form>
+      </Form>
     </>
   );
 }

@@ -168,7 +168,7 @@ describe("adding a vendor with no number", () => {
     expect(phone).not.toBeRequired();
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Corner Hardware" } });
-    fireEvent.submit(screen.getByRole("form", { name: /add a vendor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add vendor/i }));
 
     await waitFor(() => expect(createVendorMock).toHaveBeenCalled());
     const body = payload(createVendorMock, 0);
@@ -184,7 +184,7 @@ describe("adding a vendor with no number", () => {
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Govind Wholesale" } });
     fireEvent.change(screen.getByLabelText(/phone/i, PHONE_BOX), { target: { value: "  +919845012303  " } });
-    fireEvent.submit(screen.getByRole("form", { name: /add a vendor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add vendor/i }));
 
     await waitFor(() => expect(createVendorMock).toHaveBeenCalled());
     expect(payload(createVendorMock, 0).phone).toBe("+919845012303");
@@ -197,7 +197,7 @@ describe("a vendor's number typed with spaces (T-157)", () => {
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Govind Wholesale" } });
     fireEvent.change(screen.getByLabelText(/phone/i, PHONE_BOX), { target: { value: "+91 98450-12303" } });
-    fireEvent.submit(screen.getByRole("form", { name: /add a vendor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add vendor/i }));
 
     await waitFor(() => expect(createVendorMock).toHaveBeenCalled());
     expect(payload(createVendorMock, 0).phone).toBe("+919845012303");
@@ -208,7 +208,7 @@ describe("a vendor's number typed with spaces (T-157)", () => {
 
     const phone = await screen.findByLabelText(/phone/i, PHONE_BOX);
     fireEvent.change(phone, { target: { value: "+91 98450 12303" } });
-    fireEvent.submit(screen.getByRole("form", { name: /edit vendor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => expect(updateVendorMock).toHaveBeenCalled());
     expect(payload(updateVendorMock, 1).phone).toBe("+919845012303");
@@ -223,7 +223,7 @@ describe("editing a vendor with no number", () => {
     expect(phone).toHaveValue("");
     expect(phone).not.toBeRequired();
 
-    fireEvent.submit(screen.getByRole("form", { name: /edit vendor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => expect(updateVendorMock).toHaveBeenCalled());
     const body = payload(updateVendorMock, 1);
@@ -237,7 +237,7 @@ describe("editing a vendor with no number", () => {
 
     const phone = await screen.findByLabelText(/phone/i, PHONE_BOX);
     fireEvent.change(phone, { target: { value: "+919845012303" } });
-    fireEvent.submit(screen.getByRole("form", { name: /edit vendor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => expect(updateVendorMock).toHaveBeenCalled());
     expect(payload(updateVendorMock, 1).phone).toBe("+919845012303");
@@ -251,7 +251,7 @@ describe("editing a vendor with no number", () => {
 
     expect(await screen.findByLabelText(/phone/i, PHONE_BOX)).toHaveValue("+919845012303");
 
-    fireEvent.submit(screen.getByRole("form", { name: /edit vendor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(updateVendorMock).toHaveBeenCalled());
     expect(payload(updateVendorMock, 1).phone).toBe("+919845012303");
   });

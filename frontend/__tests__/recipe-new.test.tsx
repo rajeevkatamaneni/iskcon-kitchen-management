@@ -104,6 +104,43 @@ describe("new recipe", () => {
     expect(Object.keys(createMock.mock.calls[0][0]).filter((k) => /override/i.test(k))).toEqual([]);
   });
 
+  /**
+   * T-161: the sentence Form puts beside a refused box. Checked three ways so that "beside" means
+   * something: the box is marked invalid, it is described by that very sentence, and the sentence's
+   * slot sits straight after the box, or after the label wrapping it.
+   */
+  function expectSaidBeside(box: HTMLElement, sentence: string) {
+    const said = screen.getByText(sentence);
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+    expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
+  }
+
+  it("names each blank required box in red beside it, and creates nothing (T-161)", () => {
+    render(<NewRecipePage />);
+
+    // Base yield starts at 100, so only the two boxes that start empty are refused.
+    fireEvent.click(screen.getByRole("button", { name: /create recipe/i }));
+
+    expectSaidBeside(screen.getByLabelText(/^name$/i), "Name is required");
+    expectSaidBeside(screen.getByLabelText(/^category$/i), "Category is required");
+    expect(screen.queryByText(/^Base yield /)).not.toBeInTheDocument();
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("says a base yield below nothing must be at least 0, and creates nothing (T-161)", () => {
+    render(<NewRecipePage />);
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Khichdi" } });
+    fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "c1" } });
+    // Typed, not a defaultValue: jsdom only range-checks a value set the way a keystroke sets it.
+    fireEvent.change(screen.getByLabelText(/^base yield$/i), { target: { value: "-1" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /create recipe/i }));
+
+    expectSaidBeside(screen.getByLabelText(/^base yield$/i), "Base yield must be at least 0");
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
   it("refuses a role without recipe access", () => {
     authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER", fullName: "Test Person" } };
     render(<NewRecipePage />);

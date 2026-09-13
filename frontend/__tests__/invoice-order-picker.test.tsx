@@ -261,6 +261,39 @@ describe("choosing the purchase order on an invoice", () => {
       description: "Cash market vegetables",
     });
   });
+
+  it("names every blank box when Record invoice is pressed, and records nothing (T-162)", async () => {
+    render(<NewInvoicePage />);
+    await screen.findByText("Govind Wholesale");
+
+    fireEvent.click(screen.getByRole("button", { name: /^record invoice$/i }));
+
+    expect(await screen.findByText("Vendor is required")).toBeInTheDocument();
+    expect(screen.getByText("Invoice number is required")).toBeInTheDocument();
+    expect(screen.getByText("Amount (₹) is required")).toBeInTheDocument();
+    expect(screen.getByText("Invoice date is required")).toBeInTheDocument();
+    // The order picker is disabled until a vendor is chosen, and the browser does not check a
+    // disabled box. One sentence per problem the person can act on now.
+    expect(screen.queryByText("Purchase order is required")).not.toBeInTheDocument();
+    expect(recordInvoice).not.toHaveBeenCalled();
+  });
+
+  it("names a blank description on a direct invoice, and a negative amount (T-162)", async () => {
+    render(<NewInvoicePage />);
+    await screen.findByText("Govind Wholesale");
+    fireEvent.change(selectEl("vendorId"), { target: { value: "v1" } });
+    fireEvent.click(screen.getByLabelText(/direct, with no purchase order/i));
+    fillTheRest();
+    fireEvent.change(document.querySelector('input[name="amount"]') as HTMLInputElement, {
+      target: { value: "-10" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^record invoice$/i }));
+
+    expect(await screen.findByText("Description is required")).toBeInTheDocument();
+    expect(screen.getByText("Amount (₹) must be at least 0")).toBeInTheDocument();
+    expect(recordInvoice).not.toHaveBeenCalled();
+  });
 });
 
 /** Everything the form asks for that is not the vendor or the order. */

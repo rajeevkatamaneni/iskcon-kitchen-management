@@ -2,6 +2,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { HintedField } from "@/components/ds/InfoHint";
 import {
   TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, WRAP,
@@ -236,7 +237,7 @@ export function PurchaseOrderEditor({
       {words.intro && (
         <p className="mt-1 max-w-prose text-sm text-ink-secondary">{words.intro}</p>
       )}
-      <form className="mt-4" aria-label={words.formLabel} onSubmit={save}>
+      <Form className="mt-4" aria-label={words.formLabel} onSubmit={save}>
         {/* The standing advice — that the date may be left off — is the "i" beside the label. The
             warning underneath is not: it is recomputed as the date is typed and is about the day
             actually in the box, so it has to be on the screen rather than behind a press. */}
@@ -368,7 +369,7 @@ export function PurchaseOrderEditor({
           <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Save</button>
           <Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button>
         </div>
-      </form>
+      </Form>
     </section>
   );
 }

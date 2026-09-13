@@ -8,6 +8,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { HintedField } from "@/components/ds/InfoHint";
 import { VendorStatusDialog } from "@/components/VendorStatusDialog";
@@ -175,7 +176,7 @@ function VendorDetailView() {
 
               <section className="card mb-8 px-6 py-5">
                 <h2 className="text-lg">Details</h2>
-                <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Edit vendor" onSubmit={save}>
+                <Form className="mt-4 grid grid-cols-2 gap-4" aria-label="Edit vendor" onSubmit={save}>
                   <Field name="name" label="Name" defaultValue={vendor.name} required />
                   {/* Not required, and `?? ""` rather than the bare value: a vendor may have no
                       number at all now (T-025), and an uncontrolled input cannot be handed null. */}
@@ -209,7 +210,7 @@ function VendorDetailView() {
                     </button>
                     {saved && <span className="text-sm text-success">Saved.</span>}
                   </div>
-                </form>
+                </Form>
               </section>
 
               <section className="card px-6 py-5">
@@ -286,7 +287,7 @@ function VendorDetailView() {
                   </table>
                 )}
 
-                <form className="mt-4 flex flex-wrap items-end gap-4" aria-label="Add a supply" onSubmit={addSupply}>
+                <Form className="mt-4 flex flex-wrap items-end gap-4" aria-label="Add a supply" onSubmit={addSupply}>
                   <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                     <span className="pl-field-inset font-medium text-ink">Ingredient</span>
                     <select name="ingredientId" required className="min-h-touch rounded-control border border-hairline px-3">
@@ -325,7 +326,7 @@ function VendorDetailView() {
                   <button type="submit" disabled={busy || available.length === 0} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">
                     Add supply
                   </button>
-                </form>
+                </Form>
               </section>
 
               <section className="card mt-8 px-6 py-5">

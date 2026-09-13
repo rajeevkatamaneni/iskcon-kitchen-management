@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { Form } from "@/components/ds/Form";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type BatchStock, type CommittedMeal, type StockMovement } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -428,7 +429,7 @@ function AdjustForm({
           ? "Count what is in the store today and it becomes the opening batch. Everything after this — deliveries, donations, meals cooked — moves on its own."
           : "Negative writes off spoilage. Positive corrects a miscount. A large one needs an admin."}
       </p>
-      <form className="mt-4 grid grid-cols-2 gap-4" aria-label="Adjust stock" onSubmit={submit}>
+      <Form className="mt-4 grid grid-cols-2 gap-4" aria-label="Adjust stock" onSubmit={submit}>
         {!opening && (
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Batch</span>
@@ -478,7 +479,7 @@ function AdjustForm({
           </button>
           <button type="button" onClick={() => setOpen(false)} className="min-h-touch rounded px-4 text-ink-secondary hover:underline">Cancel</button>
         </div>
-      </form>
+      </Form>
     </section>
   );
 }
@@ -762,7 +763,7 @@ function CorrectMovement({
       aria-modal="true"
       aria-labelledby="correct-movement-title"
     >
-      <form className="modal w-full max-w-prose px-8 py-7" onSubmit={submit}>
+      <Form className="modal w-full max-w-prose px-8 py-7" onSubmit={submit}>
         <h2 id="correct-movement-title" className="text-lg">Correct this movement</h2>
         <p className="mt-2 text-sm text-ink-secondary">
           The {summary} stays in the ledger exactly as it is. The opposite amount is
@@ -793,7 +794,7 @@ function CorrectMovement({
             Record the correction
           </Button>
         </div>
-      </form>
+      </Form>
     </div>
   );
 }

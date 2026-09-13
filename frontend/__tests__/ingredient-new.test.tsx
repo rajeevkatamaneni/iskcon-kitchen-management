@@ -59,6 +59,30 @@ describe("adding an ingredient", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/ingredients?added=Ghee"));
   });
 
+  /**
+   * T-161: the sentence Form puts beside a refused box. Checked three ways so that "beside" means
+   * something: the box is marked invalid, it is described by that very sentence, and the sentence's
+   * slot sits straight after the box, or after the label wrapping it.
+   */
+  function expectSaidBeside(box: HTMLElement, sentence: string) {
+    const said = screen.getByText(sentence);
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+    expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
+  }
+
+  it("names each blank required box in red beside it, and adds nothing (T-161)", () => {
+    render(<NewIngredientPage />);
+
+    // The header button, outside the form, as a person presses it — not a synthetic submit event,
+    // which would skip the one path Rajeev's ruling is about.
+    fireEvent.click(screen.getByRole("button", { name: /add ingredient/i }));
+
+    expectSaidBeside(screen.getByLabelText(/^name$/i), "Name is required");
+    expectSaidBeside(screen.getByLabelText(/^category$/i), "Category is required");
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
   it("offers Cancel back to the list, and no way out that is not Cancel", () => {
     render(<NewIngredientPage />);
     expect(screen.getByRole("link", { name: /^cancel$/i })).toHaveAttribute("href", "/ingredients");

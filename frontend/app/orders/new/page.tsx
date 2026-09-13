@@ -6,6 +6,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { Loading } from "@/components/Loading";
 import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { api } from "@/lib/api";
@@ -101,7 +102,7 @@ function ChooseVendorView() {
         <Loading label="Loading vendors…" />
       ) : (
         <>
-          <form
+          <Form
             id={FORM}
             aria-label="Choose a vendor"
             onSubmit={choose}
@@ -129,7 +130,7 @@ function ChooseVendorView() {
             <ButtonLink href="/vendors/new" variant="secondary">
               Add a vendor
             </ButtonLink>
-          </form>
+          </Form>
 
           {vendors.length === 0 && !error && (
             <p className="max-w-prose text-ink-secondary">

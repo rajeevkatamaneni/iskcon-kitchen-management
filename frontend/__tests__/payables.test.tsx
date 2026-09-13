@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { api } from "@/lib/api";
 import type { ApiError, PayableView } from "@/lib/api";
 
 const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
@@ -57,5 +58,35 @@ describe("payables", () => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     render(<PayablesPage />);
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
+  });
+
+  it("names a cleared date and amount when Save is pressed, then a negative amount, and records nothing (T-162)", async () => {
+    const record = vi.spyOn(api, "recordInvoicePayment").mockResolvedValue(undefined as never);
+    try {
+      render(<PayablesPage />);
+      fireEvent.click(screen.getByRole("button", { name: /record payment/i }));
+      const form = screen.getByRole("form", { name: /record payment for INV-1/i });
+
+      // Both boxes open pre-filled (today, and what is outstanding), so blank means cleared.
+      fireEvent.change(within(form).getByLabelText("Date"), { target: { value: "" } });
+      fireEvent.change(within(form).getByLabelText("Amount (₹)"), { target: { value: "" } });
+      await act(async () => {
+        fireEvent.click(within(form).getByRole("button", { name: /^save$/i }));
+      });
+      expect(within(form).getByText("Date is required")).toBeInTheDocument();
+      expect(within(form).getByText("Amount (₹) is required")).toBeInTheDocument();
+      expect(record).not.toHaveBeenCalled();
+
+      fireEvent.change(within(form).getByLabelText("Date"), { target: { value: "2026-09-01" } });
+      fireEvent.change(within(form).getByLabelText("Amount (₹)"), { target: { value: "-100" } });
+      await act(async () => {
+        fireEvent.click(within(form).getByRole("button", { name: /^save$/i }));
+      });
+      expect(within(form).getByText("Amount (₹) must be at least 0")).toBeInTheDocument();
+      expect(within(form).queryByText("Date is required")).not.toBeInTheDocument();
+      expect(record).not.toHaveBeenCalled();
+    } finally {
+      record.mockRestore();
+    }
   });
 });

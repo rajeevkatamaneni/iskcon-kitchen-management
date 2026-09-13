@@ -1,6 +1,7 @@
 "use client";
 
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { Form } from "@/components/ds/Form";
 import { FOOD_UNITS, unitLabel } from "@/lib/format";
 import type { ApiError, CreateIngredientInput } from "@/lib/api";
 
@@ -76,7 +77,7 @@ export function IngredientForm({
     <>
       {error && <ErrorNotice error={error} />}
 
-      <form
+      <Form
         id={formId}
         className="grid grid-cols-2 gap-4"
         aria-label={supply ? "Add a supply" : "Add an ingredient"}
@@ -162,7 +163,7 @@ export function IngredientForm({
             <span>Ekadashi-prohibited (rice, wheat, dal, chickpeas…)</span>
           </label>
         )}
-      </form>
+      </Form>
     </>
   );
 }

@@ -1182,6 +1182,36 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-13 — Thirty-one more forms name a refused box in red, a hint no longer runs into the name, and WhatsApp templates go to Meta only when something changed (wave 3-1; tasks T-161, T-162, T-163, T-171, T-169a)
+
+One migration, `V129`. No new error code. **Not driven in a browser, and not seen working by Rajeev.**
+
+**Thirty-one forms move onto the shared `Form` (T-161, T-162, T-163).** On the stock, donations, orders,
+invoices, money, vendors, equipment and kitchens screens, a blank or out-of-range box now shows a red
+sentence under it naming the field, in place of the browser's grey bubble. Each form changed only its
+tag; the rules are still the ones on its controls. Three order tests that asserted the page's own
+"date already passed" message now assert `Form`'s *"Needed by must be on or after <date>"*, because the
+box's own `min` refuses it first; in a real browser the page's message was never reachable anyway.
+
+**A hint inside a label no longer runs into the field's name (T-171).** The sentence used to read
+*"Serviced onA service dated next Tuesday has not happened yet. is required"*. It now reads *"Serviced
+on is required"*. `Form` leaves out any part of the label written in the hint, note or error colour.
+
+**WhatsApp templates are sent once, then only through Reload (T-169a).** Save on Settings → WhatsApp
+sends templates only on a temple's first connection. After that, `POST
+/api/v1/settings/whatsapp/templates/reload` sends only what is waiting: changed wording, a template Meta
+did not register, or everything if the account changed. Each temple keeps a fingerprint of each
+template's wording as last sent, and the account it went to (`V129`, three columns on
+`tenant_settings`). The settings view carries `templatesPending` (changed, refused, accountChanged).
+
+**Not done:** no screen calls Reload yet (T-169b), and nobody should press it on staging until Meta's
+stored wording has been read back and compared (T-173). Save buttons that stay disabled until something
+is typed still hide `Form`'s sentence (T-172). The order editor lost its "before the order was raised"
+explanation, and ", optional" inside an aria-label reads badly in a sentence; both are held for Rajeev.
+Some boxes outside any form are still checked by nothing, and a name of only spaces passes `required`.
+Proofs, with negative controls, in `docs/work/proof/T-161.md`, `T-162.md`, `T-163.md`, `T-171.md` and
+`T-169a.md`.
+
 ### 2026-09-13 — A refused box names itself in red on meal kinds and occasions, and a template Meta already holds is no longer listed as refused (tasks T-160, T-168)
 
 No migration; the schema stays `V128`, and no new error code. **Not driven in a browser, and not seen

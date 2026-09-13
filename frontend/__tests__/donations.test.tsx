@@ -289,6 +289,51 @@ describe("recording a donation", () => {
     expect(within(form).getByLabelText(/cash amount/i)).toBeDisabled();
   });
 
+  /**
+   * T-161: the sentence Form puts beside a refused box. Checked three ways so that "beside" means
+   * something: the box is marked invalid, it is described by that very sentence, and the sentence's
+   * slot sits straight after the box, or after the label wrapping it.
+   */
+  function expectSaidBeside(box: HTMLElement, sentence: string) {
+    const said = screen.getByText(sentence);
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+    expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
+  }
+
+  it("names a blank donor and a cleared date in red beside their boxes, and records nothing (T-161)", () => {
+    render(<NewDonationPage />);
+    const form = screen.getByRole("form", { name: /record a donation/i });
+
+    // Some cash first. With nothing given at all the header button stays disabled, and a click on
+    // a disabled button submits nothing, so no box could ever be named.
+    fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "500" } });
+    fireEvent.change(within(form).getByLabelText(/^date$/i), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
+
+    expectSaidBeside(within(form).getByLabelText(/donor name/i), "Donor name is required");
+    expectSaidBeside(within(form).getByLabelText(/^date$/i), "Date is required");
+    expect(recordMock).not.toHaveBeenCalled();
+  });
+
+  it("says an estimated value below nothing must be at least 0, and records nothing (T-161)", () => {
+    render(<NewDonationPage />);
+    const form = screen.getByRole("form", { name: /record a donation/i });
+    fireEvent.change(within(form).getByLabelText(/donor name/i), { target: { value: "Govind Das" } });
+    fireEvent.click(within(form).getByRole("button", { name: /add a food item/i }));
+    fireEvent.change(within(form).getByLabelText(/food ingredient 1/i), { target: { value: "ing1" } });
+    fireEvent.change(within(form).getByLabelText(/quantity 1/i), { target: { value: "5" } });
+    fireEvent.change(within(form).getByLabelText(/estimated value/i), { target: { value: "-1" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
+
+    expectSaidBeside(
+      within(form).getByLabelText(/estimated value/i),
+      "Estimated value of goods (₹) must be at least 0"
+    );
+    expect(recordMock).not.toHaveBeenCalled();
+  });
+
   it("refuses a role without inventory access", () => {
     authRef.current = { status: "signed-in", appUser: { role: "VOLUNTEER", userId: "me" } };
     render(<NewDonationPage />);

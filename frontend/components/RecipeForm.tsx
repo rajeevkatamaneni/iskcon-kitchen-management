@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { Form } from "@/components/ds/Form";
 import { api, type ApiError, type RecipeDetail, type RecipeInput } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { FOOD_UNITS, YIELD_UNITS, unitLabel } from "@/lib/format";
@@ -145,7 +146,7 @@ export function RecipeForm({
   const ingredientOptions = (ingredients.data ?? []).filter((ing) => !ing.supply);
 
   return (
-    <form id={formId} onSubmit={handleSubmit} className="space-y-8">
+    <Form id={formId} onSubmit={handleSubmit} className="space-y-8">
       {error && <ErrorNotice error={error} />}
 
       <section className="space-y-5">
@@ -346,6 +347,6 @@ export function RecipeForm({
         </div>
       </section>
 
-    </form>
+    </Form>
   );
 }

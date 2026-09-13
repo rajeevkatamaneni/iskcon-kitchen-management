@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { Form } from "@/components/ds/Form";
 import { RequireRole } from "@/components/RequireRole";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
@@ -589,7 +590,7 @@ function VoidDonation({
       aria-modal="true"
       aria-labelledby="void-donation-title"
     >
-      <form className="modal w-full max-w-prose px-8 py-7" onSubmit={submit} aria-label="Void this gift">
+      <Form className="modal w-full max-w-prose px-8 py-7" onSubmit={submit} aria-label="Void this gift">
         <h2 id="void-donation-title" className="text-lg">Void this gift?</h2>
         <p className="mt-2 text-sm text-ink-secondary">
           The {summary} stays in the ledger, marked as voided, and comes out of the totals above it.
@@ -638,7 +639,7 @@ function VoidDonation({
             Void this gift
           </Button>
         </div>
-      </form>
+      </Form>
     </div>
   );
 }

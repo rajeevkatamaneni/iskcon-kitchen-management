@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { Form } from "@/components/ds/Form";
 import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
@@ -172,7 +173,7 @@ function NewDonationView() {
         </div>
       )}
 
-      <form id={FORM} className="grid gap-6" aria-label="Record a donation" onSubmit={submit}>
+      <Form id={FORM} className="grid gap-6" aria-label="Record a donation" onSubmit={submit}>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -410,7 +411,7 @@ function NewDonationView() {
             Enter a cash amount, or add food or equipment.
           </p>
         )}
-      </form>
+      </Form>
     </FocusScreen>
   );
 }

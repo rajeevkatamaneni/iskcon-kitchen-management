@@ -7,6 +7,7 @@ import { FocusScreen } from "@/components/ds/FocusScreen";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { HintedField } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { Form } from "@/components/ds/Form";
 import { BusyPot } from "@/components/Loading";
 import {
   api,
@@ -233,7 +234,7 @@ export function IngredientRequestForm({
         </>
       }
     >
-      <form
+      <Form
         id={formId}
         onSubmit={(event) => {
           event.preventDefault();
@@ -434,7 +435,7 @@ export function IngredientRequestForm({
             + Add dish
           </button>
         </section>
-      </form>
+      </Form>
     </FocusScreen>
   );
 }

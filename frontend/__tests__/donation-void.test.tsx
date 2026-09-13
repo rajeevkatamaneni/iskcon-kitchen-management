@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ApiError, type LedgerRow, type PeriodSummary } from "@/lib/api";
 import { todayIso } from "@/lib/format";
 
@@ -190,6 +190,40 @@ describe("striking a gift that was recorded wrongly", () => {
 
     fireEvent.change(box, { target: { value: "Entered twice." } });
     expect(commit).toBeEnabled();
+    expect(voidMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * T-161. The dialog is a Form now, but a person cannot reach its sentence: the button above stays
+   * disabled until a reason is written, and pressing a disabled button submits nothing. So the real
+   * click is shown doing nothing, and then `requestSubmit()` — the submit that click would make if
+   * the button were enabled — shows what Form says once it does run.
+   *
+   * The hint under the box sits inside the same <label>. Until T-171, Form read it as part of the
+   * name, and this sentence was the question run straight into the hint and then "is required".
+   * Form now leaves out words coloured as a hint, so the name is the question alone, asserted whole.
+   */
+  it("names a blank reason beside its box once the form is submitted, and sends nothing (T-161)", () => {
+    render(<DonationsPage />);
+    fireEvent.click(within(rowFor("Govind Das")).getByRole("button", { name: "Void" }));
+
+    const dialog = screen.getByRole("dialog");
+    const form = within(dialog).getByRole("form", { name: /void this gift/i }) as HTMLFormElement;
+    const commit = within(dialog).getByRole("button", { name: /void this gift/i });
+    const box = within(dialog).getByLabelText(/why it is being voided/i);
+    const sentence = "Why it is being voided is required";
+
+    expect(form).toHaveAttribute("novalidate");
+    expect(commit).toBeDisabled();
+    fireEvent.click(commit);
+    expect(within(dialog).queryByText(/ is required$/)).not.toBeInTheDocument();
+
+    act(() => form.requestSubmit());
+
+    const said = within(dialog).getByText(sentence);
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+    expect(box.closest("label")?.nextElementSibling).toBe(said.parentElement);
     expect(voidMock).not.toHaveBeenCalled();
   });
 

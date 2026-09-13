@@ -369,6 +369,22 @@ describe("a purchase-order line that isn't in the catalogue", () => {
     expect(screen.getByRole("form", { name: /record what arrived/i })).toBeInTheDocument();
   });
 
+  it("has no box to name on a blank press of Record as arrived, so the page's words still answer (T-162)", async () => {
+    // The arrivals form is a `Form` like every other, but none of its boxes carries a rule: a tick
+    // box is optional one at a time, and "at least one" is the page's check. So the press passes
+    // the form's checks and the page refuses it in words, as before.
+    const record = vi.spyOn(api, "recordArrivals").mockResolvedValue(undefined);
+    render(<PurchaseOrderDetailPage />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /record as arrived/i }));
+    });
+
+    expect(record).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/tick what arrived/i);
+    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+  });
+
   it("says one piece and four pieces, not one pieces (T-107, T-108)", () => {
     // "1 pieces" on the arrivals panel and on the order table. `quantity()` named its unit from a
     // single label per unit, so a count of one disagreed with its noun everywhere in the

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { HintedField, InfoHint } from "@/components/ds/InfoHint";
+import { Form } from "@/components/ds/Form";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import {
   CONDITION_LABEL,
@@ -140,7 +141,7 @@ export function EquipmentForm({
     <>
       {error && <ErrorNotice error={error} />}
 
-      <form
+      <Form
         id={formId}
         className="grid grid-cols-2 gap-4"
         aria-label="Register equipment"
@@ -224,7 +225,7 @@ export function EquipmentForm({
             className="min-h-touch rounded-control border border-hairline px-3 py-2"
           />
         </label>
-      </form>
+      </Form>
 
       {isAdmin && (
         <section className="card px-6 py-5" aria-label="Servicing">

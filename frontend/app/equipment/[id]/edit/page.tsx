@@ -6,6 +6,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { HintedField } from "@/components/ds/InfoHint";
@@ -162,7 +163,7 @@ function EditForm({
         <em>Change the schedule</em>. Both are on the item’s own page.
       </p>
 
-      <form
+      <Form
         id={FORM}
         className="grid grid-cols-2 gap-4"
         aria-label="Edit equipment"
@@ -262,7 +263,7 @@ function EditForm({
             className="min-h-touch rounded-control border border-hairline px-3 py-2"
           />
         </label>
-      </form>
+      </Form>
     </>
   );
 }

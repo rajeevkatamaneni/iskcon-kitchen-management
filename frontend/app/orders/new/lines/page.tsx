@@ -6,6 +6,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { Loading } from "@/components/Loading";
 import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { HintedField } from "@/components/ds/InfoHint";
@@ -234,7 +235,7 @@ function NewPurchaseOrderLinesView() {
       {loadingVendors ? (
         <Loading label="Loading the vendor…" />
       ) : (
-        <form id={FORM} aria-label="Raise a purchase order" onSubmit={raise} className="grid gap-6">
+        <Form id={FORM} aria-label="Raise a purchase order" onSubmit={raise} className="grid gap-6">
           <div className="grid grid-cols-2 gap-4">
             {/* `min` is what refuses yesterday in the browser, in every language and on a phone.
                 The temple's today, not the device's: a date is the kitchen's operational day, and
@@ -312,7 +313,7 @@ function NewPurchaseOrderLinesView() {
               onAdd={addLine}
             />
           </div>
-        </form>
+        </Form>
       )}
     </FocusScreen>
   );

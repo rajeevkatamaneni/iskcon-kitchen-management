@@ -20,6 +20,7 @@ import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE
 // subject and two copies of that rule is how one of them comes to print an empty cell.
 import { PurchaseOrderEditor, subjectOf, type PurchaseOrderDraft } from "@/components/PurchaseOrderEditor";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { Badge } from "@/components/ds/Badge";
 import { HintedField } from "@/components/ds/InfoHint";
 
@@ -875,7 +876,7 @@ function PurchaseOrderDetailView() {
                 <section className="card mb-6 px-6 py-5" aria-labelledby="receive-heading">
                   <h2 id="receive-heading" className="text-lg">Record a delivery</h2>
                   <p className="mt-1 text-sm text-ink-secondary">Rejected goods need a reason and never enter stock. The price is what the bill says — correct it if it differs, or leave it blank for a delivery that came without one.</p>
-                  <form className="mt-4" aria-label="Record a delivery" onSubmit={receive}>
+                  <Form className="mt-4" aria-label="Record a delivery" onSubmit={receive}>
                     <div className="overflow-x-auto">
                     <table className={`${TABLE} text-sm`}>
                       <thead className={THEAD}>
@@ -965,7 +966,7 @@ function PurchaseOrderDetailView() {
                     </table>
                     </div>
                     <button type="submit" disabled={busy} className="btn btn-primary mt-4 min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Record delivery</button>
-                  </form>
+                  </Form>
                 </section>
               )}
 
@@ -993,7 +994,7 @@ function PurchaseOrderDetailView() {
                     Tick only what has arrived. Anything left unticked stays here for next time,
                     and recording it changes nothing in the store.
                   </p>
-                  <form className="mt-4" aria-label="Record what arrived" onSubmit={recordArrivals}>
+                  <Form className="mt-4" aria-label="Record what arrived" onSubmit={recordArrivals}>
                     <ul className="grid gap-2">
                       {outstandingArrivals.map((l) => (
                         <li key={l.id}>
@@ -1046,7 +1047,7 @@ function PurchaseOrderDetailView() {
                     >
                       Record as arrived
                     </button>
-                  </form>
+                  </Form>
                 </section>
               )}
 
@@ -1194,7 +1195,7 @@ function PurchaseOrderDetailView() {
                     this delivery can still go back. This takes the goods out of stock. The delivery
                     record stays exactly as it was signed for.
                   </p>
-                  <form className="mt-4" aria-label="Return goods to the vendor" onSubmit={submitReturn}>
+                  <Form className="mt-4" aria-label="Return goods to the vendor" onSubmit={submitReturn}>
                     <div className="flex flex-wrap items-end gap-4">
                       <HintedField label={`Quantity in ${unitLabel(returning.line.unit)}`}>
                         {(id) => (
@@ -1235,7 +1236,7 @@ function PurchaseOrderDetailView() {
                       <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Record return</button>
                       <button type="button" disabled={busy} onClick={() => setReturning(null)} className="text-sm text-ink-secondary hover:underline disabled:opacity-60">Cancel</button>
                     </div>
-                  </form>
+                  </Form>
                 </section>
               )}
 
@@ -1286,7 +1287,7 @@ function PurchaseOrderDetailView() {
                     )}
                   </div>
 
-                  <form className="mt-4" aria-label="Close this order, part delivered" onSubmit={async (e) => {
+                  <Form className="mt-4" aria-label="Close this order, part delivered" onSubmit={async (e) => {
                     e.preventDefault();
                     const note = closeNote.trim();
                     const ok = await run(
@@ -1365,7 +1366,7 @@ function PurchaseOrderDetailView() {
                         Close order
                       </button>
                     </div>
-                  </form>
+                  </Form>
                 </section>
               )}
 
@@ -1400,7 +1401,7 @@ function PurchaseOrderDetailView() {
                     This calls off {po.poNumber} with {po.vendorName}. It cannot be undone — raise a
                     new order if it is needed again.
                   </p>
-                  <form className="mt-3" aria-label="Cancel this purchase order" onSubmit={async (e) => {
+                  <Form className="mt-3" aria-label="Cancel this purchase order" onSubmit={async (e) => {
                     e.preventDefault();
                     const form = e.currentTarget;
                     const reason = String(new FormData(form).get("reason") ?? "").trim();
@@ -1496,7 +1497,7 @@ function PurchaseOrderDetailView() {
                         Cancelling it counts against nobody’s delivery record.
                       </p>
                     )}
-                  </form>
+                  </Form>
                 </section>
               )}
             </>
