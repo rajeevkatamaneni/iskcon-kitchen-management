@@ -304,16 +304,16 @@ describe("the temple's page, after the edit screen exists", () => {
 /*
  * T-166, slice F of the blank-required-fields wave.
  *
- * Why nothing on this screen says "is required": `Field`'s `required` prop prints "(required)" beside
- * the label and never reaches the input, and no input here carries `required` of its own. Form only
- * reads what the browser refuses, so it has nothing to refuse for a blank box. Adding the attribute
- * is a change to the screen's rules, which this task was told not to make; it is raised instead.
- *
- * The form has no email, number or date box either, so Form checks nothing here. A cleared name
- * goes to the server as it did before, and the server's answer is what the operator reads.
+ * T-166 found that `Field`'s `required` printed "(required)" beside the label and never reached the
+ * input, so a cleared name went to the server and only the server's KMS-400001 stopped it. T-174
+ * passed it through, so the name box is required on the element and Form names it before anything is
+ * sent. The server still refuses a blank name for any other caller; this screen no longer relies on it.
  */
 describe("correcting a temple under Form (T-166)", () => {
-  it("refuses no box itself, and shows the server's answer to a cleared name", async () => {
+  it("names a cleared name in words, and sends nothing (T-174)", async () => {
+    // Rejected as the server would, so that if the save were ever sent the code would show and the
+    // assertions below would catch it rather than pass on a quiet mock.
+    updateMock.mockReset();
     updateMock.mockRejectedValue(
       new ApiError(
         {
@@ -328,13 +328,31 @@ describe("correcting a temple under Form (T-166)", () => {
     render(<EditTenantPage />);
 
     const name = screen.getByLabelText(/^name/i);
-    expect(name).not.toBeRequired();
+    expect(name).toBeRequired();
     fireEvent.change(name, { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
-    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
-    expect(updateMock.mock.calls[0][1]).toMatchObject({ name: "" });
-    expect(await screen.findByText("KMS-400001")).toBeInTheDocument();
-    expect(screen.queryByText(/is required/i)).not.toBeInTheDocument();
+    expectSaidBeside(name, "Name is required");
+    await waitFor(() => expect(name).toHaveFocus());
+    await settle();
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("KMS-400001")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * The sentence Form puts beside a refused box. Checked three ways so that "beside" means something:
+ * the box is marked invalid, it is described by that very sentence, and the sentence's slot sits
+ * straight after the box, or after the label wrapping it.
+ */
+function expectSaidBeside(box: HTMLElement, sentence: string | RegExp) {
+  const said = screen.getByText(sentence);
+  expect(box).toHaveAttribute("aria-invalid", "true");
+  expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+  expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
+}
+
+/** Lets a handler that awaits a token reach its API call, so "not called" is not merely "not yet". */
+function settle() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}

@@ -69,12 +69,11 @@ describe("sign-in", () => {
 /*
  * T-166, slice F of the blank-required-fields wave: the three sign-in forms under Form.
  *
- * Why nothing on this screen says "is required": `Field`'s `required` prop prints "(required)" beside
- * the label and never reaches the input, and no input here carries `required` of its own. Form only
- * reads what the browser refuses, so it has nothing to refuse for a blank box. Adding the attribute
- * is a change to the screen's rules, which this task was told not to make; it is raised instead.
+ * T-166 found that `Field`'s `required` printed "(required)" beside the label and never reached the
+ * input, so a blank submit here was refused by nothing. T-174 passed it through, so the email,
+ * password, phone and code boxes are required on the element and Form names a blank one.
  *
- * What Form does check here is the email box's type. The two email and phone submit buttons are
+ * Form also checks the email box's type. The two email and phone submit buttons are
  * disabled in this environment, which has no Firebase configuration, so those forms are submitted
  * directly; the code form's button is disabled only while busy, so it is clicked.
  */
@@ -93,18 +92,24 @@ describe("sign-in forms under Form (T-166)", () => {
     expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
   });
 
-  it("refuses no blank box, because no box on the page carries required", () => {
+  it("names both blank boxes in words, and never asks Firebase (T-174)", async () => {
+    signInWithEmailAndPassword.mockReset();
     render(<SignInPage />);
 
     const email = screen.getByLabelText(/email address/i);
-    expect(email).not.toBeRequired();
-    expect(screen.getByLabelText(/password/i)).not.toBeRequired();
+    const password = screen.getByLabelText(/password/i);
+    expect(email).toBeRequired();
+    expect(password).toBeRequired();
     fireEvent.submit(email.closest("form")!);
 
-    expect(screen.queryByText(/is required/i)).not.toBeInTheDocument();
+    expectSaidBeside(email, "Email address is required");
+    expectSaidBeside(password, "Password is required");
+    await waitFor(() => expect(email).toHaveFocus());
+    await settle();
+    expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
   });
 
-  it("hands the typed code to Firebase from the code form's own button", async () => {
+  it("hands the typed code to Firebase from the code form's own button, and the code box is required", async () => {
     const confirm = vi.fn().mockResolvedValue(undefined);
     signInWithPhoneNumber.mockResolvedValue({ confirm });
     render(<SignInPage />);
@@ -115,7 +120,7 @@ describe("sign-in forms under Form (T-166)", () => {
     fireEvent.submit(phone.closest("form")!);
 
     const code = await screen.findByLabelText(/^code/i);
-    expect(code).not.toBeRequired();
+    expect(code).toBeRequired();
     fireEvent.change(code, { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
 

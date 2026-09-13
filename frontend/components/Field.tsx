@@ -24,6 +24,15 @@ import { InfoHint } from "@/components/ds/InfoHint";
  * <p>Errors are wired to the input with aria-describedby and aria-invalid, so a screen reader
  * announces the problem rather than leaving it as red text nobody hears. The hint is wired by
  * {@link InfoHint}'s own tooltip while it is open, so it is not in this field's describedby.
+ *
+ * <p>`required` reaches the control, not only the label (T-174). It used to print "(required)" and
+ * stop there, so sign-in, Add a temple and Edit this temple showed boxes marked required that the
+ * browser never refused: a blank submit went through, a blank temple name reached the server, and a
+ * blank coordinate went out as `Number("")`, which is 0. `Form` names a refused box only from what
+ * the browser itself refuses, so the label saying "(required)" and the element being required have to
+ * be one fact, set in one place. Rajeev's ruling, 2026-09-11: *"Required fields should carry
+ * `required` on the element and if left unfilled, we should at least show 'Required' in red on form
+ * submit."*
  */
 interface FieldProps {
   id: string;
@@ -31,12 +40,17 @@ interface FieldProps {
   hint?: string;
   error?: string;
   required?: boolean;
-  children: (props: {
-    id: string;
-    "aria-invalid": boolean;
-    "aria-describedby": string | undefined;
-    className: string;
-  }) => ReactNode;
+  children: (props: FieldControlProps) => ReactNode;
+}
+
+/** What `Field` hands its child to spread onto the control. */
+interface FieldControlProps {
+  id: string;
+  "aria-invalid": boolean;
+  "aria-describedby": string | undefined;
+  className: string;
+  /** Present, and true, only when the field was given `required`; otherwise the key is absent. */
+  required?: true;
 }
 
 /** The one label style in the app: a step darker and a step heavier than the text around it. */
@@ -72,6 +86,14 @@ export function Field({ id, label, hint, error, required, children }: FieldProps
       <div className="mt-2">
         {children({
           id,
+          // The key is added only when the field is required, never as `required: false` or
+          // `required: undefined`. React renders all three as no attribute when they are the last
+          // word, but a spread is not always the last word: `<input required {...props} />` compiles
+          // to `{ required: true, ...props }`, and an explicit `required: undefined` in `props` would
+          // quietly take away the control's own `required`. Checked with react-dom 18.3.1:
+          // `{ required: true, ...{ required: undefined } }` renders `<input/>`. Leaving the key out
+          // means a field that is not marked required changes nothing about its control.
+          ...(required ? { required: true as const } : {}),
           "aria-invalid": Boolean(error),
           "aria-describedby": errorId,
           className: [

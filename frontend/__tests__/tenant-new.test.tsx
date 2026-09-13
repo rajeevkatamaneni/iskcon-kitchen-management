@@ -99,6 +99,8 @@ describe("add a temple", () => {
 
   it("previews the derived web address, cleans the phone, and hands off on success", async () => {
     render(<NewTenantPage />);
+    typeTheCoordinates();
+    typeTheAdministrator();
 
     fireEvent.change(screen.getByLabelText(/^name/i), {
       target: { value: "Sri Sri Radha Govinda Temple" },
@@ -128,6 +130,8 @@ describe("add a temple", () => {
     // The copy of the cleaning that used to live on this screen kept the plus and the digits and threw
     // everything else away, so this X vanished and a well-formed wrong number was sent (T-157).
     render(<NewTenantPage />);
+    typeTheCoordinates();
+    typeTheAdministrator();
 
     fireEvent.change(screen.getByLabelText(/^name/i), {
       target: { value: "Sri Sri Radha Govinda Temple" },
@@ -152,6 +156,8 @@ describe("add a temple", () => {
       })
     );
     render(<NewTenantPage />);
+    typeTheCoordinates();
+    typeTheAdministrator();
 
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Bangalore" } });
     fireEvent.click(screen.getByRole("button", { name: /add temple/i }));
@@ -169,6 +175,7 @@ describe("add a temple", () => {
 
   it("fills the coordinates from the server's answer once the operator confirms it", async () => {
     render(<NewTenantPage />);
+    typeTheAdministrator();
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Bangalore" } });
 
     await pickTheTemple();
@@ -211,6 +218,8 @@ describe("add a temple", () => {
 
   it("declining what came back leaves the coordinates empty and the boxes typeable", async () => {
     render(<NewTenantPage />);
+    typeTheName();
+    typeTheAdministrator();
 
     await pickTheTemple();
     fireEvent.click(await screen.findByRole("button", { name: /no, i’ll type them/i }));
@@ -231,6 +240,8 @@ describe("add a temple", () => {
     // The fallback is not merely present, it is on top. Nothing here disables the boxes, before a
     // pick or after one.
     render(<NewTenantPage />);
+    typeTheName();
+    typeTheAdministrator();
 
     await pickTheTemple();
     fireEvent.click(await screen.findByRole("button", { name: /use these coordinates/i }));
@@ -250,6 +261,8 @@ describe("add a temple", () => {
     // would be asking the operator to vouch for their own typing.
     resolvePlace.mockResolvedValue(null);
     render(<NewTenantPage />);
+    typeTheName();
+    typeTheAdministrator();
 
     await pickTheTemple();
 
@@ -272,6 +285,8 @@ describe("add a temple", () => {
     // is typed into and the two numbers are typed in, exactly as before any of this existed.
     placesAvailable.mockResolvedValue({ available: false });
     render(<NewTenantPage />);
+    typeTheName();
+    typeTheAdministrator();
 
     await waitFor(() => expect(placesAvailable).toHaveBeenCalled());
     typeAddress("Hare Krishna Hill, Bengaluru");
@@ -314,6 +329,7 @@ describe("add a temple", () => {
       at: { latitude: 12.285518, longitude: 76.634087 },
     });
     render(<NewTenantPage />);
+    typeTheAdministrator();
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Mysuru" } });
 
     await pickTheTemple();
@@ -370,14 +386,12 @@ describe("add a temple", () => {
 /*
  * T-166, slice F of the blank-required-fields wave.
  *
- * Why nothing on this screen says "is required": `Field`'s `required` prop prints "(required)" beside
- * the label and never reaches the input, and no input here carries `required` of its own. Form only
- * reads what the browser refuses, so it has nothing to refuse for a blank box. Adding the attribute
- * is a change to the screen's rules, which this task was told not to make; it is raised instead.
- *
- * So the one thing Form refuses on this screen is a malformed administrator email. A phone typo is
- * not a browser rule at all and must still reach the server, which answers KMS-400003 (T-157). And
- * the coordinate boxes the address picker fills are never named while its confirmation is showing.
+ * T-166 found that `Field`'s `required` printed "(required)" beside the label and never reached the
+ * input, so no box here was refused when blank, and a blank coordinate went out as `Number("")`,
+ * which is 0. T-174 passed it through. Now Form names a blank name, coordinate or administrator box,
+ * and a malformed administrator email. A phone typo is still not a browser rule and must still reach
+ * the server, which answers KMS-400003 (T-157). The coordinate boxes are named even while the address
+ * picker's "Is this the right place?" is showing, because the only alternative is a temple at 0,0.
  */
 describe("adding a temple under Form (T-166)", () => {
   beforeEach(() => {
@@ -388,15 +402,20 @@ describe("adding a temple under Form (T-166)", () => {
     resolvePlace.mockReset().mockResolvedValue(RESOLVED);
   });
 
-  it("names a malformed administrator email in words, and provisions nothing", async () => {
+  it("names a malformed administrator email in words when it is the only thing wrong, and provisions nothing", async () => {
     render(<NewTenantPage />);
 
-    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Bangalore" } });
+    // Every other box filled, so the email is the only box refused and focus has nowhere else to go.
+    typeTheName();
+    typeTheCoordinates();
+    typeTheAdministrator();
     const email = screen.getByLabelText(/^email address/i);
     fireEvent.change(email, { target: { value: "radha.example.com" } });
     fireEvent.click(screen.getByRole("button", { name: /add temple/i }));
 
     expectSaidBeside(email, "Enter an email address like name@example.com");
+    expect(screen.queryByText(/is required/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(email).toHaveFocus());
     await settle();
     expect(provisionSpy).not.toHaveBeenCalled();
   });
@@ -414,6 +433,8 @@ describe("adding a temple under Form (T-166)", () => {
       )
     );
     render(<NewTenantPage />);
+    typeTheCoordinates();
+    typeTheAdministrator();
 
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Bangalore" } });
     fireEvent.change(screen.getByLabelText(/phone number/i), { target: { value: "+91 70304 3334X" } });
@@ -425,21 +446,68 @@ describe("adding a temple under Form (T-166)", () => {
     expect(screen.queryByText(/is required/i)).not.toBeInTheDocument();
   });
 
-  it("names no coordinate box while the picker's answer is still waiting to be confirmed", async () => {
+  it("names both coordinate boxes while the picker's answer is still waiting to be confirmed, and provisions nothing (T-174)", async () => {
     render(<NewTenantPage />);
 
-    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Bangalore" } });
+    typeTheName();
+    typeTheAdministrator();
     await pickTheTemple();
     expect(await screen.findByText(/is this the right place\?/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^latitude/i)).not.toBeRequired();
-    expect(screen.getByLabelText(/^longitude/i)).not.toBeRequired();
+    const latitude = screen.getByLabelText(/^latitude/i);
+    const longitude = screen.getByLabelText(/^longitude/i);
+    expect(latitude).toBeRequired();
+    expect(longitude).toBeRequired();
 
     fireEvent.click(screen.getByRole("button", { name: /add temple/i }));
 
-    expect(screen.queryByText(/^(latitude|longitude) /i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/^latitude/i)).not.toHaveAttribute("aria-invalid", "true");
-    // What happens next is unchanged from before Form: the blank coordinates go to the server.
+    expectSaidBeside(latitude, "Latitude is required");
+    expectSaidBeside(longitude, "Longitude is required");
+    // The card is still asking, so the operator can still answer it; the press did not dismiss it.
+    expect(screen.getByText(/is this the right place\?/i)).toBeInTheDocument();
+    await settle();
+    // Before T-174 the blank boxes went to the server here as Number(""), which is 0.
+    expect(provisionSpy).not.toHaveBeenCalled();
+  });
+
+  /*
+   * T-174, the client half of "a blank coordinate is never sent as 0". The page builds the payload
+   * with Number(form.get("latitude")), so the only way to prove no 0 is built from a blank box is to
+   * show that provisionTenant is never reached while one is blank. A half-typed number such as "12."
+   * is not tested here: jsdom 25 sanitises it to "" and never sets badInput, so it would only repeat
+   * the blank case below while claiming to be something else.
+   */
+  it("never sends a blank or cleared coordinate as 0: each is named and nothing is provisioned (T-174)", async () => {
+    render(<NewTenantPage />);
+    typeTheName();
+    typeTheAdministrator();
+    typeTheCoordinates();
+    const latitude = screen.getByLabelText(/^latitude/i);
+    const longitude = screen.getByLabelText(/^longitude/i);
+    const addTemple = screen.getByRole("button", { name: /add temple/i });
+
+    // One cleared: that box alone is named.
+    fireEvent.change(latitude, { target: { value: "" } });
+    fireEvent.click(addTemple);
+    expectSaidBeside(latitude, "Latitude is required");
+    expect(screen.queryByText("Longitude is required")).not.toBeInTheDocument();
+    await settle();
+    expect(provisionSpy).not.toHaveBeenCalled();
+
+    // Both cleared: both are named.
+    fireEvent.change(longitude, { target: { value: "" } });
+    fireEvent.click(addTemple);
+    expectSaidBeside(latitude, "Latitude is required");
+    expectSaidBeside(longitude, "Longitude is required");
+    await settle();
+    expect(provisionSpy).not.toHaveBeenCalled();
+
+    // Typed again, the save goes, carrying the typed numbers and not a 0.
+    typeTheCoordinates();
+    fireEvent.click(addTemple);
     await waitFor(() => expect(provisionSpy).toHaveBeenCalledTimes(1));
+    const sent = provisionSpy.mock.calls[0][0] as unknown as { latitude: number; longitude: number };
+    expect(sent.latitude).toBe(13.0098);
+    expect(sent.longitude).toBe(77.5511);
   });
 
   function typeAddress(value: string) {
@@ -467,4 +535,29 @@ function expectSaidBeside(box: HTMLElement, sentence: string | RegExp) {
 /** Lets a handler that awaits a token reach its API call, so "not called" is not merely "not yet". */
 function settle() {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/*
+ * T-174. Every box marked "(required)" on this screen is now required on the element, so a test
+ * that submits must fill the boxes it is not about, or Form refuses the save before the thing under
+ * test is ever reached. Each test calls only the ones it does not set itself, and a test's own value
+ * is typed after these so it always wins.
+ */
+function typeInto(label: RegExp, value: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+}
+
+function typeTheName() {
+  typeInto(/^name/i, "ISKCON Bangalore");
+}
+
+function typeTheCoordinates() {
+  typeInto(/^latitude/i, "13.0098");
+  typeInto(/^longitude/i, "77.5511");
+}
+
+function typeTheAdministrator() {
+  typeInto(/^full name/i, "Radha Dasi");
+  typeInto(/^email address/i, "radha@example.com");
+  typeInto(/phone number/i, "+919876543210");
 }

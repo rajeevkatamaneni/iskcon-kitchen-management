@@ -34,6 +34,55 @@ describe("Field", () => {
     expect(screen.getByRole("tooltip")).toHaveTextContent("Fifteen characters");
   });
 
+  /*
+   * T-174. `required` used to print "(required)" beside the label and never reach the box, so the
+   * browser refused nothing and `Form` had nothing to name. The props are captured as well as the
+   * rendered box, because "not required" has to mean the key is absent: an explicit
+   * `required: undefined` renders the same box here but would take away the `required` of a control
+   * that sets its own before spreading these props.
+   */
+  it("puts required on the box when the field is required, and still says so beside the label", () => {
+    let handed: Record<string, unknown> = {};
+    render(
+      <Field id="temple-name" label="Name" required>
+        {(props) => {
+          handed = { ...props };
+          return <input {...props} />;
+        }}
+      </Field>
+    );
+
+    expect(screen.getByLabelText(/^name/i, { selector: "input" })).toBeRequired();
+    expect(handed.required).toBe(true);
+    expect(screen.getByText("(required)")).toBeInTheDocument();
+  });
+
+  it("leaves required off the box, and out of the props, when the field is not required", () => {
+    let handed: Record<string, unknown> = {};
+    render(
+      <Field id="temple-address" label="Address">
+        {(props) => {
+          handed = { ...props };
+          return <input {...props} />;
+        }}
+      </Field>
+    );
+
+    expect(screen.getByLabelText("Address", { selector: "input" })).not.toBeRequired();
+    expect(Object.keys(handed)).not.toContain("required");
+    expect(screen.queryByText("(required)")).toBeNull();
+  });
+
+  it("does not take away a required the control sets for itself before the spread", () => {
+    render(
+      <Field id="temple-note" label="Note">
+        {(props) => <input required {...props} />}
+      </Field>
+    );
+
+    expect(screen.getByLabelText("Note", { selector: "input" })).toBeRequired();
+  });
+
   it("sets the label a step darker and a step heavier than its hint", () => {
     expect(FIELD_LABEL).toContain("font-medium");
     expect(FIELD_LABEL).toContain("text-ink");
