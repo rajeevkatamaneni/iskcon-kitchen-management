@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { Field } from "@/components/Field";
+import { Form } from "@/components/ds/Form";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -172,7 +173,7 @@ function NewTenantForm() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-8">
+          <Form onSubmit={handleSubmit} className="space-y-8">
             <section className="space-y-5">
               <h2>The temple</h2>
 
@@ -404,7 +405,7 @@ function NewTenantForm() {
                 Cancel
               </Link>
             </div>
-          </form>
+          </Form>
         </div>
       </main>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { useParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -109,7 +110,7 @@ function StaffProfileView() {
                   <Link href="/staff-schedule" className="text-accent-text hover:underline">week grid</Link>{" "}
                   and click that day.
                 </p>
-                <form className="mt-4 space-y-2" aria-label="Weekly template" onSubmit={saveTemplate}>
+                <Form className="mt-4 space-y-2" aria-label="Weekly template" onSubmit={saveTemplate}>
                   {[1, 2, 3, 4, 5, 6, 7].map((dow) => {
                     const d = byDay.get(dow);
                     return (
@@ -127,7 +128,7 @@ function StaffProfileView() {
                     );
                   })}
                   <button type="submit" disabled={busy} className="btn btn-primary mt-3 min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Save template</button>
-                </form>
+                </Form>
               </section>
 
             </>

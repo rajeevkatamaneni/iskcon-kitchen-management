@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { Field } from "@/components/Field";
+import { Form } from "@/components/ds/Form";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -183,7 +184,7 @@ function EditTenantForm({ id, temple }: { id: string; temple: TenantDetail }) {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <Form onSubmit={handleSubmit} className="space-y-8">
         {/* The whole of what may change about a temple: a name, an address, and a legal status that
             arrives long after the temple was created. Everything else was settled when it was
             created and is read in the section below rather than offered here. */}
@@ -273,7 +274,7 @@ function EditTenantForm({ id, temple }: { id: string; temple: TenantDetail }) {
             Cancel
           </Link>
         </div>
-      </form>
+      </Form>
     </>
   );
 }

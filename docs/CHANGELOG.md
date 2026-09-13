@@ -1182,6 +1182,32 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-13 — Thirty-one more forms on the staff, volunteer, planner, sign-in and temple screens name a refused box in red, and Meta's stored WhatsApp wording can be read back (wave 3-2; tasks T-164, T-165, T-166, T-173)
+
+No migration; staging stays at `V129`. No new error code. **Not driven in a browser, and not seen working
+by Rajeev.**
+
+**Thirty-one more forms move onto the shared `Form` (T-164, T-165, T-166).** Staff, pay, bans, conduct
+notes, the staff schedule, leave, the shift form (new and edit volunteers, and the planner's layer),
+attendance, the day correction, the meal composer, notices, sign-in, Add and Edit a temple, profile
+leave, audit, the glossary, the wish list and giving. A blank or out-of-range box now shows a red
+sentence under it naming the field, in place of the browser's grey bubble. Each form changed only its
+tag. Eight tests that dispatched a submit now click the real button; no assertion was loosened.
+
+**Meta's stored templates can be compared with ours by a read (T-173).** `GET
+/api/v1/settings/whatsapp/templates/meta-comparison`, behind `MANAGE_TEMPLE_SETTINGS`, reports per
+template whether Meta holds it, its status and category, and whether its wording matches ours exactly
+and after trimming, with both bodies where it does not. It uses the same lookup as Reload. It never
+creates or edits a template at Meta and writes nothing to `tenant_settings`. No screen calls it.
+
+**Not done:** sign-in and Add and Edit a temple still do not refuse a blank on the client, because
+`Field`'s `required` never reaches the input, so a blank coordinate is still sent as 0 (T-174). Take
+them back on, Save note, Record this correction and Give stay disabled instead of naming the box
+(T-172). The weekly staff template sends a Working day with blank times; the messages composer saves a
+blank subject; two unlabelled boxes are named *"message"* and *"reason"* in their sentences. Reload is
+still not to be pressed on staging until the comparison has been read. Proofs, with negative controls,
+in `docs/work/proof/T-164.md`, `T-165.md`, `T-166.md` and `T-173.md`.
+
 ### 2026-09-13 — Thirty-one more forms name a refused box in red, a hint no longer runs into the name, and WhatsApp templates go to Meta only when something changed (wave 3-1; tasks T-161, T-162, T-163, T-171, T-169a)
 
 One migration, `V129`. No new error code. **Not driven in a browser, and not seen working by Rajeev.**

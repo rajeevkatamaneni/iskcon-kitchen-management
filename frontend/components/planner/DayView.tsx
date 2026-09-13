@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { Card } from "@/components/ds/Card";
+import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import {
@@ -198,7 +199,7 @@ function DayContextPanel({
       )}
 
       {canCorrect && correcting && (
-        <form onSubmit={save} aria-label="Correct this date" className="mt-4 grid gap-4 border-t border-hairline pt-4">
+        <Form onSubmit={save} aria-label="Correct this date" className="mt-4 grid gap-4 border-t border-hairline pt-4">
           <p className="text-sm text-ink-secondary">
             Correct it only when you know it to be wrong here. Everyone will see the correction,
             and why.
@@ -262,7 +263,7 @@ function DayContextPanel({
               Cancel
             </Button>
           </div>
-        </form>
+        </Form>
       )}
     </Card>
   );

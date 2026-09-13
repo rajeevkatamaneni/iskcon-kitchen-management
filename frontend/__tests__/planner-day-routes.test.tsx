@@ -46,6 +46,8 @@ const { authRef, routeRef, api } = vi.hoisted(() => ({
       copied: 0, weeksCopied: 0, refusedOnFast: 0,
     })),
     eventNameSuggestions: vi.fn(async (_q: string, _t?: string) => [] as unknown[]),
+    // T-165. Correcting the calendar for a day, which a blank reason must never reach.
+    setCalendarOverride: vi.fn(async (_date: string, _input: Record<string, unknown>, _t?: string) => undefined),
   },
 }));
 
@@ -432,3 +434,45 @@ function isoIn(days: number): string {
   d.setDate(d.getDate() + days);
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
 }
+
+/**
+ * T-165: the day's calendar correction is a `Form`. Its one required box is the reason, and a blank
+ * one is named beside it and corrects nothing.
+ */
+describe("correcting the calendar for a day (T-165)", () => {
+  beforeEach(() => {
+    routeRef.current = { date: TOMORROW };
+    api.mealServices.mockResolvedValue([]);
+    api.calendarRange.mockResolvedValue([
+      {
+        date: TOMORROW, tithi: 16, paksa: 1, masa: 3, gaurabdaYear: 540, naksatra: 10,
+        isEkadashi: false, ekadashiName: null, mahadvadashi: null, fastType: null,
+        sunrise: "06:07:00", sunset: "18:41:00", festivals: [], overridden: false, overrideReason: null,
+      },
+    ]);
+    api.listRecipes.mockResolvedValue(RECIPES);
+    api.listMealKinds.mockResolvedValue(KINDS);
+    api.setCalendarOverride.mockClear();
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "TEMPLE_ADMIN", userId: "me", fullName: "Radha Devi", tenantName: "ISKCON Bengaluru" },
+    };
+  });
+
+  it("names a blank reason beside its box, corrects nothing, then corrects once it is given", async () => {
+    render(<PlannerDayPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /correct this date/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save correction/i }));
+
+    const said = await screen.findByText("Why are you correcting this? is required");
+    const form = screen.getByRole("form", { name: /correct this date/i });
+    const reason = form.querySelector('[name="reason"]') as HTMLTextAreaElement;
+    expect(reason.getAttribute("aria-describedby")).toContain(said.id);
+    expect(screen.getAllByText(/ is required$/)).toHaveLength(1);
+    expect(api.setCalendarOverride).not.toHaveBeenCalled();
+
+    fireEvent.change(reason, { target: { value: "The temple's panchang says tomorrow" } });
+    fireEvent.click(screen.getByRole("button", { name: /save correction/i }));
+    await vi.waitFor(() => expect(api.setCalendarOverride).toHaveBeenCalledTimes(1));
+  });
+});

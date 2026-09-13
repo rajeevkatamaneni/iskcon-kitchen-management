@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { DateRange } from "@/components/ds/DateRange";
+import { Form } from "@/components/ds/Form";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -77,7 +78,7 @@ function AuditView() {
             </p>
           </header>
 
-          <form
+          <Form
             className="mb-6 flex flex-wrap items-end gap-4"
             aria-label="Filter the audit log"
             onSubmit={apply}
@@ -104,7 +105,7 @@ function AuditView() {
             >
               Apply
             </button>
-          </form>
+          </Form>
 
           {loading ? (
             <Loading label="Loading the log…" />

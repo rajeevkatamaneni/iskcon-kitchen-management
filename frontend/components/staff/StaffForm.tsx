@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Form } from "@/components/ds/Form";
 import { HintedField, InfoHint } from "@/components/ds/InfoHint";
 import { GROUP_LABELS, EMPLOYMENT_TYPES } from "./labels";
 import { normalizePhone } from "@/lib/phone";
@@ -82,7 +83,7 @@ export function StaffForm({
   }
 
   return (
-    <form
+    <Form
       id={STAFF_FORM_ID}
       className="grid grid-cols-2 gap-4"
       aria-label={staff ? "Edit a staff member" : "Hire a staff member"}
@@ -318,7 +319,7 @@ export function StaffForm({
         <span className="pl-field-inset font-medium text-ink">Notes</span>
         <input name="notes" defaultValue={staff?.notes ?? ""} className={FIELD} />
       </label>
-    </form>
+    </Form>
   );
 }
 

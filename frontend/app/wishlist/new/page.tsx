@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { HintedField } from "@/components/ds/InfoHint";
@@ -78,7 +79,7 @@ function NewWishlistItemView() {
     >
       {error && <ErrorNotice error={error} />}
 
-      <form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Add wish-list item" onSubmit={add}>
+      <Form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Add wish-list item" onSubmit={add}>
         <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Title</span>
           <input name="title" required className={FIELD} />
@@ -107,7 +108,7 @@ function NewWishlistItemView() {
             {(id) => <input id={id} name="description" className={FIELD} />}
           </HintedField>
         </div>
-      </form>
+      </Form>
     </FocusScreen>
   );
 }

@@ -8,6 +8,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { Form } from "@/components/ds/Form";
 import { NoticeCard } from "@/components/PlatformNotices";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -141,7 +142,7 @@ function NoticesView() {
                   action={
                     n.canWithdraw ? (
                       withdrawing === n.id ? (
-                        <form
+                        <Form
                           className="flex flex-wrap items-center gap-2"
                           aria-label={`Withdraw ${n.subject}`}
                           onSubmit={(e) => withdraw(n.id, e)}
@@ -167,7 +168,7 @@ function NoticesView() {
                           >
                             Keep it
                           </button>
-                        </form>
+                        </Form>
                       ) : (
                         <button
                           type="button"

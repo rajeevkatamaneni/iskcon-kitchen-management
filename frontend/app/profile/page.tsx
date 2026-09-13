@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DateRange } from "@/components/ds/DateRange";
+import { Form } from "@/components/ds/Form";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -298,7 +299,7 @@ function MyLeave() {
       {error && <p className="mt-3 text-sm text-danger">{error.message}</p>}
 
       {asking && (
-        <form className="mt-4 flex flex-wrap items-end gap-3" aria-label="Ask for time off" onSubmit={ask}>
+        <Form className="mt-4 flex flex-wrap items-end gap-3" aria-label="Ask for time off" onSubmit={ask}>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Kind</span>
             <select name="leaveType" className="min-h-touch rounded-control border border-hairline px-2">
@@ -328,7 +329,7 @@ function MyLeave() {
           >
             Send it
           </button>
-        </form>
+        </Form>
       )}
 
       {leave.length === 0 ? (

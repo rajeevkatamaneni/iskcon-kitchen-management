@@ -317,3 +317,69 @@ describe("writing to the community", () => {
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });
 });
+
+/**
+ * T-165: the composer's form is a `Form`, and it never submits, on purpose. Its `onSubmit` only
+ * stops the page reloading, and every action is a plain button in the screen's header, outside the
+ * form and not a submit. So the one way a submit reaches this form is the browser's own: Enter in the
+ * Subject box, which with no submit button in the form submits it implicitly. jsdom does not
+ * implement implicit submission, so these tests fire the submit event that Enter would.
+ *
+ * <p>What changed: a blank Subject used to get the browser's grey bubble on Enter. It now gets
+ * "Subject is required" in red beside the box. Nothing is saved either way.
+ */
+describe("the composer's form, which never submits (T-165)", () => {
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
+    listRef.current = { data: [], error: null, loading: false };
+    categoriesRef.current = { data: CATEGORIES, error: null, loading: false };
+    deliveriesRef.current = { data: [], error: null, loading: false };
+    createMock.mockReset().mockResolvedValue({ id: "new-1" });
+    updateMock.mockReset().mockResolvedValue(undefined);
+    previewMock.mockReset().mockResolvedValue(PREVIEW);
+    testMock.mockReset().mockResolvedValue(undefined);
+    audienceMock.mockReset().mockResolvedValue({ count: 42 });
+    sendMock.mockReset();
+    paramsRef.current = new URLSearchParams();
+    pushMock.mockReset();
+  });
+
+  it("names a blank subject beside its box when Enter submits the form, and saves nothing", async () => {
+    render(<NewCommunicationPage />);
+    const form = screen.getByRole("form", { name: /write a communication/i });
+    fireEvent.submit(form);
+
+    const said = await screen.findByText("Subject is required");
+    expect(form.querySelector("input")!.getAttribute("aria-describedby")).toContain(said.id);
+    expect(screen.getAllByText(/ is required$/)).toHaveLength(1);
+    expect(createMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("does nothing at all when Enter submits it with a subject", () => {
+    render(<NewCommunicationPage />);
+    const form = screen.getByRole("form", { name: /write a communication/i });
+    fireEvent.change(form.querySelector("input")!, { target: { value: "Janmashtami" } });
+    fireEvent.submit(form);
+
+    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+    expect(createMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves the header's buttons alone: two wait for a subject, and Save and preview does not", async () => {
+    render(<NewCommunicationPage />);
+    // Disabled on a blank subject by the screen's own check. T-172 changes disabled buttons; not this.
+    expect(screen.getByRole("button", { name: /send myself a copy/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /send to everyone/i })).toBeDisabled();
+
+    // Not a submit, so `Form` never sees it: a blank subject is saved as a draft and no sentence
+    // shows. Pinned as today's behaviour and raised in T-165's proof, not ruled on here.
+    fireEvent.click(screen.getByRole("button", { name: /save and preview/i }));
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(createMock.mock.calls[0][0]).toMatchObject({ subject: "" });
+    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+  });
+});

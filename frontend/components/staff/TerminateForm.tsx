@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Form } from "@/components/ds/Form";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { money, shortDate } from "@/lib/format";
@@ -92,7 +93,7 @@ export function TerminateForm({
         )}
       </dl>
 
-      <form
+      <Form
         id={TERMINATE_FORM_ID}
         className="grid grid-cols-2 gap-4"
         aria-label="Terminate employment"
@@ -187,7 +188,7 @@ export function TerminateForm({
         {/* The gravest thing this screen offers (B9). Last, unticked, and deliberately not styled
             to invite a press — most dismissals raise nothing at all. */}
         <BanOnTermination categories={banCategories} />
-      </form>
+      </Form>
     </>
   );
 }

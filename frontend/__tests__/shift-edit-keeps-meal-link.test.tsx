@@ -75,7 +75,8 @@ function field(name: string): HTMLInputElement {
 }
 
 async function saved(): Promise<ShiftInput> {
-  fireEvent.submit(screen.getByRole("form", { name: /edit a shift/i }));
+  // The header's own button, which reaches the form through `form=` (T-165).
+  fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
   await waitFor(() => expect(updateShiftMock).toHaveBeenCalledTimes(1));
   const [id, input] = updateShiftMock.mock.calls[0];
   expect(id).toBe("s1");

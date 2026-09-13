@@ -266,7 +266,7 @@ describe("correcting a shift", () => {
 
     fireEvent.change(form.querySelector('input[name="title"]')!, { target: { value: "Sunday cooking" } });
     fireEvent.change(form.querySelector('input[name="reminderHours"]')!, { target: { value: "24, 48" } });
-    fireEvent.submit(form);
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => expect(updateShiftMock).toHaveBeenCalled());
     const [id, input] = updateShiftMock.mock.calls[0];
@@ -281,7 +281,7 @@ describe("correcting a shift", () => {
     const form = screen.getByRole("form", { name: /edit a shift/i });
 
     fireEvent.change(form.querySelector('input[name="startTime"]')!, { target: { value: "16:00" } });
-    fireEvent.submit(form);
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => expect(updateShiftMock).toHaveBeenCalled());
     expect(pushMock).toHaveBeenCalledWith("/volunteers?saved=Sunday%20prep&moved=s1");
@@ -292,9 +292,74 @@ describe("correcting a shift", () => {
     const form = screen.getByRole("form", { name: /edit a shift/i });
 
     fireEvent.change(form.querySelector('input[name="location"]')!, { target: { value: "Prep area" } });
-    fireEvent.submit(form);
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => expect(updateShiftMock).toHaveBeenCalled());
     expect(pushMock).toHaveBeenCalledWith("/volunteers?saved=Sunday%20prep");
+  });
+});
+
+/**
+ * T-165: the shift form is a `Form`, so a refused box is named in red beside it and nothing is
+ * sent. The same `ShiftFields` is mounted by the planner's layer, which planner-shift.test.tsx
+ * covers; these two are the volunteers screens, each committing from its header with `form=`.
+ */
+describe("a blank shift form names each box it refused (T-165)", () => {
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    queryRef.current = { data: shift(), error: null, loading: false };
+    createShiftMock.mockReset().mockResolvedValue(shift());
+    updateShiftMock.mockReset().mockResolvedValue(undefined);
+    pushMock.mockReset();
+  });
+
+  it("posting: names the title, date and both times beside their boxes, and posts nothing", async () => {
+    render(<NewShiftPage />);
+    fireEvent.click(screen.getByRole("button", { name: /post shift/i }));
+
+    const form = screen.getByRole("form", { name: /post a shift/i });
+    const expected: [string, string][] = [
+      ["title", "Title is required"],
+      ["shiftDate", "Date is required"],
+      ["startTime", "Start is required"],
+      ["endTime", "End is required"],
+    ];
+    for (const [name, sentence] of expected) {
+      const said = await screen.findByText(sentence);
+      expect(form.querySelector(`input[name="${name}"]`)!.getAttribute("aria-describedby")).toContain(said.id);
+    }
+    // Capacity opens on 1, which passes, so it says nothing.
+    expect(screen.getAllByText(/ is required$/)).toHaveLength(4);
+    expect(createShiftMock).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("posting: a blank title and equal times each say their own thing, and nothing is posted", async () => {
+    render(<NewShiftPage />);
+    const form = screen.getByRole("form", { name: /post a shift/i });
+    fireEvent.change(form.querySelector('input[name="shiftDate"]')!, { target: { value: "2026-12-06" } });
+    fireEvent.change(form.querySelector('input[name="startTime"]')!, { target: { value: "20:00" } });
+    fireEvent.change(form.querySelector('input[name="endTime"]')!, { target: { value: "20:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /post shift/i }));
+
+    expect(await screen.findByText("Title is required")).toBeInTheDocument();
+    // The same-time refusal is the form's own rule (T-146), shown as it was, beside the new sentence.
+    expect(screen.getByRole("alert")).toHaveTextContent(/cannot start and end at the same time/i);
+    expect(screen.getAllByText(/ is required$/)).toHaveLength(1);
+    expect(createShiftMock).not.toHaveBeenCalled();
+  });
+
+  it("correcting: names a cleared title beside its box, and saves nothing", async () => {
+    render(<EditShiftPage />);
+    const form = screen.getByRole("form", { name: /edit a shift/i });
+    const title = form.querySelector('input[name="title"]') as HTMLInputElement;
+    fireEvent.change(title, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    const said = await screen.findByText("Title is required");
+    expect(title.getAttribute("aria-describedby")).toContain(said.id);
+    expect(screen.getAllByText(/ is required$/)).toHaveLength(1);
+    expect(updateShiftMock).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
   });
 });

@@ -281,7 +281,7 @@ describe("asking for volunteers from the planner", () => {
 
     fireEvent.click(screen.getByRole("button", ASK));
     fireEvent.change(field("startTime"), { target: { value: "07:00" } });
-    fireEvent.submit(within(screen.getByRole("dialog")).getByRole("form"));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /post shift/i }));
 
     await waitFor(() => expect(createShift).toHaveBeenCalled());
     const input = createShift.mock.calls[0][0];
@@ -522,5 +522,60 @@ describe("asking for volunteers from the planner", () => {
 
     await settled(day, "5 of 8");
     expect(screen.queryByRole("button", ASK)).toBeNull();
+  });
+});
+
+/**
+ * T-165: the layer's form is the volunteers' `ShiftFields`, which is a `Form`. Two things are true
+ * here that are not true on the volunteers screens: the date is read-only, and the commit button is
+ * in the layer's header.
+ */
+describe("a blank box in the planner's shift layer (T-165)", () => {
+  beforeEach(() => {
+    authRef.current = { role: "KITCHEN_MANAGER" };
+    push.mockClear();
+    createShift.mockReset().mockResolvedValue({ id: "s-new" });
+    updateShift.mockReset().mockResolvedValue(undefined);
+    mealServices.mockReset().mockResolvedValue([lunch()]);
+    mealCrew.mockReset().mockResolvedValue([crewOf()]);
+    listShifts.mockReset().mockResolvedValue([]);
+  });
+
+  it("names a cleared title and the empty start beside their boxes, never the fixed date, and posts nothing", async () => {
+    await openTheDay();
+    fireEvent.click(screen.getByRole("button", ASK));
+    fireEvent.change(field("title"), { target: { value: "" } });
+    const layer = screen.getByRole("dialog");
+    fireEvent.click(within(layer).getByRole("button", { name: /post shift/i }));
+
+    const title = await within(layer).findByText("Title is required");
+    expect(field("title").getAttribute("aria-describedby")).toContain(title.id);
+    expect(field("startTime").getAttribute("aria-describedby")).toContain(
+      within(layer).getByText("Start is required").id
+    );
+    expect(within(layer).getAllByText(/ is required$/)).toHaveLength(2);
+    expect(within(layer).queryByText(/^Date /)).toBeNull();
+    expect(createShift).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("passes the read-only date by, even when it holds nothing", async () => {
+    await openTheDay();
+    fireEvent.click(screen.getByRole("button", ASK));
+    fireEvent.change(field("startTime"), { target: { value: "09:00" } });
+
+    // Nobody can empty this box: it is read-only and React holds its value. It is emptied here
+    // behind React's back, with no event, to put a blank `required` box in front of `Form` that the
+    // browser does not validate. A read-only box is barred from constraint validation, so `Form`
+    // must pass it by rather than name it. This proves `Form` does not over-reach; it would also
+    // pass against a plain `<form>`, which skips the box the same way.
+    const date = field("shiftDate");
+    date.value = "";
+    expect(date.value).toBe("");
+    expect(date.readOnly && date.required).toBe(true);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /post shift/i }));
+
+    await waitFor(() => expect(createShift).toHaveBeenCalled());
+    expect(screen.queryByText(/^Date /)).toBeNull();
   });
 });

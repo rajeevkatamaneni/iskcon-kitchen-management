@@ -10,6 +10,7 @@ import {
   type ConfirmationResult,
 } from "firebase/auth";
 import { Field } from "@/components/Field";
+import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { useAuth } from "@/lib/auth-context";
 import { getFirebaseAuth, firebaseConfigured } from "@/lib/firebase";
@@ -214,7 +215,7 @@ function EmailSignIn({ onSignedIn, prefillEmail }: { onSignedIn: () => void; pre
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <Form onSubmit={handleSubmit} className="space-y-5">
       {error && (
         <div role="alert" className="rounded border border-danger bg-danger-bg p-4 text-danger">
           {error}
@@ -240,7 +241,7 @@ function EmailSignIn({ onSignedIn, prefillEmail }: { onSignedIn: () => void; pre
       >
         {busy ? "Signing in…" : "Sign in"}
       </button>
-    </form>
+    </Form>
   );
 }
 
@@ -305,7 +306,7 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
       )}
 
       {confirmation === null ? (
-        <form onSubmit={sendCode} className="space-y-5">
+        <Form onSubmit={sendCode} className="space-y-5">
           {/* The country code is a format, and a format belongs in the box it applies to: an
               example in the placeholder says it in fewer words than a sentence underneath. */}
           <Field id="phone" label="Phone number" required>
@@ -327,9 +328,9 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
           >
             {busy ? "Sending code…" : "Send code"}
           </button>
-        </form>
+        </Form>
       ) : (
-        <form onSubmit={verifyCode} className="space-y-5">
+        <Form onSubmit={verifyCode} className="space-y-5">
           <Field id="code" label="Code" hint="We sent a six-digit code by SMS." required>
             {(props) => (
               <input
@@ -357,7 +358,7 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
           >
             Use a different number
           </button>
-        </form>
+        </Form>
       )}
 
       <div id="recaptcha-container" />

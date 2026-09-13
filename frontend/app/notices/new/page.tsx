@@ -7,6 +7,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
+import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, toApiError, type ApiError, type NoticeSeverity } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -104,7 +105,7 @@ function NewNoticeView() {
         Nobody reviews it first, and it carries your temple’s name.
       </InlineNotice>
 
-      <form id={FORM} className="grid gap-4" aria-label="Raise a platform notice" onSubmit={raise}>
+      <Form id={FORM} className="grid gap-4" aria-label="Raise a platform notice" onSubmit={raise}>
         <fieldset className="grid gap-2">
           <legend className="pl-field-inset text-sm font-medium text-ink">Severity</legend>
           {SEVERITIES.map((s, i) => (
@@ -126,7 +127,7 @@ function NewNoticeView() {
           <span className="pl-field-inset font-medium text-ink">What happened, and what other temples should do</span>
           <textarea name="body" required rows={8} maxLength={4000} className="rounded-control border border-hairline px-3 py-2" />
         </label>
-      </form>
+      </Form>
     </FocusScreen>
   );
 }

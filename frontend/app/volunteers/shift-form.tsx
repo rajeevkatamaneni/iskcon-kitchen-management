@@ -4,6 +4,7 @@ import { useState } from "react";
 import { HintedField } from "@/components/ds/InfoHint";
 import type { ShiftInput, ShiftView } from "@/lib/api";
 import { crossesMidnight } from "@/lib/format";
+import { Form } from "@/components/ds/Form";
 
 /**
  * The eight fields a seva shift is made of, shared by posting one and correcting one.
@@ -85,7 +86,7 @@ export function ShiftFields({
   const overnight = !sameTime && startTime !== "" && endTime !== "" && crossesMidnight(startTime, endTime);
 
   return (
-    <form
+    <Form
       id={SHIFT_FORM}
       className="grid grid-cols-2 gap-4"
       aria-label={editing ? "Edit a shift" : "Post a shift"}
@@ -193,7 +194,7 @@ export function ShiftFields({
         <span className="pl-field-inset font-medium text-ink">Description</span>
         <input name="description" defaultValue={shift?.description ?? ""} className={FIELD} />
       </label>
-    </form>
+    </Form>
   );
 }
 

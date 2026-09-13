@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { FieldRow } from "@/components/ds/FieldRow";
+import { Form } from "@/components/ds/Form";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { AddressPicker } from "@/components/planner/AddressPicker";
 import { Button } from "@/components/ds/Button";
@@ -1479,7 +1480,7 @@ export function MealComposer({
   );
 
   return (
-    <form
+    <Form
       id={formId}
       aria-label={editing ? `Edit ${kindName}` : "Plan a meal"}
       onSubmit={(e) => {
@@ -1488,7 +1489,7 @@ export function MealComposer({
       }}
     >
       {body}
-    </form>
+    </Form>
   );
 
 }

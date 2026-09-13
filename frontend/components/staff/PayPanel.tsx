@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Form } from "@/components/ds/Form";
 import { HintedField, InfoHint } from "@/components/ds/InfoHint";
 import { money, shortDate } from "@/lib/format";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
@@ -100,7 +101,7 @@ export function PayPanel({
       </dl>
 
       {/* ---- Recording a payment ---- */}
-      <form className="mt-6 grid grid-cols-4 gap-4" aria-label="Record a payment" onSubmit={onSubmitPayment}>
+      <Form className="mt-6 grid grid-cols-4 gap-4" aria-label="Record a payment" onSubmit={onSubmitPayment}>
         <h2 className="col-span-4 text-base">Record a payment</h2>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -206,10 +207,10 @@ export function PayPanel({
             Record payment
           </button>
         </div>
-      </form>
+      </Form>
 
       {/* ---- Recording an advance ---- */}
-      <form className="mt-6 grid grid-cols-4 gap-4" aria-label="Record an advance" onSubmit={onSubmitAdvance}>
+      <Form className="mt-6 grid grid-cols-4 gap-4" aria-label="Record an advance" onSubmit={onSubmitAdvance}>
         <h2 className="col-span-4 text-base">Give an advance</h2>
         <p className="col-span-4 -mt-2 text-sm text-ink-secondary">
           Money paid ahead of the work. It is docked from later payments.
@@ -269,7 +270,7 @@ export function PayPanel({
             Record advance
           </button>
         </div>
-      </form>
+      </Form>
 
       {/* ---- What has been paid ---- */}
       <section className="mt-8" aria-labelledby="payment-history-heading">

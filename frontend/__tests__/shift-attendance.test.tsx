@@ -27,6 +27,7 @@ const {
   recordAttendanceMock,
   correctAttendanceMock,
   releaseVolunteerMock,
+  broadcastShiftMock,
 } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } } as {
@@ -39,6 +40,7 @@ const {
   recordAttendanceMock: vi.fn(),
   correctAttendanceMock: vi.fn(),
   releaseVolunteerMock: vi.fn(),
+  broadcastShiftMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -60,6 +62,7 @@ vi.mock("@/lib/api", async (orig) => {
       recordShiftAttendance: recordAttendanceMock,
       correctShiftAttendance: correctAttendanceMock,
       releaseVolunteerFromShift: releaseVolunteerMock,
+      broadcastShift: broadcastShiftMock,
     },
   };
 });
@@ -187,7 +190,9 @@ describe("marking attendance on a roster", () => {
   it("sends everyone on the roster, the unticked as absent", async () => {
     render(<ShiftRosterPage />);
     fireEvent.click(screen.getByRole("checkbox", { name: /gopal das came/i }));
-    fireEvent.submit(screen.getByRole("form", { name: /attendance/i }));
+    // Pressed rather than `fireEvent.submit`, since T-165: the form is a `Form`, and the press is
+    // what a coordinator does.
+    fireEvent.click(screen.getByRole("button", { name: /save attendance/i }));
 
     await waitFor(() => expect(recordAttendanceMock).toHaveBeenCalled());
     expect(recordAttendanceMock.mock.calls[0][0]).toBe("shift-1");
@@ -548,7 +553,8 @@ describe("taking a volunteer off a roster", () => {
     fireEvent.change(screen.getByLabelText(/note about taking .* off the shift/i), {
       target: { value: note },
     });
-    fireEvent.submit(screen.getByRole("form", { name: /take a volunteer off this shift/i }));
+    // The row's own button, which reaches the removal form through `form=` (T-165).
+    fireEvent.click(screen.getByRole("button", { name: /take off shift/i }));
   }
 
   it("names the person being removed, and sends the reason and the note with it", async () => {
@@ -688,5 +694,96 @@ describe("taking a volunteer off a roster", () => {
     queryRef.current = { data: roster([signup()], "CANCELLED"), error: null, loading: false };
     render(<ShiftRosterPage />);
     expect(screen.queryByRole("button", { name: /remove/i })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * T-165: the roster's three forms name a refused box in red beside it, and one form's blank box
+ * never stops another. The case worth proving is the removal form: its two boxes sit inside the
+ * attendance form's table but belong to the removal form through `form=`, so a blank note must stop
+ * a removal and must not stop "Save attendance".
+ *
+ * <p>The attendance form has no `required` box, so there is no "is required" sentence to assert for
+ * it. What is true of it is that it saves while the other two forms sit open and blank.
+ */
+describe("a blank box on the roster names itself, and stops only its own form (T-165)", () => {
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(AFTER_THE_SHIFT_STARTED);
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    reloadMock.mockReset();
+    recordAttendanceMock.mockReset().mockResolvedValue(undefined);
+    correctAttendanceMock.mockReset().mockResolvedValue(undefined);
+    releaseVolunteerMock.mockReset().mockResolvedValue(undefined);
+    broadcastShiftMock.mockReset().mockResolvedValue({ recipients: 2 });
+    queryRef.current = {
+      data: roster([signup(), signup({ userId: "u2", fullName: "Gopal Das" })]),
+      error: null,
+      loading: false,
+    };
+  });
+
+  it("names a blank update beside its box, and sends nothing", async () => {
+    render(<ShiftRosterPage />);
+    fireEvent.click(screen.getByRole("button", { name: /send update to all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /send now/i }));
+
+    // The box has a placeholder and no label, so the only name the page gives it is its `name`
+    // attribute. That reads badly and is recorded in T-165's proof rather than changed here.
+    const said = await screen.findByText("message is required");
+    const box = screen.getByPlaceholderText("e.g. Gate B today, not A");
+    expect(box.getAttribute("aria-describedby")).toContain(said.id);
+    expect(box.nextElementSibling).toBe(said.parentElement);
+    expect(broadcastShiftMock).not.toHaveBeenCalled();
+  });
+
+  it("names both blank halves of a removal beside their boxes, takes nobody off, then takes them off once given", async () => {
+    render(<ShiftRosterPage />);
+    fireEvent.click(screen.getAllByRole("button", { name: /^remove$/i })[1]);
+    fireEvent.click(screen.getByRole("button", { name: /take off shift/i }));
+
+    const reasonSaid = await screen.findByText("Why Gopal Das is coming off the shift is required");
+    const noteSaid = screen.getByText("Note about taking Gopal Das off the shift is required");
+    const reason = screen.getByLabelText(/why gopal das is coming off the shift/i);
+    const note = screen.getByLabelText(/note about taking gopal das off the shift/i);
+    expect(reason.getAttribute("aria-describedby")).toContain(reasonSaid.id);
+    expect(note.getAttribute("aria-describedby")).toContain(noteSaid.id);
+    expect(releaseVolunteerMock).not.toHaveBeenCalled();
+    // A refused removal is not an attendance save either, though its boxes sit in that form's table.
+    expect(recordAttendanceMock).not.toHaveBeenCalled();
+
+    fireEvent.change(reason, { target: { value: "ROTA_CHANGED" } });
+    fireEvent.change(note, { target: { value: NOTE } });
+    fireEvent.click(screen.getByRole("button", { name: /take off shift/i }));
+    await waitFor(() => expect(releaseVolunteerMock).toHaveBeenCalled());
+    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+  });
+
+  it("saves attendance while a removal form sits open and blank in the table", async () => {
+    render(<ShiftRosterPage />);
+    fireEvent.click(screen.getAllByRole("button", { name: /^remove$/i })[1]);
+    await screen.findByLabelText(/why gopal das is coming off the shift/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /save attendance/i }));
+    await waitFor(() => expect(recordAttendanceMock).toHaveBeenCalled());
+    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+    expect(releaseVolunteerMock).not.toHaveBeenCalled();
+  });
+
+  it("saves attendance while the update box above it is open and blank", async () => {
+    render(<ShiftRosterPage />);
+    fireEvent.click(screen.getByRole("button", { name: /send update to all/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /save attendance/i }));
+    await waitFor(() => expect(recordAttendanceMock).toHaveBeenCalled());
+    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+    expect(broadcastShiftMock).not.toHaveBeenCalled();
   });
 });

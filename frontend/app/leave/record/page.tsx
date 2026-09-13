@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { Form } from "@/components/ds/Form";
 import { DateRange } from "@/components/ds/DateRange";
 import { useRouter } from "next/navigation";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -98,7 +99,7 @@ function RecordLeaveView() {
     >
       {error && <ErrorNotice error={error} />}
 
-      <form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Record leave" onSubmit={record}>
+      <Form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Record leave" onSubmit={record}>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Staff member</span>
           <select name="staffProfileId" required className={FIELD}>
@@ -133,7 +134,7 @@ function RecordLeaveView() {
           <span className="pl-field-inset font-medium text-ink">Note</span>
           <input name="reason" className={FIELD} />
         </label>
-      </form>
+      </Form>
     </FocusScreen>
   );
 }

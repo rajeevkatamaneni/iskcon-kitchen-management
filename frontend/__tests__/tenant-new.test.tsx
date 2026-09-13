@@ -366,3 +366,105 @@ describe("add a temple", () => {
     expect(placeSuggestions).not.toHaveBeenCalled();
   });
 });
+
+/*
+ * T-166, slice F of the blank-required-fields wave.
+ *
+ * Why nothing on this screen says "is required": `Field`'s `required` prop prints "(required)" beside
+ * the label and never reaches the input, and no input here carries `required` of its own. Form only
+ * reads what the browser refuses, so it has nothing to refuse for a blank box. Adding the attribute
+ * is a change to the screen's rules, which this task was told not to make; it is raised instead.
+ *
+ * So the one thing Form refuses on this screen is a malformed administrator email. A phone typo is
+ * not a browser rule at all and must still reach the server, which answers KMS-400003 (T-157). And
+ * the coordinate boxes the address picker fills are never named while its confirmation is showing.
+ */
+describe("adding a temple under Form (T-166)", () => {
+  beforeEach(() => {
+    provisionSpy.mockClear();
+    pushMock.mockClear();
+    placesAvailable.mockReset().mockResolvedValue({ available: true });
+    placeSuggestions.mockReset().mockResolvedValue([SUGGESTION]);
+    resolvePlace.mockReset().mockResolvedValue(RESOLVED);
+  });
+
+  it("names a malformed administrator email in words, and provisions nothing", async () => {
+    render(<NewTenantPage />);
+
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Bangalore" } });
+    const email = screen.getByLabelText(/^email address/i);
+    fireEvent.change(email, { target: { value: "radha.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /add temple/i }));
+
+    expectSaidBeside(email, "Enter an email address like name@example.com");
+    await settle();
+    expect(provisionSpy).not.toHaveBeenCalled();
+  });
+
+  it("lets a phone typo through to the server, and shows its KMS-400003", async () => {
+    provisionSpy.mockRejectedValueOnce(
+      new ApiError(
+        {
+          code: "KMS-400003",
+          message: "That phone number isn't in a form we can use.",
+          action: "Enter it with its country code, like +91 98765 43210.",
+          fieldErrors: [{ field: "adminPhone", message: "Enter it with its country code." }],
+        },
+        400
+      )
+    );
+    render(<NewTenantPage />);
+
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Bangalore" } });
+    fireEvent.change(screen.getByLabelText(/phone number/i), { target: { value: "+91 70304 3334X" } });
+    fireEvent.click(screen.getByRole("button", { name: /add temple/i }));
+
+    await waitFor(() => expect(provisionSpy).toHaveBeenCalledTimes(1));
+    expect((provisionSpy.mock.calls[0][0] as unknown as { adminPhone: string }).adminPhone).toBe("+91703043334X");
+    expect(await screen.findByText("KMS-400003")).toBeInTheDocument();
+    expect(screen.queryByText(/is required/i)).not.toBeInTheDocument();
+  });
+
+  it("names no coordinate box while the picker's answer is still waiting to be confirmed", async () => {
+    render(<NewTenantPage />);
+
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "ISKCON Bangalore" } });
+    await pickTheTemple();
+    expect(await screen.findByText(/is this the right place\?/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^latitude/i)).not.toBeRequired();
+    expect(screen.getByLabelText(/^longitude/i)).not.toBeRequired();
+
+    fireEvent.click(screen.getByRole("button", { name: /add temple/i }));
+
+    expect(screen.queryByText(/^(latitude|longitude) /i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^latitude/i)).not.toHaveAttribute("aria-invalid", "true");
+    // What happens next is unchanged from before Form: the blank coordinates go to the server.
+    await waitFor(() => expect(provisionSpy).toHaveBeenCalledTimes(1));
+  });
+
+  function typeAddress(value: string) {
+    fireEvent.change(screen.getByLabelText(/^address/i), { target: { value } });
+  }
+
+  async function pickTheTemple() {
+    typeAddress(TYPED);
+    fireEvent.click(await screen.findByText(SUGGESTION.primary));
+  }
+});
+
+/**
+ * The sentence Form puts beside a refused box. Checked three ways so that "beside" means something:
+ * the box is marked invalid, it is described by that very sentence, and the sentence's slot sits
+ * straight after the box, or after the label wrapping it.
+ */
+function expectSaidBeside(box: HTMLElement, sentence: string | RegExp) {
+  const said = screen.getByText(sentence);
+  expect(box).toHaveAttribute("aria-invalid", "true");
+  expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+  expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
+}
+
+/** Lets a handler that awaits a token reach its API call, so "not called" is not merely "not yet". */
+function settle() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}

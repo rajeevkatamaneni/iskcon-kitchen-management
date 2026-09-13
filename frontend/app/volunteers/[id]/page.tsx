@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 import { dateWithYear, moment, shiftWindow, templeDay, templeZone, todayIso } from "@/lib/format";
 
@@ -287,7 +288,7 @@ function ShiftRosterView() {
               {showBroadcast && (
                 <section className="card mb-8 px-6 py-5">
                   <h2 className="text-lg">Send an update</h2>
-                  <form className="mt-3" aria-label="Send an update" onSubmit={broadcast}>
+                  <Form className="mt-3" aria-label="Send an update" onSubmit={broadcast}>
                     <textarea name="message" required maxLength={1000} rows={3} placeholder="e.g. Gate B today, not A"
                       className="w-full rounded-control border border-hairline px-3 py-2" />
                     <label className="mt-2 flex items-center gap-2 text-sm text-ink-secondary">
@@ -296,7 +297,7 @@ function ShiftRosterView() {
               /> Also send to the waitlist
                     </label>
                     <button type="submit" disabled={busy} className="btn btn-primary mt-3 min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Send now</button>
-                  </form>
+                  </Form>
                 </section>
               )}
 
@@ -305,7 +306,7 @@ function ShiftRosterView() {
                 {activeSignups.length === 0 ? (
                   <p className="text-sm text-ink-secondary">No one signed up yet.</p>
                 ) : (
-                  <form aria-label="Attendance" onSubmit={recordAttendance}>
+                  <Form aria-label="Attendance" onSubmit={recordAttendance}>
                     <div className="table-wrap overflow-x-auto">
                       <table className={TABLE}>
                         <thead className={THEAD}>
@@ -564,7 +565,7 @@ function ShiftRosterView() {
                         Attendance can be marked once this shift has started.
                       </p>
                     ) : null}
-                  </form>
+                  </Form>
                 )}
                 {/* The removal form's element, deliberately outside the attendance form above and
                     empty of controls (T-080). HTML forbids a nested form, and the fields on the row
@@ -572,7 +573,7 @@ function ShiftRosterView() {
                     and the alternative was taking the whole attendance table out of its form to
                     make room for a second one. One at a time, because `removing` holds one id. */}
                 {removing !== null && (
-                  <form
+                  <Form
                     id={`remove-${removing}`}
                     aria-label="Take a volunteer off this shift"
                     onSubmit={(e) =>

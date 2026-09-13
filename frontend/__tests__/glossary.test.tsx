@@ -77,3 +77,50 @@ describe("translation glossary", () => {
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });
 });
+
+/*
+ * T-166, slice F of the blank-required-fields wave.
+ * Rajeev’s ruling, 2026-09-11: "Required fields should carry `required` on the element and if left
+ * unfilled, we should at least show 'Required' in red on form submit. Ideally, we should say
+ * 'Quantity is required' OR 'Note is required'."
+ *
+ * Both text boxes carry `required`, so an empty Add is refused by Form, each box is named from its
+ * label's own words, and nothing is sent. The button is clicked, not the form submitted, because a
+ * click is what a person does.
+ */
+describe("a blank glossary term (T-166)", () => {
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } };
+    queryRef.current = { data: [], error: null, loading: false };
+    addMock.mockReset().mockResolvedValue({ id: "g2" });
+  });
+
+  it("names both blank boxes in red beside them, and adds nothing", async () => {
+    render(<GlossaryPage />);
+    const form = screen.getByRole("form", { name: /add a glossary term/i });
+
+    fireEvent.click(within(form).getByRole("button", { name: /^add$/i }));
+
+    expectSaidBeside(within(form).getByLabelText(/english term/i), "English term is required");
+    expectSaidBeside(within(form).getByLabelText(/preferred translation/i), "Preferred translation is required");
+    await settle();
+    expect(addMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The sentence Form puts beside a refused box. Checked three ways so that "beside" means something:
+ * the box is marked invalid, it is described by that very sentence, and the sentence's slot sits
+ * straight after the box, or after the label wrapping it.
+ */
+function expectSaidBeside(box: HTMLElement, sentence: string | RegExp) {
+  const said = screen.getByText(sentence);
+  expect(box).toHaveAttribute("aria-invalid", "true");
+  expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+  expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
+}
+
+/** Lets a handler that awaits a token reach its API call, so "not called" is not merely "not yet". */
+function settle() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}

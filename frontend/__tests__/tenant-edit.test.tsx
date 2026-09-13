@@ -300,3 +300,41 @@ describe("the temple's page, after the edit screen exists", () => {
     expect(screen.getByText("Approved")).toBeInTheDocument();
   });
 });
+
+/*
+ * T-166, slice F of the blank-required-fields wave.
+ *
+ * Why nothing on this screen says "is required": `Field`'s `required` prop prints "(required)" beside
+ * the label and never reaches the input, and no input here carries `required` of its own. Form only
+ * reads what the browser refuses, so it has nothing to refuse for a blank box. Adding the attribute
+ * is a change to the screen's rules, which this task was told not to make; it is raised instead.
+ *
+ * The form has no email, number or date box either, so Form checks nothing here. A cleared name
+ * goes to the server as it did before, and the server's answer is what the operator reads.
+ */
+describe("correcting a temple under Form (T-166)", () => {
+  it("refuses no box itself, and shows the server's answer to a cleared name", async () => {
+    updateMock.mockRejectedValue(
+      new ApiError(
+        {
+          code: "KMS-400001",
+          message: "Some of the information entered isn't valid.",
+          action: "Check the highlighted fields and try again.",
+          fieldErrors: [{ field: "name", message: "Enter the temple's name." }],
+        },
+        400
+      )
+    );
+    render(<EditTenantPage />);
+
+    const name = screen.getByLabelText(/^name/i);
+    expect(name).not.toBeRequired();
+    fireEvent.change(name, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
+    expect(updateMock.mock.calls[0][1]).toMatchObject({ name: "" });
+    expect(await screen.findByText("KMS-400001")).toBeInTheDocument();
+    expect(screen.queryByText(/is required/i)).not.toBeInTheDocument();
+  });
+});

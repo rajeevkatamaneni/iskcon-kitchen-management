@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loading } from "@/components/Loading";
+import { Form } from "@/components/ds/Form";
 import { useAuth } from "@/lib/auth-context";
 import { openCheckout, type CheckoutOutcome } from "@/lib/checkout";
 import { money } from "@/lib/format";
@@ -231,7 +232,7 @@ function MoneyTab({
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[1.6fr_1fr]">
-      <form onSubmit={submit} className="card grid gap-6 px-8 py-7">
+      <Form onSubmit={submit} className="card grid gap-6 px-8 py-7">
         <p className="text-ink-secondary">
           The kitchen buys what that week’s menus are short of.
           {page.costPerPlateInr != null && (
@@ -311,7 +312,7 @@ function MoneyTab({
           {busy ? "Just a moment…" : `Give ${money(given, "INR")}`}
         </button>
 
-      </form>
+      </Form>
 
       <aside className="grid gap-4">
         <section className="card px-6 py-5">

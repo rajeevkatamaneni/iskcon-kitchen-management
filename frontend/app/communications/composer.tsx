@@ -8,6 +8,7 @@ import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { Form } from "@/components/ds/Form";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import {
@@ -160,7 +161,7 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
       {error && <ErrorNotice error={error} />}
       {notice && <InlineNotice tone="success" autoDismiss>{notice}</InlineNotice>}
 
-      <form className="grid gap-4" aria-label="Write a communication" onSubmit={(e) => e.preventDefault()}>
+      <Form className="grid gap-4" aria-label="Write a communication" onSubmit={(e) => e.preventDefault()}>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">What kind of message is this?</span>
@@ -239,7 +240,7 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
             className="min-h-64 rounded-control border border-hairline px-4 py-3 text-base leading-relaxed text-ink outline-none focus:border-accent-border"
           />
         </div>
-      </form>
+      </Form>
 
       {confirming !== null && (
         <div className="card px-6 py-5">

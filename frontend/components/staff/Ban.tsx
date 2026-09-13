@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Form } from "@/components/ds/Form";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { HintedField } from "@/components/ds/InfoHint";
@@ -257,7 +258,7 @@ export function BanRecord({
       {/* Two fields and one field: both stay inline, which is where the threshold settled in Q1.
           Sending somebody to another screen to correct a sentence is friction, not focus. */}
       {changeable && panel === "amend" && (
-        <form className="mt-4 grid gap-3" aria-label="Correct this record" onSubmit={onSubmitAmend}>
+        <Form className="mt-4 grid gap-3" aria-label="Correct this record" onSubmit={onSubmitAmend}>
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">What kind of thing was it?</span>
             <select name="category" defaultValue={ban.category} required className={FIELD}>
@@ -277,11 +278,11 @@ export function BanRecord({
               Save the correction
             </Button>
           </div>
-        </form>
+        </Form>
       )}
 
       {changeable && panel === "retract" && (
-        <form className="mt-4 grid gap-3" aria-label="Take this record back" onSubmit={onSubmitRetract}>
+        <Form className="mt-4 grid gap-3" aria-label="Take this record back" onSubmit={onSubmitRetract}>
           <InlineNotice tone="warning">
             <p>It stops being shown at hires straight away.</p>
             <p>The record stays on file with your reason on it.</p>
@@ -297,7 +298,7 @@ export function BanRecord({
               Take it back
             </Button>
           </div>
-        </form>
+        </Form>
       )}
     </>
   );

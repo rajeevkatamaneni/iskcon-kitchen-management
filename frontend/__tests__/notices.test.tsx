@@ -232,7 +232,10 @@ describe("the notices board", () => {
     expect(reason).toBeRequired();
 
     fireEvent.change(reason, { target: { value: "Wrong batch number." } });
-    fireEvent.submit(screen.getByRole("form", { name: /Withdraw Recall/ }));
+    // The form's own button rather than `fireEvent.submit`, since T-165 made it a `Form`.
+    fireEvent.click(
+      within(screen.getByRole("form", { name: /Withdraw Recall/ })).getByRole("button", { name: "Withdraw" })
+    );
 
     await waitFor(() =>
       expect(withdrawMock).toHaveBeenCalledWith("ours", "Wrong batch number.", "test-token")
@@ -278,5 +281,53 @@ describe("raising a notice", () => {
     render(<NoticesPage />);
     expect(screen.getByText(/Recall: adulterated ghee went out to every temple\./i)).toBeInTheDocument();
     expect(replaceMock).toHaveBeenCalledWith("/notices");
+  });
+});
+
+/**
+ * T-165: both notice forms are `Form`s, so a blank required box is named in red beside it and
+ * nothing is sent.
+ */
+describe("a blank notice box names itself (T-165)", () => {
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
+    boardRef.current = { data: [], error: null, loading: false };
+    paramsRef.current = new URLSearchParams();
+    pushMock.mockReset();
+    replaceMock.mockReset();
+  });
+
+  it("withdrawing: names a blank reason beside its box, and withdraws nothing", async () => {
+    boardRef.current = {
+      data: [notice({ id: "ours", subject: "Recall: adulterated ghee", mine: true, canWithdraw: true })],
+      error: null,
+      loading: false,
+    };
+    render(<NoticesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw" }));
+    const form = screen.getByRole("form", { name: /Withdraw Recall/ });
+    fireEvent.click(within(form).getByRole("button", { name: "Withdraw" }));
+
+    // The box has a placeholder and no label, so the only name the page gives it is its `name`
+    // attribute. That reads badly and is recorded in T-165's proof rather than changed here.
+    const said = await screen.findByText("reason is required");
+    const reason = screen.getByPlaceholderText("Why is it being withdrawn?");
+    expect(reason.getAttribute("aria-describedby")).toContain(said.id);
+    expect(withdrawMock).not.toHaveBeenCalled();
+  });
+
+  it("raising: names the blank subject and message beside their boxes, and posts nothing", async () => {
+    render(<NewNoticePage />);
+    // The header's button, which reaches the form through `form=`.
+    fireEvent.click(screen.getByRole("button", { name: /post to every temple/i }));
+
+    const form = screen.getByRole("form", { name: /raise a platform notice/i });
+    const subject = await screen.findByText("Subject is required");
+    const body = screen.getByText("What happened, and what other temples should do is required");
+    expect(form.querySelector('[name="subject"]')!.getAttribute("aria-describedby")).toContain(subject.id);
+    expect(form.querySelector('[name="body"]')!.getAttribute("aria-describedby")).toContain(body.id);
+    expect(screen.getAllByText(/ is required$/)).toHaveLength(2);
+    expect(raiseMock).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
   });
 });

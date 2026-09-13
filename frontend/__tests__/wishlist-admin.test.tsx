@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ApiError, WishlistItemView } from "@/lib/api";
 
 const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
@@ -34,6 +34,7 @@ vi.mock("@/lib/use-authed-query", () => ({
 
 import WishlistAdminPage from "@/app/wishlist/page";
 import NewWishlistItemPage from "@/app/wishlist/new/page";
+import { api } from "@/lib/api";
 
 function item(o: Partial<WishlistItemView>): WishlistItemView {
   return {
@@ -99,3 +100,70 @@ describe("adding a wish-list item", () => {
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });
 });
+
+/*
+ * T-166, slice F of the blank-required-fields wave.
+ * Rajeev’s ruling, 2026-09-11: "Required fields should carry `required` on the element and if left
+ * unfilled, we should at least show 'Required' in red on form submit. Ideally, we should say
+ * 'Quantity is required' OR 'Note is required'."
+ *
+ * The title and the price carry `required`; the quantity does too but opens at 1, so it is not
+ * refused. Add item sits in the header, outside the form, and points at it with form="…", which is
+ * why this presses that button: a submit from outside the tag has to be checked just the same.
+ */
+describe("a blank wish-list item (T-166)", () => {
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
+    queryRef.current = { data: [], error: null, loading: false };
+    pushMock.mockReset();
+  });
+
+  it("names the blank title and price beside their boxes, from the header's button, and adds nothing", async () => {
+    const create = vi.spyOn(api, "createWishlistItem").mockResolvedValue({} as never);
+    render(<NewWishlistItemPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /add item/i }));
+
+    expectSaidBeside(screen.getByRole("textbox", { name: "Title" }), "Title is required");
+    expectSaidBeside(screen.getByRole("spinbutton", { name: "Price (₹)" }), "Price (₹) is required");
+    await settle();
+    expect(create).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+    create.mockRestore();
+  });
+
+  it("adds the item once the two boxes are filled, so the refusal is not a dead end", async () => {
+    const create = vi.spyOn(api, "createWishlistItem").mockResolvedValue({} as never);
+    render(<NewWishlistItemPage />);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Rice sacks" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Price (₹)" }), { target: { value: "250" } });
+    fireEvent.click(screen.getByRole("button", { name: /add item/i }));
+
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Rice sacks", priceInr: 250, quantityWanted: 1 }),
+        "test-token"
+      )
+    );
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/wishlist?added=Rice%20sacks"));
+    create.mockRestore();
+  });
+});
+
+/**
+ * The sentence Form puts beside a refused box. Checked three ways so that "beside" means something:
+ * the box is marked invalid, it is described by that very sentence, and the sentence's slot sits
+ * straight after the box, or after the label wrapping it.
+ */
+function expectSaidBeside(box: HTMLElement, sentence: string | RegExp) {
+  const said = screen.getByText(sentence);
+  expect(box).toHaveAttribute("aria-invalid", "true");
+  expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+  expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
+}
+
+/** Lets a handler that awaits a token reach its API call, so "not called" is not merely "not yet". */
+function settle() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}

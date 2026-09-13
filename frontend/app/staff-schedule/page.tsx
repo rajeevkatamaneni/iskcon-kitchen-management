@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Form } from "@/components/ds/Form";
 import { useCallback, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -504,7 +505,7 @@ function DayEditor({
         </InlineNotice>
       ) : (
         <div className="grid gap-5">
-          <form
+          <Form
             className="flex flex-wrap items-end gap-3"
             aria-label={day.working ? "Change the hours" : "Add them on"}
             onSubmit={(e) => {
@@ -524,9 +525,9 @@ function DayEditor({
             <Button type="submit" size="sm" disabled={busy}>
               {day.working ? "Change the hours" : "Add them on"}
             </Button>
-          </form>
+          </Form>
 
-          <form
+          <Form
             className="flex flex-wrap items-end gap-3"
             aria-label="Mark them off"
             onSubmit={(e) => {
@@ -550,9 +551,9 @@ function DayEditor({
               <input name="reason" className="min-h-touch rounded-control border border-hairline px-2" />
             </label>
             <Button type="submit" variant="secondary" size="sm" disabled={busy}>Mark them off</Button>
-          </form>
+          </Form>
 
-          <form
+          <Form
             className="flex flex-wrap items-end gap-3"
             aria-label="Swap this day"
             onSubmit={(e) => {
@@ -566,7 +567,7 @@ function DayEditor({
               <input type="date" name="toDate" required className="min-h-touch rounded-control border border-hairline px-2" />
             </label>
             <Button type="submit" variant="secondary" size="sm" disabled={busy}>Swap</Button>
-          </form>
+          </Form>
 
           {day.fromException && (
             <div>

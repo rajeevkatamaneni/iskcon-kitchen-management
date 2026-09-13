@@ -12,6 +12,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { TABLE, TD_ACTIONS, TD_TEXT, THEAD, TH_ACTIONS, TH_TEXT, TR, WRAP } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
+import { Form } from "@/components/ds/Form";
 
 
 export default function GlossaryPage() {
@@ -82,7 +83,7 @@ function GlossaryView() {
 
           <section className="card mb-8 px-6 py-5" aria-labelledby="add-heading">
             <h2 id="add-heading" className="text-lg">Add a term</h2>
-            <form className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-[8rem_1fr_1fr_auto]" aria-label="Add a glossary term" onSubmit={add}>
+            <Form className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-[8rem_1fr_1fr_auto]" aria-label="Add a glossary term" onSubmit={add}>
               <label className="flex flex-col gap-1 text-sm text-ink-secondary">
                 <span className="pl-field-inset font-medium text-ink">Language</span>
                 {/* Defaulted explicitly. It used to be Hindi only because Hindi happened to head a
@@ -109,7 +110,7 @@ function GlossaryView() {
                   Add
                 </button>
               </div>
-            </form>
+            </Form>
           </section>
 
           {loading ? (

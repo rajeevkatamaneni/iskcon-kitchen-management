@@ -1271,3 +1271,54 @@ describe("planning a meal on a fasting day", () => {
     expect(screen.queryByRole("button", { name: /grain preparations/i })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * T-165: the composer is a `Form`. It has no `required` box, so its test is a figure out of range.
+ *
+ * <p>Not the head count: `setCount` clamps a typed -1 to 0, so a counter can never hold a figure its
+ * `min={0}` refuses. Not a preparation's quantity either: nought or less is caught first by the
+ * composer's own "Say how much … to make", which disables Save. The travel box is the one range the
+ * browser alone guards. It keeps what is typed, and a 0 is not a figure the arrival rule judges, so
+ * Save stays live and `min={1}` is what refuses it.
+ */
+describe("a figure out of range names its box (T-165)", () => {
+  beforeEach(() => {
+    createMealPlan.mockClear();
+    createMealPlan.mockResolvedValue({ id: "m1" });
+    placesAvailable.mockResolvedValue({ available: false });
+  });
+
+  it("says a travel time of 0 must be at least 1, and saves nothing", async () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Event" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "11:00" } });
+    fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
+      target: { value: "Rajajinagar community programme" },
+    });
+    fireEvent.change(screen.getByLabelText(/is this going outside/i), { target: { value: "yes" } });
+    fireEvent.change(screen.getByLabelText(/pickup or delivery/i, { selector: "select" }), { target: { value: "DELIVERY" } });
+    fireEvent.change(screen.getByLabelText(/contact name/i), { target: { value: "Mrs Latha Rao" } });
+    fireEvent.change(screen.getByLabelText(/contact phone/i, { selector: "input" }), { target: { value: "+91 98862 30011" } });
+    fireEvent.change(screen.getByLabelText(/where is it going/i, { selector: "input" }), {
+      target: { value: "Hare Krishna Hill, Rajajinagar 560010" },
+    });
+    fireEvent.change(screen.getByLabelText(/when do the guests eat/i, { selector: "input" }), { target: { value: "13:00" } });
+
+    // Typed with fireEvent.change, not a defaultValue: jsdom only range-checks a value set the way a
+    // person sets it.
+    const travel = screen.getByLabelText(/estimated travel time/i, { selector: "input" });
+    fireEvent.change(travel, { target: { value: "0" } });
+
+    // None of the composer's own checks refuses this, so the commit button is live.
+    const save = screen.getByRole("button", { name: /save this meal/i });
+    expect(save).not.toBeDisabled();
+    fireEvent.click(save);
+
+    const said = await screen.findByText("Estimated travel time must be at least 1");
+    expect(travel.getAttribute("aria-describedby")).toContain(said.id);
+    expect(screen.getAllByText(/ must be at least /)).toHaveLength(1);
+    expect(createMealPlan).not.toHaveBeenCalled();
+  });
+});

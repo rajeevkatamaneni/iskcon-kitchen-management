@@ -167,3 +167,50 @@ describe("taking the money", () => {
     expect(screen.queryByText(/the kitchen has been told/i)).not.toBeInTheDocument();
   });
 });
+
+/*
+ * T-166, slice F of the blank-required-fields wave. The money form is now a Form, and nothing about
+ * the checkout may change with it. The form has no box a browser rule applies to: "Or another
+ * amount" is a plain text box with a numeric keyboard, no `required` and no `min`, and the 80G
+ * boxes are not required. So Form refuses nothing, and the page's own check is what stops a bad
+ * amount: the Give button is disabled while the amount is not above nothing.
+ */
+describe("the amount, under Form (T-166)", () => {
+  beforeEach(() => {
+    giveOnce.mockReset().mockResolvedValue(CHECKOUT);
+    openCheckout.mockReset().mockResolvedValue("paid");
+  });
+
+  it("gives the chosen preset when the other amount is left blank, and says nothing about the box", async () => {
+    render(<DonatePage />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Give ₹/ })).toBeInTheDocument());
+    expect(screen.getByLabelText(/or another amount/i)).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Give ₹/ }));
+
+    await waitFor(() => expect(giveOnce).toHaveBeenCalledTimes(1));
+    expect(giveOnce.mock.calls[0][0]).toBe(1100);
+    await waitFor(() => expect(openCheckout).toHaveBeenCalledWith(CHECKOUT, expect.anything()));
+    expect(screen.queryByText(/is required|must be|can be at most/i)).not.toBeInTheDocument();
+  });
+
+  it("stops a negative or non-numeric amount with the page's disabled button, not with a sentence", async () => {
+    render(<DonatePage />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Give/ })).toBeInTheDocument());
+    const other = screen.getByLabelText(/or another amount/i);
+    expect(other).not.toBeRequired();
+    expect(other).not.toHaveAttribute("min");
+
+    fireEvent.change(other, { target: { value: "-5" } });
+    expect(screen.getByRole("button", { name: /^Give/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Give/ }));
+
+    fireEvent.change(other, { target: { value: "abc" } });
+    expect(screen.getByRole("button", { name: /^Give/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Give/ }));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(giveOnce).not.toHaveBeenCalled();
+    expect(screen.queryByText(/is required|must be|is not valid/i)).not.toBeInTheDocument();
+  });
+});

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { Form } from "@/components/ds/Form";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Button } from "@/components/ds/Button";
 import { Card } from "@/components/ds/Card";
@@ -101,7 +102,7 @@ function ConductNotesPanel({
         <p className="mb-6 text-sm text-ink-muted">No conduct notes on this record.</p>
       )}
 
-      <form onSubmit={submit} aria-label="Add a conduct note">
+      <Form onSubmit={submit} aria-label="Add a conduct note">
         <label className="flex flex-col gap-1 text-sm">
           <span className="pl-field-inset font-medium text-ink">Add a note</span>
           <textarea
@@ -126,7 +127,7 @@ function ConductNotesPanel({
             Save note
           </Button>
         </div>
-      </form>
+      </Form>
     </Card>
   );
 }
