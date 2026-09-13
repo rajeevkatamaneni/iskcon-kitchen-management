@@ -53,6 +53,25 @@ public class WhatsAppSettingsController {
 	}
 
 	/**
+	 * Sends Meta every template that is waiting: new ones, changed wording, and ones Meta did not
+	 * register last time (T-169a). Answers with the settings as they stand after it, the same view as
+	 * the GET, so the button can show what is still waiting without a second request.
+	 *
+	 * <p>Rajeev, 2026-09-13: <em>"For Watts App specifically, we need a new button Reload Wattsapp
+	 * Templates."</em> After a temple's first connection this is the only way templates reach Meta;
+	 * Save only saves. Same permission as everything else on this controller, because sending
+	 * templates to a temple's Meta account is part of connecting that account.
+	 *
+	 * <p>Synchronous, as Save's submission was: one to three Meta calls per template, inside the
+	 * request. See the service for why that is recorded as a limit rather than built around.
+	 */
+	@PostMapping("/templates/reload")
+	@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")
+	public TenantWhatsAppSettings reloadTemplates(@AuthenticationPrincipal AuthenticatedUser actor) {
+		return settings.reloadTemplates(actor);
+	}
+
+	/**
 	 * Sends a real test message from the temple's number to the phone typed (T-151), and answers with
 	 * the settings as they stand after it.
 	 *

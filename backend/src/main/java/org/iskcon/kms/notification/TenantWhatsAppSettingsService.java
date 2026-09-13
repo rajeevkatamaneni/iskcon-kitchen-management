@@ -10,11 +10,15 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
 import org.iskcon.kms.audit.AuditService;
@@ -46,11 +50,17 @@ public class TenantWhatsAppSettingsService {
 	private static final SecureRandom RANDOM = new SecureRandom();
 
 	/**
-	 * For the refused-template list only: two strings per element, so a plain mapper is enough and
-	 * the service's constructor, which two integration tests build by hand, stays as it is.
+	 * For the refused-template list and, since T-169a, the template fingerprints: strings only, so a
+	 * plain mapper is enough and the service's constructor, which three integration tests build by
+	 * hand, stays as it is.
 	 */
 	private static final ObjectMapper JSON = new ObjectMapper();
 	private static final TypeReference<List<TenantWhatsAppSettings.RefusedTemplate>> REFUSED_LIST =
+			new TypeReference<>() {
+			};
+
+	/** name -> "sha256:..." or null, as V129 describes. A LinkedHashMap because it keeps the nulls. */
+	private static final TypeReference<LinkedHashMap<String, String>> FINGERPRINT_MAP =
 			new TypeReference<>() {
 			};
 
@@ -96,7 +106,9 @@ public class TenantWhatsAppSettingsService {
 		return jdbc.query("""
 				SELECT whatsapp_phone_number_id, whatsapp_waba_id, whatsapp_webhook_token,
 					   whatsapp_display_number, whatsapp_verified_at, whatsapp_webhook_seen_at,
-					   whatsapp_templates_submitted_at, whatsapp_refused_templates::text AS refused_templates
+					   whatsapp_templates_submitted_at, whatsapp_refused_templates::text AS refused_templates,
+					   whatsapp_template_fingerprints::text AS fingerprints, whatsapp_templates_sent_waba_id,
+					   whatsapp_templates_sent_phone_number_id
 				FROM tenant_settings
 				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
 				""", (rs, n) -> rs.getString("whatsapp_phone_number_id") == null
@@ -110,7 +122,8 @@ public class TenantWhatsAppSettingsService {
 								instant(rs, "whatsapp_verified_at"),
 								instant(rs, "whatsapp_webhook_seen_at"),
 								instant(rs, "whatsapp_templates_submitted_at"),
-								refusedTemplates(rs.getString("refused_templates"))))
+								refusedTemplates(rs.getString("refused_templates")),
+								pending(rs)))
 				.stream().findFirst().orElseGet(TenantWhatsAppSettings::none);
 	}
 
@@ -122,6 +135,18 @@ public class TenantWhatsAppSettingsService {
 	 * shift reminder. The callback token and verify token are minted once and kept across later
 	 * edits, because they are already in the temple's Meta dashboard and changing them silently would
 	 * stop delivery receipts.
+	 *
+	 * <p><strong>Templates go to Meta on the first connection only (T-169a).</strong> Rajeev,
+	 * 2026-09-13, approved: the first connection sends the templates automatically, and after that
+	 * Save only saves; templates go only through Reload WhatsApp Templates. See
+	 * {@link #templatesNeverSent} for what "first" means, including for a temple that sent templates
+	 * before V129 kept any record of it.
+	 *
+	 * <p>A changed account is saved and nothing is sent to it. The view then reports
+	 * {@code accountChanged}, and the administrator presses Reload. Sending twenty templates to a
+	 * business account is a deliberate act with Meta's review and edit limits behind it, and the screen
+	 * now separates editing a setting from sending anything, which is the point of Rajeev's read-only
+	 * default.
 	 */
 	@Transactional
 	public TenantWhatsAppSettings save(AuthenticatedUser actor, String phoneNumberId, String wabaId,
@@ -171,8 +196,63 @@ public class TenantWhatsAppSettingsService {
 				null, Map.of("whatsappPhoneNumberId", phoneNumberId.trim(), "whatsappWabaId", wabaId.trim()),
 				"WhatsApp account connected.");
 
-		submitTemplates(tenantId, wabaId.trim(), tokenToUse);
+		boolean firstConnection = templatesNeverSent();
+		if (firstConnection) {
+			submitTemplates(wabaId.trim(), phoneNumberId.trim(), tokenToUse, false);
+		}
 		return read();
+	}
+
+	/**
+	 * The Reload WhatsApp Templates button (T-169a): sends Meta every template again, brings the wording
+	 * Meta holds up to date, and records what Meta now holds.
+	 *
+	 * <p>Rajeev, 2026-09-13: <em>"For Watts App specifically, we need a new button Reload Wattsapp
+	 * Templates. Click on that to reload watts app templates. We can show a date when the templates
+	 * were uploaded last."</em> And, approved with it, "Reload must actually update changed wording".
+	 *
+	 * <p><strong>Every template, not only the ones counted as waiting.</strong> The counts on the view
+	 * only say what is known from our own records, and our records cannot see a template somebody
+	 * deleted in Meta's manager, or what an account holds that nobody has compared. Asking Meta about
+	 * all twenty is what makes the button's quiet state, "last sent to Meta on …", true after a press.
+	 * It costs what Save's submission always cost: one registration per template, plus a lookup and
+	 * perhaps an edit for each template whose wording is not already known to be current. See
+	 * {@link #submitTemplates}.
+	 *
+	 * <p><strong>Synchronous, and that is a known limit.</strong> Twenty or more sequential Meta calls
+	 * inside one request and one transaction, 34 to 60 seconds on staging's Save. Nothing here is built
+	 * around it, by instruction, because the press is rare and the administrator is waiting for the
+	 * answer anyway.
+	 *
+	 * <p>Not connected, or connected with no stored token, is refused exactly as the Test button
+	 * refuses it, with the same existing codes: nothing about Reload is a new kind of failure.
+	 */
+	@Transactional
+	public TenantWhatsAppSettings reloadTemplates(AuthenticatedUser actor) {
+		UUID tenantId = TenantContext.get().orElseThrow(
+				() -> new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "tenant")));
+		TenantWhatsAppSettings current = read();
+		if (!current.connected()) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "phoneNumberId"));
+		}
+		String token = secrets.get(tenantId, TenantSecretStore.Kind.WHATSAPP_ACCESS_TOKEN).orElseThrow(
+				() -> new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "accessToken")));
+
+		submitTemplates(current.wabaId(), current.phoneNumberId(), token, true);
+
+		// Before and after are both read from the row, never computed from what was asked for, so the
+		// audit entry says what the screen said and then what is stored.
+		TenantWhatsAppSettings after = read();
+		auditService.record(actor, AuditAction.SETTINGS_UPDATED, AuditEntityType.TENANT, tenantId,
+				pendingForAudit(current.templatesPending()), pendingForAudit(after.templatesPending()),
+				"WhatsApp templates sent to Meta.");
+		return after;
+	}
+
+	private static Map<String, Object> pendingForAudit(TenantWhatsAppSettings.TemplatesPending pending) {
+		return Map.of("whatsappTemplatesChanged", pending.changed(),
+				"whatsappTemplatesRefused", pending.refused(),
+				"whatsappAccountChanged", pending.accountChanged());
 	}
 
 	/**
@@ -432,32 +512,95 @@ public class TenantWhatsAppSettingsService {
 	 * templates, and it holds these. Leaving them out would mean a save where Meta held everything,
 	 * two of them as marketing, could write no date if the other eighteen happened to be refused —
 	 * which would say nothing went to Meta when two plainly had.
+	 *
+	 * <p><strong>What is recorded, and when Meta is asked about wording (T-169a, V129).</strong> Every
+	 * send records, per template, a fingerprint of the wording Meta holds, or null when that is not
+	 * known, and the account it went to. A template Meta has just created holds our wording. A template
+	 * Meta refused, or could not be asked about, is null. A template Meta already held is where the two
+	 * callers differ:
+	 * <ul>
+	 *   <li>On a first connection ({@code compareWithMeta} false) it is recorded as null, unknown, and
+	 *       Meta is asked nothing more. That keeps the first Save exactly what T-159 and T-168 made it,
+	 *       one registration per template, and an account that already held templates from some
+	 *       earlier set-up is not reported as changed on the strength of nobody having looked.</li>
+	 *   <li>On Reload ({@code compareWithMeta} true) it is taken as current without asking only when
+	 *       the same account last recorded this exact fingerprint. Otherwise Meta is asked what it
+	 *       holds, and the wording is replaced if it differs: see {@link #bringUpToDate}.</li>
+	 * </ul>
+	 *
+	 * <p><strong>Why an edit and not a new name.</strong> The name is in {@link NotificationTemplate},
+	 * the same for every temple, and every send asks for it. A new name is a release-wide rename: every
+	 * temple's messages would fail over to SMS until each temple's Meta approved the new template, and a
+	 * temple that had not yet pressed Reload would be sending a name its account does not hold. Meta's
+	 * edit changes one temple's copy in place, under the name the code already sends, and "the API
+	 * automatically re-approves the template unless it fails template review". Renaming stays the right
+	 * tool for what an edit cannot do, such as moving an approved template's category, and is done in a
+	 * release as T-159 did for the connection check.
 	 */
-	private void submitTemplates(UUID tenantId, String wabaId, String accessToken) {
+	private void submitTemplates(String wabaId, String phoneNumberId, String accessToken, boolean compareWithMeta) {
+		UUID tenantId = TenantContext.get().orElse(null);
+		LastSend before = lastSend();
+		boolean sameAccount = wabaId.equals(before.wabaId()) && phoneNumberId.equals(before.phoneNumberId());
+		Map<String, String> fingerprints = new LinkedHashMap<>();
 		int submittedNew = 0;
 		int alreadyHeld = 0;
 		int heldUnderAnotherCategory = 0;
+		int notRegistered = 0;
+		int reworded = 0;
+		int wordingNotUpdated = 0;
 		List<TenantWhatsAppSettings.RefusedTemplate> needsAttention = new ArrayList<>();
 		for (NotificationTemplate template : NotificationTemplate.values()) {
 			String name = template.whatsappTemplateName();
+			String fingerprint = template.whatsappFingerprint(TEMPLATE_LANGUAGE);
 			try {
 				MetaWhatsAppClient.TemplateSubmission result = meta.createTemplate(
 						wabaId, accessToken, name, template.whatsappCategory(),
 						TEMPLATE_LANGUAGE, template.whatsappBodyText(), template.whatsappExampleValues());
 				switch (result.outcome()) {
-					case SUBMITTED -> submittedNew++;
-					case ALREADY_EXISTS -> alreadyHeld++;
-					case HELD_UNDER_ANOTHER_CATEGORY -> {
-						heldUnderAnotherCategory++;
-						needsAttention.add(new TenantWhatsAppSettings.RefusedTemplate(name,
-								heldUnderReason(result.heldCategory()),
-								TenantWhatsAppSettings.Kind.HELD_UNDER_ANOTHER_CATEGORY));
+					case SUBMITTED -> {
+						submittedNew++;
+						fingerprints.put(name, fingerprint);
 					}
-					case REFUSED -> needsAttention.add(new TenantWhatsAppSettings.RefusedTemplate(name,
-							plainReason(result.metaReason()), TenantWhatsAppSettings.Kind.REFUSED));
+					case REFUSED -> {
+						notRegistered++;
+						fingerprints.put(name, null);
+						needsAttention.add(new TenantWhatsAppSettings.RefusedTemplate(name,
+								plainReason(result.metaReason()), TenantWhatsAppSettings.Kind.REFUSED));
+					}
+					case ALREADY_EXISTS, HELD_UNDER_ANOTHER_CATEGORY -> {
+						boolean heldUnderItsOwnCategory =
+								result.outcome() == MetaWhatsAppClient.TemplateOutcome.HELD_UNDER_ANOTHER_CATEGORY;
+						if (heldUnderItsOwnCategory) {
+							heldUnderAnotherCategory++;
+						} else {
+							alreadyHeld++;
+						}
+						HeldWording wording = !compareWithMeta
+								? HeldWording.UNKNOWN
+								: sameAccount && fingerprint.equals(before.fingerprints().get(name))
+										? HeldWording.CURRENT
+										: bringUpToDate(wabaId, accessToken, template);
+						// For a template Meta holds under a category of its own, a fingerprint here says the
+						// wording is ours; the category is not something a Reload can move, and it stays on
+						// the list as its own kind rather than being counted as changed forever.
+						fingerprints.put(name, wording.current() ? fingerprint : null);
+						if (wording.reworded()) {
+							reworded++;
+						}
+						if (wording.problem() != null) {
+							wordingNotUpdated++;
+							needsAttention.add(wording.problem());
+						} else if (heldUnderItsOwnCategory) {
+							needsAttention.add(new TenantWhatsAppSettings.RefusedTemplate(name,
+									heldUnderReason(result.heldCategory()),
+									TenantWhatsAppSettings.Kind.HELD_UNDER_ANOTHER_CATEGORY));
+						}
+					}
 				}
 			} catch (RuntimeException e) {
 				log.warn("Could not submit template {} for temple {}: {}", name, tenantId, e.toString());
+				notRegistered++;
+				fingerprints.put(name, null);
 				needsAttention.add(new TenantWhatsAppSettings.RefusedTemplate(name, NOT_REACHED,
 						TenantWhatsAppSettings.Kind.NOT_REACHED));
 			}
@@ -473,14 +616,270 @@ public class TenantWhatsAppSettingsService {
 				UPDATE tenant_settings SET whatsapp_refused_templates = ?::jsonb
 				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
 				""", json(needsAttention));
+		jdbc.update(RECORD_FINGERPRINTS, fingerprintJson(fingerprints));
+		jdbc.update("""
+				UPDATE tenant_settings
+				SET whatsapp_templates_sent_waba_id = ?, whatsapp_templates_sent_phone_number_id = ?
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", wabaId, phoneNumberId);
 		log.info("Submitted {} of {} WhatsApp templates for temple {}: {} new, {} already held, "
 						+ "{} held under another category, {} not registered",
 				registered, NotificationTemplate.values().length, tenantId,
-				submittedNew, alreadyHeld, heldUnderAnotherCategory, needsAttention.size() - heldUnderAnotherCategory);
+				submittedNew, alreadyHeld, heldUnderAnotherCategory, notRegistered);
+		if (compareWithMeta) {
+			log.info("Reload for temple {}: {} reworded at Meta, {} still waiting for new wording",
+					tenantId, reworded, wordingNotUpdated);
+		}
 	}
 
+	/** The one write of the fingerprints, as its own statement so it can be found and reasoned about. */
+	private static final String RECORD_FINGERPRINTS = """
+			UPDATE tenant_settings SET whatsapp_template_fingerprints = ?::jsonb
+			WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+			""";
+
+	/**
+	 * Makes the wording Meta holds for one template match ours, on Reload (T-169a).
+	 *
+	 * <p><strong>Finding the template's id.</strong> We never store one. Meta lists a business account's
+	 * templates filtered by name, and {@link MetaWhatsAppClient#findTemplate} takes the one entry whose
+	 * name and language are exactly ours. That answer also carries the review status and the body.
+	 *
+	 * <p><strong>Then, in order:</strong>
+	 * <ol>
+	 *   <li>The body Meta holds is ours: nothing to do. This is every template on a temple that sent its
+	 *       templates before V129 and has had no rewording since, which is how that temple's first Reload
+	 *       records fingerprints without editing anything.</li>
+	 *   <li>Meta is still reviewing it ({@code PENDING}, or {@code IN_APPEAL}): no edit is attempted,
+	 *       because "Only templates with an APPROVED, REJECTED, or PAUSED status can be edited".</li>
+	 *   <li>Any other status outside those three, such as {@code DISABLED}: not attempted either.</li>
+	 *   <li>Otherwise Meta is asked to replace the wording. Its documented 2388039 covers both a review
+	 *       in progress and too many edits, and the status just read tells them apart: on an
+	 *       {@code APPROVED} template it can only be the limit, "up to 10 times in a 30-day window, or 1
+	 *       time in a 24-hour window". On a status Meta did not name, the stored sentence says both.</li>
+	 * </ol>
+	 * https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/template-management
+	 *
+	 * <p>Each outcome that leaves Meta holding other wording is stored on the list with its own plain
+	 * sentence, and records no fingerprint, so a later Reload tries again.
+	 */
+	private HeldWording bringUpToDate(String wabaId, String accessToken, NotificationTemplate template) {
+		String name = template.whatsappTemplateName();
+		Optional<MetaWhatsAppClient.HeldTemplate> found;
+		try {
+			found = meta.findTemplate(wabaId, accessToken, name, TEMPLATE_LANGUAGE);
+		} catch (RuntimeException e) {
+			log.warn("Could not ask Meta which wording it holds for template {}: {}", name, e.toString());
+			return HeldWording.problem(name, NOT_TOLD_WHAT_META_HOLDS, TenantWhatsAppSettings.Kind.NOT_REACHED);
+		}
+		if (found.isEmpty()) {
+			log.warn("Meta says it holds template {} but lists none of that name in language {}", name, TEMPLATE_LANGUAGE);
+			return HeldWording.problem(name, NOT_TOLD_WHAT_META_HOLDS, TenantWhatsAppSettings.Kind.NOT_REACHED);
+		}
+		MetaWhatsAppClient.HeldTemplate held = found.get();
+		String ours = template.whatsappBodyText();
+		if (held.bodyText() != null && ours.strip().equals(held.bodyText().strip())) {
+			return HeldWording.CURRENT;
+		}
+
+		String status = held.status() == null ? "" : held.status().toUpperCase(Locale.ROOT);
+		if (STILL_IN_REVIEW_STATUSES.contains(status)) {
+			return HeldWording.problem(name, STILL_IN_REVIEW, TenantWhatsAppSettings.Kind.REFUSED);
+		}
+		if (!status.isEmpty() && !EDITABLE_STATUSES.contains(status)) {
+			return HeldWording.problem(name, CANNOT_BE_REWORDED, TenantWhatsAppSettings.Kind.REFUSED);
+		}
+
+		MetaWhatsAppClient.TemplateEdit edit;
+		try {
+			edit = meta.editTemplate(held.id(), accessToken, name, ours, template.whatsappExampleValues());
+		} catch (RuntimeException e) {
+			log.warn("Could not send new wording for template {}: {}", name, e.toString());
+			return HeldWording.problem(name, NOT_REACHED, TenantWhatsAppSettings.Kind.NOT_REACHED);
+		}
+		return switch (edit.outcome()) {
+			case EDITED -> HeldWording.REWORDED;
+			case STATUS_CANNOT_BE_CHANGED -> HeldWording.problem(name,
+					"APPROVED".equals(status) ? EDIT_LIMIT : IN_REVIEW_OR_EDIT_LIMIT,
+					TenantWhatsAppSettings.Kind.REFUSED);
+			case REFUSED -> HeldWording.problem(name, plainReason(edit.metaReason()),
+					TenantWhatsAppSettings.Kind.REFUSED);
+		};
+	}
+
+	/** Meta's statuses under which a template is being reviewed, so cannot be edited yet. */
+	private static final Set<String> STILL_IN_REVIEW_STATUSES = Set.of("PENDING", "IN_APPEAL");
+
+	/** "Only templates with an APPROVED, REJECTED, or PAUSED status can be edited." */
+	private static final Set<String> EDITABLE_STATUSES = Set.of("APPROVED", "REJECTED", "PAUSED");
+
+	static final String NOT_TOLD_WHAT_META_HOLDS =
+			"Meta did not say which wording it holds for this message. Press Reload to try again.";
+
+	static final String STILL_IN_REVIEW =
+			"Meta is still reviewing this message, so its new wording has to wait. Press Reload again once the review is over.";
+
+	static final String EDIT_LIMIT =
+			"Meta allows a message to be reworded only once a day and ten times a month. Press Reload again tomorrow.";
+
+	static final String IN_REVIEW_OR_EDIT_LIMIT =
+			"Meta is not taking new wording for this message yet, because of a review or a recent change. Press Reload again tomorrow.";
+
+	static final String CANNOT_BE_REWORDED =
+			"Meta holds this message in a state that cannot be reworded. Report it with the message name shown here.";
+
+	/**
+	 * What became of one template Meta already held.
+	 *
+	 * @param current  Meta now holds exactly our wording, so its fingerprint is recorded
+	 * @param reworded that is because this Reload replaced the wording
+	 * @param problem  the list entry to store when Meta holds other wording, or null
+	 */
+	private record HeldWording(boolean current, boolean reworded, TenantWhatsAppSettings.RefusedTemplate problem) {
+
+		static final HeldWording UNKNOWN = new HeldWording(false, false, null);
+		static final HeldWording CURRENT = new HeldWording(true, false, null);
+		static final HeldWording REWORDED = new HeldWording(true, true, null);
+
+		static HeldWording problem(String name, String reason, TenantWhatsAppSettings.Kind kind) {
+			return new HeldWording(false, false, new TenantWhatsAppSettings.RefusedTemplate(name, reason, kind));
+		}
+	}
+
+	/** What the last send recorded: the fingerprints and the account. */
+	private record LastSend(Map<String, String> fingerprints, String wabaId, String phoneNumberId) {
+	}
+
+	private LastSend lastSend() {
+		return jdbc.query("""
+				SELECT whatsapp_template_fingerprints::text AS fingerprints, whatsapp_templates_sent_waba_id,
+					   whatsapp_templates_sent_phone_number_id
+				FROM tenant_settings
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", (rs, n) -> new LastSend(fingerprints(rs.getString("fingerprints")),
+						rs.getString("whatsapp_templates_sent_waba_id"),
+						rs.getString("whatsapp_templates_sent_phone_number_id")))
+				.stream().findFirst().orElseGet(() -> new LastSend(Map.of(), null, null));
+	}
+
+	/**
+	 * Whether this is a temple's first connection, the only Save that sends templates (T-169a).
+	 *
+	 * <p><strong>"First" means no template has ever been sent for this temple</strong>: no account
+	 * recorded as sent to, which every send since V129 writes whatever Meta answered, and no
+	 * {@code whatsapp_templates_submitted_at}, which every send since V55 wrote when Meta held anything.
+	 *
+	 * <p>Both, because each alone misses a case. The account alone would call every temple that sent
+	 * before V129 "first" and resend twenty templates on its next Save, which is exactly what Rajeev
+	 * ruled out. The date alone would call a temple whose first Save found Meta refusing or unreachable
+	 * for every template "first" again, and Save would keep sending. With both, that temple's next
+	 * attempt is Reload, as it is for everyone else.
+	 *
+	 * <p>One case reads as first and is: a temple that connected before V129 and never had a template
+	 * registered at all has nothing at Meta, so its next Save sends.
+	 */
+	private boolean templatesNeverSent() {
+		return Boolean.TRUE.equals(jdbc.query("""
+				SELECT whatsapp_templates_sent_waba_id IS NULL AND whatsapp_templates_submitted_at IS NULL AS never
+				FROM tenant_settings
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", rs -> !rs.next() || rs.getBoolean("never")));
+	}
+
+	private static TenantWhatsAppSettings.TemplatesPending pending(ResultSet rs) throws SQLException {
+		return pending(refusedTemplates(rs.getString("refused_templates")), fingerprints(rs.getString("fingerprints")),
+				rs.getString("whatsapp_templates_sent_waba_id"), rs.getString("whatsapp_templates_sent_phone_number_id"),
+				rs.getString("whatsapp_waba_id"), rs.getString("whatsapp_phone_number_id"));
+	}
+
+	/**
+	 * What the Reload button is waiting to send (T-169a), from nothing but what this temple's row
+	 * records.
+	 *
+	 * <p><strong>{@code refused}</strong> counts the stored entries of kind REFUSED or NOT_REACHED, as the
+	 * screen's contract defines it. A template Meta holds under a category of its own is not counted:
+	 * Reload cannot change a category, and a count that no press can clear would leave the button
+	 * primary forever.
+	 *
+	 * <p><strong>{@code changed}</strong> counts templates in this release that are not already counted as
+	 * refused and whose stored fingerprint is either different from today's or missing:
+	 * <ul>
+	 *   <li><strong>A temple with no fingerprints at all counts nothing.</strong> That is every temple that
+	 *       sent before V129, South Bengaluru on staging among them: Meta holds all twenty there, and the
+	 *       six T-159 reworded already carry the new wording, so "20 changed" would be false and even
+	 *       "6 changed" would be. Nothing was recorded, so nothing is claimed. The next Reload asks Meta,
+	 *       finds the wording current, and records it.</li>
+	 *   <li>A fingerprint recorded as null, unknown, counts nothing, for the same reason.</li>
+	 *   <li>A template with no key at all, on a temple that has fingerprints, is one the app did not have
+	 *       when it last sent: new in this release, so waiting.</li>
+	 *   <li>A refused template is left to {@code refused}, so the two numbers never count one template
+	 *       twice and the screen can add them.</li>
+	 * </ul>
+	 *
+	 * <p><strong>{@code accountChanged}</strong> compares the account last sent to with the one saved now.
+	 * Never sent since V129 reads as not changed: there is no record to differ from.
+	 */
+	static TenantWhatsAppSettings.TemplatesPending pending(List<TenantWhatsAppSettings.RefusedTemplate> stored,
+			Map<String, String> fingerprints, String sentWabaId, String sentPhoneNumberId,
+			String wabaId, String phoneNumberId) {
+
+		Set<String> refusedNames = stored.stream()
+				.filter(TenantWhatsAppSettingsService::waitsForReload)
+				.map(TenantWhatsAppSettings.RefusedTemplate::name)
+				.collect(Collectors.toSet());
+		int changed = 0;
+		if (!fingerprints.isEmpty()) {
+			for (NotificationTemplate template : NotificationTemplate.values()) {
+				String name = template.whatsappTemplateName();
+				if (refusedNames.contains(name)) {
+					continue;
+				}
+				if (!fingerprints.containsKey(name)) {
+					changed++;
+					continue;
+				}
+				String held = fingerprints.get(name);
+				if (held != null && !held.equals(template.whatsappFingerprint(TEMPLATE_LANGUAGE))) {
+					changed++;
+				}
+			}
+		}
+		int refused = (int) stored.stream().filter(TenantWhatsAppSettingsService::waitsForReload).count();
+		boolean accountChanged = sentWabaId != null
+				&& (!sentWabaId.equals(wabaId) || !Objects.equals(sentPhoneNumberId, phoneNumberId));
+		return new TenantWhatsAppSettings.TemplatesPending(changed, refused, accountChanged);
+	}
+
+	private static boolean waitsForReload(TenantWhatsAppSettings.RefusedTemplate entry) {
+		return entry.kind() == TenantWhatsAppSettings.Kind.REFUSED
+				|| entry.kind() == TenantWhatsAppSettings.Kind.NOT_REACHED;
+	}
+
+	private static String fingerprintJson(Map<String, String> fingerprints) {
+		try {
+			return JSON.writeValueAsString(fingerprints);
+		} catch (JsonProcessingException e) {
+			throw new IllegalStateException("Could not write the template fingerprints", e);
+		}
+	}
+
+	private static Map<String, String> fingerprints(String stored) {
+		if (stored == null || stored.isBlank()) {
+			return Map.of();
+		}
+		try {
+			return JSON.readValue(stored, FINGERPRINT_MAP);
+		} catch (JsonProcessingException e) {
+			throw new IllegalStateException("Could not read the template fingerprints", e);
+		}
+	}
+
+	/**
+	 * Since T-169a a later Save no longer sends templates, so every "try again" says Reload. That is
+	 * the button that sends them, on a first connection's refusals as on any other.
+	 */
 	private static final String NOT_REACHED =
-			"Meta could not be reached while this message was being registered. Press Save to try again.";
+			"Meta could not be reached while this message was being registered. Press Reload to try again.";
 
 	/**
 	 * A template Meta holds under a category it chose, in words that tell the truth and give no
@@ -523,7 +922,7 @@ public class TenantWhatsAppSettingsService {
 			return "Meta found no fixed wording of its own, too many blank lines or too many emoji."
 					+ NEEDS_AN_APP_CHANGE;
 		}
-		return "Meta did not accept this message. Press Save to try again, and if it is refused again, "
+		return "Meta did not accept this message. Press Reload to try again, and if it is refused again, "
 				+ "report it with the message name shown here.";
 	}
 

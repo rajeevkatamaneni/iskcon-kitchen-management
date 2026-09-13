@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -282,6 +283,173 @@ public class MetaWhatsAppClient {
 		public TemplateSubmission(TemplateOutcome outcome, String metaReason) {
 			this(outcome, metaReason, null);
 		}
+	}
+
+	/**
+	 * Meta's {@code error_subcode} for an edit Meta will not make to a template in its present state
+	 * (T-169a).
+	 *
+	 * <p>Documented on Meta's error codes page as "2388039 - Message template status can't be changed":
+	 * "This occurs when you try to edit a template whose status cannot be changed, for example, a
+	 * template that is still in review. Wait until the template is approved or rejected before editing,
+	 * and note that templates have a daily limit on the number of edits."
+	 * https://developers.facebook.com/documentation/business-messaging/whatsapp/support/error-codes
+	 *
+	 * <p>So one code covers both "still in review" and "edited too often", and Meta's page does not tell
+	 * them apart. The caller does, from the status it read before trying: see
+	 * {@code TenantWhatsAppSettingsService}.
+	 */
+	static final int TEMPLATE_STATUS_CANNOT_BE_CHANGED = 2388039;
+
+	/**
+	 * What Meta holds under one template name in one language: its id, its review status, its category
+	 * and its body (T-169a). The id is what an edit is addressed to, and we never store one.
+	 *
+	 * <p><strong>How, and where Meta says so.</strong> {@code GET /{WABA_ID}/message_templates} takes a
+	 * {@code name} filter and a {@code fields} list, and answers a {@code data} array of templates each
+	 * carrying {@code id}, {@code name}, {@code language}, {@code status}, {@code category} and
+	 * {@code components}. Graph API reference, "Request Syntax: GET
+	 * /&lt;WHATSAPP_BUSINESS_ACCOUNT_ID&gt;/message_templates ?category=, &amp;content=, &amp;language=,
+	 * &amp;name=, …":
+	 * https://developers.facebook.com/docs/graph-api/reference/whats-app-business-account/message_templates/
+	 * and the template management guide's "Get all templates and specific fields":
+	 * https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/template-management
+	 *
+	 * <p><strong>The match is made here, exactly, on name and language.</strong> Meta's reference does
+	 * not say whether {@code name} matches whole names or parts of them, and a part match would hand
+	 * back {@code volunteer_shift_reminder} to a question about {@code shift_reminder}. Meta also keeps
+	 * one template per language under a name. So whatever comes back is filtered to the one entry whose
+	 * name and language are exactly the ones asked for, and anything else is ignored.
+	 *
+	 * @return empty when Meta lists no template with exactly this name and language
+	 * @throws WhatsAppCredentialsRejected when Meta cannot be reached, as every call here does
+	 * @throws WhatsAppSendFailed when Meta answers with an error, or with something that is not its list
+	 */
+	public Optional<HeldTemplate> findTemplate(String wabaId, String accessToken, String name, String languageCode) {
+		HttpResponse<String> response = call(HttpRequest.newBuilder(
+						URI.create(graphBaseUrl + "/" + encode(wabaId) + "/message_templates?name=" + encode(name)
+								+ "&fields=id,name,language,status,category,components"))
+				.timeout(TIMEOUT)
+				.header("Authorization", "Bearer " + accessToken)
+				.GET());
+
+		if (response.statusCode() >= 400) {
+			String readable = readableError(response);
+			log.warn("Meta would not list template {}: {}", name, readable);
+			throw new WhatsAppSendFailed(readable);
+		}
+		JsonNode data;
+		try {
+			data = objectMapper.readTree(response.body()).path("data");
+		} catch (IOException e) {
+			throw new WhatsAppSendFailed("Meta's answer could not be read.", e);
+		}
+		if (!data.isArray()) {
+			throw new WhatsAppSendFailed("Meta's answer was not a list of templates.");
+		}
+		for (JsonNode held : data) {
+			String id = text(held, "id");
+			if (id == null || !name.equals(text(held, "name")) || !languageCode.equals(text(held, "language"))) {
+				continue;
+			}
+			String body = null;
+			for (JsonNode component : held.path("components")) {
+				if ("BODY".equalsIgnoreCase(text(component, "type"))) {
+					body = text(component, "text");
+				}
+			}
+			return Optional.of(new HeldTemplate(id, text(held, "status"), text(held, "category"), body));
+		}
+		return Optional.empty();
+	}
+
+	/**
+	 * Replaces the wording of a template Meta already holds, keeping its name, language and category
+	 * (T-169a).
+	 *
+	 * <p><strong>Meta's rules, from the template management guide</strong>
+	 * (https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/template-management):
+	 * <ul>
+	 *   <li>The request is {@code POST /{TEMPLATE_ID}} with the new {@code components}, and "the API
+	 *       replaces all components with the components in the edit request payload". The answer is
+	 *       {@code {"success": true}}.</li>
+	 *   <li>"Only templates with an APPROVED, REJECTED, or PAUSED status can be edited."</li>
+	 *   <li>"You cannot edit the category of an approved template." So no category is sent: this changes
+	 *       wording only, and a template Meta holds under a category of its own keeps it.</li>
+	 *   <li>"Approved templates can be edited up to 10 times in a 30-day window, or 1 time in a 24-hour
+	 *       window. Rejected or paused templates can be edited an unlimited number of times."</li>
+	 *   <li>"After you edit an approved or paused template, the API automatically re-approves the
+	 *       template unless it fails template review."</li>
+	 * </ul>
+	 *
+	 * <p>Meta's refusal is sorted the way {@link #createTemplate}'s is, by code first:
+	 * {@link #TEMPLATE_STATUS_CANNOT_BE_CHANGED} is its own outcome, and anything else is a refusal
+	 * carrying Meta's sentence for the log and for the caller to translate. Meta unreachable is thrown.
+	 */
+	public TemplateEdit editTemplate(String templateId, String accessToken, String name, String bodyText,
+			List<String> exampleValues) {
+
+		Map<String, Object> component = exampleValues.isEmpty()
+				? Map.of("type", "BODY", "text", bodyText)
+				: Map.of("type", "BODY", "text", bodyText,
+						"example", Map.of("body_text", List.of(exampleValues)));
+
+		HttpResponse<String> response = post(
+				graphBaseUrl + "/" + encode(templateId), accessToken, Map.of("components", List.of(component)));
+
+		if (response.statusCode() < 400) {
+			if (saysSuccessFalse(response.body())) {
+				log.warn("Meta answered the edit of template {} without confirming it: {}", name, response.body());
+				return new TemplateEdit(EditOutcome.REFUSED, "Meta did not confirm the change.");
+			}
+			return new TemplateEdit(EditOutcome.EDITED, null);
+		}
+		JsonNode error = errorNode(response.body());
+		String readable = readableError(response.statusCode(), response.body());
+		log.debug("Meta answered the edit of template {} with HTTP {}: error.code={} error.error_subcode={} error_user_title={}",
+				name, response.statusCode(), raw(error, "code"), raw(error, "error_subcode"), raw(error, "error_user_title"));
+		if (error.path("error_subcode").asInt(0) == TEMPLATE_STATUS_CANNOT_BE_CHANGED) {
+			log.warn("Meta will not change template {} in its present state: {}", name, readable);
+			return new TemplateEdit(EditOutcome.STATUS_CANNOT_BE_CHANGED, readable);
+		}
+		log.warn("Meta refused new wording for template {}: {}", name, readable);
+		return new TemplateEdit(EditOutcome.REFUSED, readable);
+	}
+
+	/** A 2xx whose body says {@code "success": false}, which Meta's page does not describe but is not an edit. */
+	private boolean saysSuccessFalse(String body) {
+		try {
+			JsonNode success = body == null ? null : objectMapper.readTree(body).get("success");
+			return success != null && !success.asBoolean(true);
+		} catch (IOException e) {
+			return false;
+		}
+	}
+
+	/**
+	 * One template as Meta holds it.
+	 *
+	 * @param id       Meta's id, which an edit is addressed to
+	 * @param status   Meta's review status, e.g. {@code APPROVED}, {@code PENDING}, {@code REJECTED}
+	 * @param category the category Meta holds it under, which may not be ours (T-168)
+	 * @param bodyText the body as Meta holds it, with its {@code {{1}}} placeholders; null if it listed none
+	 */
+	public record HeldTemplate(String id, String status, String category, String bodyText) {
+	}
+
+	/**
+	 * What became of new wording sent for a template Meta already holds.
+	 *
+	 * <p>{@link #STATUS_CANNOT_BE_CHANGED} is Meta's documented 2388039, which covers both a template
+	 * still in review and one edited too often; see {@link #TEMPLATE_STATUS_CANNOT_BE_CHANGED}.
+	 */
+	public enum EditOutcome { EDITED, STATUS_CANNOT_BE_CHANGED, REFUSED }
+
+	/**
+	 * @param metaReason Meta's sentence when it did not edit, for the log and the caller to translate;
+	 *     null when it did
+	 */
+	public record TemplateEdit(EditOutcome outcome, String metaReason) {
 	}
 
 	// ---------------------------------------------------------------------

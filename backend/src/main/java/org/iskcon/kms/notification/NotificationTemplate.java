@@ -1,5 +1,9 @@
 package org.iskcon.kms.notification;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import org.iskcon.kms.communication.CommunicationCategory;
 import java.util.List;
@@ -609,6 +613,41 @@ public enum NotificationTemplate {
 			placeholders.put(order.get(i), "{{" + (i + 1) + "}}");
 		}
 		return render(placeholders).body();
+	}
+
+	/**
+	 * A stable fingerprint of this template as Meta would hold it: its name, category, language and
+	 * body text, and nothing else (T-169a).
+	 *
+	 * <p><strong>Why it exists.</strong> Settings → WhatsApp shows "3 templates changed since they were
+	 * last sent", and that is a comparison with what each temple last sent Meta. Storing the whole body
+	 * per temple would work too, but a hash says the one thing needed, equal or not, and keeps the
+	 * wording in one place: here.
+	 *
+	 * <p><strong>What is in it, and what is deliberately not.</strong> The four things Meta keys and
+	 * judges a template on, so a change to any of them is a change Meta has to be told about. The
+	 * example values are left out: they are shown to Meta's reviewer and never sent to anybody, and
+	 * a better sample must not make every temple's screen say its messages changed. Rewording a body
+	 * changes the fingerprint, which is the point, since that is exactly the change a Reload has to
+	 * carry to Meta.
+	 *
+	 * <p>The four parts are joined with the ASCII unit separator, which no name, category, language
+	 * code or body contains, so two different templates can never join into the same string. The
+	 * {@code sha256:} prefix is there so a stored value says what it is, and a later change of
+	 * algorithm can be told apart from a change of wording.
+	 *
+	 * @param languageCode the language the template is registered in, which the caller owns
+	 */
+	public String whatsappFingerprint(String languageCode) {
+		String canonical = String.join("\u001F",
+				whatsappTemplateName(), whatsappCategory(), languageCode, whatsappBodyText());
+		try {
+			byte[] digest = MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8));
+			return "sha256:" + HexFormat.of().formatHex(digest);
+		} catch (NoSuchAlgorithmException e) {
+			// Every Java runtime is required to provide SHA-256, so this cannot happen on one that runs us.
+			throw new IllegalStateException("SHA-256 is not available", e);
+		}
 	}
 
 	/**

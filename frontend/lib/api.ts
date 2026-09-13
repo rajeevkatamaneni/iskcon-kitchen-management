@@ -3636,6 +3636,41 @@ export interface WhatsAppSettingsView {
   webhookSeenAt: string | null;
   /** When the message templates were last submitted. Approval is Meta's, and is not instant. */
   templatesSubmittedAt: string | null;
+  /**
+   * Templates Meta did not register on the last send, each with a plain reason (T-159, T-168).
+   * An already-held template is never listed. Optional only until T-169b updates the settings
+   * test fixtures; T-169b makes it required.
+   */
+  refusedTemplates?: WhatsAppRefusedTemplate[];
+  /**
+   * What the Reload button is waiting to send (T-169). Optional only until T-169b updates the
+   * settings test fixtures; T-169b makes it required.
+   */
+  templatesPending?: WhatsAppTemplatesPending;
+}
+
+/** How Meta answered for one template on the last send (T-168). */
+export type WhatsAppTemplateIssueKind = "REFUSED" | "NOT_REACHED" | "HELD_UNDER_ANOTHER_CATEGORY";
+
+export interface WhatsAppRefusedTemplate {
+  /** Meta's template name, e.g. `donation_thank_you`. */
+  name: string;
+  /** One plain sentence for an administrator, never Meta's own text. */
+  reason: string;
+  kind: WhatsAppTemplateIssueKind;
+}
+
+/**
+ * Why the Reload button is the primary button (T-169, option 2). All zero and false means nothing is
+ * waiting, and the button reads "Templates last sent to Meta on <date>".
+ */
+export interface WhatsAppTemplatesPending {
+  /** Templates whose wording in this release differs from what was last sent to Meta. */
+  changed: number;
+  /** Templates Meta did not register on the last send (kind REFUSED or NOT_REACHED). */
+  refused: number;
+  /** The WhatsApp account changed since templates were last sent. */
+  accountChanged: boolean;
 }
 
 export interface SaveWhatsAppSettingsInput {
@@ -6180,6 +6215,16 @@ export const api = {
    * Sends a real test message from the temple's WhatsApp number to the number typed (T-151). It
    * replaced a button that only re-checked the credentials and sent nothing.
    */
+  /**
+   * Sends every template that is waiting to Meta: new ones, changed wording, and ones Meta did not
+   * register last time (T-169). After the first connection this is the only way templates go.
+   */
+  reloadWhatsAppTemplates: (token?: string) =>
+    request<WhatsAppSettingsView>("/api/v1/settings/whatsapp/templates/reload", {
+      method: "POST",
+      token,
+    }),
+
   sendWhatsAppTestMessage: (phoneNumber: string, token?: string) =>
     request<WhatsAppSettingsView>("/api/v1/settings/whatsapp/test", {
       method: "POST",

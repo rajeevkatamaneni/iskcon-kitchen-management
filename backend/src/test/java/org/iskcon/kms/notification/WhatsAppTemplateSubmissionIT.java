@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -302,6 +303,14 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 		return byName;
 	}
 
+	/**
+	 * Since T-169a only a first connection's Save sends templates, so every "later send" in this class
+	 * is the Reload button's.
+	 */
+	private ResultActions reloadTemplates() throws Exception {
+		return mvc.perform(post("/api/v1/settings/whatsapp/templates/reload"));
+	}
+
 	private ResultActions saveSettings() throws Exception {
 		return mvc.perform(put("/api/v1/settings/whatsapp")
 				.contentType(MediaType.APPLICATION_JSON)
@@ -417,7 +426,7 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 
 		assertThat(storedRefusals()).hasSize(NotificationTemplate.values().length)
 				.allSatisfy((name, reason) -> assertThat(reason)
-						.startsWith("Meta did not accept this message. Press Save to try again")
+						.startsWith("Meta did not accept this message. Press Reload to try again")
 						.doesNotContain("never said before"));
 	}
 
@@ -441,14 +450,15 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 	}
 
 	/**
-	 * The list is a snapshot of the last save, not a history. Note for a negative control: with the
+	 * The list is a snapshot of the last send, not a history. Since T-169a the later send is a Reload,
+	 * because a second Save sends nothing. Note for a negative control: with the
 	 * write removed this test passes vacuously, because it ends by asserting an absence and a list
 	 * that was never written is also empty. {@link #refusalsAreStoredInPlainWords} is the one that
 	 * proves the write, and {@link #stagingsFalseRefusalsClearOnTheNextSave} proves the replacement
 	 * with a list that is not empty afterwards.
 	 */
 	@Test
-	@DisplayName("a later save where Meta accepts everything clears the list")
+	@DisplayName("a later Reload where Meta accepts everything clears the list")
 	void aCleanSaveClearsTheList() throws Exception {
 		metaRefusesWhatItRefusedOnStaging();
 		saveSettings().andExpect(status().isOk());
@@ -456,7 +466,7 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 		org.mockito.Mockito.reset(meta);
 		when(meta.verifyNumber(anyString(), anyString())).thenReturn("Temple Kitchen (+1 555-010-0159)");
 		metaAcceptsEverything();
-		saveSettings().andExpect(status().isOk());
+		reloadTemplates().andExpect(status().isOk());
 
 		assertThat(storedRefusals()).isEmpty();
 		mvc.perform(get("/api/v1/settings/whatsapp"))
@@ -546,10 +556,12 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 	/**
 	 * What will actually happen on staging: its row holds thirteen false refusals written by T-159's
 	 * code, with no kind. They must read back (as refusals, which is what they were written as), and
-	 * the next save must replace them outright with the truth — not add to them, not keep them.
+	 * the next send must replace them outright with the truth — not add to them, not keep them. Since
+	 * T-169a that send is a Reload. The stale text below still says "Press Save", because that is what
+	 * T-159 wrote and staging's row holds.
 	 */
 	@Test
-	@DisplayName("staging's thirteen false refusals read back, then clear on the next save")
+	@DisplayName("staging's thirteen false refusals read back, then clear on the next Reload")
 	void stagingsFalseRefusalsClearOnTheNextSave() throws Exception {
 		Set<String> falselyRefused = new HashSet<>(ALREADY_HELD_ON_STAGING);
 		falselyRefused.addAll(HELD_AS_MARKETING_ON_STAGING);
@@ -572,7 +584,7 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.refusedTemplates.length()").value(13))
 				.andExpect(jsonPath("$.refusedTemplates[0].kind").value("REFUSED"));
 
-		saveSettings().andExpect(status().isOk());
+		reloadTemplates().andExpect(status().isOk());
 
 		assertThat(storedRefusals()).containsOnlyKeys(HELD_AS_MARKETING_ON_STAGING);
 		mvc.perform(get("/api/v1/settings/whatsapp"))
