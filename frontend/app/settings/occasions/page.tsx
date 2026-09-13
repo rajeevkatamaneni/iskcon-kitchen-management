@@ -10,6 +10,7 @@ import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { FieldRow } from "@/components/ds/FieldRow";
+import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import {
   ACTIONS_ROW,
@@ -224,7 +225,7 @@ function OccasionsView() {
             <h2 id="add-occasion-heading" className="text-lg">
               Add an occasion
             </h2>
-            <form className="mt-4 grid gap-5" aria-label="Add an occasion" onSubmit={add}>
+            <Form className="mt-4 grid gap-5" aria-label="Add an occasion" onSubmit={add}>
               <fieldset className="grid gap-2">
                 <legend className="pl-field-inset text-sm font-medium text-ink">
                   How its date is decided
@@ -277,7 +278,7 @@ function OccasionsView() {
                   Add occasion
                 </Button>
               </div>
-            </form>
+            </Form>
           </section>
 
           {loading ? (
@@ -578,7 +579,7 @@ function EditOccasion({
             : "This occasion falls on the same date every year. To let the calendar decide it instead, add it again as a new occasion and remove this one."}
         </p>
 
-        <form className="mt-5 grid gap-5" aria-label="Edit an occasion" onSubmit={save}>
+        <Form className="mt-5 grid gap-5" aria-label="Edit an occasion" onSubmit={save}>
           <OccasionFields idPrefix="edit" draft={draft} onChange={setDraft} />
 
           {error && <ErrorNotice error={error} />}
@@ -591,7 +592,7 @@ function EditOccasion({
               Save occasion
             </Button>
           </div>
-        </form>
+        </Form>
       </div>
     </div>
   );

@@ -292,6 +292,35 @@ describe("meal kinds", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
+  it("names a blank name in red under its box, and sends nothing (T-160)", async () => {
+    await open();
+
+    const form = screen.getByRole("form", { name: /add a kind of meal/i });
+    fireEvent.click(within(form).getByRole("button", { name: /add meal kind/i }));
+
+    // Rajeev, 2026-09-11: the field is named, in red, and the browser's grey bubble is not used.
+    const sentence = within(form).getByText("Name is required");
+    expect(sentence).toHaveClass("text-danger");
+    const name = within(form).getByLabelText(/^name/i);
+    expect(name).toHaveAttribute("aria-invalid", "true");
+    expect(name).toHaveAccessibleDescription("Name is required");
+    expect(name).toHaveFocus();
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("names a cleared name on the edit dialog, and saves nothing (T-160)", async () => {
+    await open();
+
+    const row = screen.getByRole("cell", { name: /^Lunch$/ }).closest("tr")!;
+    fireEvent.click(within(row).getByRole("button", { name: /edit/i }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/^name/i), { target: { value: "" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /save meal kind/i }));
+
+    expect(within(dialog).getByText("Name is required")).toHaveClass("text-danger");
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
   it("shows a duplicate name in the server's own words when adding", async () => {
     createMock.mockRejectedValueOnce(ALREADY_EXISTS);
     await open();

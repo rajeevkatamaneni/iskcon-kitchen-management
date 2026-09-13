@@ -9,6 +9,7 @@ import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { FieldRow } from "@/components/ds/FieldRow";
+import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import {
   ACTIONS_ROW,
@@ -199,7 +200,7 @@ function MealKindsView() {
             <h2 id="add-meal-kind-heading" className="text-lg">
               Add a kind of meal
             </h2>
-            <form className="mt-4 grid gap-5" aria-label="Add a kind of meal" onSubmit={add}>
+            <Form className="mt-4 grid gap-5" aria-label="Add a kind of meal" onSubmit={add}>
               <MealKindFields idPrefix="add" draft={draft} onChange={setDraft} lastPlace={nextOrder} />
 
               <div>
@@ -207,7 +208,7 @@ function MealKindsView() {
                   Add meal kind
                 </Button>
               </div>
-            </form>
+            </Form>
           </section>
 
           {loading ? (
@@ -482,7 +483,7 @@ function EditMealKind({
           Edit {kind.name}
         </h2>
 
-        <form className="mt-5 grid gap-5" aria-label="Edit a kind of meal" onSubmit={save}>
+        <Form className="mt-5 grid gap-5" aria-label="Edit a kind of meal" onSubmit={save}>
           <MealKindFields
             idPrefix="edit"
             draft={draft}
@@ -511,7 +512,7 @@ function EditMealKind({
               Save meal kind
             </Button>
           </div>
-        </form>
+        </Form>
       </div>
     </div>
   );

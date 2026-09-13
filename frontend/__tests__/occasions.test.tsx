@@ -196,6 +196,34 @@ describe("festival occasions", () => {
     expect(await screen.findByRole("cell", { name: /^Vamana Dvadasi$/ })).toBeInTheDocument();
   });
 
+  it("names each blank required box in red under it, and sends nothing (T-160)", async () => {
+    await open();
+
+    const form = screen.getByRole("form", { name: /add an occasion/i });
+    fireEvent.click(within(form).getByRole("button", { name: /add occasion/i }));
+
+    expect(within(form).getByText("Name is required")).toHaveClass("text-danger");
+    expect(within(form).getByText("Wording in the calendar is required")).toHaveClass("text-danger");
+    expect(within(form).getByLabelText(/^name/i)).toHaveFocus();
+    expect(within(form).getByLabelText(/^wording in the calendar/i)).toHaveAccessibleDescription(
+      "Wording in the calendar is required"
+    );
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("says a day of 0 must be at least 1, and sends nothing (T-160)", async () => {
+    await open();
+
+    const form = screen.getByRole("form", { name: /add an occasion/i });
+    fireEvent.click(within(form).getByLabelText(/the same date every year/i));
+    fireEvent.change(within(form).getByLabelText(/^name/i), { target: { value: "Temple Anniversary" } });
+    fireEvent.change(within(form).getByLabelText(/^day/i), { target: { value: "0" } });
+    fireEvent.click(within(form).getByRole("button", { name: /add occasion/i }));
+
+    expect(within(form).getByText("Day must be at least 1")).toHaveClass("text-danger");
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
   it("renames one, and never sends a type on the edit", async () => {
     await open();
 
