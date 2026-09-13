@@ -134,8 +134,8 @@ class NotificationSendE2EIT extends AbstractIntegrationTest {
 			id = new TransactionTemplate(transactionManager).execute(tx -> {
 				UUID queued = notificationService.notify(
 						NotificationRecipient.user(user),
-						NotificationTemplate.SHIFT_REMINDER,
-						Map.of("role", "cook", "temple", "Govinda", "date", "Sunday", "time", "9am"),
+						NotificationTemplate.VOLUNTEER_SHIFT_REMINDER,
+						Map.of("title", "Kitchen seva", "date", "Sunday", "time", "9am", "location", "Main kitchen"),
 						null);
 				try {
 					Thread.sleep(CALLER_KEEPS_WORKING.toMillis());

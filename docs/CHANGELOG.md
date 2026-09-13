@@ -1182,6 +1182,44 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-13 — WhatsApp messages reworded as Rajeev reviewed them, counter-gift phones saved as +91, and Language opens read-only (wave 4b; tasks T-180, T-186, T-185, T-175)
+
+**No migration**; staging stays at `V131`. No new error code, no new permission. **Not driven in a
+browser, and not seen working by Rajeev.**
+
+**Template wording, as Rajeev reviewed it (T-180).** "the app" becomes *"the Seva Kitchen website"* in
+four messages. The unused `shift_reminder` template is removed, so there are 19. Leave taken back reads
+*"your approved leave … has been cancelled by your manager"*. Both wish-list gift messages are reworded,
+and the split one now names the amount applied to the item and the amount sent to the general fund. A
+shift update quotes the coordinator: *Message from the coordinator of your {{1}} shift: "{{2}}" This
+message went to everyone on the shift.* The receipt message says it can be downloaded from My donations on
+the Seva Kitchen website, or asked for at the temple office. Every template's wording is shared with SMS
+and email, so those change too. Line breaks are flattened in WhatsApp parameters only; SMS and email keep
+them. A queued message whose template no longer exists is now marked FAILED with the reason *"This
+message's template no longer exists, so it could not be sent."*, instead of throwing, retrying three times
+and staying pending for ever.
+
+**Meta does not have the new wording yet.** It goes to Meta only when a temple presses Reload, and that
+is held until Meta decides the 20 templates currently PENDING. Until then Settings will show the changed
+templates as waiting, which is expected.
+
+**A counter gift's donor phone is saved as +91 when it can only be an Indian mobile (T-186).** Ten digits
+starting 6 to 9, with an optional 0, 91 or +91 in front, is saved as `+91` and the ten digits; anything else
+is saved as typed. The donations page confirms it: *"Saved as +91 98765 43210"*. So a counter gift now
+appears on the donor's My donations when that number is verified. Existing gifts are unchanged; a backfill
+is a decision for Rajeev. **Known side effect:** the donor ledger groups by exact phone, so a new gift saved
+as `+919876543210` no longer groups with that donor's older gifts typed `98765 43210`. That is with the
+main session as a decision; the ledger was not changed.
+
+**Settings' Language section opens read-only (T-185)**, with Edit, then Cancel and Save, like every
+other section. Appearance is now the one section that does not.
+
+**The attendance table keeps a form's red sentences through a re-render (T-175).** The suspected defect
+was not real; a test now pins it, and `Form.tsx` is unchanged.
+
+**Not done:** none of the four has been seen in a real browser. Proofs with negative controls are in
+`docs/work/proof/T-180.md` (with its amendment), `T-186.md`, `T-185.md` and `T-175.md`.
+
 ### 2026-09-13 — My donations for volunteers, Settings opens read-only, ten blank-box buttons press, and Meta's template status per temple (wave 4a; tasks T-179, T-172, T-178, T-169b)
 
 **Adds migration `V131`**; staging was at `V130`. One new permission, `VIEW_OWN_DONATIONS`, and one new

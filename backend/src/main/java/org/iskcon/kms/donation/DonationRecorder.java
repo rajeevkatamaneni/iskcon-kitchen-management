@@ -79,7 +79,12 @@ public class DonationRecorder {
 		}
 
 		String donorName = request.anonymous() ? null : request.donorName().trim();
-		UUID donationId = insertDonation(actor, request, donorName);
+		// Saved in +91 form when what was typed can only be an Indian mobile, and as typed otherwise
+		// (T-186). Here rather than on the screen alone because the server is the authority: a client
+		// that sends "98765 43210" still stores the number My donations can match. The thank-you is
+		// sent to the same value, so the number stored and the number messaged never differ.
+		String donorPhone = CounterPhone.normalise(request.donorPhone());
+		UUID donationId = insertDonation(actor, request, donorName, donorPhone);
 
 		for (int i = 0; i < ingredients.size(); i++) {
 			IngredientDonationLine line = ingredients.get(i);
@@ -106,7 +111,7 @@ public class DonationRecorder {
 				null, donationSnapshot(donorName, request, ingredients.size(), equipment.size()), null);
 
 		return new DonationReceipt(donationId, request.anonymous(), donorName,
-				trimToNull(request.donorPhone()), trimToNull(request.donorEmail()),
+				donorPhone, trimToNull(request.donorEmail()),
 				request.donatedOn(), templeName());
 	}
 
@@ -161,7 +166,8 @@ public class DonationRecorder {
 	 * temple estimated. Neither sets {@code provider} — that is what tells the ledger a person, not a
 	 * gateway, wrote this row.
 	 */
-	private UUID insertDonation(AuthenticatedUser actor, RecordDonationRequest request, String donorName) {
+	private UUID insertDonation(
+			AuthenticatedUser actor, RecordDonationRequest request, String donorName, String donorPhone) {
 		UUID id = UUID.randomUUID();
 		boolean cash = request.cashAmountInr() != null;
 		jdbc.update(connection -> {
@@ -176,7 +182,7 @@ public class DonationRecorder {
 			ps.setObject(1, id);
 			ps.setString(2, cash ? "ONE_TIME" : "IN_KIND");
 			ps.setString(3, donorName);
-			ps.setString(4, request.anonymous() ? null : trimToNull(request.donorPhone()));
+			ps.setString(4, request.anonymous() ? null : donorPhone);
 			ps.setString(5, request.anonymous() ? null : trimToNull(request.donorEmail()));
 			ps.setBoolean(6, request.anonymous());
 			ps.setBigDecimal(7, request.cashAmountInr());

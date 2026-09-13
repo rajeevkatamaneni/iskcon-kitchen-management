@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 /**
  * The temple's language, and the defect that would have made it unsettable (T-077).
@@ -46,6 +46,8 @@ describe("the temple's language", () => {
     const { rerender } = render(<LanguageSection initial={null} getToken={async () => "t"} />);
     rerender(<LanguageSection initial="kn-IN" getToken={async () => "t"} />);
 
+    // Read-only until Edit (T-185). Pressing Edit must not disturb what the picker reads.
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     await waitFor(() => expect(setTempleLanguage).toHaveBeenCalledTimes(1));
@@ -59,6 +61,8 @@ describe("the temple's language", () => {
     // null-until-picked state cannot.
     const { rerender } = render(<LanguageSection initial="en-IN" getToken={async () => "t"} />);
 
+    // Read-only until Edit (T-185): a pick is only ever made in an open section.
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.change(picker(), { target: { value: "ta" } });
     expect(picker()).toHaveValue("ta");
 
@@ -80,5 +84,133 @@ describe("the temple's language", () => {
   it("offers English and all twenty-two scheduled languages", () => {
     render(<LanguageSection initial="en-IN" getToken={async () => "t"} />);
     expect(screen.getAllByRole("option")).toHaveLength(23);
+  });
+});
+
+/**
+ * Read-only until Edit, then Cancel and Save, as on every other section of Settings (T-185).
+ *
+ * <p>Rajeev, 2026-09-13: *"The default state of the screen shuld be read only to avoid accidental
+ * mistakes. The way to get it to edit is using the 'Edit' button. When clicked the fields become
+ * editable and the button reads 'Save'. This applies for all sections on the settinsg scree"*. The
+ * other five sections are pinned in `settings-edit-mode.test.tsx`. These tests ask the same questions
+ * of this one.
+ */
+describe("the temple's language opens read-only", () => {
+  beforeEach(() => {
+    setTempleLanguage.mockReset().mockResolvedValue(undefined);
+  });
+
+  /** Lets a handler that awaits a token reach its API call, so "not called" is not merely "not yet". */
+  const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  const button = (name: string) => screen.queryByRole("button", { name });
+
+  it("opens with the temple's language shown, the picker shut, an Edit button, and no Save", () => {
+    render(<LanguageSection initial="kn-IN" getToken={async () => "t"} />);
+
+    // Not vacuous: the choice is on the screen, it simply cannot be changed.
+    expect(picker()).toHaveValue("kn");
+    // A <select> has no read-only state, so it is disabled, with the sunken fill the other sections use.
+    expect(picker()).toBeDisabled();
+    expect(picker()).toHaveClass("disabled:bg-sunken");
+    expect(button("Edit")).toBeEnabled();
+    expect(button("Save")).not.toBeInTheDocument();
+    expect(button("Cancel")).not.toBeInTheDocument();
+  });
+
+  it("Edit opens the picker, and puts Cancel then Save where Edit was", () => {
+    render(<LanguageSection initial="kn-IN" getToken={async () => "t"} />);
+
+    fireEvent.click(button("Edit")!);
+
+    expect(picker()).toBeEnabled();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const save = screen.getByRole("button", { name: "Save" });
+    // Secondary first, then the primary (§4), with the same classes as the other sections.
+    expect(cancel.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cancel).toHaveClass("btn", "btn-quiet");
+    expect(save).toHaveClass("btn", "btn-primary");
+    expect(button("Edit")).not.toBeInTheDocument();
+  });
+
+  it("Save sends the chosen language once, says Saved, and shuts the picker again", async () => {
+    render(<LanguageSection initial="kn-IN" getToken={async () => "t"} />);
+
+    fireEvent.click(button("Edit")!);
+    fireEvent.change(picker(), { target: { value: "hi" } });
+    fireEvent.click(button("Save")!);
+
+    await waitFor(() => expect(setTempleLanguage).toHaveBeenCalledTimes(1));
+    expect(setTempleLanguage).toHaveBeenCalledWith("hi", "t");
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getByText("Saved.")).toBeInTheDocument();
+    expect(picker()).toBeDisabled();
+    expect(picker()).toHaveValue("hi");
+    await settle();
+    expect(setTempleLanguage).toHaveBeenCalledTimes(1);
+  });
+
+  it("Cancel puts back the language shown before Edit, and sends nothing", async () => {
+    render(<LanguageSection initial="kn-IN" getToken={async () => "t"} />);
+
+    fireEvent.click(button("Edit")!);
+    fireEvent.change(picker(), { target: { value: "ta" } });
+    expect(picker()).toHaveValue("ta");
+    fireEvent.click(button("Cancel")!);
+
+    expect(picker()).toHaveValue("kn");
+    expect(picker()).toBeDisabled();
+    // And it is the value held, not only the value drawn: opening the section again starts from it.
+    fireEvent.click(button("Edit")!);
+    expect(picker()).toHaveValue("kn");
+    await settle();
+    expect(setTempleLanguage).not.toHaveBeenCalled();
+  });
+
+  it("Cancel after an earlier save puts back that saved choice, not the language it opened on", async () => {
+    render(<LanguageSection initial="kn-IN" getToken={async () => "t"} />);
+
+    fireEvent.click(button("Edit")!);
+    fireEvent.change(picker(), { target: { value: "ta" } });
+    fireEvent.click(button("Save")!);
+    await screen.findByRole("button", { name: "Edit" });
+
+    fireEvent.click(button("Edit")!);
+    fireEvent.change(picker(), { target: { value: "hi" } });
+    fireEvent.click(button("Cancel")!);
+
+    expect(picker()).toHaveValue("ta");
+    await settle();
+    expect(setTempleLanguage).toHaveBeenCalledTimes(1);
+  });
+
+  it("still reads a language that arrives later, after an Edit that was cancelled", () => {
+    // The snapshot is what the component held, which before any pick is nothing. If Cancel pinned
+    // the shown English instead, the temple's Kannada would never show: T-077 again.
+    const { rerender } = render(<LanguageSection initial={null} getToken={async () => "t"} />);
+
+    fireEvent.click(button("Edit")!);
+    fireEvent.click(button("Cancel")!);
+    rerender(<LanguageSection initial="kn-IN" getToken={async () => "t"} />);
+
+    expect(picker()).toHaveValue("kn");
+  });
+
+  it("greys out Save only while the save is in flight", async () => {
+    let finish: () => void = () => {};
+    setTempleLanguage.mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
+    render(<LanguageSection initial="kn-IN" getToken={async () => "t"} />);
+
+    fireEvent.click(button("Edit")!);
+    // Nothing can be blank here, so there is no other reason for Save to be grey.
+    expect(button("Save")).toBeEnabled();
+    fireEvent.click(button("Save")!);
+
+    const saving = await screen.findByRole("button", { name: "Saving…" });
+    expect(saving).toBeDisabled();
+    expect(button("Cancel")).toBeDisabled();
+
+    await act(async () => finish());
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeEnabled();
   });
 });

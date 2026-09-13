@@ -111,7 +111,7 @@ class WhatsAppTemplateCatalogueIT extends AbstractIntegrationTest {
 		}
 
 		// Two wordings recorded, the current one later: first seen is the older, changed is the newer.
-		assertDates(templates, "shift_reminder", RELEASE, REWORDED);
+		assertDates(templates, "volunteer_shift_reminder", RELEASE, REWORDED);
 		// Two wordings, the older one is the earliest row in the table.
 		assertDates(templates, "po_delivery", EARLIEST, RELEASE);
 		// One wording, the current one: not changed since tracking began.
@@ -184,8 +184,8 @@ class WhatsAppTemplateCatalogueIT extends AbstractIntegrationTest {
 			String name = t.whatsappTemplateName();
 			String current = t.whatsappFingerprint("en");
 			switch (name) {
-				case "shift_reminder" -> {
-					seed(name, "sha256:older-shift-reminder", RELEASE);
+				case "volunteer_shift_reminder" -> {
+					seed(name, "sha256:older-volunteer-shift-reminder", RELEASE);
 					seed(name, current, REWORDED);
 				}
 				case "po_delivery" -> {

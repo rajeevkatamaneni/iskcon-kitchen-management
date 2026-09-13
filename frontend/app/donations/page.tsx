@@ -23,6 +23,7 @@ import {
 import { money, todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
+import { savedPhoneForDisplay } from "@/lib/phone";
 import { Loading } from "@/components/Loading";
 import {
   ACTIONS_ROW,
@@ -167,7 +168,12 @@ function DonationsView() {
   // on hand. Two plain strings rather than one object, deliberately: this effect's dependencies are
   // what it reads, and an object rebuilt every render would loop.
   const thanked = params.get("thanked");
+  // The donor's phone as it was saved (T-186), carried from /donations/new: "+91" and ten digits when
+  // what was typed could only be an Indian mobile, and exactly what was typed otherwise. Read back so
+  // the office sees the number the thank-you and My donations will use, before the donor walks away.
+  const savedPhone = params.get("savedPhone");
   const [flash, setFlash] = useState<string | null>(null);
+  const [savedAs, setSavedAs] = useState<string | null>(null);
   const [thankYouSent, setThankYouSent] = useState(true);
   const captured = useRef(false);
   useEffect(() => {
@@ -178,8 +184,9 @@ function DonationsView() {
     // is decided here rather than trusted to the parameter — a bookmarked or hand-edited URL must
     // not be able to put the old false sentence back on the screen.
     setThankYouSent(thanked !== "no" && recorded !== "");
+    setSavedAs(savedPhone ? savedPhoneForDisplay(savedPhone) : null);
     router.replace("/donations");
-  }, [recorded, thanked, router]);
+  }, [recorded, thanked, savedPhone, router]);
 
   return (
     <div className="flex min-h-screen">
@@ -212,11 +219,14 @@ function DonationsView() {
                     the banner said something that had not happened, on the one screen whose job is
                     to report what did. The detail page two clicks away has always got this right,
                     and this now says the same thing in the same words. */}
-                {thankYouSent
-                  ? "It is in the ledger below, and a thank-you is on its way to the donor."
-                  : flash
-                    ? "It is in the ledger below. No thank-you was sent: this gift carries no phone number and no email address, so anything the temple wants to say has to be said in person."
-                    : "It is in the ledger below. No thank-you was sent, because an anonymous gift leaves nobody to send one to."}
+                <p>
+                  {thankYouSent
+                    ? "It is in the ledger below, and a thank-you is on its way to the donor."
+                    : flash
+                      ? "It is in the ledger below. No thank-you was sent: this gift carries no phone number and no email address, so anything the temple wants to say has to be said in person."
+                      : "It is in the ledger below. No thank-you was sent, because an anonymous gift leaves nobody to send one to."}
+                </p>
+                {savedAs && <p>Saved as {savedAs}</p>}
               </InlineNotice>
             </div>
           )}

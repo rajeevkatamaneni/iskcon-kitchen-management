@@ -36,6 +36,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -287,6 +288,32 @@ class MyDonationsIT extends AbstractIntegrationTest {
 		assertThat(message(strangerBody)).isEqualTo(message(nobodyBody));
 		refused(as(GOPAL, get("/api/v1/my-donations/" + nearMiss + "/receipt/download")));
 		refused(as(GOPAL, get("/api/v1/my-donations/" + noCountryCode + "/receipt/download")));
+	}
+
+	/**
+	 * T-186, from the other end. The counter form used to store "98765 43210" as typed, and the test
+	 * above rightly refuses to match that. The recorder now saves an unambiguous Indian mobile in +91
+	 * form, so the same typing, through the real recording endpoint, reaches its donor. Matching here is
+	 * unchanged and still exact. This is the test the negative control removes the normaliser under.
+	 */
+	@Test
+	@DisplayName("a counter gift recorded through the form as 98765 43210 is listed for the verified +919876543210")
+	void counterGiftTypedWithoutCountryCodeIsListed() throws Exception {
+		String response = mvc.perform(as(ADMIN, post("/api/v1/donations"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"anonymous":false,"donorName":"Gopal Das","donorPhone":"98765 43210",
+								 "cashAmountInr":1100,"donatedOn":"2026-09-06"}
+								"""))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		UUID recorded = UUID.fromString(json.readTree(response).get("id").asText());
+
+		mvc.perform(as(GOPAL, get("/api/v1/my-donations")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[*].id").value(containsInAnyOrder(recorded.toString())));
+		assertThat(admin.queryForObject("SELECT donor_phone FROM donations WHERE id = ?", String.class, recorded))
+				.isEqualTo(VERIFIED_PHONE);
 	}
 
 	// Two tests rather than one, so that a leak in the list and a leak in the download each fail on

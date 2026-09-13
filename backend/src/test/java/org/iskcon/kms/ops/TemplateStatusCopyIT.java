@@ -78,7 +78,7 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
  *       pointed at. It counts every request by method and records the path and Authorization header of
  *       each. Every POST is refused and counted, per test in {@link #tearDown} and for the class in
  *       {@link #noTestInThisClassPostedToMeta}. The counter is shown to be live: the refresh test asserts
- *       exactly twenty lookups.</li>
+ *       exactly nineteen lookups.</li>
  *   <li><strong>The token:</strong> every log event of every test, with the four classes involved raised
  *       to DEBUG, and every response body, is searched for both temples' tokens in {@link #tearDown}. The
  *       stub proves the token really was sent, and that it was the refreshed temple's own.</li>
@@ -223,7 +223,7 @@ class TemplateStatusCopyIT extends AbstractIntegrationTest {
 		connect(govinda, "waba-govinda", GOVINDA_TOKEN);
 		connect(krishna, "waba-krishna", KRISHNA_TOKEN);
 		seedCopyRow(govinda, "a_retired_template", "APPROVED");
-		seedCopyRow(govinda, "shift_reminder", "APPROVED");
+		seedCopyRow(govinda, "volunteer_shift_reminder", "APPROVED");
 		meta.holdEveryTemplateAsReleased("PENDING");
 		meta.hold("donation_thank_you", "MARKETING", "PENDING", body("donation_thank_you"), null);
 		meta.hold("po_delivery", "UTILITY", "REJECTED", body("po_delivery"), "INVALID_FORMAT");
@@ -245,8 +245,8 @@ class TemplateStatusCopyIT extends AbstractIntegrationTest {
 		assertThat(view.get("templates").get(0).get("name").asText())
 				.as("in the release's own order").isEqualTo(NotificationTemplate.values()[0].whatsappTemplateName());
 
-		assertRow(rows.get("shift_reminder"), "PENDING", "UTILITY", true, true);
-		assertThat(rows.get("shift_reminder").get("lookupProblem").isNull()).isTrue();
+		assertRow(rows.get("volunteer_shift_reminder"), "PENDING", "UTILITY", true, true);
+		assertThat(rows.get("volunteer_shift_reminder").get("lookupProblem").isNull()).isTrue();
 		assertRow(rows.get("donation_thank_you"), "PENDING", "MARKETING", true, true);
 		assertThat(rows.get("donation_thank_you").get("ourCategory").asText())
 				.isEqualTo(template("donation_thank_you").whatsappCategory());
@@ -312,7 +312,7 @@ class TemplateStatusCopyIT extends AbstractIntegrationTest {
 		assertThat(rule("refreshTempleTemplateStatus", UUID.class, AuthenticatedUser.class))
 				.isEqualTo("hasAuthority('MANAGE_TENANTS')");
 		connect(govinda, "waba-govinda", GOVINDA_TOKEN);
-		seedCopyRow(govinda, "shift_reminder", "APPROVED");
+		seedCopyRow(govinda, "volunteer_shift_reminder", "APPROVED");
 		meta.holdEveryTemplateAsReleased("APPROVED");
 
 		signInAs("uid-admin-t178");
@@ -396,9 +396,9 @@ class TemplateStatusCopyIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("RLS: one temple's copy is invisible from another temple's context and unwritable from it, as kms_app")
 	void oneTemplesCopyIsInvisibleFromAnother() throws Exception {
-		seedCopyRow(govinda, "shift_reminder", "APPROVED");
+		seedCopyRow(govinda, "volunteer_shift_reminder", "APPROVED");
 		seedCopyRow(govinda, "po_delivery", "REJECTED");
-		seedCopyRow(krishna, "shift_reminder", "PENDING");
+		seedCopyRow(krishna, "volunteer_shift_reminder", "PENDING");
 
 		assertThat(jdbc.queryForObject("SELECT current_user", String.class)).isEqualTo(APP_ROLE);
 		assertThat(admin.queryForObject("""
@@ -430,8 +430,8 @@ class TemplateStatusCopyIT extends AbstractIntegrationTest {
 		// And the operator's read goes through the same policy: govinda's page shows govinda's rows only.
 		signInAs("uid-super-t178");
 		JsonNode view = json(mvc.perform(get("/api/v1/ops/tenants/{id}/whatsapp-templates", govinda)), 200);
-		assertThat(byName(view).keySet()).containsExactly("shift_reminder", "po_delivery");
-		assertThat(byName(view).get("shift_reminder").get("metaStatus").asText()).isEqualTo("APPROVED");
+		assertThat(byName(view).keySet()).containsExactly("po_delivery", "volunteer_shift_reminder");
+		assertThat(byName(view).get("volunteer_shift_reminder").get("metaStatus").asText()).isEqualTo("APPROVED");
 	}
 
 	// ---- helpers ------------------------------------------------------------------------------------

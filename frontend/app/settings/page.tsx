@@ -45,7 +45,8 @@ import { normalizePhone } from "@/lib/phone";
  * default state of the screen shuld be read only to avoid accidental mistakes."* Edit opens one
  * section, and its button becomes Save, with Cancel beside it. Appearance stays a live picker, as he
  * ruled: *"No, leave the color picker as is."* The Language section is `LanguageSection`, a
- * component of its own, and is not yet under the rule. How it works is at {@link useEditMode}.
+ * component of its own, and follows the same rule (T-185), so Appearance is the one exception. How
+ * it works is at {@link useEditMode}.
  */
 export default function SettingsRoute() {
   return (

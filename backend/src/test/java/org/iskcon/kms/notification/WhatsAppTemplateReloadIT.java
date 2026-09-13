@@ -89,7 +89,7 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
  * 2388039 title and sentence, are Meta's template management and error codes pages. All three URLs are
  * cited in {@link MetaWhatsAppClient}. The fake's name filter matches <em>part</em> of a name on
  * purpose, because Meta's reference does not say it matches whole names, and the client must still
- * pick {@code shift_reminder} rather than {@code volunteer_shift_reminder}.
+ * pick {@code volunteer_shift_reminder} rather than a longer name containing it.
  *
  * <p>Nothing leaves the building. The service is built by hand and wrapped in the application's own
  * transaction interceptor, for the reason {@link WhatsAppTemplateSubmissionIT} gives, and this class
@@ -107,12 +107,19 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 	 */
 	private static final int STATUS_COPY_LOOKUPS = NotificationTemplate.values().length;
 
-	/** T-159's own record of shift_reminder's wording before it was reworded. */
-	private static final String OLD_SHIFT_REMINDER = "Reminder: your {{1}} shift at {{2}} is on {{3}} at {{4}}.";
+	/**
+	 * volunteer_shift_reminder's wording before T-180 reworded it. These tests used volunteer_shift_reminder and
+	 * T-159's record of its older wording until T-180 removed that template.
+	 */
+	private static final String OLD_VOLUNTEER_REMINDER =
+			"Reminder: your {{1}} shift is on {{2}}, {{3}} at {{4}}. If you can't make it, please release your spot in the app.";
 
-	/** The six T-159 reworded, which Meta on staging already holds in their new wording. */
+	/**
+	 * The six T-159 reworded, which Meta on staging already holds in their new wording, less
+	 * volunteer_shift_reminder, which T-180 removed.
+	 */
 	private static final Set<String> REWORDED_BY_T159 = Set.of(
-			"shift_reminder", "po_delivery", "shift_broadcast", "temple_announcement",
+			"po_delivery", "shift_broadcast", "temple_announcement",
 			"temple_communication", "low_stock_digest");
 
 	@Autowired
@@ -278,7 +285,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 
 	/**
 	 * A temple exactly as South Bengaluru is on staging when V129 deploys: connected, templates
-	 * submitted and dated, Meta holding all twenty in this release's wording, and no fingerprints or
+	 * submitted and dated, Meta holding all nineteen in this release's wording, and no fingerprints or
 	 * account recorded, because the columns did not exist when it sent them.
 	 */
 	private void aTempleThatSentBeforeV129() throws Exception {
@@ -299,7 +306,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("the view carries refusedTemplates and templatesPending in exactly the shape the screen reads")
 	void theViewHasTheContractShape() throws Exception {
-		meta.refuseCreating("shift_reminder", FakeMeta.TOO_MANY_VARIABLES);
+		meta.refuseCreating("volunteer_shift_reminder", FakeMeta.TOO_MANY_VARIABLES);
 		meta.hold("donation_thank_you", "MARKETING", "APPROVED", template("donation_thank_you").whatsappBodyText());
 
 		save().andExpect(status().isOk());
@@ -320,7 +327,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		Map<String, String> kinds = new TreeMap<>();
 		refused.forEach(entry -> kinds.put(entry.get("name").asText(), entry.get("kind").asText()));
 		assertThat(kinds).containsExactlyInAnyOrderEntriesOf(Map.of(
-				"shift_reminder", "REFUSED", "donation_thank_you", "HELD_UNDER_ANOTHER_CATEGORY"));
+				"volunteer_shift_reminder", "REFUSED", "donation_thank_you", "HELD_UNDER_ANOTHER_CATEGORY"));
 
 		// One REFUSED counts. The one Meta holds as marketing does not: no press of Reload can move it.
 		assertThat(pending.get("refused").asInt()).isEqualTo(1);
@@ -374,7 +381,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 	@DisplayName("a recorded fingerprint that differs from this release counts as changed, and so does a template new since")
 	void aChangedFingerprintCountsAsChanged() throws Exception {
 		save().andExpect(status().isOk());
-		setStoredFingerprint("shift_reminder", "sha256:the-wording-before-this-release");
+		setStoredFingerprint("volunteer_shift_reminder", "sha256:the-wording-before-this-release");
 		setStoredFingerprint("po_delivery", "sha256:the-wording-before-this-release");
 
 		mvc.perform(get("/api/v1/settings/whatsapp"))
@@ -394,12 +401,12 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 	 * rewording anything Meta already holds correctly.
 	 */
 	@Test
-	@DisplayName("a temple that sent before V129 is claimed to have nothing changed; its Save sends nothing; its first Reload records all twenty and edits none")
+	@DisplayName("a temple that sent before V129 is claimed to have nothing changed; its Save sends nothing; its first Reload records all nineteen and edits none")
 	void aTempleThatSentBeforeV129ClaimsNothing() throws Exception {
 		aTempleThatSentBeforeV129();
 
 		JsonNode pending = view().get("templatesPending");
-		assertThat(pending.get("changed").asInt()).as("not 20, and not the six T-159 reworded").isZero();
+		assertThat(pending.get("changed").asInt()).as("not 19, and not the six T-159 reworded").isZero();
 		assertThat(pending.get("refused").asInt()).isZero();
 		assertThat(pending.get("accountChanged").asBoolean()).isFalse();
 
@@ -408,7 +415,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 
 		reload().andExpect(status().isOk());
 		assertThat(meta.creates.get()).isEqualTo(NotificationTemplate.values().length);
-		assertThat(meta.lookups.get()).as("every held template compared, since none was known").isEqualTo(20 + STATUS_COPY_LOOKUPS);
+		assertThat(meta.lookups.get()).as("every held template compared, since none was known").isEqualTo(19 + STATUS_COPY_LOOKUPS);
 		assertThat(meta.edits.get()).as("Meta already holds this release's wording").isZero();
 		assertThat(storedFingerprints()).isEqualTo(everyFingerprintAsReleased());
 		assertThat(view().get("templatesPending").toString())
@@ -453,7 +460,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		assertThat(meta.createPaths).containsOnly("/waba-new/message_templates");
 		assertThat(meta.lookups.get())
 				.as("fingerprints recorded against the old account prove nothing about the new one")
-				.isEqualTo(20 + STATUS_COPY_LOOKUPS);
+				.isEqualTo(19 + STATUS_COPY_LOOKUPS);
 		mvc.perform(get("/api/v1/settings/whatsapp"))
 				.andExpect(jsonPath("$.templatesPending.accountChanged").value(false));
 
@@ -467,9 +474,9 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 
 	/**
 	 * Every kind of waiting at once, as a release would leave a temple: one template reworded, one new,
-	 * one Meta refused last time. The lookup deliberately finds {@code volunteer_shift_reminder} too,
-	 * because the fake's name filter matches part of a name, and only {@code shift_reminder} may be
-	 * edited.
+	 * one Meta refused last time. The lookup deliberately finds {@code volunteer_shift_reminder_retired}
+	 * too, held under a longer name containing the reworded one, because the fake's name filter matches
+	 * part of a name, and only {@code volunteer_shift_reminder} may be edited.
 	 */
 	@Test
 	@DisplayName("Reload creates new templates, rewords changed ones through Meta's edit, retries refused ones, records fingerprints, replaces the list and stamps the date")
@@ -478,10 +485,11 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		save().andExpect(status().isOk());
 		assertThat(storedList()).containsOnlyKeys("temple_announcement");
 
-		// A release since: shift_reminder was reworded (Meta and our record both hold the old wording),
+		// A release since: volunteer_shift_reminder was reworded (Meta and our record both hold the old wording),
 		// and low_stock_digest is new (Meta has never had it, and our record has no key for it).
-		meta.hold("shift_reminder", "UTILITY", "APPROVED", OLD_SHIFT_REMINDER);
-		setStoredFingerprint("shift_reminder", "sha256:the-wording-before-this-release");
+		meta.hold("volunteer_shift_reminder", "UTILITY", "APPROVED", OLD_VOLUNTEER_REMINDER);
+		meta.hold("volunteer_shift_reminder_retired", "UTILITY", "APPROVED", OLD_VOLUNTEER_REMINDER);
+		setStoredFingerprint("volunteer_shift_reminder", "sha256:the-wording-before-this-release");
 		meta.forget("low_stock_digest");
 		removeStoredFingerprint("low_stock_digest");
 		meta.allowCreating("temple_announcement");
@@ -502,8 +510,8 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 
 		assertThat(meta.held("low_stock_digest")).as("created").isNotNull();
 		assertThat(meta.held("temple_announcement")).as("retried, and created").isNotNull();
-		assertThat(meta.editedTemplateIds).as("only shift_reminder, not volunteer_shift_reminder").containsExactly("id-shift_reminder");
-		assertThat(meta.held("shift_reminder").body()).isEqualTo(template("shift_reminder").whatsappBodyText());
+		assertThat(meta.editedTemplateIds).as("only volunteer_shift_reminder, not the longer name containing it").containsExactly("id-volunteer_shift_reminder");
+		assertThat(meta.held("volunteer_shift_reminder").body()).isEqualTo(template("volunteer_shift_reminder").whatsappBodyText());
 		assertThat(meta.lastEditBody).contains("\"type\":\"BODY\"").doesNotContain("category");
 		assertThat(meta.lookups.get()).as("only the template whose held wording was not known to be current").isEqualTo(1 + STATUS_COPY_LOOKUPS);
 
@@ -539,21 +547,21 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 	@DisplayName("Meta refusing new wording for its edit limit is stored with a true, plain reason, and not counted twice")
 	void anEditLimitIsStoredTruthfully() throws Exception {
 		save().andExpect(status().isOk());
-		meta.hold("shift_reminder", "UTILITY", "APPROVED", OLD_SHIFT_REMINDER);
-		setStoredFingerprint("shift_reminder", "sha256:the-wording-before-this-release");
+		meta.hold("volunteer_shift_reminder", "UTILITY", "APPROVED", OLD_VOLUNTEER_REMINDER);
+		setStoredFingerprint("volunteer_shift_reminder", "sha256:the-wording-before-this-release");
 		meta.answerEdits(FakeMeta.STATUS_CANNOT_BE_CHANGED);
 
 		reload().andExpect(status().isOk());
 
 		assertThat(meta.edits.get()).isEqualTo(1);
-		JsonNode entry = storedList().get("shift_reminder");
+		JsonNode entry = storedList().get("volunteer_shift_reminder");
 		assertThat(entry.get("kind").asText()).isEqualTo("REFUSED");
 		assertThat(entry.get("reason").asText())
 				.isEqualTo(TenantWhatsAppSettingsService.EDIT_LIMIT)
 				.doesNotContain("status").doesNotContain("template");
 		assertThat(storedList()).hasSize(1);
-		assertThat(storedFingerprints().get("shift_reminder")).as("Meta still holds the old wording").isEqualTo("null");
-		assertThat(meta.held("shift_reminder").body()).isEqualTo(OLD_SHIFT_REMINDER);
+		assertThat(storedFingerprints().get("volunteer_shift_reminder")).as("Meta still holds the old wording").isEqualTo("null");
+		assertThat(meta.held("volunteer_shift_reminder").body()).isEqualTo(OLD_VOLUNTEER_REMINDER);
 		assertThat(view().get("templatesPending").toString())
 				.isEqualTo("{\"changed\":0,\"refused\":1,\"accountChanged\":false}");
 	}
@@ -562,13 +570,13 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 	@DisplayName("a template Meta is still reviewing is not edited at all, and the stored reason says it is in review")
 	void aTemplateInReviewIsNotEdited() throws Exception {
 		save().andExpect(status().isOk());
-		meta.hold("shift_reminder", "UTILITY", "PENDING", OLD_SHIFT_REMINDER);
-		setStoredFingerprint("shift_reminder", "sha256:the-wording-before-this-release");
+		meta.hold("volunteer_shift_reminder", "UTILITY", "PENDING", OLD_VOLUNTEER_REMINDER);
+		setStoredFingerprint("volunteer_shift_reminder", "sha256:the-wording-before-this-release");
 
 		reload().andExpect(status().isOk());
 
 		assertThat(meta.edits.get()).as("Meta allows no edit while in review, so none is attempted").isZero();
-		JsonNode entry = storedList().get("shift_reminder");
+		JsonNode entry = storedList().get("volunteer_shift_reminder");
 		assertThat(entry.get("kind").asText()).isEqualTo("REFUSED");
 		assertThat(entry.get("reason").asText()).isEqualTo(TenantWhatsAppSettingsService.STILL_IN_REVIEW);
 	}
@@ -577,13 +585,13 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 	@DisplayName("2388039 on a template whose status Meta did not name says both causes Meta documents, not one guessed")
 	void anUnnamedStatusGetsBothCauses() throws Exception {
 		save().andExpect(status().isOk());
-		meta.hold("shift_reminder", "UTILITY", null, OLD_SHIFT_REMINDER);
-		setStoredFingerprint("shift_reminder", "sha256:the-wording-before-this-release");
+		meta.hold("volunteer_shift_reminder", "UTILITY", null, OLD_VOLUNTEER_REMINDER);
+		setStoredFingerprint("volunteer_shift_reminder", "sha256:the-wording-before-this-release");
 		meta.answerEdits(FakeMeta.STATUS_CANNOT_BE_CHANGED);
 
 		reload().andExpect(status().isOk());
 
-		assertThat(storedList().get("shift_reminder").get("reason").asText())
+		assertThat(storedList().get("volunteer_shift_reminder").get("reason").asText())
 				.isEqualTo(TenantWhatsAppSettingsService.IN_REVIEW_OR_EDIT_LIMIT);
 	}
 
@@ -654,7 +662,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 				.containsExactlyInAnyOrderElementsOf(Arrays.stream(NotificationTemplate.values())
 						.map(NotificationTemplate::whatsappTemplateName).toList());
 		Map<String, Object> shiftReminder = copy.stream()
-				.filter(row -> "shift_reminder".equals(row.get("template_name"))).findFirst().orElseThrow();
+				.filter(row -> "volunteer_shift_reminder".equals(row.get("template_name"))).findFirst().orElseThrow();
 		assertThat(shiftReminder.get("meta_status")).as("the first Save left Meta reviewing it").isEqualTo("PENDING");
 		assertThat(shiftReminder.get("held")).isEqualTo(true);
 		assertThat(shiftReminder.get("wording_matches")).isEqualTo(true);

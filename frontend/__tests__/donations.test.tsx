@@ -380,7 +380,45 @@ describe("recording a donation", () => {
     fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "5000" } });
     fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/donations?recorded=Govind%20Das"));
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith("/donations?recorded=Govind%20Das&savedPhone=%2B919812345678")
+    );
+  });
+
+  /*
+   * T-186. A donor's phone typed the way it is read out, "98765 43210", used to be saved exactly so,
+   * and My donations, which matches the phone Firebase verified (+919876543210) exactly, never showed
+   * that gift to its donor. The number is now saved in +91 form when it can only be an Indian mobile,
+   * and the saved form goes to the ledger's confirmation so the office sees what was saved.
+   */
+  it("saves a phone typed as 98765 43210 as +919876543210, and carries the saved form to the ledger", async () => {
+    render(<NewDonationPage />);
+    const form = screen.getByRole("form", { name: /record a donation/i });
+    fireEvent.change(within(form).getByLabelText(/donor name/i), { target: { value: "Govind Das" } });
+    fireEvent.change(within(form).getByLabelText(/^phone/i), { target: { value: "98765 43210" } });
+    fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "5000" } });
+    fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
+
+    await waitFor(() => expect(recordMock).toHaveBeenCalledTimes(1));
+    expect(recordMock.mock.calls[0][0].donorPhone).toBe("+919876543210");
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith("/donations?recorded=Govind%20Das&savedPhone=%2B919876543210")
+    );
+  });
+
+  it("saves a landline exactly as typed, with no guessing, and carries that to the ledger", async () => {
+    render(<NewDonationPage />);
+    const form = screen.getByRole("form", { name: /record a donation/i });
+    fireEvent.change(within(form).getByLabelText(/donor name/i), { target: { value: "Govind Das" } });
+    fireEvent.change(within(form).getByLabelText(/^phone/i), { target: { value: " 022 2345 6789 " } });
+    fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "5000" } });
+    fireEvent.click(screen.getByRole("button", { name: /record donation/i }));
+
+    await waitFor(() => expect(recordMock).toHaveBeenCalledTimes(1));
+    expect(recordMock.mock.calls[0][0].donorPhone).toBe("022 2345 6789");
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith("/donations?recorded=Govind%20Das&savedPhone=022%202345%206789")
+    );
   });
 
   it("tells the ledger nothing was sent when the gift carries no phone number and no email", async () => {
@@ -559,6 +597,34 @@ describe("the ledger", () => {
    * address. Seen on staging on 2026-09-09. The detail page two clicks away has always said this
    * correctly, and the banner now says it in the same voice.
    */
+  /*
+   * T-186. The counter saves a donor's phone in +91 form when it can only be an Indian mobile, and as
+   * typed otherwise, so the confirmation reads back what was saved: the office catches a wrong number
+   * while the donor is still at the counter.
+   */
+  it("reads back a normalised phone the way it is said aloud", () => {
+    paramsRef.current = new URLSearchParams("recorded=Govind%20Das&savedPhone=%2B919876543210");
+    render(<DonationsPage />);
+
+    expect(screen.getByText(/The gift from Govind Das was recorded\./i)).toBeInTheDocument();
+    expect(screen.getByText("Saved as +91 98765 43210")).toBeInTheDocument();
+  });
+
+  it("reads back a phone kept as typed exactly as it was typed", () => {
+    paramsRef.current = new URLSearchParams("recorded=Govind%20Das&savedPhone=022%202345%206789");
+    render(<DonationsPage />);
+
+    expect(screen.getByText("Saved as 022 2345 6789")).toBeInTheDocument();
+  });
+
+  it("says nothing about a phone when the gift carried none", () => {
+    paramsRef.current = new URLSearchParams("recorded=Govind%20Das&thanked=no");
+    render(<DonationsPage />);
+
+    expect(screen.getByText(/The gift from Govind Das was recorded\./i)).toBeInTheDocument();
+    expect(screen.queryByText(/Saved as/i)).not.toBeInTheDocument();
+  });
+
   it("does not promise a thank-you to a donor there is no way to reach", () => {
     paramsRef.current = new URLSearchParams("recorded=Govind%20Das&thanked=no");
     render(<DonationsPage />);

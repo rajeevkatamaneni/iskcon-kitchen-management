@@ -93,7 +93,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * parsing are all the real ones. Its lookup answer has the shape Meta's Graph API reference gives for
  * {@code GET /{WABA_ID}/message_templates} (cited in {@link MetaWhatsAppClient#findTemplate}). Its name
  * filter matches part of a name on purpose, as {@code WhatsAppTemplateReloadIT}'s does, so asking about
- * {@code shift_reminder} also lists {@code volunteer_shift_reminder}. Unlike that fake it holds nothing
+ * {@code volunteer_shift_reminder} also lists any longer name containing it, which one test holds on purpose. Unlike that fake it holds nothing
  * that a request can change: every POST is counted and refused.
  *
  * <p>Nothing leaves the building, and no Spring bean that talks to Meta is used. The comparison is built
@@ -264,7 +264,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 		for (NotificationTemplate template : NotificationTemplate.values()) {
 			fingerprints.put(template.whatsappTemplateName(), template.whatsappFingerprint("en"));
 		}
-		fingerprints.put("shift_reminder", null);
+		fingerprints.put("volunteer_shift_reminder", null);
 		String refused = objectMapper.writeValueAsString(List.of(Map.of("name", "donation_thank_you",
 				"reason", TenantWhatsAppSettingsService.heldUnderReason("MARKETING"),
 				"kind", "HELD_UNDER_ANOTHER_CATEGORY")));
@@ -285,7 +285,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 		meta.holdEveryTemplateAsReleased();
 		meta.hold("po_delivery", "UTILITY", "APPROVED", " " + body("po_delivery") + "\n");
 		meta.hold("shift_broadcast", "UTILITY", "APPROVED", body("shift_broadcast").replaceFirst(" ", "  "));
-		meta.forget("shift_reminder");
+		meta.forget("volunteer_shift_reminder");
 		meta.hold("donation_thank_you", "MARKETING", "APPROVED", body("donation_thank_you"));
 		meta.dropConnectionFor("low_stock_digest");
 		meta.answerWithAnErrorFor("temple_announcement");
@@ -343,7 +343,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 	// ---- what it answers -----------------------------------------------------------------------------
 
 	@Test
-	@DisplayName("all twenty held and identical: every entry matches exactly, shows no bodies, and was asked with the stored token")
+	@DisplayName("all nineteen held and identical: every entry matches exactly, shows no bodies, and was asked with the stored token")
 	void allHeldAndIdentical() throws Exception {
 		aConnectedTemple();
 		meta.holdEveryTemplateAsReleased();
@@ -352,7 +352,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 
 		assertThat(report.get("wabaId").asText()).isEqualTo("waba-govinda");
 		assertThat(report.get("language").asText()).isEqualTo("en");
-		assertThat(NotificationTemplate.values()).hasSize(20);
+		assertThat(NotificationTemplate.values()).hasSize(19);
 		assertThat(byName(report).keySet()).containsExactly(Arrays.stream(NotificationTemplate.values())
 				.map(NotificationTemplate::whatsappTemplateName).toArray(String[]::new));
 		for (JsonNode entry : report.get("templates")) {
@@ -372,12 +372,12 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 
 		// The stub counts, and the token was in use: without these the zero-POST and never-logged checks
 		// in tearDown could pass against a stub that saw nothing.
-		assertThat(meta.lookups.get()).as("one lookup per template").isEqualTo(20);
+		assertThat(meta.lookups.get()).as("one lookup per template").isEqualTo(19);
 		assertThat(meta.lookedUpNames).containsExactlyInAnyOrderElementsOf(byName(report).keySet());
 		assertThat(meta.authorizations).containsOnly("Bearer " + TOKEN);
 		assertThat(logs.list.stream().map(ILoggingEvent::getFormattedMessage))
-				.anyMatch(line -> line.startsWith("Compared 20 WhatsApp templates with Meta for temple " + govinda
-						+ ": 20 identical, 0 identical only after trimming, 0 worded differently, 0 not held, 0 not answered"));
+				.anyMatch(line -> line.startsWith("Compared 19 WhatsApp templates with Meta for temple " + govinda
+						+ ": 19 identical, 0 identical only after trimming, 0 worded differently, 0 not held, 0 not answered"));
 	}
 
 	@Test
@@ -416,7 +416,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 		assertThat(entry.get("metaBody").asText()).isEqualTo(normalised);
 		assertThat(entry.get("ourBody").asText()).isEqualTo(body("shift_broadcast"));
 		assertThat(entries.values().stream().filter(e -> e.get("bodyMatchesExactly").asBoolean()).count())
-				.as("the other nineteen are untouched by one difference").isEqualTo(19);
+				.as("the other eighteen are untouched by one difference").isEqualTo(18);
 	}
 
 	@Test
@@ -424,10 +424,13 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 	void notHeld() throws Exception {
 		aConnectedTemple();
 		meta.holdEveryTemplateAsReleased();
-		meta.forget("shift_reminder");
-		assertThat(meta.held("volunteer_shift_reminder")).as("the partial match the lookup will also list").isNotNull();
+		meta.forget("volunteer_shift_reminder");
+		// T-180: this used to be shift_reminder, which volunteer_shift_reminder contains. With it removed no
+		// template's name contains another's, so the longer name is held here to keep the case covered.
+		meta.hold("volunteer_shift_reminder_retired", "UTILITY", "APPROVED", body("volunteer_shift_reminder"));
+		assertThat(meta.held("volunteer_shift_reminder_retired")).as("the partial match the lookup will also list").isNotNull();
 
-		JsonNode entry = byName(compared()).get("shift_reminder");
+		JsonNode entry = byName(compared()).get("volunteer_shift_reminder");
 
 		assertThat(entry.get("held").isBoolean()).isTrue();
 		assertThat(entry.get("held").asBoolean()).isFalse();
@@ -473,7 +476,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 		assertThat(refused.get("lookupProblem").asText()).isEqualTo(WhatsAppTemplateComparison.META_ANSWERED_WITH_AN_ERROR);
 
 		assertThat(entries.values().stream().filter(e -> e.get("lookupProblem").isNull()
-				&& e.get("bodyMatchesExactly").asBoolean()).count()).as("the other eighteen").isEqualTo(18);
+				&& e.get("bodyMatchesExactly").asBoolean()).count()).as("the other seventeen").isEqualTo(17);
 	}
 
 	// ---- when it cannot answer -----------------------------------------------------------------------
@@ -522,7 +525,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 
 		signInAs("uid-admin-t173");
 		assertThat(compare(securedMvc).getStatus()).isEqualTo(200);
-		assertThat(meta.lookups.get()).isEqualTo(20);
+		assertThat(meta.lookups.get()).isEqualTo(19);
 	}
 
 	// ---- what it never does --------------------------------------------------------------------------
@@ -553,7 +556,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 		assertThat(admin.queryForObject("SELECT count(*) FROM audit_events WHERE tenant_id = ?", Integer.class, govinda))
 				.as("audit entries").isZero();
 		assertThat(response.getStatus()).as(response.getContentAsString()).isEqualTo(200);
-		assertThat(meta.lookups.get()).as("every template was asked about").isGreaterThanOrEqualTo(20);
+		assertThat(meta.lookups.get()).as("every template was asked about").isGreaterThanOrEqualTo(19);
 	}
 
 	@Test

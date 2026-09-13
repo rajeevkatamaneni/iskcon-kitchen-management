@@ -44,29 +44,34 @@ class NotificationTemplateTest {
 		// Rendering with real values and with placeholders must differ only in the values, or the two
 		// channels have quietly become two different messages.
 		Map<String, Object> values = new LinkedHashMap<>();
-		values.put("role", "Kitchen");
-		values.put("temple", "Bengaluru Temple");
+		values.put("title", "Kitchen");
 		values.put("date", "12 August");
 		values.put("time", "6:00 am");
+		values.put("location", "Main kitchen");
 
-		String sms = NotificationTemplate.SHIFT_REMINDER.render(values).body();
-		String whatsapp = NotificationTemplate.SHIFT_REMINDER.whatsappBodyText();
+		// T-180: this checked the older shift reminder until that template was removed, and now checks the reminder
+		// volunteers are actually sent, in its T-180 wording.
+		String sms = NotificationTemplate.VOLUNTEER_SHIFT_REMINDER.render(values).body();
+		String whatsapp = NotificationTemplate.VOLUNTEER_SHIFT_REMINDER.whatsappBodyText();
 
-		// Reworded by T-159, because Meta refused the shorter sentence for its length.
 		assertThat(sms).isEqualTo(
-				"This is a reminder that your Kitchen shift at Bengaluru Temple is scheduled for 12 August at 6:00 am. "
-						+ "Thank you for your seva.");
+				"Reminder: your Kitchen shift is on 12 August, 6:00 am at Main kitchen. "
+						+ "If you can't make it, please release your spot as soon as possible so others can sign up.");
 		assertThat(whatsapp).isEqualTo(
-				"This is a reminder that your {{1}} shift at {{2}} is scheduled for {{3}} at {{4}}. Thank you for your seva.");
+				"Reminder: your {{1}} shift is on {{2}}, {{3}} at {{4}}. "
+						+ "If you can't make it, please release your spot as soon as possible so others can sign up.");
 	}
 
 	@Test
 	@DisplayName("a parameter order that does not match the sentence is caught, not sent")
 	void orderMustMatchTheSentence() {
-		// The regression this whole file exists for: SHIFT_REMINDER's body says role, temple, date,
-		// time. Any other order would still render, and would still send.
-		assertThat(NotificationTemplate.SHIFT_REMINDER.parameterOrder())
-				.containsExactly("role", "temple", "date", "time");
+		// The regression this whole file exists for: the volunteer reminder's body says title, date,
+		// time, location. Any other order would still render, and would still send.
+		assertThat(NotificationTemplate.VOLUNTEER_SHIFT_REMINDER.parameterOrder())
+				.containsExactly("title", "date", "time", "location");
+		// T-180's wording names the applied amount before the item, so the order moved with it.
+		assertThat(NotificationTemplate.WISHLIST_GIFT_SPLIT.parameterOrder())
+				.containsExactly("donor", "amount", "applied", "item", "remainder", "temple");
 		assertThat(NotificationTemplate.DONATION_THANK_YOU.parameterOrder())
 				.containsExactly("donor", "temple", "date");
 	}

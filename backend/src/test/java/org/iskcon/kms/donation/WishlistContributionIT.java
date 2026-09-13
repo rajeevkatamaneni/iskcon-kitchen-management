@@ -200,11 +200,13 @@ class WishlistContributionIT extends AbstractIntegrationTest {
 				.contains("₹14,000");
 		assertThat(body)
 				.as("the donor finished it, and is told so")
-				.contains("that was the amount that finished it")
-				.contains("you are the one who got it over the line");
+				.contains("your gift is what got it over the finish line");
+		assertThat(body)
+				.as("the item in quotes, because admins type titles that carry their own article (T-180)")
+				.contains("the wish-list item \"Commercial wet grinder\"");
 		assertThat(body)
 				.as("the remainder is a good in itself, not an apology")
-				.contains("that is not second best")
+				.contains("that is not a second-best option")
 				.doesNotContain("unfortunately")
 				.doesNotContain("we regret");
 		assertThat(body).as("warm, and in the house voice").startsWith("Dear Radha Devi,").endsWith("Hare Krishna.");

@@ -5,16 +5,23 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import jakarta.mail.Session;
+import jakarta.mail.internet.MimeMessage;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.mail.javamail.JavaMailSender;
 
 /**
  * When "this temple's WhatsApp actually works" gets written down, and when it does not (T-136).
@@ -128,5 +135,79 @@ class WhatsAppChannelAdapterTest {
 		assertThatThrownBy(() -> adapter.send("+919812345678", message))
 				.isInstanceOf(IllegalStateException.class)
 				.hasMessage("connection closed");
+	}
+	// ---- a message typed over several lines (T-180) --------------------------------------------------
+
+	/**
+	 * A coordinator's broadcast as a coordinator types it: two lines, a blank line between, and a double
+	 * space. Meta refuses a template parameter with a line break in it, so before T-180 this could not go
+	 * on WhatsApp at all.
+	 */
+	private static final String TWO_LINE_MESSAGE = "Please arrive at 5am.\r\n\r\nBring  an apron.";
+
+	private static OutboundMessage twoLineBroadcast() {
+		Map<String, Object> params = Map.of("title", "Kitchen seva", "message", TWO_LINE_MESSAGE);
+		return new OutboundMessage(NotificationTemplate.SHIFT_BROADCAST, params,
+				NotificationTemplate.SHIFT_BROADCAST.render(params));
+	}
+
+	@Test
+	@DisplayName("a two-line broadcast reaches Meta on one line, with each run of spaces and line breaks made one space")
+	@SuppressWarnings("unchecked")
+	void aTwoLineBroadcastIsFlattenedForWhatsApp() {
+		givenAConnectedTemple();
+		when(meta.sendTemplate(anyString(), anyString(), anyString(), anyString(), anyString(), anyList()))
+				.thenReturn("wamid.HBgM");
+
+		adapter.send("+919812345678", twoLineBroadcast());
+
+		ArgumentCaptor<List<String>> sent = ArgumentCaptor.forClass(List.class);
+		verify(meta).sendTemplate(anyString(), anyString(), anyString(), eq("shift_broadcast"), anyString(),
+				sent.capture());
+		assertThat(sent.getValue()).containsExactly("Kitchen seva", "Please arrive at 5am. Bring an apron.");
+		assertThat(sent.getValue()).allSatisfy(value -> assertThat(value)
+				.doesNotContain("\n").doesNotContain("\r").doesNotContain("  "));
+	}
+
+	/**
+	 * The other half, and the reason the flattening is in the WhatsApp adapter and nowhere earlier. Email
+	 * is driven for real around a mocked relay and must carry the admin's line breaks as typed. SMS has no
+	 * provider and sends nothing today; what it is handed is the same message, so the rendered body is
+	 * checked after the WhatsApp send to show that send changed nothing the other channels read.
+	 */
+	@Test
+	@DisplayName("the same broadcast keeps its line breaks by email, and the message SMS is handed is untouched by the WhatsApp send")
+	@SuppressWarnings("unchecked")
+	void emailAndSmsKeepTheLineBreaks() throws Exception {
+		OutboundMessage broadcast = twoLineBroadcast();
+		givenAConnectedTemple();
+		when(meta.sendTemplate(anyString(), anyString(), anyString(), anyString(), anyString(), anyList()))
+				.thenReturn("wamid.HBgM");
+		adapter.send("+919812345678", broadcast);
+
+		assertThat(broadcast.rendered().body())
+				.isEqualTo("Message from the coordinator of your Kitchen seva shift: \"" + TWO_LINE_MESSAGE
+						+ "\" This message went to everyone on the shift.");
+		assertThat(broadcast.orderedParameters()).containsExactly("Kitchen seva", TWO_LINE_MESSAGE);
+
+		JavaMailSender relay = mock(JavaMailSender.class);
+		when(relay.createMimeMessage()).thenAnswer(i -> new MimeMessage((Session) null));
+		ObjectProvider<JavaMailSender> relayProvider = mock(ObjectProvider.class);
+		when(relayProvider.getIfAvailable()).thenReturn(relay);
+		TenantEmailIdentityService identities = mock(TenantEmailIdentityService.class);
+		when(identities.current()).thenReturn(new TenantEmailIdentityService.Identity("ISKCON South Bengaluru", null));
+		SmtpEmailAdapter email = new SmtpEmailAdapter(relayProvider, identities, "noreply@kms.test", "ISKCON Kitchen");
+
+		assertThat(email.send("volunteer@example.org", broadcast).sent()).isTrue();
+
+		ArgumentCaptor<MimeMessage> mailed = ArgumentCaptor.forClass(MimeMessage.class);
+		verify(relay).send(mailed.capture());
+		assertThat((String) mailed.getValue().getContent()).contains(TWO_LINE_MESSAGE);
+	}
+
+	@Test
+	@DisplayName("a value with no line break or double space goes to Meta exactly as it is")
+	void anOrdinaryValueIsUnchanged() {
+		assertThat(WhatsAppChannelAdapter.whatsappParameters(message)).isEqualTo(message.orderedParameters());
 	}
 }

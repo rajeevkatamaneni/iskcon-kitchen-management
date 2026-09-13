@@ -84,9 +84,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  */
 class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 
-	/** The six Meta refused on staging. Every other template is accepted. */
+	/** The six Meta refused on staging, less shift_reminder, which T-180 removed. Every other template is accepted. */
 	private static final Set<String> REFUSED_ON_STAGING = Set.of(
-			"shift_reminder", "po_delivery", "shift_broadcast", "temple_announcement",
+			"po_delivery", "shift_broadcast", "temple_announcement",
 			"temple_communication", "low_stock_digest");
 
 	/**
@@ -193,7 +193,6 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 
 	/** Meta's own words on staging, 2026-09-12, per template it refused. */
 	private static final Map<String, String> META_SAID = Map.of(
-			"shift_reminder", TOO_MANY_VARIABLES,
 			"po_delivery", TOO_MANY_VARIABLES,
 			"shift_broadcast", TOO_MANY_VARIABLES,
 			"temple_announcement", TOO_MANY_VARIABLES,
@@ -278,7 +277,7 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 		useMeta(new MetaWhatsAppClient(objectMapper, "http://127.0.0.1:" + metaServer.getAddress().getPort()));
 	}
 
-	/** Meta as staging's second Save found it: seven new, eleven already held, two held as marketing. */
+	/** Meta as staging's second Save found it: six new, eleven already held, two held as marketing. */
 	private MetaAnswer asOnStagingsSecondSave(String name) {
 		if (HELD_AS_MARKETING_ON_STAGING.contains(name)) {
 			return HELD_AS_MARKETING;
@@ -401,7 +400,7 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 
 		Map<String, String> stored = storedRefusals();
 		assertThat(stored.keySet()).containsExactlyInAnyOrderElementsOf(REFUSED_ON_STAGING);
-		assertThat(stored.get("shift_reminder")).startsWith("Meta found too little fixed wording");
+		assertThat(stored.get("po_delivery")).startsWith("Meta found too little fixed wording");
 		assertThat(stored.get("low_stock_digest")).startsWith("Meta will not accept a message that begins or ends");
 		assertThat(stored.get("temple_communication")).startsWith("Meta found no fixed wording of its own");
 		stored.values().forEach(reason -> assertThat(reason)
@@ -412,7 +411,7 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 
 		// And it reaches the answer the screen reads.
 		mvc.perform(get("/api/v1/settings/whatsapp"))
-				.andExpect(jsonPath("$.refusedTemplates.length()").value(6))
+				.andExpect(jsonPath("$.refusedTemplates.length()").value(5))
 				.andExpect(jsonPath("$.refusedTemplates[?(@.name == 'po_delivery')].reason")
 						.value(org.hamcrest.Matchers.hasItem(stored.get("po_delivery"))));
 	}
@@ -478,15 +477,15 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 
 	/**
 	 * The staging data in this class is a claim about the code's templates, so it is checked against
-	 * them: the eleven, the two, and what is left — which must be the six T-159 reworded plus the
+	 * them: the eleven, the two, and what is left — which must be the six T-159 reworded, less the one T-180 removed, plus the
 	 * renamed connection check, the seven staging's log counted as submitted.
 	 */
 	@Test
-	@DisplayName("the staging template names used here are the application's own, and account for all twenty")
+	@DisplayName("the staging template names used here are the application's own, and account for all nineteen")
 	void stagingNamesAreReal() {
 		Set<String> all = Arrays.stream(NotificationTemplate.values())
 				.map(NotificationTemplate::whatsappTemplateName).collect(Collectors.toSet());
-		assertThat(all).hasSize(20).containsAll(ALREADY_HELD_ON_STAGING).containsAll(HELD_AS_MARKETING_ON_STAGING);
+		assertThat(all).hasSize(19).containsAll(ALREADY_HELD_ON_STAGING).containsAll(HELD_AS_MARKETING_ON_STAGING);
 
 		Set<String> rest = new HashSet<>(all);
 		rest.removeAll(ALREADY_HELD_ON_STAGING);
@@ -522,7 +521,7 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.refusedTemplates[0].reason").value(HELD_AS_MARKETING_REASON));
 	}
 
-	/** Every temple that saves twice: Meta holds all twenty, and that is a clean result. */
+	/** Every temple that saves twice: Meta holds all nineteen, and that is a clean result. */
 	@Test
 	@DisplayName("a save where Meta already holds every template stores nothing and sets the date")
 	void everythingAlreadyHeldIsClean() throws Exception {
@@ -547,10 +546,10 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 
 		assertThat(storedSubmittedAt()).isNotNull();
 		Map<String, String> kinds = storedKinds();
-		assertThat(kinds).hasSize(20);
+		assertThat(kinds).hasSize(19);
 		assertThat(kinds.entrySet().stream().filter(e -> e.getValue().equals("HELD_UNDER_ANOTHER_CATEGORY"))
 				.map(Map.Entry::getKey)).containsExactlyInAnyOrderElementsOf(HELD_AS_MARKETING_ON_STAGING);
-		assertThat(kinds.values().stream().filter("REFUSED"::equals)).hasSize(18);
+		assertThat(kinds.values().stream().filter("REFUSED"::equals)).hasSize(17);
 	}
 
 	/**

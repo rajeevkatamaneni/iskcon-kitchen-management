@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { RosterSignup, RosterView } from "@/lib/api";
 
 /**
@@ -785,5 +785,184 @@ describe("a blank box on the roster names itself, and stops only its own form (T
     await waitFor(() => expect(recordAttendanceMock).toHaveBeenCalled());
     expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
     expect(broadcastShiftMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * T-175: a refused removal's sentences survive the attendance table re-rendering around them.
+ *
+ * <p>Why this needs its own proof. The removal form is an empty `Form` reached through `form=`, so
+ * the slots it places for its sentences sit inside the *attendance* form's table, and `Form`'s
+ * `MutationObserver` only watches its own (empty) form element. T-165 read that as a risk: the table
+ * re-renders, and nothing re-seats a sentence it disturbed. These tests cause the re-renders a
+ * coordinator can cause with the sentences showing, and check each sentence is still there, once,
+ * right after its box's label, with `aria-invalid` and `aria-describedby` still pointing at it.
+ *
+ * <p>Two kinds of re-render, because the page has two:
+ *
+ * <ul>
+ *   <li>Ones that keep the table mounted: ticking somebody's attendance (no React render at all, but
+ *       a `change` event every `Form` on the page hears), opening "Send update to all" (the whole
+ *       page re-renders and a section is inserted above the table), and "Save attendance" (the page
+ *       goes busy, which re-renders the removal row itself: its own buttons turn disabled and back,
+ *       beside the slots, and a notice is inserted above).</li>
+ *   <li>The data refresh. The real `useAuthedQuery` sets `loading` before every re-fetch, and the
+ *       page answers `loading` with a spinner in place of the roster, so a refresh does not re-render
+ *       the table around the sentence — it unmounts the table, both boxes and the removal form, and
+ *       mounts them again. The sentence cannot survive that and should not: the box it was about is
+ *       gone. What is asserted is that nothing is left behind or doubled, and the next press names
+ *       the boxes once. The mock hook is driven through the same two legs the real one takes.</li>
+ * </ul>
+ */
+describe("a refused removal's sentences survive the attendance table re-rendering (T-175)", () => {
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(AFTER_THE_SHIFT_STARTED);
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    reloadMock.mockReset();
+    recordAttendanceMock.mockReset().mockResolvedValue(undefined);
+    correctAttendanceMock.mockReset().mockResolvedValue(undefined);
+    releaseVolunteerMock.mockReset().mockResolvedValue(undefined);
+    broadcastShiftMock.mockReset().mockResolvedValue({ recipients: 2 });
+    queryRef.current = {
+      data: roster([signup(), signup({ userId: "u2", fullName: "Gopal Das" })]),
+      error: null,
+      loading: false,
+    };
+  });
+
+  const REASON_SAID = "Why Gopal Das is coming off the shift is required";
+  const NOTE_SAID = "Note about taking Gopal Das off the shift is required";
+
+  /** Opens Gopal Das's removal row and presses "Take off shift" with both boxes blank. */
+  async function refuseABlankRemoval() {
+    fireEvent.click(screen.getAllByRole("button", { name: /^remove$/i })[1]);
+    fireEvent.click(screen.getByRole("button", { name: /take off shift/i }));
+    await screen.findByText(REASON_SAID);
+    return {
+      reason: screen.getByLabelText(/why gopal das is coming off the shift/i),
+      note: screen.getByLabelText(/note about taking gopal das off the shift/i),
+    };
+  }
+
+  /**
+   * One sentence, exactly once, in the slot straight after the label that wraps its box, and the box
+   * still marked invalid and described by it. "Straight after the label" is the whole question: a
+   * slot React had displaced would still hold its text somewhere in the table.
+   */
+  function expectBeside(box: HTMLElement, text: string) {
+    const said = screen.getAllByText(text);
+    expect(said).toHaveLength(1);
+    const slot = said[0].parentElement!;
+    expect(slot.hasAttribute("data-form-error-slot")).toBe(true);
+    expect(box.closest("label")!.nextElementSibling).toBe(slot);
+    expect(box.getAttribute("aria-invalid")).toBe("true");
+    expect((box.getAttribute("aria-describedby") ?? "").split(/\s+/)).toContain(said[0].id);
+  }
+
+  function slotsOnPage() {
+    return document.querySelectorAll("[data-form-error-slot]").length;
+  }
+
+  it("keeps both sentences beside their boxes through a tick, the update box opening and a save, then clears each once its box is given", async () => {
+    render(<ShiftRosterPage />);
+    const { reason, note } = await refuseABlankRemoval();
+    expectBeside(reason, REASON_SAID);
+    expectBeside(note, NOTE_SAID);
+    expect(slotsOnPage()).toBe(2);
+
+    // 1. Unticking Radha Devi. An uncontrolled checkbox, so React renders nothing, but the `change`
+    // it fires reaches every Form's document listener, the removal form's included.
+    fireEvent.click(screen.getByRole("checkbox", { name: /radha devi came/i }));
+    expectBeside(reason, REASON_SAID);
+    expectBeside(note, NOTE_SAID);
+
+    // 2. Opening "Send update to all": the whole page re-renders, and a section with a Form of its
+    // own is inserted above the roster.
+    fireEvent.click(screen.getByRole("button", { name: /send update to all/i }));
+    expect(screen.getByRole("form", { name: "Send an update" })).toBeInTheDocument();
+    expectBeside(reason, REASON_SAID);
+    expectBeside(note, NOTE_SAID);
+
+    // 3. "Save attendance", held open so the busy render can be looked at. Busy disables the removal
+    // row's own buttons, which sit in the same block as the two slots: React re-rendering the row
+    // the sentences are in, not somewhere else on the page.
+    let finish!: () => void;
+    recordAttendanceMock.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
+    fireEvent.click(screen.getByRole("button", { name: /save attendance/i }));
+    await waitFor(() => expect(recordAttendanceMock).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: /take off shift/i })).toBeDisabled();
+    expectBeside(reason, REASON_SAID);
+    expectBeside(note, NOTE_SAID);
+
+    await act(async () => finish());
+    await screen.findByText("Attendance recorded.");
+    expect(screen.getByRole("button", { name: /take off shift/i })).toBeEnabled();
+    expectBeside(reason, REASON_SAID);
+    expectBeside(note, NOTE_SAID);
+    expect(slotsOnPage()).toBe(2);
+    // The refused removal was not sent by any of that.
+    expect(releaseVolunteerMock).not.toHaveBeenCalled();
+
+    // Putting each box right clears its own sentence and gives the box back as it was.
+    fireEvent.change(reason, { target: { value: "ROTA_CHANGED" } });
+    expect(screen.queryByText(REASON_SAID)).not.toBeInTheDocument();
+    expect(reason.hasAttribute("aria-invalid")).toBe(false);
+    expect(reason.hasAttribute("aria-describedby")).toBe(false);
+    expectBeside(note, NOTE_SAID);
+
+    fireEvent.change(note, { target: { value: NOTE } });
+    expect(screen.queryByText(NOTE_SAID)).not.toBeInTheDocument();
+    expect(note.hasAttribute("aria-invalid")).toBe(false);
+    expect(slotsOnPage()).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /take off shift/i }));
+    await waitFor(() => expect(releaseVolunteerMock).toHaveBeenCalled());
+    expect(releaseVolunteerMock.mock.calls[0][1]).toBe("u2");
+    expect(releaseVolunteerMock.mock.calls[0][2]).toEqual({ reason: "ROTA_CHANGED", internalNote: NOTE });
+  });
+
+  it("a refresh takes the boxes down with their sentences, leaves nothing behind, and the next press names each box once", async () => {
+    const { rerender } = render(<ShiftRosterPage />);
+    await refuseABlankRemoval();
+
+    // The save that triggers the page's refresh.
+    fireEvent.click(screen.getByRole("button", { name: /save attendance/i }));
+    await waitFor(() => expect(reloadMock).toHaveBeenCalled());
+
+    // The real hook's first leg: `loading` while the roster is fetched again.
+    queryRef.current = { ...queryRef.current, loading: true };
+    rerender(<ShiftRosterPage />);
+    expect(screen.getByText("Loading roster…")).toBeInTheDocument();
+    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+    expect(slotsOnPage()).toBe(0);
+
+    // Its second leg: the roster back, as a new object.
+    queryRef.current = {
+      data: roster([signup(), signup({ userId: "u2", fullName: "Gopal Das" })]),
+      error: null,
+      loading: false,
+    };
+    rerender(<ShiftRosterPage />);
+    // Gopal Das's removal row is open again (the page still holds whose it is), blank, and quiet.
+    const reason = screen.getByLabelText(/why gopal das is coming off the shift/i);
+    const note = screen.getByLabelText(/note about taking gopal das off the shift/i);
+    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+    expect(reason.hasAttribute("aria-invalid")).toBe(false);
+    expect(slotsOnPage()).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /take off shift/i }));
+    await screen.findByText(REASON_SAID);
+    expectBeside(reason, REASON_SAID);
+    expectBeside(note, NOTE_SAID);
+    expect(slotsOnPage()).toBe(2);
+    expect(releaseVolunteerMock).not.toHaveBeenCalled();
   });
 });

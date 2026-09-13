@@ -593,6 +593,8 @@ describe("the temple's language", () => {
     const select = within(section).getByRole("combobox") as HTMLSelectElement;
     expect(select.value).toBe("kn");
 
+    // The section opens read-only (T-185), so the choice is made after Edit, as on every section.
+    fireEvent.click(within(section).getByRole("button", { name: "Edit" }));
     fireEvent.change(select, { target: { value: "hi" } });
     fireEvent.click(within(section).getByRole("button", { name: /^save$/i }));
 

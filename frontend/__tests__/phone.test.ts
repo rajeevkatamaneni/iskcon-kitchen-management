@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isE164, normalizePhone } from "@/lib/phone";
+import { isE164, normalizeIndianMobile, normalizePhone, savedPhoneForDisplay } from "@/lib/phone";
 
 /**
  * The phone helper every E.164 box sends through (T-157).
@@ -53,5 +53,68 @@ describe("normalizePhone", () => {
   it("turns a box of spaces into nothing, which every screen already treats as no number", () => {
     expect(normalizePhone("   ")).toBe("");
     expect(isE164("   ")).toBe(false);
+  });
+});
+
+/**
+ * The counter's rule for a donor's phone (T-186), on the same inputs as the server's
+ * `CounterPhoneTest`. Read the two lists side by side: the server is the authority and this copy only
+ * lets the screen say what was saved, so if they ever disagree the screen is telling the office a lie.
+ */
+const RECOGNISED = [
+  ["ten digits with a space, as read out", "98765 43210"],
+  ["ten digits bare", "9876543210"],
+  ["a trunk 0", "09876543210"],
+  ["91 with no plus", "919876543210"],
+  ["+91 with a space and a hyphen", "+91 98765-43210"],
+  ["already in +91 form", "+919876543210"],
+  ["a non-breaking space and an en dash", "+91\u00A098765\u201343210"],
+  ["a zero-width space and the marks Android wraps a copied contact in", "\u202A98765\u200B43210\u202C"],
+  ["spaces at either end", "  98765 43210  "],
+] as const;
+
+const KEPT_AS_TYPED = [
+  ["a Mumbai landline", "022 2345 6789", "022 2345 6789"],
+  ["a foreign number", "+1 555 0100", "+1 555 0100"],
+  ["a short number", "12345", "12345"],
+  ["letters", "abcd", "abcd"],
+  ["ten digits starting 1", "1234567890", "1234567890"],
+  ["ten digits starting 5", "5876543210", "5876543210"],
+  ["a typo with a letter", "98765 4321X", "98765 4321X"],
+  ["a bracketed trunk 0", "+91 (0) 98765 43210", "+91 (0) 98765 43210"],
+  ["an international 0091 prefix", "0091 98765 43210", "0091 98765 43210"],
+  ["+91 followed by a 0 as well", "+91 0 98765 43210", "+91 0 98765 43210"],
+  ["eleven digits", "98765 432101", "98765 432101"],
+  ["a landline, trimmed", "  022 2345 6789 ", "022 2345 6789"],
+] as const;
+
+describe("normalizeIndianMobile", () => {
+  it.each(RECOGNISED)("saves %s as +91 and its ten digits", (_how, typed) => {
+    expect(normalizeIndianMobile(typed)).toBe("+919876543210");
+  });
+
+  it.each(KEPT_AS_TYPED)("keeps %s exactly as typed, after trimming", (_how, typed, saved) => {
+    expect(normalizeIndianMobile(typed)).toBe(saved);
+  });
+
+  it("turns a Bengaluru landline with its trunk 0 into that same line's +91 number, which is not a guess", () => {
+    // 080 is Bengaluru's code, so this is "0" and ten digits starting 8. The server does the same.
+    expect(normalizeIndianMobile("080 2345 6789")).toBe("+918023456789");
+  });
+
+  it("leaves a blank box blank, which the screen sends as no phone", () => {
+    expect(normalizeIndianMobile("")).toBe("");
+    expect(normalizeIndianMobile("   ")).toBe("");
+  });
+});
+
+describe("savedPhoneForDisplay", () => {
+  it("writes a saved +91 number the way it is read aloud", () => {
+    expect(savedPhoneForDisplay("+919876543210")).toBe("+91 98765 43210");
+  });
+
+  it("shows anything else exactly as it was saved", () => {
+    expect(savedPhoneForDisplay("022 2345 6789")).toBe("022 2345 6789");
+    expect(savedPhoneForDisplay("+15550100")).toBe("+15550100");
   });
 });

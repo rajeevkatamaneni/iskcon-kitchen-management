@@ -139,7 +139,7 @@ class TemplateWordingRecorderIT extends AbstractIntegrationTest {
 			TemplateWordingRecorder recorder = new TemplateWordingRecorder(app);
 
 			Map<String, String> earlierRelease = new TreeMap<>(TemplateWordingRecorder.currentWording());
-			earlierRelease.put("shift_reminder", "sha256:the-wording-before-this-release");
+			earlierRelease.put("volunteer_shift_reminder", "sha256:the-wording-before-this-release");
 			assertThat(recorder.record(earlierRelease)).isTrue();
 			Map<String, List<Instant>> before = rowsByWording();
 
@@ -148,16 +148,16 @@ class TemplateWordingRecorderIT extends AbstractIntegrationTest {
 
 			Map<String, List<Instant>> added = new LinkedHashMap<>(after);
 			added.keySet().removeAll(before.keySet());
-			String currentKey = "shift_reminder " + NotificationTemplate.SHIFT_REMINDER.whatsappFingerprint("en");
+			String currentKey = "volunteer_shift_reminder " + NotificationTemplate.VOLUNTEER_SHIFT_REMINDER.whatsappFingerprint("en");
 			assertThat(added.keySet()).as("the one new row").containsExactly(currentKey);
 			assertThat(after).as("nothing earlier moved").containsAllEntriesOf(before);
 
-			Instant oldSeen = before.get("shift_reminder sha256:the-wording-before-this-release").get(0);
+			Instant oldSeen = before.get("volunteer_shift_reminder sha256:the-wording-before-this-release").get(0);
 			Instant newSeen = added.get(currentKey).get(0);
 			assertThat(newSeen).isAfter(oldSeen);
 
 			WhatsAppTemplateCatalogue.Catalogue catalogue = new WhatsAppTemplateCatalogue(app).read();
-			WhatsAppTemplateCatalogue.Entry shiftReminder = entry(catalogue, "shift_reminder");
+			WhatsAppTemplateCatalogue.Entry shiftReminder = entry(catalogue, "volunteer_shift_reminder");
 			assertThat(shiftReminder.wordingFirstSeenAt()).isEqualTo(oldSeen);
 			assertThat(shiftReminder.wordingLastChangedAt()).isEqualTo(newSeen);
 

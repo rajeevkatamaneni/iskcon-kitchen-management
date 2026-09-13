@@ -381,7 +381,7 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 				temple);
 		admin.update("""
 				INSERT INTO notifications (tenant_id, recipient_label, to_phone, template, preferred_channel, status)
-				VALUES (?, 'Test Devotee', '+919876500051', 'SHIFT_REMINDER', 'WHATSAPP', 'SENT')
+				VALUES (?, 'Test Devotee', '+919876500051', 'VOLUNTEER_SHIFT_REMINDER', 'WHATSAPP', 'SENT')
 				""", temple);
 		// Append-only, and references the user above — so the purge must lift append-only and delete
 		// this before it can delete the user.

@@ -178,7 +178,8 @@ class MetaTemplateRulesTest {
 	@Test
 	@DisplayName("the published ratio passes the fourteen templates Meta accepted on staging")
 	void acceptedOnStagingPassTheRatio() {
-		List<String> refusedOnStaging = List.of("shift_reminder", "po_delivery", "shift_broadcast",
+		// shift_reminder was the sixth, until T-180 removed it.
+		List<String> refusedOnStaging = List.of("po_delivery", "shift_broadcast",
 				"temple_announcement", "temple_communication", "low_stock_digest");
 		for (NotificationTemplate template : NotificationTemplate.values()) {
 			if (refusedOnStaging.contains(template.whatsappTemplateName())

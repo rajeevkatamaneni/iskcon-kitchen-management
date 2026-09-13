@@ -1,6 +1,8 @@
 package org.iskcon.kms.notification;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import org.iskcon.kms.user.User.NotificationChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,7 +63,7 @@ public class WhatsAppChannelAdapter implements ChannelAdapter {
 					address,
 					message.template().whatsappTemplateName(),
 					languageCode,
-					message.orderedParameters());
+					whatsappParameters(message));
 
 		} catch (RuntimeException e) {
 			// Meta refusing one message — an unapproved template, a number outside the test list, a
@@ -92,5 +94,27 @@ public class WhatsAppChannelAdapter implements ChannelAdapter {
 		// where verifying the number would have said yes.
 		settings.markMessageSent();
 		return SendResult.sent(providerMessageId);
+	}
+
+	/** A line break, a tab, or two or more spaces: anything a single space should stand for. */
+	private static final Pattern WHITESPACE_RUN = Pattern.compile("\\s+");
+
+	/**
+	 * The message's values in placeholder order, each on one line (T-180).
+	 *
+	 * <p>Meta refuses a template parameter that holds a line break, so a coordinator's broadcast typed
+	 * over two lines could not go on WhatsApp at all and fell through to email. Each run of whitespace
+	 * becomes one space.
+	 *
+	 * <p><strong>Why here, and for every parameter.</strong> This adapter is the one place a
+	 * notification becomes a WhatsApp send, and the SMS and email adapters never pass through it, so
+	 * they keep the line breaks the admin typed. It is every parameter rather than only the broadcast's
+	 * {@code message}, because Meta's refusal is about any parameter, and a temple's announcement intro
+	 * is typed text too. A value with no line break or double space comes out unchanged.
+	 */
+	static List<String> whatsappParameters(OutboundMessage message) {
+		return message.orderedParameters().stream()
+				.map(value -> WHITESPACE_RUN.matcher(value).replaceAll(" ").strip())
+				.toList();
 	}
 }

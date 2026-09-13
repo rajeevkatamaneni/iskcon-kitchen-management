@@ -3716,15 +3716,11 @@ export interface WhatsAppSettingsView {
   templatesSubmittedAt: string | null;
   /**
    * Templates Meta did not register on the last send, each with a plain reason (T-159, T-168).
-   * An already-held template is never listed. Optional only until T-169b updates the settings
-   * test fixtures; T-169b makes it required.
+   * An already-held template is never listed. The backend always sends it (T-169a).
    */
-  refusedTemplates?: WhatsAppRefusedTemplate[];
-  /**
-   * What the Reload button is waiting to send (T-169). Optional only until T-169b updates the
-   * settings test fixtures; T-169b makes it required.
-   */
-  templatesPending?: WhatsAppTemplatesPending;
+  refusedTemplates: WhatsAppRefusedTemplate[];
+  /** What the WhatsApp templates button is waiting to send (T-169). The backend always sends it. */
+  templatesPending: WhatsAppTemplatesPending;
 }
 
 /** How Meta answered for one template on the last send (T-168). */

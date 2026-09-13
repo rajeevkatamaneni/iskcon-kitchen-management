@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Form } from "@/components/ds/Form";
 import { HintedField } from "@/components/ds/InfoHint";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { api, toApiError, type ApiError } from "@/lib/api";
@@ -17,6 +18,16 @@ import { api, toApiError, type ApiError } from "@/lib/api";
  * lived inside `app/settings/page.tsx` and could only ever be rendered by loading that whole screen,
  * which meant the one thing worth asserting about it — what it reads when the temple's saved
  * language arrives after the first paint — could not be asserted at all.
+ *
+ * <p><strong>Read-only until Edit, like every other section of Settings but Appearance
+ * (T-185).</strong> Rajeev, 2026-09-13: *"The default state of the screen shuld be read only to avoid
+ * accidental mistakes. The way to get it to edit is using the 'Edit' button. When clicked the fields
+ * become editable and the button reads 'Save'. This applies for all sections on the settinsg
+ * scree"*. T-169b put the other five sections under that rule and missed this one, because it lives
+ * in its own file. The behaviour, the words and the look are T-169b's, copied rather than imported:
+ * `useEditMode`, `EditActions` and the sunken read-only fill are private to `app/settings/page.tsx`,
+ * and reaching into a page from a component would make the component depend on the screen that
+ * mounts it. If a third copy is ever wanted, that is the moment to move them into `components/ds`.
  */
 export function LanguageSection({
   initial,
@@ -57,6 +68,18 @@ export function LanguageSection({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
+  /**
+   * <p><strong>The snapshot is `picked`, not `language`, and that keeps T-077 fixed.</strong> Cancel
+   * puts back what the component held when Edit was pressed. Before any pick that is null, so after
+   * Cancel the picker is derived from the prop again and still reads a temple language that arrives
+   * later. Snapshotting the shown value would copy the prop into state on every Cancel, which is the
+   * exact bug the comment above describes.
+   */
+  const edit = useEditMode(picked, (before) => {
+    setPicked(before);
+    setError(null);
+  });
+
   async function save() {
     setBusy(true);
     setError(null);
@@ -64,6 +87,7 @@ export function LanguageSection({
     try {
       await api.setTempleLanguage(language, await getToken());
       setSaved(true);
+      edit.close();
     } catch (e) {
       setError(toApiError(e, "We couldn’t save that."));
     } finally {
@@ -79,18 +103,33 @@ export function LanguageSection({
       </p>
 
       {/* The scope of the setting — what it does and does not reach — which is exactly the thing
-          somebody wants once, at the moment they are choosing. */}
-      <div className="mt-6 max-w-md">
+          somebody wants once, at the moment they are choosing.
+
+          The shared Form, as on the other sections, so this one reads and behaves like them. Nothing
+          on it can be refused: the select always holds one of the languages, so `required` would
+          change nothing and is left off rather than implying a blank is possible. */}
+      <Form
+        key={edit.formKey}
+        id="language-form"
+        className="mt-6 max-w-md"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (edit.editing) void save();
+        }}
+      >
         <HintedField
           label="Your temple’s language"
           hint="This changes what is printed, not what this screen is written in."
         >
           {(id) => (
+            // A <select> has no read-only state, so it is disabled until Edit and takes the same
+            // sunken fill, exactly as the payment gateway's provider select does.
             <select
               id={id}
               value={language}
               onChange={(e) => setPicked(e.target.value)}
-              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
+              disabled={!edit.editing}
+              className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink disabled:bg-sunken"
             >
               {ALL_LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>
@@ -100,7 +139,7 @@ export function LanguageSection({
             </select>
           )}
         </HintedField>
-      </div>
+      </Form>
 
       {error && (
         <div role="alert" className="mt-6 rounded-lg bg-danger-bg px-4 py-3 text-sm text-danger">
@@ -112,15 +151,116 @@ export function LanguageSection({
 
       <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
         <span className="flex-1" />
-        <button
-          type="button"
-          onClick={save}
+        <EditActions
+          editing={edit.editing}
+          formId="language-form"
           disabled={busy}
-          className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
-        >
-          {busy ? "Saving…" : "Save"}
-        </button>
+          saving={busy}
+          onEdit={() => {
+            setSaved(false);
+            edit.open();
+          }}
+          onCancel={edit.cancel}
+        />
       </div>
     </section>
+  );
+}
+
+// ---- Editing, copied from app/settings/page.tsx (T-169b) -------------------
+
+/**
+ * Read-only until Edit. A copy of `useEditMode` in `app/settings/page.tsx`, line for line; the
+ * reasoning is there, and the two must stay the same.
+ *
+ * <p>Cancel puts back what the section held at the moment Edit was pressed. Closing remounts the
+ * section's `Form` through `formKey`, so nothing `Form` has said outlives a Cancel.
+ */
+function useEditMode<T>(current: T, restore: (values: T) => void) {
+  const [editing, setEditing] = useState(false);
+  const [formKey, setFormKey] = useState(0);
+  const before = useRef(current);
+
+  function close() {
+    setEditing(false);
+    setFormKey((key) => key + 1);
+  }
+
+  return {
+    editing,
+    formKey,
+    open() {
+      before.current = current;
+      setEditing(true);
+    },
+    cancel() {
+      restore(before.current);
+      close();
+    },
+    /** After a Save the server accepted, when what is on the screen is what is saved. */
+    close,
+  };
+}
+
+/**
+ * Edit, or Cancel and Save, at the right-hand end of the footer. A copy of `EditActions` in
+ * `app/settings/page.tsx`, with the same classes and words, less the relabelling and extra disabled
+ * reason that only the WhatsApp and Volunteer messages sections use.
+ *
+ * <p>Edit is quiet: it commits nothing. Cancel comes before Save (§4). Save submits the `Form` from
+ * outside it with `form=`, and is greyed out only while the save is in flight. The buttons carry
+ * different keys so React builds a new element, rather than turning Edit into a submit button under
+ * the pointer that has just pressed it.
+ */
+function EditActions({
+  editing,
+  formId,
+  disabled,
+  saving,
+  onEdit,
+  onCancel,
+}: {
+  editing: boolean;
+  formId: string;
+  /** Something in this section is in flight. */
+  disabled: boolean;
+  saving: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+}) {
+  if (!editing) {
+    return (
+      <button
+        key="edit"
+        type="button"
+        onClick={onEdit}
+        disabled={disabled}
+        className="btn btn-quiet min-h-touch px-6 text-sm disabled:opacity-60"
+      >
+        Edit
+      </button>
+    );
+  }
+  return (
+    <>
+      <button
+        key="cancel"
+        type="button"
+        onClick={onCancel}
+        disabled={disabled}
+        className="btn btn-quiet min-h-touch px-5 text-sm disabled:opacity-60"
+      >
+        Cancel
+      </button>
+      <button
+        key="save"
+        type="submit"
+        form={formId}
+        disabled={disabled}
+        className="btn btn-primary min-h-touch px-6 text-sm transition-colors duration-state disabled:opacity-60"
+      >
+        {saving ? "Saving…" : "Save"}
+      </button>
+    </>
   );
 }

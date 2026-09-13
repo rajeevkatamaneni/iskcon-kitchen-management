@@ -70,7 +70,7 @@ class OpsIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.tenantName").value("Sri Sri Radha Govinda Temple"))
 				.andExpect(jsonPath("$.sentToday").value(1))
 				.andExpect(jsonPath("$.failedToday").value(1))
-				.andExpect(jsonPath("$.recentFailures[0].template").value("SHIFT_REMINDER"))
+				.andExpect(jsonPath("$.recentFailures[0].template").value("VOLUNTEER_SHIFT_REMINDER"))
 				.andExpect(jsonPath("$.lastCalendarPrecompute").doesNotExist());
 	}
 
@@ -107,7 +107,7 @@ class OpsIT extends AbstractIntegrationTest {
 		admin.update("""
 				INSERT INTO notifications (tenant_id, recipient_label, to_phone, template,
 						preferred_channel, status, created_at)
-				VALUES (?, 'Test Devotee', '+919876500051', 'SHIFT_REMINDER', 'WHATSAPP', 'SENT',
+				VALUES (?, 'Test Devotee', '+919876500051', 'VOLUNTEER_SHIFT_REMINDER', 'WHATSAPP', 'SENT',
 						(date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') + interval '9 hours')
 							AT TIME ZONE 'Asia/Kolkata')
 				""", temple);
@@ -150,7 +150,7 @@ class OpsIT extends AbstractIntegrationTest {
 		admin.update("""
 				INSERT INTO notifications (tenant_id, recipient_label, to_phone, template,
 						preferred_channel, status, final_channel)
-				VALUES (?, 'Test Devotee', '+919876500051', 'SHIFT_REMINDER', 'WHATSAPP', ?, ?)
+				VALUES (?, 'Test Devotee', '+919876500051', 'VOLUNTEER_SHIFT_REMINDER', 'WHATSAPP', ?, ?)
 				""", tenantId, status, finalChannel);
 	}
 

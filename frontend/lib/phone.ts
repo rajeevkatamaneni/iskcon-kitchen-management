@@ -48,3 +48,41 @@ export function normalizePhone(value: string): string {
 export function isE164(value: string): boolean {
   return E164.test(normalizePhone(value));
 }
+
+/**
+ * An Indian mobile number's ten digits: they start 6, 7, 8 or 9, optionally after a trunk "0" or
+ * after "91" or "+91". `[0-9]` rather than `\d`, to match the server's pattern character for character.
+ */
+const INDIAN_MOBILE = /^(?:\+91|91|0)?([6-9][0-9]{9})$/;
+
+/**
+ * A donor's phone as the counter saves it (T-186): "+91" and ten digits when what was typed can only
+ * be an Indian mobile number, and otherwise exactly what was typed, trimmed.
+ *
+ * <p>The server applies the same rule in `donation/CounterPhone.java` and is the authority: this copy
+ * exists so the screen can tell the person recording the gift what was saved ("Saved as +91 98765
+ * 43210") before they walk away. The two are held to one list of inputs by `phone.test.ts` and
+ * `CounterPhoneTest`.
+ *
+ * <p>Only the unambiguous shapes are rewritten. A landline, a foreign number, a short number, a
+ * bracketed "(0)" or a letter is left alone, because a wrong guess stores a well-formed number that
+ * rings somebody else, and My donations would hand that somebody the receipt. This is why it is not
+ * `normalizePhone`: that one removes separators from a number already held to E.164, and a counter
+ * gift's phone is deliberately not held to anything.
+ *
+ * <p>A blank box is "", which the screen already sends as no phone.
+ */
+export function normalizeIndianMobile(value: string): string {
+  const trimmed = value.trim();
+  const mobile = INDIAN_MOBILE.exec(normalizePhone(trimmed));
+  return mobile ? `+91${mobile[1]}` : trimmed;
+}
+
+/**
+ * A saved counter phone written the way it is read aloud: "+919876543210" as "+91 98765 43210".
+ * Anything that is not in that form is shown exactly as it was saved, because it was saved as typed.
+ */
+export function savedPhoneForDisplay(saved: string): string {
+  const mobile = /^\+91([6-9][0-9]{4})([0-9]{5})$/.exec(saved);
+  return mobile ? `+91 ${mobile[1]} ${mobile[2]}` : saved;
+}

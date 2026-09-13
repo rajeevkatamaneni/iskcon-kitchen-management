@@ -18,28 +18,13 @@ import java.util.Map;
  */
 public enum NotificationTemplate {
 
-	/**
-	 * T-159: Meta refused "Reminder: your {{1}} shift at {{2}} is on {{3}} at {{4}}." as having "too
-	 * many variables for its length" — seven fixed words for four details. Reworded to say the same
-	 * thing at a length Meta accepts, and closed with the thanks the signup confirmation Meta accepted
-	 * already carries, because a first rewording that stopped at "at {{4}}." ended on a detail and
-	 * {@code MetaTemplateRulesTest} refused it.
-	 */
-	SHIFT_REMINDER("shift_reminder") {
-		@Override
-		public RenderedMessage render(Map<String, Object> params) {
-			return new RenderedMessage(
-					"Shift reminder",
-					"This is a reminder that your %s shift at %s is scheduled for %s at %s. Thank you for your seva.".formatted(
-							value(params, "role"), value(params, "temple"),
-							value(params, "date"), value(params, "time")));
-		}
-
-		@Override
-		public List<String> parameterOrder() {
-			return List.of("role", "temple", "date", "time");
-		}
-	},
+	// T-180: the older shift reminder, Meta name shift_reminder, stood here and was removed. Nothing
+	// had sent it since volunteer reminders moved to VOLUNTEER_SHIFT_REMINDER, and Rajeev, reviewing the templates on
+	// 2026-09-13: "If it is not used, why have it. Having unused code and configurations creates
+	// confusion and sends people and agents on wasteful goos hunts. Remove it." It is not deleted at
+	// Meta, where each connected temple still holds it, unused. A notification row stored under the
+	// old name before this release is failed with a plain reason by NotificationDispatcher rather
+	// than thrown on; see templateNamed there.
 
 	/**
 	 * A purchase order reaching its vendor, with all three of its dates.
@@ -109,7 +94,7 @@ public enum NotificationTemplate {
 	 *       why it is a separate template from {@link #WISHLIST_SPONSORSHIP_CONVERTED}: the applied
 	 *       amount is exactly what was owed, so the item is bought, every time.</li>
 	 *   <li><strong>Treat the remainder as a real good.</strong> The general fund is chronically short
-	 *       and it is what feeds everyone who walks in. "That is not second best" says it outright
+	 *       and it is what feeds everyone who walks in. "That is not a second-best option" says it outright
 	 *       rather than hoping the reader infers it, because the sentence before it is about
 	 *       something the donor did not entirely get.</li>
 	 *   <li><strong>Stay warm.</strong> No "we regret", no "your transaction", no apology anywhere.</li>
@@ -117,29 +102,42 @@ public enum NotificationTemplate {
 	 *
 	 * <p>Two mechanical constraints shaped the wording as much as the tone. The parameters appear in
 	 * the body in the order {@link #parameterOrder()} lists them, because Meta numbers them
-	 * positionally; and none of them appears twice, which is why the second sentence says "It is
-	 * fully funded now" rather than naming the item again.
+	 * positionally; and none of them appears twice.
+	 *
+	 * <p><strong>Reworded by T-180, from Rajeev's review of 2026-09-13.</strong> Two faults in the old
+	 * sentence, both his. The item went in bare, "just as the %s was almost paid for", and admins type
+	 * titles with their own article, so a donor read "just as the A wet grinder was almost paid for".
+	 * The item is now quoted after "the wish-list item", which reads the same whatever the title
+	 * starts with. And "almost paid for" and "only %s of it was still needed" were claims about timing
+	 * the message cannot always make true — his words: "instead of setting ourselves up to fail, we need
+	 * to word it better so we never get caught no matter what." The new sentence says only that part of
+	 * the gift went to the item because others funded it too, which is true every time this is sent.
+	 *
+	 * <p>The new sentence names the applied amount before the item, so {@link #parameterOrder()} lists
+	 * {@code applied} before {@code item} to keep the placeholders numbered in reading order. The names
+	 * are unchanged, and senders pass them by name, so nothing that sends this changes.
 	 */
 	WISHLIST_GIFT_SPLIT("wishlist_gift_split") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
-					"Thank you — your gift completed the " + value(params, "item"),
-					("Dear %s, your gift of %s reached us just as the %s was almost paid for — only %s of "
-							+ "it was still needed there, and that was the amount that finished it. It is "
-							+ "fully funded now, and you are the one who got it over the line. The remaining "
-							+ "%s has gone to our general fund, and that is not second best: the general fund "
-							+ "is the one that is always short, and it is what puts rice and dal in front of "
-							+ "every person who walks into %s and sits down to eat. Thank you for both. "
-							+ "Hare Krishna.")
-							.formatted(value(params, "donor"), value(params, "amount"), value(params, "item"),
-									value(params, "applied"), value(params, "remainder"),
+					// Quoted for the same reason as the body: "completed the A wet grinder" is how a bare
+					// title reads.
+					"Thank you — your gift completed the wish-list item \"" + value(params, "item") + "\"",
+					("Dear %s, thank you for your gift of %s. Only part of it, %s, could go towards the "
+							+ "wish-list item \"%s\", because other generous donors stepped in to fund it, and "
+							+ "your gift is what got it over the finish line. The remaining %s has gone to our "
+							+ "general fund, and that is not a second-best option. The general fund is what lets "
+							+ "us feed every person who walks into %s and sits down to eat. We cannot thank you "
+							+ "enough for your generosity. Hare Krishna.")
+							.formatted(value(params, "donor"), value(params, "amount"), value(params, "applied"),
+									value(params, "item"), value(params, "remainder"),
 									value(params, "temple")));
 		}
 
 		@Override
 		public List<String> parameterOrder() {
-			return List.of("donor", "amount", "item", "applied", "remainder", "temple");
+			return List.of("donor", "amount", "applied", "item", "remainder", "temple");
 		}
 	},
 
@@ -151,13 +149,20 @@ public enum NotificationTemplate {
 	 * applied, so nothing can be credited — and one message hedging across both would leave every
 	 * donor unsure whether their money did anything. Where a gift <em>could</em> be partly applied,
 	 * {@link #WISHLIST_GIFT_SPLIT} is sent instead.
+	 *
+	 * <p>T-180 reworded it from Rajeev's review of 2026-09-13, to say of the general fund what the
+	 * split message says: that it is not a second-best home for the gift, and why.
 	 */
 	WISHLIST_SPONSORSHIP_CONVERTED("wishlist_sponsorship_converted") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Thank you — your gift to " + value(params, "temple"),
-					"That wish-list item was just fully sponsored by the time your payment completed, so your generous gift to %s has been received as a general donation instead. Thank you for your seva. Hare Krishna."
+					("The wish-list item you gave towards was fully sponsored by the time your payment "
+							+ "completed. Nothing to worry about: your gift has gone to the general fund of %s, "
+							+ "and that is not a second-best option. The general fund is what lets us feed every "
+							+ "person who walks in and sits down to eat. We cannot thank you enough for your "
+							+ "generosity. Hare Krishna.")
 							.formatted(value(params, "temple")));
 		}
 
@@ -199,6 +204,12 @@ public enum NotificationTemplate {
 	 * <p><strong>The body is registered with Meta under {@code donation_receipt} and must be approved
 	 * before WhatsApp will carry it.</strong> Until it is, a send falls through to SMS and email, as
 	 * every unapproved template does.
+	 *
+	 * <p>T-180: it used to send the donor to the temple office for a copy. Rajeev asked why, when a
+	 * donor can sign in and download the receipt themselves, and since T-179 they can, from the page
+	 * the navigation calls My donations. The message names that page rather than linking it, because
+	 * no temple has a stored web address this could put in a link. The office stays as the second way,
+	 * for a donor recorded at the counter who has no website account to sign in with.
 	 */
 	DONATION_RECEIPT("donation_receipt") {
 		@Override
@@ -206,7 +217,7 @@ public enum NotificationTemplate {
 			return new RenderedMessage(
 					"Your donation receipt " + value(params, "receiptNumber"),
 					("Dear %s, your receipt %s for the donation you made to %s on %s has been issued. "
-							+ "Please ask at the temple office for a copy. Hare Krishna.").formatted(
+							+ "You can download it from My donations on the Seva Kitchen website, or ask at the temple office for a copy. Hare Krishna.").formatted(
 									value(params, "donor"), value(params, "receiptNumber"),
 									value(params, "temple"), value(params, "date")));
 		}
@@ -221,13 +232,26 @@ public enum NotificationTemplate {
 	 * T-159: Meta refused "Update about your {{1}} shift: {{2}}" for its length, and it also ended on
 	 * the coordinator's message, which Meta does not allow either. The message is now quoted inside a
 	 * sentence, so whatever punctuation the coordinator typed, the body never ends on it.
+	 *
+	 * <p>T-180 reworded it, because Rajeev found it read poorly, and dropped its closing "Please check
+	 * the app for the latest details". Volunteers cannot see a shift's updates anywhere on the website:
+	 * a broadcast is shown only on the coordinator's roster. So the sentence now says only what is true,
+	 * who the message is from and who else got it.
+	 *
+	 * <p>The message stays in straight quotes, as T-159 had it, so a coordinator's message that ends
+	 * without a full stop cannot run into "This message went…". Nothing is added to or taken from the
+	 * text inside them at send time: it goes in as typed, apart from WhatsApp's flattening below.
+	 *
+	 * <p>The coordinator's message may run over several lines. SMS and email keep them. WhatsApp cannot,
+	 * because Meta refuses a parameter with a line break in it, so {@link WhatsAppChannelAdapter}
+	 * flattens every parameter to one line on that channel alone.
 	 */
 	SHIFT_BROADCAST("shift_broadcast") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Update about your shift: " + value(params, "title"),
-					"There is an update about your %s shift. The message reads: \"%s\" Please check the app for the latest details."
+					"Message from the coordinator of your %s shift: \"%s\" This message went to everyone on the shift."
 							.formatted(value(params, "title"), value(params, "message")));
 		}
 
@@ -237,12 +261,17 @@ public enum NotificationTemplate {
 		}
 	},
 
+	/**
+	 * T-180: the close was "please release your spot in the app". Rajeev asked for "as soon as possible
+	 * so others can sign up", allowing "as soon as possible." alone if Meta's rules refused the length.
+	 * They do not, so it carries the whole of what he asked for.
+	 */
 	VOLUNTEER_SHIFT_REMINDER("volunteer_shift_reminder") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Reminder: " + value(params, "title"),
-					"Reminder: your %s shift is on %s, %s at %s. If you can't make it, please release your spot in the app."
+					"Reminder: your %s shift is on %s, %s at %s. If you can't make it, please release your spot as soon as possible so others can sign up."
 							.formatted(value(params, "title"), value(params, "date"),
 									value(params, "time"), value(params, "location")));
 		}
@@ -269,12 +298,16 @@ public enum NotificationTemplate {
 		}
 	},
 
+	/**
+	 * T-180: closed "See you there!" until Rajeev asked for "Thank you for your seva.", to match the
+	 * signup confirmation above it.
+	 */
 	WAITLIST_PROMOTED("waitlist_promoted") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"A spot opened: you're in for " + value(params, "title"),
-					"Good news! A spot opened and you're now signed up for %s on %s, %s at %s. See you there!"
+					"Good news! A spot opened and you're now signed up for %s on %s, %s at %s. Thank you for your seva."
 							.formatted(value(params, "title"), value(params, "date"),
 									value(params, "time"), value(params, "location")));
 		}
@@ -311,13 +344,17 @@ public enum NotificationTemplate {
 	 *
 	 * <p>The copy is written for somebody who may have been let down rather than let go. It thanks
 	 * them, points them somewhere, and carries no hint that the reason might be about them.
+	 *
+	 * <p>T-180: "the app" became "the Seva Kitchen website" here and in three other messages. Rajeev:
+	 * "Can we not call it an app. That could confuse people. It is a website portal or the shift signup
+	 * page."
 	 */
 	REMOVED_FROM_SHIFT("removed_from_shift") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"A change to your shift: " + value(params, "title"),
-					"Hare Krishna. You're no longer on the %s shift on %s, %s at %s. Reason: %s. Thank you for offering to serve — please check the app for other shifts."
+					"Hare Krishna. You're no longer on the %s shift on %s, %s at %s. Reason: %s. Thank you for offering to serve — please check the Seva Kitchen website for other shifts."
 							.formatted(value(params, "title"), value(params, "date"),
 									value(params, "time"), value(params, "location"),
 									value(params, "reason")));
@@ -334,7 +371,7 @@ public enum NotificationTemplate {
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Shift cancelled: " + value(params, "title"),
-					"We're sorry — the %s shift on %s at %s has been cancelled. Thank you for offering to serve; please check the app for other shifts."
+					"We're sorry — the %s shift on %s at %s has been cancelled. Thank you for offering to serve; please check the Seva Kitchen website for other shifts."
 							.formatted(value(params, "title"), value(params, "date"), value(params, "temple")));
 		}
 
@@ -349,7 +386,7 @@ public enum NotificationTemplate {
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Your schedule at " + value(params, "temple") + " has changed",
-					"Hare Krishna %s, your work schedule at %s has been updated. Please check the app for your latest hours."
+					"Hare Krishna %s, your work schedule at %s has been updated. Please check the Seva Kitchen website for your latest hours."
 							.formatted(value(params, "name"), value(params, "temple")));
 		}
 
@@ -472,13 +509,17 @@ public enum NotificationTemplate {
 	 * Leave granted and then taken back. Not in the brief's list of two, and added anyway: somebody
 	 * who has been told they are off arranges their week around it, and letting them find out by
 	 * turning up on the wrong day would be a worse failure than any this system otherwise has.
+	 *
+	 * <p>T-180: it said the leave "has been withdrawn", and Rajeev read that, reasonably, as the staff
+	 * member withdrawing their own request. It is the manager taking back leave already approved, so the
+	 * body and subject now say "cancelled by your manager" in as many words.
 	 */
 	LEAVE_REVOKED("leave_revoked") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
-					"Your leave at " + value(params, "temple") + " has been withdrawn",
-					"Hare Krishna %s, the leave you were granted at %s for %s has been withdrawn, so you are expected as usual. Please speak to your manager."
+					"Your leave at " + value(params, "temple") + " has been cancelled by your manager",
+					"Hare Krishna %s, your approved leave at %s for %s has been cancelled by your manager, so you are expected as usual. Please speak to your manager if you have questions."
 							.formatted(value(params, "name"), value(params, "temple"), value(params, "dates")));
 		}
 
@@ -497,7 +538,9 @@ public enum NotificationTemplate {
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Low stock at " + value(params, "temple"),
-					"Low stock: %s item(s) at %s are below their reorder level: %s. Please review them in the app.".formatted(
+					// T-180: "in the app" became "on the Seva Kitchen website"; "on" because "in the website"
+					// is not how anybody says it.
+					"Low stock: %s item(s) at %s are below their reorder level: %s. Please review them on the Seva Kitchen website.".formatted(
 							value(params, "count"), value(params, "temple"), value(params, "items")));
 		}
 
@@ -603,11 +646,6 @@ public enum NotificationTemplate {
 	 */
 	public List<String> usedBy() {
 		return switch (this) {
-			// Read 2026-09-13: no class passes this constant any more. Volunteer reminders are sent as
-			// VOLUNTEER_SHIFT_REMINDER. Said plainly rather than left blank, because an operator looking
-			// at a template Meta holds will otherwise assume something sends it.
-			case SHIFT_REMINDER -> List.of(
-					"Nothing in the app sends this today. Volunteer shift reminders use volunteer_shift_reminder.");
 			case PO_DELIVERY -> List.of("Sending a purchase order to its vendor on WhatsApp");
 			case WISHLIST_GIFT_SPLIT -> List.of(
 					"Thanking a donor whose online gift finished a wish-list item, with the rest going to the general fund");
@@ -630,7 +668,7 @@ public enum NotificationTemplate {
 					"The WhatsApp preview on a letter before it is sent");
 			case LEAVE_APPROVED -> List.of("Telling a member of staff that their leave was approved");
 			case LEAVE_DECLINED -> List.of("Telling a member of staff that their leave was not approved");
-			case LEAVE_REVOKED -> List.of("Telling a member of staff that their approved leave was withdrawn");
+			case LEAVE_REVOKED -> List.of("Telling a member of staff that their manager cancelled their approved leave");
 			case LOW_STOCK_DIGEST -> List.of("The daily low-stock message to the kitchen staff, kitchen managers and temple admins");
 			case WHATSAPP_TEST -> List.of("The test message a temple admin sends from WhatsApp settings");
 		};
@@ -748,7 +786,9 @@ public enum NotificationTemplate {
 			case "neededBy" -> "5 Aug 2026";
 			case "vendor" -> "Sri Balaji Traders";
 			case "summary" -> "25 kg rice, 10 kg dal";
-			case "message" -> "Please arrive fifteen minutes early";
+			// With its full stop since T-180, inside the body's quotes: Meta's reviewer sees
+			// "Please arrive fifteen minutes early." This message went to everyone on the shift.
+			case "message" -> "Please arrive fifteen minutes early.";
 			// Why a volunteer came off a roster (T-080). One of exactly four clauses, and the sample
 			// is one of them verbatim rather than an invented sentence — Meta's reviewer is being
 			// shown the real range of this hole, which is the argument for it being one template.

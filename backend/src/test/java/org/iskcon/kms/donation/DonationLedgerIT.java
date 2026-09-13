@@ -1,5 +1,6 @@
 package org.iskcon.kms.donation;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -199,6 +200,44 @@ class DonationLedgerIT extends AbstractIntegrationTest {
 		assert csv.contains("Anonymous") : "the anonymous gift should read Anonymous";
 		assert csv.contains("Radha Devi") : "a named donor's name is fine to show";
 		assert !csv.contains("+919812345678") : "the ledger must never export contact PII";
+	}
+
+	/**
+	 * T-186, recorded rather than fixed. The donor's history groups a counter gift with that donor's
+	 * other gifts by exact phone ({@code donor_phone IS NOT DISTINCT FROM ?} in
+	 * {@code DonationLedgerService.donorHistory}). New counter gifts are now saved in +91 form and old
+	 * ones keep what was typed, so a regular donor's history splits in two at the day T-186 shipped.
+	 * Changing the ledger's matching was not T-186's decision, so this pins the behaviour as it is.
+	 *
+	 * <p>The new row's phone is written by {@code CounterPhone.normalise}, the call the recorder makes;
+	 * that the endpoint stores it is proven in {@code DonationIntakeIT} and {@code MyDonationsIT}.
+	 */
+	@Test
+	@DisplayName("T-186: a new counter gift saved as +919876543210 does not group with the donor's older gift typed 98765 43210")
+	void newPlusNinetyOneGiftDoesNotGroupWithOlderTypedGift() throws Exception {
+		// Before T-186, both typed the same way: these two group, as they always did.
+		UUID older = counterGift("Govind Das", "98765 43210");
+		UUID alsoOlder = counterGift("Govind Das", "98765 43210");
+		// After T-186, the same donor, typed the same way, saved in +91 form.
+		UUID newer = counterGift("Govind Das", CounterPhone.normalise("98765 43210"));
+		// And a second new gift typed differently, which before T-186 would not have grouped either.
+		UUID newerTypedWithZero = counterGift("Govind Das", CounterPhone.normalise("09876543210"));
+
+		mvc.perform(authed(get("/api/v1/donations/ledger/donor/" + older)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[*].id").value(containsInAnyOrder(older.toString(), alsoOlder.toString())));
+		mvc.perform(authed(get("/api/v1/donations/ledger/donor/" + newer)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[*].id").value(containsInAnyOrder(newer.toString(), newerTypedWithZero.toString())));
+	}
+
+	private UUID counterGift(String donorName, String phone) {
+		return admin.queryForObject("""
+				INSERT INTO donations (tenant_id, type, amount_inr, status, is_anonymous, donor_name, donor_phone,
+					payment_mode, donated_on)
+				VALUES (?, 'ONE_TIME', 500, 'COMPLETED', false, ?, ?, 'CASH', CURRENT_DATE)
+				RETURNING id
+				""", UUID.class, tenant, donorName, phone);
 	}
 
 	@Test

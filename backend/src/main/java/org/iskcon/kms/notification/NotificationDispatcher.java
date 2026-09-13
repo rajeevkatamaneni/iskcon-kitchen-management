@@ -35,6 +35,13 @@ public class NotificationDispatcher {
 
 	private static final TypeReference<Map<String, Object>> JSON_MAP = new TypeReference<>() {};
 
+	/**
+	 * Why a row naming a template this release does not have was failed. Written to the attempt record
+	 * against the row's preferred channel, because that table is the only place a notification carries a
+	 * reason and it needs a channel; nothing was sent on it. Read by nobody on a screen today.
+	 */
+	static final String TEMPLATE_GONE = "This message's template no longer exists, so it could not be sent.";
+
 	private final JdbcTemplate jdbc;
 	private final ObjectMapper objectMapper;
 	private final MeterRegistry meterRegistry;
@@ -65,7 +72,18 @@ public class NotificationDispatcher {
 			return;
 		}
 
-		NotificationTemplate template = NotificationTemplate.valueOf(n.template());
+		NotificationTemplate template = templateNamed(n.template());
+		if (template == null) {
+			// A row queued under a template this release no longer has (T-180 removed the older shift reminder).
+			// Failed here, on the record, rather than thrown: a throw would have the job retry a row that
+			// can never succeed and then leave it PENDING for ever, invisible to the ops failure list.
+			// Failing it is terminal, so a later retry or duplicate enqueue returns at isTerminal above.
+			log.warn("Notification {} names template {}, which no longer exists; marked failed, not sent",
+					n.id(), n.template());
+			recordAttempt(n.id(), n.preferredChannel(), "FAILED", null, TEMPLATE_GONE);
+			markFailed(n.id());
+			return;
+		}
 		OutboundMessage message = new OutboundMessage(template, n.params(), render(template, n.params()));
 
 		for (NotificationChannel channel : cascade(n.preferredChannel())) {
@@ -85,6 +103,23 @@ public class NotificationDispatcher {
 		}
 
 		markFailed(n.id());
+	}
+
+	/**
+	 * The template a stored row names, or null when this release has no template by that name.
+	 *
+	 * <p>The row stores the constant's name as text, so removing a constant cannot remove the rows that
+	 * already name it. {@code valueOf} throws for those, and it used to be called bare here.
+	 */
+	static NotificationTemplate templateNamed(String storedName) {
+		if (storedName == null) {
+			return null;
+		}
+		try {
+			return NotificationTemplate.valueOf(storedName);
+		} catch (IllegalArgumentException unknown) {
+			return null;
+		}
 	}
 
 	/**

@@ -185,9 +185,9 @@ class CommunicationIT extends AbstractIntegrationTest {
 		try {
 			notifications.notify(
 					org.iskcon.kms.notification.NotificationRecipient.user(devoteeA),
-					org.iskcon.kms.notification.NotificationTemplate.SHIFT_REMINDER,
-					Map.of("role", "Kitchen seva", "temple", "Bengaluru Temple",
-							"date", "12 August", "time", "6:00 am"),
+					org.iskcon.kms.notification.NotificationTemplate.VOLUNTEER_SHIFT_REMINDER,
+					Map.of("title", "Kitchen seva", "date", "12 August",
+							"time", "6:00 am", "location", "Main kitchen"),
 					null);
 		} finally {
 			org.iskcon.kms.tenancy.TenantContext.clear();
@@ -195,7 +195,7 @@ class CommunicationIT extends AbstractIntegrationTest {
 
 		Map<String, Object> reminder = admin.queryForMap("""
 				SELECT status, category, suppressed_reason FROM notifications
-				WHERE recipient_user_id = ? AND template = 'SHIFT_REMINDER'
+				WHERE recipient_user_id = ? AND template = 'VOLUNTEER_SHIFT_REMINDER'
 				""", devoteeA);
 		assertThat(reminder.get("status")).isEqualTo("PENDING");
 		assertThat(reminder.get("category")).isEqualTo("OPERATIONAL");

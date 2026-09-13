@@ -44,11 +44,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * <p><strong>The fixture is four temples, seeded as the superuser with known answers,</strong> so every
  * number is asserted against a count a reader can do by hand:
  * <ul>
- *   <li>Radha Govinda: shift_reminder APPROVED; donation_thank_you PENDING as MARKETING; leave_revoked
+ *   <li>Radha Govinda: volunteer_shift_reminder APPROVED; donation_thank_you PENDING as MARKETING; leave_revoked
  *       REJECTED for ABUSIVE_CONTENT, which is a refusal but not of formatting.</li>
- *   <li>Krishna Balaram: shift_reminder REJECTED for INVALID_FORMAT; donation_thank_you IN_APPEAL as
+ *   <li>Krishna Balaram: volunteer_shift_reminder REJECTED for INVALID_FORMAT; donation_thank_you IN_APPEAL as
  *       MARKETING.</li>
- *   <li>Jagannath: shift_reminder PAUSED; donation_thank_you not held; po_delivery not answered.</li>
+ *   <li>Jagannath: volunteer_shift_reminder PAUSED; donation_thank_you not held; po_delivery not answered.</li>
  *   <li>Gaura Nitai: no copy at all, as a temple with no WhatsApp connection has.</li>
  * </ul>
  *
@@ -144,7 +144,7 @@ class TemplateStatusCountsIT extends AbstractIntegrationTest {
 		}
 
 		// Govinda APPROVED, Krishna REJECTED for formatting, Jagannath PAUSED. Gaura Nitai has no copy.
-		assertCounts(byName.get("shift_reminder"), 3, 1, 0, 2, 0, true);
+		assertCounts(byName.get("volunteer_shift_reminder"), 3, 1, 0, 2, 0, true);
 		// Govinda PENDING and Krishna IN_APPEAL, both MARKETING; Jagannath's copy says Meta does not hold it.
 		assertCounts(byName.get("donation_thank_you"), 3, 0, 2, 0, 2, false);
 		// Only Jagannath's copy has it, and Meta did not answer: counted, and in no group.
@@ -206,12 +206,12 @@ class TemplateStatusCountsIT extends AbstractIntegrationTest {
 		UUID govinda = temple(0);
 		UUID krishna = temple(1);
 		UUID jagannath = temple(2);
-		seed(govinda, "shift_reminder", "APPROVED", "UTILITY", true, null, null);
+		seed(govinda, "volunteer_shift_reminder", "APPROVED", "UTILITY", true, null, null);
 		seed(govinda, "donation_thank_you", "PENDING", "MARKETING", true, null, null);
 		seed(govinda, "leave_revoked", "REJECTED", "UTILITY", true, "ABUSIVE_CONTENT", null);
-		seed(krishna, "shift_reminder", "REJECTED", "UTILITY", true, "INVALID_FORMAT", null);
+		seed(krishna, "volunteer_shift_reminder", "REJECTED", "UTILITY", true, "INVALID_FORMAT", null);
 		seed(krishna, "donation_thank_you", "IN_APPEAL", "MARKETING", true, null, null);
-		seed(jagannath, "shift_reminder", "PAUSED", "UTILITY", true, "NONE", null);
+		seed(jagannath, "volunteer_shift_reminder", "PAUSED", "UTILITY", true, "NONE", null);
 		seed(jagannath, "donation_thank_you", null, null, false, null, null);
 		seed(jagannath, "po_delivery", null, null, null, null, "Meta could not be reached for this message.");
 	}

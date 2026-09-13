@@ -154,8 +154,8 @@ class NotificationIT extends AbstractIntegrationTest {
 		try {
 			UUID id = notificationService.notify(
 					NotificationRecipient.user(unconsentedUser),
-					NotificationTemplate.SHIFT_REMINDER,
-					Map.of("role", "cook", "temple", "Govinda", "date", "Sunday", "time", "9am"),
+					NotificationTemplate.VOLUNTEER_SHIFT_REMINDER,
+					Map.of("title", "Kitchen seva", "date", "Sunday", "time", "9am", "location", "Main kitchen"),
 					null);
 
 			assertThat(statusOf(id)).isEqualTo("SUPPRESSED");
@@ -265,7 +265,7 @@ class NotificationIT extends AbstractIntegrationTest {
 		admin.update("""
 				INSERT INTO notifications (id, tenant_id, recipient_user_id, recipient_label,
 						to_phone, to_email, template, preferred_channel, status)
-				VALUES (?, ?, ?, ?, ?, ?, 'SHIFT_REMINDER', ?, 'PENDING')
+				VALUES (?, ?, ?, ?, ?, ?, 'VOLUNTEER_SHIFT_REMINDER', ?, 'PENDING')
 				""", id, temple, userId, label, phone, email, preferred);
 		return id;
 	}

@@ -13,8 +13,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.notification.NotificationRecipient;
@@ -155,6 +158,173 @@ class DonationIntakeIT extends AbstractIntegrationTest {
 				""".formatted(rice);
 		record(body);
 		verify(notificationService, never()).notify(any(), any(), any(), any());
+	}
+
+	@Test
+	@DisplayName("a phone typed as 98765 43210 is stored, and thanked, as +919876543210 (T-186)")
+	void counterPhoneIsSavedInPlusNinetyOneForm() throws Exception {
+		UUID donationId = record("""
+				{"anonymous":false,"donorName":"Govind Das","donorPhone":"98765 43210",
+				 "cashAmountInr":500,"donatedOn":"2026-08-10"}
+				""");
+
+		assertThat(admin.queryForObject("SELECT donor_phone FROM donations WHERE id = ?", String.class, donationId))
+				.isEqualTo("+919876543210");
+		// The thank-you goes to the number that was stored, never to a different spelling of it.
+		verify(notificationService, times(1)).notify(
+				eq(NotificationRecipient.contact("+919876543210", null)),
+				eq(NotificationTemplate.DONATION_THANK_YOU), any(), any());
+	}
+
+	@Test
+	@DisplayName("a Mumbai landline or a foreign number is stored exactly as typed, with no guessing (T-186)")
+	void unrecognisedPhoneIsStoredAsTyped() throws Exception {
+		UUID landline = record("""
+				{"anonymous":false,"donorName":"Govind Das","donorPhone":" 022 2345 6789 ",
+				 "cashAmountInr":500,"donatedOn":"2026-08-10"}
+				""");
+		UUID foreign = record("""
+				{"anonymous":false,"donorName":"Govind Das","donorPhone":"+1 555 0100",
+				 "cashAmountInr":500,"donatedOn":"2026-08-10"}
+				""");
+
+		assertThat(admin.queryForObject("SELECT donor_phone FROM donations WHERE id = ?", String.class, landline))
+				.isEqualTo("022 2345 6789");
+		assertThat(admin.queryForObject("SELECT donor_phone FROM donations WHERE id = ?", String.class, foreign))
+				.isEqualTo("+1 555 0100");
+	}
+
+	/**
+	 * T-186 changes new counter gifts only. Whether to rewrite the rows already recorded is Rajeev's
+	 * decision, and this is the read-only query that sizes it, held here so that what goes in front of
+	 * him is a query that has been run rather than one that looks right. Per temple: (a) counter gifts
+	 * whose stored phone the rule would change, and (b) how many of those would newly match a volunteer
+	 * of that temple, which is the part that widens who can download a receipt.
+	 *
+	 * <p>Proven against these fixtures only. The real numbers need staging data, which no test reads.
+	 */
+	static final String BACKFILL_COUNT_SQL = """
+			WITH counter AS (
+			    SELECT d.tenant_id, d.donor_phone, d.status, d.voided_at, d.is_anonymous,
+			           regexp_replace(d.donor_phone, '%s', '', 'g') AS bare
+			    FROM donations d
+			    WHERE d.provider IS NULL
+			      AND d.donor_account_user_id IS NULL
+			      AND d.donor_phone IS NOT NULL
+			),
+			rewritten AS (
+			    SELECT c.*, '+91' || right(c.bare, 10) AS saved
+			    FROM counter c
+			    WHERE c.bare ~ '^(\\+91|91|0)?[6-9][0-9]{9}$'
+			      AND '+91' || right(c.bare, 10) <> c.donor_phone
+			)
+			SELECT t.id AS tenant_id, t.name AS temple,
+			       count(r.donor_phone) AS would_change,
+			       count(r.donor_phone) FILTER (
+			           WHERE r.status = 'COMPLETED' AND r.voided_at IS NULL AND r.is_anonymous = false
+			             AND r.bare <> r.saved
+			             AND EXISTS (SELECT 1 FROM users u
+			                         WHERE u.tenant_id = r.tenant_id AND u.role = 'VOLUNTEER'
+			                           AND u.status = 'ACTIVE' AND u.phone = r.saved)
+			       ) AS would_newly_match
+			FROM tenants t
+			LEFT JOIN rewritten r ON r.tenant_id = t.id
+			GROUP BY t.id, t.name
+			ORDER BY t.name
+			""";
+
+	/**
+	 * T-157's separators, {@code [\s\p{Z}\p{Pd}\p{Cf}]}, spelled out code point by code point for
+	 * PostgreSQL, whose regular expressions have no Unicode categories and whose {@code \s} follows the
+	 * database's locale. Checked against Java's own pattern over every code point below.
+	 */
+	static final String SQL_SEPARATORS = "[\\u0009-\\u000D\\u0020\\u002D\\u00A0\\u00AD\\u058A\\u05BE"
+			+ "\\u0600-\\u0605\\u061C\\u06DD\\u070F\\u0890-\\u0891\\u08E2\\u1400\\u1680\\u1806\\u180E"
+			+ "\\u2000-\\u2015\\u2028-\\u202F\\u205F-\\u2064\\u2066-\\u206F\\u2E17\\u2E1A\\u2E3A-\\u2E3B"
+			+ "\\u2E40\\u2E5D\\u3000\\u301C\\u3030\\u30A0\\uFE31-\\uFE32\\uFE58\\uFE63\\uFEFF\\uFF0D"
+			+ "\\uFFF9-\\uFFFB\\U00010EAD\\U000110BD\\U000110CD\\U00013430-\\U0001343F"
+			+ "\\U0001BCA0-\\U0001BCA3\\U0001D173-\\U0001D17A\\U000E0001\\U000E0020-\\U000E007F]";
+
+	@Test
+	@DisplayName("the backfill count query's separators are exactly T-157's, code point for code point (T-186)")
+	void backfillQuerySeparatorsMatchJava() {
+		Pattern java = Pattern.compile("[\\s\\p{Z}\\p{Pd}\\p{Cf}]");
+		TreeSet<Integer> expected = new TreeSet<>();
+		for (int cp = 1; cp <= 0x10FFFF; cp++) {
+			if ((cp < 0xD800 || cp > 0xDFFF) && java.matcher(new String(Character.toChars(cp))).matches()) {
+				expected.add(cp);
+			}
+		}
+		List<Integer> sql = admin.queryForList("""
+				SELECT cp FROM generate_series(1, 1114111) cp
+				WHERE (cp < 55296 OR cp > 57343) AND chr(cp) ~ ?
+				ORDER BY cp
+				""", Integer.class, SQL_SEPARATORS);
+		assertThat(sql).hasSize(expected.size()).containsExactlyElementsOf(expected);
+	}
+
+	@Test
+	@DisplayName("the backfill count query counts, per temple, the rows the rule would change and those that would newly match (T-186)")
+	void backfillCountQueryAgainstFixtures() {
+		UUID templeB = insertTenant("jagannath", "Sri Jagannath Temple");
+		volunteer(templeA, "uid-gopal", "+919876543210", "VOLUNTEER");
+		volunteer(templeA, "uid-office", "+919811122233", "TEMPLE_ADMIN");
+
+		// Temple A.
+		counterGift(templeA, "98765 43210", "COMPLETED", false);          // changes; newly matches Gopal
+		counterGift(templeA, "98765\u201343210", "COMPLETED", false);    // en dash; changes; newly matches
+		counterGift(templeA, "+91 98765 43210", "COMPLETED", false);      // changes; already matches today
+		counterGift(templeA, "+919876543210", "COMPLETED", false);        // already saved form; no change
+		counterGift(templeA, "022 2345 6789", "COMPLETED", false);        // Mumbai landline; no change
+		counterGift(templeA, "+91 (0) 98765 43210", "COMPLETED", false);  // no guessing; no change
+		counterGift(templeA, "09812345678", "COMPLETED", false);          // changes; nobody's phone
+		counterGift(templeA, "98111 22233", "COMPLETED", false);          // changes; an admin's phone only
+		counterGift(templeA, "98765 43210", "COMPLETED", true);           // changes; struck, never listed
+		admin.update("""
+				INSERT INTO donations (tenant_id, type, amount_inr, status, is_anonymous, donor_name, donor_phone,
+					payment_mode, provider, donated_on)
+				VALUES (?, 'ONE_TIME', 100, 'COMPLETED', false, 'Online', '98765 43210', 'UPI', 'razorpay', CURRENT_DATE)
+				""", templeA);                                               // online, not a counter gift
+		// Temple B: the same typing, but Gopal is not a volunteer there.
+		counterGift(templeB, "98765 43210", "COMPLETED", false);          // changes; matches nobody here
+
+		Map<UUID, Map<String, Object>> byTemple = new HashMap<>();
+		for (Map<String, Object> row : admin.queryForList(BACKFILL_COUNT_SQL.formatted(SQL_SEPARATORS))) {
+			byTemple.put((UUID) row.get("tenant_id"), row);
+		}
+		assertThat(((Number) byTemple.get(templeA).get("would_change")).longValue()).isEqualTo(6);
+		assertThat(((Number) byTemple.get(templeA).get("would_newly_match")).longValue()).isEqualTo(2);
+		assertThat(((Number) byTemple.get(templeB).get("would_change")).longValue()).isEqualTo(1);
+		assertThat(((Number) byTemple.get(templeB).get("would_newly_match")).longValue()).isZero();
+
+		// And (a) agrees with the rule the server applies, row by row, not only with the figures above.
+		for (UUID tenant : List.of(templeA, templeB)) {
+			long javaCount = admin.queryForList("""
+					SELECT donor_phone FROM donations
+					WHERE tenant_id = ? AND provider IS NULL AND donor_phone IS NOT NULL
+					""", String.class, tenant).stream()
+					.filter(phone -> !CounterPhone.normalise(phone).equals(phone))
+					.count();
+			assertThat(((Number) byTemple.get(tenant).get("would_change")).longValue()).isEqualTo(javaCount);
+		}
+	}
+
+	private void counterGift(UUID tenantId, String phone, String status, boolean voided) {
+		admin.update("""
+				INSERT INTO donations (tenant_id, type, amount_inr, status, is_anonymous, donor_name, donor_phone,
+					payment_mode, donated_on, voided_at, voided_by, void_reason)
+				VALUES (?, 'ONE_TIME', 100, ?, false, 'Govind Das', ?, 'CASH', CURRENT_DATE,
+					CASE WHEN ?::boolean THEN now() END,
+					CASE WHEN ?::boolean THEN (SELECT id FROM users WHERE tenant_id = ? AND role = 'TEMPLE_ADMIN' LIMIT 1) END,
+					CASE WHEN ?::boolean THEN 'Entered twice' END)
+				""", tenantId, status, phone, voided, voided, tenantId, voided);
+	}
+
+	private void volunteer(UUID tenantId, String uid, String phone, String role) {
+		admin.update("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, ?, 'Test Person', ?, ?, ?, 'ACTIVE')
+				""", tenantId, uid, uid + "@example.com", phone, role);
 	}
 
 	@Test

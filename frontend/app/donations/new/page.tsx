@@ -11,6 +11,7 @@ import { FocusScreen } from "@/components/ds/FocusScreen";
 import { HintedField } from "@/components/ds/InfoHint";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { FOOD_UNITS, money, todayIso, unitLabel } from "@/lib/format";
+import { normalizeIndianMobile } from "@/lib/phone";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -88,6 +89,11 @@ function NewDonationView() {
     // instead (T-172 enabled it), which hid `Form`'s sentences for a blank donor name or date too.
     if (!hasCash && !hasItems) return;
     const f = new FormData(event.currentTarget);
+    // The phone as it will be saved (T-186): "+91" and ten digits when what was typed can only be an
+    // Indian mobile, and exactly what was typed otherwise. The server applies the same rule and is the
+    // authority; it is worked out here too so the confirmation can say what was saved, and the office
+    // can catch a wrong number before the donor has walked away.
+    const donorPhone = anonymous ? "" : normalizeIndianMobile(String(f.get("donorPhone") ?? ""));
     setBusy(true);
     setError(null);
     try {
@@ -95,7 +101,7 @@ function NewDonationView() {
         {
           anonymous,
           donorName: anonymous ? null : String(f.get("donorName") ?? "").trim() || null,
-          donorPhone: anonymous ? null : String(f.get("donorPhone") ?? "").trim() || null,
+          donorPhone: donorPhone || null,
           donorEmail: anonymous ? null : String(f.get("donorEmail") ?? "").trim() || null,
           cashAmountInr: hasCash ? Number(cashAmount) : null,
           estimatedValueInr: hasCash ? null : numOrNull(String(f.get("estimatedValueInr") ?? "")),
@@ -128,10 +134,11 @@ function NewDonationView() {
       // here. Two copies of one rule is worth a note — if the server's ever changes, this must
       // change with it, or the banner starts lying in the other direction.
       const reachable =
-        !anonymous &&
-        (String(f.get("donorPhone") ?? "").trim() !== "" || String(f.get("donorEmail") ?? "").trim() !== "");
+        !anonymous && (donorPhone !== "" || String(f.get("donorEmail") ?? "").trim() !== "");
+      // The saved phone travels with the name, in its stored form, for the confirmation to read back.
       router.push(
-        `/donations?recorded=${encodeURIComponent(who)}${reachable ? "" : "&thanked=no"}`
+        `/donations?recorded=${encodeURIComponent(who)}${reachable ? "" : "&thanked=no"}` +
+          (donorPhone ? `&savedPhone=${encodeURIComponent(donorPhone)}` : "")
       );
     } catch (e) {
       setError(toApiError(e, "We couldn’t record that donation."));
