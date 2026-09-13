@@ -175,13 +175,15 @@ translated live on demand. **Still outstanding: why the print path is 5–10× f
 - **Remove the "Swap or edit" button and the Cancel button.** Cancel deletes a preparation with
   no confirmation, which is unacceptable; both must go.
 
-### P6 — Volunteer shortfall → post a shift · **NOT BUILT**
+### P6 — Volunteer shortfall → post a shift · **BUILT 2026-09-12 (T-155), not yet verified by Rajeev**
+*Built to Rajeev's 2026-09-12 description, and released to staging with wave 2; nobody has pressed it in a browser yet. "Ask for volunteers" shows only when fewer are rostered than the meal needs, and opens the Volunteers screen's own "Post a shift" form in a layer over the planner: title from the meal and day, capacity equal to the shortfall, end time the meal's ready-by, and the date fixed to the meal's day and read-only (his ruling). Posting closes the layer and leaves the planner on the same day.*
 When the crew a meal needs exceeds the staff working that day, show a link to create a
 volunteer shift request. It opens the "Post a shift" form as a layer over the planner, with the
 title derived from date and meal ("Lunch preparation on September 1 2026") and the date and
 capacity pre-filled. The admin completes it, posts, and lands back in the planner where they were.
 
-### P7 — Show an existing shift request · **NOT BUILT**
+### P7 — Show an existing shift request · **BUILT 2026-09-12 (T-155, T-158), not yet verified by Rajeev**
+*Built to Rajeev's 2026-09-12 description, and released to staging with wave 2; nobody has pressed it in a browser yet. A shift linked to the meal shows in place of the button as "0 of 3 signed up" and opens the full form in the same layer to edit, save or cancel, without leaving the planner. "Exists" means linked to that meal, not overlapping it by the clock. If a save moves a shift people signed up for, the warning shows inside the meal's card (his ruling). Editing the same shift on the Volunteers screen now keeps it on its meal.*
 "Who will run it" must indicate when a volunteer request already exists for that day and time,
 and let the admin open and edit it in a layer over the planner — view, edit and save, or close
 without changes — without leaving the planner.

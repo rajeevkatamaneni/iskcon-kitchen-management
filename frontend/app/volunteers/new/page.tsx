@@ -57,7 +57,7 @@ function NewShiftView() {
       }
     >
       {error && <ErrorNotice error={error} />}
-      <ShiftFields onSubmit={post} />
+      <ShiftFields editing={false} onSubmit={post} />
     </FocusScreen>
   );
 }

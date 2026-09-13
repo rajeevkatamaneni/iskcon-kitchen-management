@@ -11,6 +11,11 @@ import { crossesMidnight } from "@/lib/format";
  * <p>Both screens ask for exactly the same things, so they ask with the same markup. A shift that
  * could be created but not corrected is a shift whose only fix is cancelling it, which empties the
  * roster and makes every volunteer sign up again over a typo in the start time.
+ *
+ * <p>A third caller renders it too: the meal planner's layer (`components/planner/ShiftLayer.tsx`,
+ * T-155), which opens this same form over the day rather than a cut-down copy of it. DESIGN_SYSTEM
+ * v1.8 §4 asks for exactly that, and the copy it replaced had already drifted — it never learned to
+ * say "Ends the next day".
  */
 
 /** Named so a header button outside the form can submit it. */
@@ -18,12 +23,42 @@ export const SHIFT_FORM = "shift-form";
 
 const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
+/**
+ * What the boxes open on. A whole `ShiftView` fits, which is what the edit screen hands in; so does
+ * the handful of facts the meal planner already knows about a shift nobody has posted yet (T-155).
+ */
+export type ShiftFormValues = Partial<
+  Pick<
+    ShiftView,
+    "title" | "description" | "shiftDate" | "startTime" | "endTime" | "location" | "capacity" | "reminderOffsetsMinutes"
+  >
+>;
+
 export function ShiftFields({
   shift,
+  editing,
+  fixedDate,
   onSubmit,
 }: {
-  /** The shift being corrected, or nothing when one is being posted. */
-  shift?: ShiftView;
+  /**
+   * What the boxes open on: the shift being corrected, or what is already known about one being
+   * posted, or nothing at all on a blank form.
+   */
+  shift?: ShiftFormValues;
+  /**
+   * Whether this shift already exists. Separate from `shift` on purpose, and required so no caller
+   * can leave it to be guessed (T-155): the planner opens this form on a *new* shift with its date,
+   * title, size and end time already filled in, and the form used to decide what to call itself from
+   * whether it had values. So a prefilled new shift announced itself to a screen reader as "Edit a
+   * shift". Having values and having been saved are two different facts.
+   */
+  editing: boolean;
+  /**
+   * A date the shift is fixed to, shown and sent but not editable. Only the meal planner's layer
+   * passes it (T-155, Rajeev 2026-09-12: the date "Should be restricted to the day of the meal plan
+   * and read only"). The volunteers screens leave it out and keep an editable date.
+   */
+  fixedDate?: string;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
   // The two times are held in state for one reason: the form has to say, while somebody is typing,
@@ -53,7 +88,7 @@ export function ShiftFields({
     <form
       id={SHIFT_FORM}
       className="grid grid-cols-2 gap-4"
-      aria-label={shift ? "Edit a shift" : "Post a shift"}
+      aria-label={editing ? "Edit a shift" : "Post a shift"}
       onSubmit={(event) => {
         // Held here rather than in each of the two screens that use this form, so neither can
         // forget it. A submit blocked here never reaches the API, so nothing is saved and nothing
@@ -71,7 +106,29 @@ export function ShiftFields({
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Date</span>
-        <input name="shiftDate" type="date" required defaultValue={shift?.shiftDate ?? ""} className={FIELD} />
+        {/* Fixed, it is `readOnly` and never `disabled`: a disabled input is left out of the form's
+            data, so the save would go without a date, and a disabled box cannot be focused, so a
+            keyboard or screen-reader user could not even reach it to hear what it holds. Read-only
+            stays in the tab order and is announced as read-only; the recessed fill and the line
+            under it are how a sighted reader tells, and that line is also its description. */}
+        {fixedDate ? (
+          <>
+            <input
+              name="shiftDate"
+              type="date"
+              required
+              readOnly
+              value={fixedDate}
+              aria-describedby="shift-date-fixed"
+              className={`${FIELD} cursor-default bg-sunken text-ink-secondary`}
+            />
+            <span id="shift-date-fixed" className="pl-field-inset text-ink-muted">
+              <i aria-hidden="true" className="ti ti-lock" /> The day of the meal. It cannot be changed here.
+            </span>
+          </>
+        ) : (
+          <input name="shiftDate" type="date" required defaultValue={shift?.shiftDate ?? ""} className={FIELD} />
+        )}
       </label>
       {/* No line under this one. "How many volunteers are needed" is the word *Capacity* said
           again, and a shift has no other capacity to be confused with. */}
@@ -160,6 +217,18 @@ export function moved(before: ShiftView, after: ShiftInput): boolean {
     hhmm(before.startTime) !== after.startTime.slice(0, 5) ||
     hhmm(before.endTime) !== after.endTime.slice(0, 5)
   );
+}
+
+/**
+ * Should the person saving be warned that volunteers were not told? When the save moved the shift
+ * and somebody is already signed up to it: their reminders move with the shift and nobody tells them.
+ *
+ * <p>One rule for every place a shift is corrected — the edit screen and the planner's layer — so
+ * the two cannot come to warn about different things (T-155; Rajeev 2026-09-12: "They need to know
+ * what their actions are resulting in. Cant be silent about it.").
+ */
+export function movedUnderRoster(before: ShiftView, after: ShiftInput): boolean {
+  return moved(before, after) && before.signedUpCount > 0;
 }
 
 /** The API sends `HH:mm:ss`; a time input wants `HH:mm`. */

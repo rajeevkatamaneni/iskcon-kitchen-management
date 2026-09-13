@@ -8,10 +8,10 @@ import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
-import { api, toApiError, type ApiError } from "@/lib/api";
+import { api, toApiError, type ApiError, type ShiftInput } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { ShiftFields, SHIFT_FORM, moved, readShiftForm } from "../../shift-form";
+import { ShiftFields, SHIFT_FORM, movedUnderRoster, readShiftForm } from "../../shift-form";
 
 /**
  * Correct a shift — the same eight fields as posting one, so the same shape of screen.
@@ -42,12 +42,28 @@ function EditShiftView() {
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!shift) return;
-    const input = readShiftForm(new FormData(event.currentTarget));
+    const input: ShiftInput = {
+      ...readShiftForm(new FormData(event.currentTarget)),
+      // The meal link (D-14), carried through as it is stored, because this screen has no box for
+      // it and `PUT /shifts/{id}` replaces the whole shift: an update without the three fields takes
+      // the link off (`ShiftMealLinkIT.anEditCanUnlinkAShift`). Without this, retitling a shift
+      // raised from the planner quietly stopped it counting toward its meal and dropped it from the
+      // planner (T-158).
+      //
+      // Sent as the stored values, never derived from the form. So an unlinked shift sends three
+      // nulls and stays unlinked, which is exactly what the server's all-or-nothing check accepts;
+      // and a shift moved to another date keeps its meal, as the planner's own layer does (T-155) —
+      // a crew for Sunday's feast can be wanted on Saturday, and the link is what says so. Taking a
+      // link off is not something this screen offers; the API still allows it.
+      mealDate: shift.mealDate ?? null,
+      mealKind: shift.mealKind ?? null,
+      mealEventName: shift.mealEventName ?? null,
+    };
     setBusy(true);
     setError(null);
     try {
       await api.updateShift(shift.id, input, await getToken());
-      const warn = moved(shift, input) && shift.signedUpCount > 0 ? `&moved=${shift.id}` : "";
+      const warn = movedUnderRoster(shift, input) ? `&moved=${shift.id}` : "";
       router.push(`/volunteers?saved=${encodeURIComponent(input.title)}${warn}`);
     } catch (e) {
       setError(toApiError(e, "We couldn’t save that change."));
@@ -77,7 +93,7 @@ function EditShiftView() {
       ) : loadError ? (
         <ErrorNotice error={loadError} />
       ) : shift ? (
-        <ShiftFields shift={shift} onSubmit={save} />
+        <ShiftFields shift={shift} editing onSubmit={save} />
       ) : null}
     </FocusScreen>
   );

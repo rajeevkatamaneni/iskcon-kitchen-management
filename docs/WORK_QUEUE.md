@@ -108,6 +108,9 @@ the UAT Docket artifact (ask Rajeev for the link, or `/artifacts` in Claude Code
    be seen there afterwards. Confirmed never built — `createShift` has never appeared in a planner
    file in the whole history. The overlay Rajeev remembers was on the Volunteers page and became a
    screen on 2026-08-21 (`b84dcd0`) under his own four-fields-becomes-a-screen rule.
+   **Built 2026-09-12 as T-155 and T-158, released to staging with wave 2, not yet verified by Rajeev.** The
+   planner's "Ask for volunteers" opens the real shift form in a layer, and the shift then shows
+   there and opens to edit. Proofs in `docs/work/proof/T-155.md` and `T-158.md`.
 
 **Decided and closed on 2026-09-06/07, so nobody re-opens them:**
 

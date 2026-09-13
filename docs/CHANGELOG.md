@@ -1182,6 +1182,41 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-12 — The planner's "Ask for volunteers" opens the real shift form, and editing a shift keeps its meal (tasks T-155, T-158)
+
+Frontend only: no backend file, no migration (the schema stays `V127`), no new error code. Released to
+staging together with wave 2. **Not driven in a browser by anyone yet, and not seen working
+by Rajeev.** This builds `docs/OUTSTANDING_BUILD_LIST.md` P6 and P7 and `docs/WORK_QUEUE.md` §3 item 6.
+
+**"Ask for volunteers" opens the volunteers' own shift form in a layer over the planner** (T-155). It
+replaces T-019's three-field copy. The layer carries the volunteers screen's header ("Post a shift" or
+"Edit a shift", the meal and day under it, Cancel and the commit button top right). A new shift opens
+on the derived title, the planner's day, capacity equal to the shortfall and the meal's ready-by as
+the end time. Saving sends the meal link on create and on edit, closes the layer and stays on the
+day. The button then gives way to the shift itself, "0 of 3 signed up", which opens the same layer as
+an edit. A shift already linked to the meal shows the same way. The button now appears only when
+fewer are rostered than the meal needs, using the same rule as the crew count's warning tone, so a
+"6 of 6" meal no longer offers it. An overnight shift shows the form's "Ends the next day" line, and a
+prefilled new shift is labelled "Post a shift", not "Edit a shift".
+
+**Rajeev's two rulings on the layer, 2026-09-12.** The date is fixed to the meal's day in the layer
+(*"Should be restricted to the day of the meal plan and read only."*): the box is read-only rather
+than disabled, so it is still announced, reachable and submitted, with the line "The day of the meal.
+It cannot be changed here." The Volunteers screens keep an editable date. And the layer now warns when
+a save moves a shift people have signed up for (*"Cant be silent about it."*): the Volunteers list's
+banner moved into a shared `moved-notice.tsx` and shows inside the meal's card on the planner, with
+one shared rule deciding when. He kept the "0 of 3 signed up" opener and the "Post a shift" heading.
+
+**Saving on the Volunteers edit screen no longer takes a shift off its meal** (T-158). The screen sent
+only the form's fields, and an update without the link unlinks, so a planner shift edited there
+stopped counting toward its meal and vanished from the planner. It now sends the stored link back. The
+API's own unlink is unchanged (`ShiftMealLinkIT` 11/11).
+
+**Not done.** No screen can take a meal link off a shift; whether to add one is Rajeev's decision.
+On the planner only the times can change, so the warning's "That shift moved" may read as moved to
+another day; the wording was kept exact. Proofs, with negative controls, are in
+`docs/work/proof/T-155.md` and `T-158.md`.
+
 ### 2026-09-12 — Wave 2: phone numbers with spaces are accepted, a form button no longer submits by accident, and the unit refusal names the ingredient on screen (tasks T-154, T-156, T-157)
 
 Three tasks in one commit. Frontend and request-record changes only: no migration (the schema stays

@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { MovedNotice } from "./moved-notice";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -115,15 +116,7 @@ function VolunteerShiftsView() {
 
           {movedShift && (
             <div className="mb-6">
-              <InlineNotice tone="warning">
-                That shift moved, and the {movedShift.signedUpCount} volunteer
-                {movedShift.signedUpCount === 1 ? "" : "s"} already signed up have not been told.
-                Their reminders now fire at the new time.{" "}
-                <Link href={`/volunteers/${movedShift.id}`} className="underline">
-                  Send them an update
-                </Link>
-                .
-              </InlineNotice>
+              <MovedNotice shift={movedShift} />
             </div>
           )}
 

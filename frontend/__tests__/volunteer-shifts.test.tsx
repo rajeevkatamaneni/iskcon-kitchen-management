@@ -210,6 +210,16 @@ describe("posting a shift", () => {
     expect(createShiftMock.mock.calls[0][0].endTime).toBe("02:00");
   });
 
+  it("keeps the date editable: only the planner's layer fixes it (T-155)", () => {
+    render(<NewShiftPage />);
+    const date = screen
+      .getByRole("form", { name: /post a shift/i })
+      .querySelector('input[name="shiftDate"]') as HTMLInputElement;
+    expect(date.readOnly).toBe(false);
+    fireEvent.change(date, { target: { value: "2026-12-07" } });
+    expect(date.value).toBe("2026-12-07");
+  });
+
   it("offers Cancel rather than a back-link", () => {
     render(<NewShiftPage />);
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/volunteers");
@@ -237,6 +247,17 @@ describe("correcting a shift", () => {
     expect(form.querySelector('input[name="capacity"]')).toHaveValue(5);
     // Offsets are stored in minutes and edited in hours.
     expect(form.querySelector('input[name="reminderHours"]')).toHaveValue("24");
+  });
+
+  it("keeps the date editable when correcting a shift (T-155)", () => {
+    render(<EditShiftPage />);
+    const date = screen
+      .getByRole("form", { name: /edit a shift/i })
+      .querySelector('input[name="shiftDate"]') as HTMLInputElement;
+    expect(date.readOnly).toBe(false);
+    expect(date.value).toBe("2026-12-06");
+    fireEvent.change(date, { target: { value: "2026-12-07" } });
+    expect(date.value).toBe("2026-12-07");
   });
 
   it("saves through updateShift, in minutes", async () => {

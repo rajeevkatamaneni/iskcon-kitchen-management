@@ -12,6 +12,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { BusyPot } from "@/components/Loading";
 import { RecipePeek } from "@/components/RecipePeek";
 import { ShiftLayer } from "@/components/planner/ShiftLayer";
+import { MovedNotice } from "@/app/volunteers/moved-notice";
 import {
   api,
   toApiError,
@@ -80,6 +81,10 @@ export function MealServices({
   const [raising, setRaising] = useState<{ meal: MealServiceView; shift: ShiftView | null } | null>(
     null
   );
+  // The shift a save in that layer just moved under the volunteers signed up to it, if any. Held
+  // here rather than in the layer, because the layer has closed by the time the warning is needed;
+  // the meal the shift belongs to shows it. Replaced by the next save, moved or not.
+  const [movedShiftId, setMovedShiftId] = useState<string | null>(null);
   const { data, loading } = useAuthedQuery(
     useCallback(
       (t?: string) => {
@@ -174,6 +179,7 @@ export function MealServices({
           crew={(crew ?? []).find((c) => c.mealKind === meal.mealKind) ?? null}
           shifts={(shifts ?? []).filter((s) => isFor(s, meal))}
           onRaiseShift={(shift) => setRaising({ meal, shift })}
+          movedShiftId={movedShiftId}
           sufficiency={sufficiency}
           recipes={recipes}
           readOnly={readOnly}
@@ -203,8 +209,9 @@ export function MealServices({
           )}
           shift={raising.shift}
           onClose={() => setRaising(null)}
-          onSaved={() => {
+          onSaved={(movedId) => {
             setRaising(null);
+            setMovedShiftId(movedId);
             changed();
           }}
         />
@@ -287,6 +294,7 @@ function MealBlock({
   crew,
   shifts,
   onRaiseShift,
+  movedShiftId,
   sufficiency,
   recipes,
   readOnly,
@@ -301,6 +309,8 @@ function MealBlock({
   shifts: ShiftView[];
   /** Raise a shift for this meal, or open the one already raised. Null asks for a new one. */
   onRaiseShift: (shift: ShiftView | null) => void;
+  /** A shift the planner's layer just moved under a roster. Warned about here if it is this meal's. */
+  movedShiftId: string | null;
   sufficiency: Map<string, MealSufficiency>;
   recipes: RecipeSummary[];
   readOnly: boolean;
@@ -339,6 +349,22 @@ function MealBlock({
     appUser?.role === "TEMPLE_ADMIN" ||
     appUser?.role === "KITCHEN_MANAGER" ||
     appUser?.role === "KITCHEN_STAFF";
+
+  /**
+   * Whether to offer "Ask for volunteers" on this meal (T-155): a reader who may raise a shift, on a
+   * day that can still be changed, for a meal that is short of hands and has no shift raised for it.
+   *
+   * <p>"Short" is the crew pebble's own test, called rather than restated, so the offer and the
+   * number beside it cannot disagree. Before T-155 this checked only that a crew size had been set,
+   * and staging showed the offer beside a meal reading "6 of 6" — asking for volunteers nobody
+   * needs. A meal with a shift already raised shows that shift instead, full or not, so it can
+   * still be opened.
+   */
+  const offerShift = canRaiseShift && !readOnly && shifts.length === 0 && shortOfCrew(meal.crewRequired, crew);
+
+  // Found among this meal's own shifts, as re-read after the save, which is where the count comes
+  // from — the same way the volunteers list finds the shift it warns about.
+  const movedShift = movedShiftId ? shifts.find((s) => s.id === movedShiftId) ?? null : null;
 
   // The card is two halves with two readers (build brief Q3). The worksheet is always English and
   // goes back to the office; the recipes are optional, and print in a language chosen here for the
@@ -436,8 +462,14 @@ function MealBlock({
                 onOpen={readOnly || !canRaiseShift ? null : () => onRaiseShift(shift)}
               />
             ))}
-            {canRaiseShift && !readOnly && meal.crewRequired != null && shifts.length === 0 && (
-              <Button size="sm" variant="ghost" icon="hand-stop" onClick={() => onRaiseShift(null)}>
+            {offerShift && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="hand-stop"
+                aria-haspopup="dialog"
+                onClick={() => onRaiseShift(null)}
+              >
                 Ask for volunteers
               </Button>
             )}
@@ -516,6 +548,16 @@ function MealBlock({
           </span>
         </div>
       </header>
+
+      {/* The warning the volunteers edit screen gives, in the same words, after the planner's layer
+          moved a shift people signed up for (T-155). Directly under this meal's header, because that
+          is where the reader just pressed the shift, where the layer closes back to, and it names
+          the meal the moved shift belongs to without having to say so. */}
+      {movedShift && (
+        <div className="mt-4">
+          <MovedNotice shift={movedShift} />
+        </div>
+      )}
 
       {/* Only an event repeats, and only one that is still to be cooked. There is nothing to say
           about repeating a Lunch: the temple cooks one every day of the year already. */}
@@ -1189,7 +1231,7 @@ function CrewPebble({
 }) {
   if (required == null) return null;
   const rostered = crew?.rostered ?? 0;
-  const short = rostered < required;
+  const short = shortOfCrew(required, crew);
 
   return (
     // The breakdown behind the number lives in an "i" rather than a native `title`, which is what it
@@ -1232,7 +1274,25 @@ function CrewPebble({
 }
 
 /**
+ * Whether a meal has fewer hands rostered than it takes — the warning tone on the crew pebble and the
+ * condition for offering "Ask for volunteers" (T-155), in one place so the two cannot disagree.
+ *
+ * <p>False where nobody has said how many the meal takes, for the reason the pebble gives: null is
+ * not zero. A crew row that is missing — nothing counted yet, or the count refused — reads as nobody
+ * rostered, which is what the pebble has always drawn.
+ */
+function shortOfCrew(required: number | null, crew: MealCrewView | null): boolean {
+  return required != null && (crew?.rostered ?? 0) < required;
+}
+
+/**
  * A shift already raised for this meal, and its sign-ups — "2 of 5 signed up" (T-019).
+ *
+ * <p>Kept, not replaced, by T-155. Rajeev asked that once a shift is posted from the planner, <em>"the
+ * 'Ask for volunteers' button will be replaed by Hyper link text OR a button that lets the user to
+ * view and edit the Volenteer shift"</em>. This already was that button, and it carries the one figure a planner wants from
+ * the shift without opening it. It opens the shift in the planner's layer, on the volunteers' own
+ * full form.
  *
  * <p>It sits beside the crew pebble because it is the answer to it: the pebble says a meal is three
  * hands short, and this says five were asked for and two have come forward. Read together they are
@@ -1266,6 +1326,9 @@ function ShiftPebble({ shift, onOpen }: { shift: ShiftView; onOpen: (() => void)
     <button
       type="button"
       title={shift.title}
+      // It opens a layer rather than going anywhere, and a screen reader should say so before the
+      // press rather than after.
+      aria-haspopup="dialog"
       onClick={onOpen}
       className={`${skin} hover:bg-raised`}
     >

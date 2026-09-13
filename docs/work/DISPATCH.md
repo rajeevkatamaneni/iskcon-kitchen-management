@@ -26,6 +26,23 @@ Three, in his words. Recorded by the work manager at dispatch.
    A removal task, under README's removal-wave rules. **Built as T-153.** If a locked document
    promises the endpoint, the builder stops and reports rather than editing it.
 
+4. **The planner's shift layer (T-155), four points.** Relayed by the main session, in his words:
+   > *"The shift opens from a '0 of 3 signed up' button : That works for me."*
+
+   > *"The layer's heading : Sure, it says what it is straightup."*
+
+   > *"The date can be changed inside the layer : Should be restricted to the day of the meal plan and read only."*
+
+   > *"No warning when moving a shift people already signed up for : Yes warning. They need to know what their actions are resulting in. Cant be silent about it."*
+
+   The first two keep what was built. **The last two change it before release**, and T-155 was reopened for them
+   (see its row). The Volunteers screens keep an editable date; only the layer locks it.
+
+5. **Not a ruling yet — a decision to put to Rajeev later, and not to build:** no screen can take a meal
+   link off a shift (found by T-158). Anyone who links a shift to the wrong meal cannot correct it in the
+   app; only an API update with the link left out unlinks. Whether to add an "unlink from this meal"
+   control is his call.
+
 ## ▶ WAVE 2 (2026-09-12) — two halves, 2a then 2b, because the Button sweep reaches the other two tasks' files
 
 **State at dispatch:** HEAD `2d748de`, tree clean, no locks held, Gradle daemon stopped. Staging
@@ -47,7 +64,7 @@ shape. A builder that needs it stops.
 **Merged-tree checks for wave 2**, run by the work manager after T-156 landed and before T-155 was dispatched:
 - **Frontend, all wave-2 files final, no builder in the tree:** `tsc --noEmit` clean; `vitest run` **127 files, 1,518 tests, all passing** (up from 124 / 1,488 in wave 1); `eslint . --max-warnings=0` clean. Log: `scratchpad/merged-frontend-wave2.log`.
 - **Backend:** T-157's eight classes plus `ErrorCodeTest`, `--rerun-tasks`, through the lock, daemon stopped before and after. Result: **933 passed, 0 failed, 0 skipped** (`PhoneNormalisationIT` 84, `PhoneValidationIT` 9, `WhatsAppTestSendIT` 8, `StaffEmploymentIT` 17, `MembershipIT` 9, `TenantProvisioningIT` 13, `VendorIT` 19, `VendorWithoutPhoneIT` 7, `ErrorCodeTest` 767). Log: `scratchpad/merged-backend-wave2.log`.
-- **Wave 2 (T-154, T-156, T-157) is proven and not released.** Every changed file in `git status` belongs to one of the three contracts or to this ledger. Nothing committed. T-155 was dispatched after these runs and its files are not part of wave 2's release.
+- **Wave 2 (T-154, T-156, T-157) was committed by the release agent as `63b02de`; the release lock freed 2026-09-12.** Before that commit it was proven and not released. Every changed file in `git status` belongs to one of the three contracts or to this ledger. Nothing committed. T-155 was dispatched after these runs and its files are not part of wave 2's release.
 
 ### T-154 — see its block under wave 1; placed in **2a** and dispatched 2026-09-12.
 
@@ -107,7 +124,9 @@ shape. A builder that needs it stops.
 - **reservations:** none (`KMS-400003` exists).
 - **proof:** `docs/work/proof/T-157.md`
 
-## ▶ WAVE 2c — T-155, approved 2026-09-12, dispatched after T-156
+## ▶ WAVE 2c — T-155 (approved, reopened on Rajeev's rulings) and T-158, released 2026-09-12 with wave 2
+
+**Released by the release agent, 2026-09-12:** T-155 and T-158 committed together, gated on a clean archive of HEAD, pushed, and deployed to staging along with wave 2 (`63b02de`). Neither has been driven in a browser or seen by Rajeev.
 
 ### T-155 — The planner's "Ask for volunteers" opens the real shift form in a layer
 
@@ -115,7 +134,7 @@ shape. A builder that needs it stops.
   > *"Clicking htat button open the EXACT same form that create a volenteer shit would open. Only difference here in this case is, we show the form in a layer on top of the crate meal plan screen and once the user saves, it just closes bringing the user back to the meal planner and the 'Ask for volunteers' button will be replaed by Hyper link text OR a button that lets the user to view and edit the Volenteer shift. In case there is already an existing shift that covers this meal, then show that instead of the 'Ask for volunteers' button and the meal planner can view it and edit it too."*
 - **approved:** Rajeev, 2026-09-12, relayed by the main session: *"The planner rebuild: Yes please. Proceed."*
 - **wave:** 2c — after T-156, because T-156's contract holds every `ds/Button` importer (including `ShiftLayer.tsx`) and all of `frontend/__tests__/`, which this task needs.
-- **state:** **building** (dispatched 2026-09-12, after T-156 was proven and the wave-2 frontend merged run was green)
+- **state:** **proven** 2026-09-12, reopen included. **Reopen result:** (1) `ShiftFields` takes an optional `fixedDate`, passed only by `ShiftLayer` (the meal's day, new and edit); the box is `readOnly`, not `disabled`, so it stays in the tab order, is announced as read-only, and still submits `shiftDate`; a line under it reads "The day of the meal. It cannot be changed here." with a lock icon (wording the builder's, Rajeev's to change). The volunteers new and edit screens keep an editable date; `new/page.tsx` is byte-identical. (2) `movedUnderRoster(before, after)` = `moved(...) && signedUpCount > 0` in `shift-form.tsx`; the banner moved verbatim into `app/volunteers/moved-notice.tsx`; the edit page, the list page and the planner use both. **On the planner the warning shows inside the meal's own card, under its header row, beside the shift button**, where the layer closes back to; it stays until the next save. `tsc` clean; planner-shift 19, volunteer-shifts 18, T-158's test 5 = 42/42. Controls on `ShiftLayer.tsx`: date editable again 3 red; warning removed 1 red (the two no-warning tests stay green because they assert an absence); restores by `cmp`. T-158's lines in the edit page intact (the diff is the import and the `warn` line only), and its test file is identical. **For Rajeev:** the wording stays exact, but on the planner only the times can change, so "That shift moved" may read as moved to another day. **Reopened** on Rajeev's rulings (item 4 at the top of this file). **First pass proven 2026-09-12:** the layer renders `ShiftFields` itself, not a copy; saving sends the meal link on both create and edit, closes, stays on the day; the shift then shows as the "0 of 3 signed up" button, which opens the full form as an edit; a shift already linked to the meal shows instead of the button. The three defects fixed: the overnight line "Ends the next day — this shift runs through midnight" shows in the layer; the button shows only when fewer are rostered than needed (one `shortOfCrew` rule, shared with `CrewPebble`); `ShiftFields` takes a required `editing` flag, so a prefilled new shift reads "Post a shift". `tsc` clean, 7 granted files 114/114, full vitest 127 / 1,524, ESLint clean. Controls: old offer rule 1 red, old label 1 red, cut-down form in the layer 3 red; restores by `cmp`. No mockup exists. **Reopened for two changes, sent back to the same builder with a widened contract (ownership checked: no live builder, T-158 finished):** (1) in the layer only, the date is the meal's day and read-only, for new and edit, still submitted as `shiftDate`; (2) the layer gives the edit screen's warning when a save moves a shift with signups — the condition (`moved(...) && signedUpCount > 0`) moves into one shared helper in `shift-form.tsx`, and the list page's banner ("That shift moved, and the N volunteer(s) already signed up have not been told.", `app/volunteers/page.tsx:116-125`) into a new shared `app/volunteers/moved-notice.tsx`, used by the edit page, the list page and the planner. Widened paths: `app/volunteers/[id]/edit/page.tsx` (the `warn` line and import only, keeping T-158's fix), `app/volunteers/page.tsx` (banner swap only), `app/volunteers/moved-notice.tsx` *(new)*, `__tests__/volunteer-shifts.test.tsx`; `__tests__/shift-edit-keeps-meal-link.test.tsx` run, never edited. One negative control per change. Snapshots from the current files, never HEAD; artefacts `control-T-155b.*`. The work manager re-runs the merged frontend check over T-155 and T-158 after it lands.
 - **what:** Replace T-019's three-field `ShiftLayer` with the full shift form from
   `app/volunteers/shift-form.tsx`, shown as a layer over the planner. Saving closes the layer onto the
   same day; the button is replaced by a link or button that opens the shift in the same layer to view
@@ -141,6 +160,16 @@ shape. A builder that needs it stops.
   tests (existing, granted): `planner.test.tsx`, `planner-shift.test.tsx`, `planner-day-routes.test.tsx`, `meal-recording.test.tsx`,
   `meal-correction.test.tsx`, `volunteer-shifts.test.tsx`, `crew-pebble.test.tsx` (all under `frontend/__tests__/`).
 - **proof:** —
+
+### T-158 — The volunteers edit screen drops a shift's meal link on save
+
+- **source:** found by T-155's builder, 2026-09-12 · dispatched on the main session's instruction to ship with T-155, because T-155 sends people from the planner to full shifts.
+- **wave:** 2c, after T-155's first pass; built on T-155's uncommitted changes.
+- **state:** **proven** 2026-09-12. The edit page's save now adds the stored `mealDate`, `mealKind`, `mealEventName` (each `?? null`) to `readShiftForm`'s fields; `ShiftView` already carried them, so `api.ts` did not change. **Who unlinks:** no screen. `PUT /shifts/{id}` rewrites every field, and the server comment calls an update without the link "the only way to undo a link that was made in error"; `ShiftMealLinkIT.anEditCanUnlinkAShift` pins it and is unchanged. The only `updateShift` callers are this page and `ShiftLayer.tsx`. An unlinked shift sends three explicit nulls, the one no-link shape `requireWholeMealLink` accepts. A shift whose date is moved on the edit screen stays linked to its original meal, matching the planner layer (taste, for Rajeev). `tsc` clean; the new file plus the two shift test files 35/35; `ShiftMealLinkIT` 11/11 with `--rerun-tasks`; no backend file changed. Control, fix removed: 5 of 5 new tests red (three are the defect; two pin the null shape, since the old page's absent keys also meant unlinked); restore by `cmp`. T-155's line in the edit page intact. **Merged frontend run over T-155 and T-158 (first pass), work manager:** `tsc` clean, vitest **128 files / 1,529**, ESLint clean. Log: `scratchpad/merged-frontend-T155-T158.log`. **Re-run after T-155's reopen landed, no builder in the tree:** `tsc` clean, vitest **128 files / 1,536**, ESLint clean. Log: `scratchpad/merged-frontend-T155b-T158.log`. **T-155 and T-158 are proven together and not released.** Files: `components/planner/ShiftLayer.tsx`, `components/planner/MealServices.tsx`, `app/volunteers/shift-form.tsx`, `app/volunteers/[id]/edit/page.tsx`, `app/volunteers/page.tsx`, `app/volunteers/moved-notice.tsx` *(new)*, `__tests__/planner-shift.test.tsx`, `__tests__/volunteer-shifts.test.tsx`, `__tests__/shift-edit-keeps-meal-link.test.tsx` *(new)*, and the two proofs. `app/volunteers/new/page.tsx` shows as modified: T-155's first-pass one-line `editing={false}`. **Follow-ups:** the decision on an unlink control (item 5 at the top); `ShiftLayer.tsx` sends the planner day as `mealDate` rather than the shift's stored one, which is harmless today because they are always equal.
+- **what:** Saving on `/volunteers/[id]/edit` sent the eight form fields only, so an update without the link unlinked the shift, and a planner shift edited there stopped counting toward its meal and disappeared from the planner. Keep the link on an ordinary edit, keep the API's unlink behaviour exactly as it is, and establish who legitimately unlinks.
+- **paths:** `frontend/app/volunteers/[id]/edit/page.tsx` · `frontend/__tests__/shift-edit-keeps-meal-link.test.tsx` *(new)* · `volunteer-shifts.test.tsx`, `planner-shift.test.tsx` (granted, unchanged) · `shift-form.tsx` (granted, unchanged) · backend read-only.
+- **reservations:** none.
+- **proof:** `docs/work/proof/T-158.md`
 
 ## 🔎 WAVE 1 — DRIVEN ON STAGING 2026-09-12, by the main session, as the Temple Admin (`ikms.temple-admin.1`)
 
