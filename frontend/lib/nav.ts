@@ -80,6 +80,9 @@ const GROUPS: NavGroup[] = [
       // king's ransom and their service is the donation. So the page guard refuses them too; this
       // row and `app/donate/page.tsx` carry the same list, which is nav.ts's own rule.
       { href: "/donate", label: "Donate", icon: "heart-handshake", roles: [VOLUNTEER] },
+      // Beside Donate (T-179): the gifts that are theirs and the receipt for each one. The temple's "send
+      // receipt" stays as the fallback, not the default (Rajeev, 2026-09-13).
+      { href: "/my-donations", label: "My donations", icon: "receipt", roles: [VOLUNTEER] },
     ],
   },
   {

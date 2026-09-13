@@ -24,7 +24,7 @@ describe("navForRole", () => {
   it("gives a volunteer their seva and their giving, and nothing of the kitchen's", () => {
     // The kitchen's donors are its volunteers, not strangers: the same person serves and gives, so
     // giving belongs in their menu rather than behind a link somebody has to send them.
-    expect(hrefsFor("VOLUNTEER")).toEqual(["/my-shifts", "/shifts", "/donate"]);
+    expect(hrefsFor("VOLUNTEER")).toEqual(["/my-shifts", "/shifts", "/donate", "/my-donations"]);
   });
 
   it("gives kitchen staff the kitchen menu but not the leadership-only pages", () => {

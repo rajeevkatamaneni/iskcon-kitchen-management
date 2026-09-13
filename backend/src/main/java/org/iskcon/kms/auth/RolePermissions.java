@@ -152,7 +152,9 @@ public final class RolePermissions {
 			User.Role.VOLUNTEER,
 			EnumSet.of(
 					VIEW_OWN_SHIFTS,
-					SIGN_UP_FOR_SHIFTS));
+					SIGN_UP_FOR_SHIFTS,
+					// Their own gifts and receipts, beside Donate (T-179).
+					VIEW_OWN_DONATIONS));
 
 	/**
 	 * What someone verified by Firebase may do before they belong to any temple. Deliberately one

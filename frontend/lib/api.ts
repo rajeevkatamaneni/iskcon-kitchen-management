@@ -375,6 +375,21 @@ export interface HealthStatus {
 }
 
 /** Platform-wide notification-send figures for the Super-Admin Operations page. */
+/** One successful gift that belongs to the signed-in person (T-179). */
+export interface MyDonation {
+  id: string;
+  /** "MONEY" or "GOODS". */
+  kind: string;
+  /** The day the gift was received. */
+  receivedOn: string;
+  /** Rupees for a money gift; null for goods. */
+  amount: number | null;
+  /** Plain words, e.g. "Online donation" or "Rice, 25 Kg". */
+  description: string;
+  /** Null until the temple has issued a receipt. */
+  receiptNumber: string | null;
+}
+
 /** One WhatsApp template in the platform catalogue (T-177). Read-only; no temple data. */
 export interface WhatsAppTemplateCatalogueEntry {
   /** Meta's template name, e.g. `shift_reminder`. */
@@ -6069,6 +6084,25 @@ export const api = {
       { method: "GET", token }
     );
     return document ?? null;
+  },
+
+  /** The signed-in person's own successful gifts (VIEW_OWN_DONATIONS, T-179). */
+  myDonations: (token?: string) => request<MyDonation[]>("/api/v1/my-donations", { method: "GET", token }),
+
+  /** The receipt for one of the person's own gifts, fetched with the token, never a plain link (T-179). */
+  downloadMyDonationReceipt: async (donationId: string, token?: string): Promise<Blob> => {
+    const response = await fetch(`${BASE_URL}/api/v1/my-donations/${donationId}/receipt/download`, {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw await errorFromBinaryResponse(
+        response,
+        "We couldn't download that receipt.",
+        "Try again in a moment."
+      );
+    }
+    return response.blob();
   },
 
   /** The receipt itself, fetched with the token and handed to the browser — never a plain link. */

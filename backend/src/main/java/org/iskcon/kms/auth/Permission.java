@@ -185,6 +185,11 @@ public enum Permission {
 	MANAGE_VENDOR_PAYMENTS,
 	VIEW_DONATIONS,
 
+	// A signed-in person's own successful gifts and their receipts (T-179): gifts made from their account, and
+	// counter gifts whose phone or email matches a contact Firebase has verified for them. Never anyone else's,
+	// never an anonymous gift. Distinct from VIEW_DONATIONS, which is the temple's whole register with PAN.
+	VIEW_OWN_DONATIONS,
+
 	// Striking a gift that was recorded wrongly (D-4). Split out of VIEW_DONATIONS rather than
 	// folded into it, and narrower than the MANAGE_INVENTORY that records one in the first place —
 	// the fourth instance of the split this file already makes three times, for the same reason each

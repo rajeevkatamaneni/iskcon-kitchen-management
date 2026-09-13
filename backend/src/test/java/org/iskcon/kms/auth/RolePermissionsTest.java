@@ -172,6 +172,8 @@ class RolePermissionsTest {
 				// --- Volunteers offer seva ---
 				allowed(User.Role.VOLUNTEER, Permission.VIEW_OWN_SHIFTS),
 				allowed(User.Role.VOLUNTEER, Permission.SIGN_UP_FOR_SHIFTS),
+				// Their own gifts and receipts only; the temple's register stays VIEW_DONATIONS (T-179).
+				allowed(User.Role.VOLUNTEER, Permission.VIEW_OWN_DONATIONS),
 				denied(User.Role.VOLUNTEER, Permission.MANAGE_VOLUNTEER_SHIFTS),
 				denied(User.Role.VOLUNTEER, Permission.MANAGE_INVENTORY),
 				denied(User.Role.VOLUNTEER, Permission.VIEW_DONATIONS),
