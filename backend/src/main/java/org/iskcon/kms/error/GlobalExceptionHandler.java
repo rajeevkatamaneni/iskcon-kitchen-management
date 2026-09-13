@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.tenant.NotAtZeroZero;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -105,8 +106,14 @@ public class GlobalExceptionHandler {
 		// missing. Anything else — including a phone number alongside any other bad field — stays
 		// KMS-400001 with the whole list, because a code that names one field would be a lie about
 		// the rest of the form.
-		ErrorCode code = isOnlyAboutAPhoneNumber(e.getBindingResult().getAllErrors())
-				? ErrorCode.INVALID_PHONE_NUMBER
+		//
+		// A second carve-out of exactly the same shape (T-176): a temple being added whose *only*
+		// fault is sitting at 0,0 gets KMS-400002, whose next step says to choose the temple's place.
+		// The two cannot both apply, because each needs every error to be its own kind — so a 0,0
+		// alongside a bad phone number, or a blank name, is KMS-400001 with both listed.
+		List<ObjectError> allErrors = e.getBindingResult().getAllErrors();
+		ErrorCode code = isOnlyAboutAPhoneNumber(allErrors) ? ErrorCode.INVALID_PHONE_NUMBER
+				: isOnlyATempleAtZeroZero(allErrors) ? ErrorCode.INVALID_COORDINATES
 				: ErrorCode.VALIDATION_FAILED;
 
 		// Validation failures are ordinary user behaviour, not incidents. Logged at DEBUG so
@@ -132,6 +139,25 @@ public class GlobalExceptionHandler {
 	 */
 	private boolean isOnlyAboutAPhoneNumber(List<ObjectError> errors) {
 		return !errors.isEmpty() && errors.stream().allMatch(this::isMalformedPhoneNumber);
+	}
+
+	/**
+	 * Whether the only thing wrong with this submission is a temple being added at 0,0.
+	 *
+	 * <p>"Only", for the reason {@link #isOnlyAboutAPhoneNumber} gives: KMS-400002 talks about
+	 * coordinates, and handing it to a form that also has an empty name box would hide the name.
+	 * Keyed on the constraint, never on the field name {@code latitude}, so a latitude of 200 or a
+	 * blank latitude keeps its own words and KMS-400001.
+	 *
+	 * <p>This imports {@link NotAtZeroZero} from the tenant package. That direction is the
+	 * acceptable one: the handler knowing which constraint it maps is the same knowledge as the
+	 * phone rule above, while the request record stays free of anything in this package.
+	 */
+	private boolean isOnlyATempleAtZeroZero(List<ObjectError> errors) {
+		return !errors.isEmpty() && errors.stream().allMatch(error ->
+				error.contains(ConstraintViolation.class)
+						&& error.unwrap(ConstraintViolation.class).getConstraintDescriptor().getAnnotation()
+								instanceof NotAtZeroZero);
 	}
 
 	/**

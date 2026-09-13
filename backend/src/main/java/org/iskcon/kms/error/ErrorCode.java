@@ -49,7 +49,7 @@ public enum ErrorCode {
 
 	INVALID_COORDINATES(400002, 400,
 			"Those coordinates don't look right.",
-			"Latitude must be between -90 and 90, longitude between -180 and 180."),
+			"Choose the temple's place, or type its real latitude and longitude."),
 
 	INVALID_PHONE_NUMBER(400003, 400,
 			"That phone number isn't in a format we can use.",

@@ -20,7 +20,13 @@ import org.iskcon.kms.config.PhoneNumberDeserializer;
  *
  * <p>Validation messages here are user-facing and follow the same rules as error codes: plain
  * language, no jargon, and they say what to do rather than what is wrong.
+ *
+ * <p>{@link NotAtZeroZero} sits on the record, not on a field, because no one field can see the
+ * pair (T-176). Add a temple once sent a blank coordinate box as 0, and every field rule below
+ * accepts 0 — so a temple could be saved at 0,0, in the Atlantic, with no way to move it
+ * afterwards. {@code UpdateTenantRequest} does not carry it: coordinates cannot change there (D-17).
  */
+@NotAtZeroZero
 public record ProvisionTenantRequest(
 		@NotBlank(message = "Enter the temple's name.")
 		@Size(max = 200, message = "That name is too long.")
