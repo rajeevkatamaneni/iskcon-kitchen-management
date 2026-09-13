@@ -109,11 +109,23 @@ describe("conduct notes on a staff record", () => {
   it("will not save an empty note, so nothing permanent lands by accident", async () => {
     render(<ConductNotes staffId="s1" />);
     const box = await screen.findByLabelText("Add a note");
+    const save = screen.getByRole("button", { name: "Save note" });
 
-    expect(screen.getByRole("button", { name: "Save note" })).toBeDisabled();
+    // Pressable while blank (T-172), because the press is what names the empty box.
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    expect(screen.getByText("Add a note is required")).toBeInTheDocument();
+    expect(box).toHaveAttribute("aria-invalid", "true");
+
+    // Spaces pass `required`; the panel's own trim check stops them, and nothing permanent lands.
     fireEvent.change(box, { target: { value: "   " } });
-    expect(screen.getByRole("button", { name: "Save note" })).toBeDisabled();
+    fireEvent.click(save);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(addMock).not.toHaveBeenCalled();
+
+    fireEvent.change(box, { target: { value: "Late twice this week." } });
+    fireEvent.click(save);
+    await waitFor(() => expect(addMock).toHaveBeenCalledTimes(1));
   });
 
   it("says so plainly when there is nothing on the record yet", async () => {

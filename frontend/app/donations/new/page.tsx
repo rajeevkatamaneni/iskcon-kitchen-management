@@ -82,6 +82,11 @@ function NewDonationView() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Cash or goods is not a rule any one box can carry, so `Form` cannot refuse it. The page's own
+    // sentence under the form ("Enter a cash amount, or add food or equipment.") is on screen for
+    // exactly as long as this is true, and this stops the send. The button used to be disabled
+    // instead (T-172 enabled it), which hid `Form`'s sentences for a blank donor name or date too.
+    if (!hasCash && !hasItems) return;
     const f = new FormData(event.currentTarget);
     setBusy(true);
     setError(null);
@@ -144,7 +149,7 @@ function NewDonationView() {
           <ButtonLink href="/donations" variant="secondary">
             Cancel
           </ButtonLink>
-          <Button type="submit" form={FORM} disabled={busy || (!hasCash && !hasItems)}>
+          <Button type="submit" form={FORM} disabled={busy}>
             Record donation
           </Button>
         </>

@@ -227,17 +227,34 @@ describe("correcting a recorded meal", () => {
     expect((cookedBox as HTMLInputElement).value).toBe("400");
   });
 
-  it("refuses to send until a reason has been given", async () => {
+  /**
+   * T-172. The correction is a `Form` now, and Record this correction is pressable before a reason is
+   * written. It used to stay disabled (and call the server from its click), so nothing could ever say
+   * the reason was missing. A press names the box. A reason of only spaces passes `required` and is
+   * stopped by the page's own trim check. A written reason, pressed once, sends once.
+   */
+  it("refuses to send until a reason has been given, and names the blank reason when pressed", async () => {
     await open([recordedLunch()]);
     openTheCorrectionForm();
 
     const submit = screen.getByRole("button", { name: /record this correction/i });
-    expect(submit).toBeDisabled();
+    const reason = screen.getByLabelText(/why the figures are being changed/i);
+    expect(submit).toBeEnabled();
 
-    fireEvent.change(screen.getByLabelText(/why the figures are being changed/i), {
-      target: { value: "The card was read as 400" },
-    });
-    expect(submit).not.toBeDisabled();
+    fireEvent.click(submit);
+    const said = screen.getByText("Why the figures are being changed is required");
+    expect(reason).toHaveAttribute("aria-invalid", "true");
+    expect(reason.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+    expect(correctRecordedMeal).not.toHaveBeenCalled();
+
+    fireEvent.change(reason, { target: { value: "   " } });
+    fireEvent.click(submit);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(correctRecordedMeal).not.toHaveBeenCalled();
+
+    fireEvent.change(reason, { target: { value: "The card was read as 400" } });
+    fireEvent.click(submit);
+    await vi.waitFor(() => expect(correctRecordedMeal).toHaveBeenCalledTimes(1));
   });
 
   /**

@@ -399,6 +399,11 @@ function CorrectionDialog({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // `Form` has already named a blank box or a negative amount. Two things get past it: a reason of
+    // only spaces, which passes `required`, and a credit of exactly 0, which passes `min="0"`. The
+    // button used to stay disabled for both; it is pressable now (T-172), so the same check stops
+    // the send here. Neither has a sentence of its own yet — see T-172's proof.
+    if (!ready) return;
     setBusy(true);
     setError(null);
     try {
@@ -491,7 +496,7 @@ function CorrectionDialog({
           <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" variant={striking ? "danger" : "primary"} busy={busy} disabled={!ready}>
+          <Button type="submit" variant={striking ? "danger" : "primary"} busy={busy}>
             {striking ? "Void this bill" : "Record the credit note"}
           </Button>
         </div>
@@ -539,6 +544,9 @@ function ReverseDialog({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Spaces pass `required`. The button used to stay disabled for them (T-172 made it pressable),
+    // so the same check stops the send here.
+    if (written === "") return;
     setBusy(true);
     setError(null);
     try {
@@ -595,7 +603,7 @@ function ReverseDialog({
           <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" variant="danger" busy={busy} disabled={written === ""}>
+          <Button type="submit" variant="danger" busy={busy}>
             Reverse this payment
           </Button>
         </div>

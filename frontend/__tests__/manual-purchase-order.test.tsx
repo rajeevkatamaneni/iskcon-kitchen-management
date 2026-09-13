@@ -256,17 +256,18 @@ describe("step one — which vendor", () => {
     render(<NewPurchaseOrderPage />);
     const picker = await screen.findByRole("combobox", { name: /vendor/i });
 
-    // Nothing chosen, nothing to continue to.
-    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
-
-    fireEvent.change(picker, { target: { value: "v1" } });
+    // Nothing chosen, nothing to continue to. Continue is still pressable (T-172): pressing it on a
+    // blank picker is how the screen says a vendor is needed, tested below.
     expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
 
+    fireEvent.change(picker, { target: { value: "v1" } });
+
     await act(async () => {
-      fireEvent.submit(screen.getByRole("form", { name: /choose a vendor/i }));
+      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     });
     // In the address, so step two is linkable and survives a reload.
     expect(pushMock).toHaveBeenCalledWith("/orders/new/lines?vendor=v1");
+    expect(pushMock).toHaveBeenCalledTimes(1);
   });
 
   it("names the vendor as required when the form is submitted blank, and goes nowhere (T-162)", async () => {
@@ -274,13 +275,11 @@ describe("step one — which vendor", () => {
     await screen.findByRole("combobox", { name: /vendor/i });
     const pushesBefore = pushMock.mock.calls.length;
 
-    // Continue stays disabled until a vendor is chosen. That is a known, separate issue this task
-    // leaves alone, and it means no press can reach a blank submit today. So the form is submitted
-    // directly, which proves the `Form` is on it: this is what a blank press will say the day that
-    // button is enabled.
-    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+    // Until T-172 Continue stayed disabled until a vendor was chosen, and this test had to submit the
+    // form directly. It is pressable now, so the real press is what names the picker.
+    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
     await act(async () => {
-      fireEvent.submit(screen.getByRole("form", { name: /choose a vendor/i }));
+      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     });
 
     expect(screen.getByText("Vendor is required")).toBeInTheDocument();

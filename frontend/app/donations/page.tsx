@@ -571,6 +571,10 @@ function VoidDonation({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // A reason of only spaces passes `required`, so `Form` lets it through and it stops here. It used
+    // to be stopped by the button staying disabled; the button is pressable now (T-172), and this is
+    // the same check moved to where a press arrives. Nothing is sent, as before.
+    if (written === "") return;
     setBusy(true);
     setError(null);
     try {
@@ -632,10 +636,11 @@ function VoidDonation({
           <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          {/* Refused until there are words in the box. The server refuses a blank reason too, and
-              the column's CHECK refuses one behind that; this is only the earliest and kindest of
-              the three, and it is the one that does not make somebody press a button to be told. */}
-          <Button type="submit" variant="danger" busy={busy} disabled={busy || written === ""}>
+          {/* Pressable while the box is blank (T-172). It used to stay disabled until there were words
+              in the box, which meant a press never happened and `Form` could never say which box was
+              empty — Rajeev's ruling of 2026-09-11 wants that said, in red, on submit. The server
+              still refuses a blank reason, and the column's CHECK behind it. */}
+          <Button type="submit" variant="danger" busy={busy} disabled={busy}>
             Void this gift
           </Button>
         </div>

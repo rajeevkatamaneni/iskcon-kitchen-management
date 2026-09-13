@@ -230,29 +230,33 @@ describe("vendors (T-163)", () => {
 
 describe("the vendor status dialog, a form of its own opened over a page (T-163)", () => {
   /**
-   * The dialog's commit button is disabled until the reason has words in it, which is the older,
-   * hand-rolled half of the same rule and is left exactly as it was (the brief: a disabled button
-   * is a separate, known issue). So no click can ever reach `Form`'s check on a blank reason, and a
-   * person can never see this sentence. The submit event is dispatched directly, only here, to show
-   * the dialog's own `Form` would still refuse it — against a plain `<form>` this test goes red,
-   * because the dispatched event would reach the handler and post an empty reason.
+   * Until T-172 the dialog's commit button stayed disabled until the reason had words in it, so this
+   * test had to dispatch the submit event itself to reach `Form`'s check. The button is pressable now,
+   * and a real press names the blank box. A reason of only spaces passes `required`; the dialog's own
+   * trim check stops it and nothing is sent.
    *
    * <p>The wrapping label holds the hint sentence as well as the question. Until T-171 the name was
    * both, run together; `Form` now leaves out words coloured as a hint, so the name is the question.
    */
-  it("still refuses a blank reason through its own Form, though the button never allows it", async () => {
+  it("refuses a blank reason through its own Form when Make inactive is pressed, and spaces send nothing", async () => {
     render(<VendorDetailPage />);
     fireEvent.click(await screen.findByRole("button", { name: /make inactive/i }));
 
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByRole("button", { name: /make inactive/i })).toBeDisabled();
+    const commit = within(dialog).getByRole("button", { name: /make inactive/i });
+    expect(commit).toBeEnabled();
 
-    fireEvent.submit(within(dialog).getByRole("form"));
+    fireEvent.click(commit);
 
     expectRefused(
       within(dialog).getByRole("textbox"),
       "Why are they being dropped? is required"
     );
+    expect(mocks.deactivateVendor).not.toHaveBeenCalled();
+
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "   " } });
+    fireEvent.click(commit);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.deactivateVendor).not.toHaveBeenCalled();
   });
 

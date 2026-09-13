@@ -301,12 +301,39 @@ describe("recording a donation", () => {
     expect((box.closest("label") ?? box).nextElementSibling).toBe(said.parentElement);
   }
 
+  /**
+   * T-172. Record donation is pressable before anything is given. A press with the donor name blank
+   * names that box, as any blank press does. Cash or goods is not a rule any one box can carry, so
+   * `Form` cannot say it; the page's own sentence under the form says it, and is on screen for as long
+   * as neither is given, and the press sends nothing. Once there is cash, one press records once.
+   */
+  it("keeps Record donation pressable with nothing given, names a blank donor, and records only with cash or goods (T-172)", async () => {
+    render(<NewDonationPage />);
+    const form = screen.getByRole("form", { name: /record a donation/i });
+    const record = screen.getByRole("button", { name: /record donation/i });
+
+    expect(record).toBeEnabled();
+    fireEvent.click(record);
+    expectSaidBeside(within(form).getByLabelText(/donor name/i), "Donor name is required");
+    expect(recordMock).not.toHaveBeenCalled();
+
+    fireEvent.change(within(form).getByLabelText(/donor name/i), { target: { value: "Govind Das" } });
+    fireEvent.click(record);
+    expect(within(form).getByText("Enter a cash amount, or add food or equipment.")).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(recordMock).not.toHaveBeenCalled();
+
+    fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "500" } });
+    fireEvent.click(record);
+    await waitFor(() => expect(recordMock).toHaveBeenCalledTimes(1));
+  });
+
   it("names a blank donor and a cleared date in red beside their boxes, and records nothing (T-161)", () => {
     render(<NewDonationPage />);
     const form = screen.getByRole("form", { name: /record a donation/i });
 
-    // Some cash first. With nothing given at all the header button stays disabled, and a click on
-    // a disabled button submits nothing, so no box could ever be named.
+    // Some cash first, so the only things wrong are the two boxes. (Until T-172 this was needed
+    // because the header button stayed disabled with nothing given; the test below covers that case.)
     fireEvent.change(within(form).getByLabelText(/cash amount/i), { target: { value: "500" } });
     fireEvent.change(within(form).getByLabelText(/^date$/i), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: /record donation/i }));

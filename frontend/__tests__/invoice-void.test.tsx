@@ -168,9 +168,9 @@ describe("voiding and crediting", () => {
     fireEvent.click(screen.getByRole("button", { name: /void this bill/i }));
 
     const panel = screen.getByRole("form", { name: /void this invoice/i });
-    // Refused until there are words in the box, the way dropping a vendor already works.
+    // Pressable before there are words in the box (T-172); what a blank press says is tested below.
     const commit = within(panel).getByRole("button", { name: /void this bill/i });
-    expect(commit).toBeDisabled();
+    expect(commit).toBeEnabled();
 
     fireEvent.change(within(panel).getByRole("textbox"), {
       target: { value: "Billed twice for the same delivery." },
@@ -284,11 +284,9 @@ describe("reversing a payment", () => {
 /**
  * A blank correction (T-162).
  *
- * <p>Both dialogs keep their commit button disabled until the reason has words in it, and the credit
- * note until it also has an amount above zero. That is a known, separate issue this task does not
- * change, and it means no press can reach a blank submit today. So these submit the form directly:
- * what is proved is that each dialog's form is a `Form` and names its own boxes, which is what a
- * blank press will say the day those buttons are enabled.
+ * <p>Until T-172 both dialogs kept their commit button disabled until the reason had words in it, and
+ * the credit note until it also had an amount above zero, so these tests had to submit the form
+ * directly. The buttons are pressable now, and each test presses the real one.
  *
  * <p>The sentences are asserted exactly as they render. Each box's `<label>` holds its hint as well as
  * its question. Until T-171, `Form` read both as the name and glued them together, as "What
@@ -300,15 +298,16 @@ describe("a blank correction (T-162)", () => {
     render(<InvoiceDetailPage />);
     fireEvent.click(screen.getByRole("button", { name: /record a credit note/i }));
     const panel = screen.getByRole("form", { name: /record a credit note/i });
-    expect(within(panel).getByRole("button", { name: /record the credit note/i })).toBeDisabled();
+    const commit = within(panel).getByRole("button", { name: /record the credit note/i });
+    expect(commit).toBeEnabled();
 
-    fireEvent.submit(panel);
+    fireEvent.click(commit);
     expect(within(panel).getByText("How much is being credited? is required")).toBeInTheDocument();
     expect(within(panel).getByText("What is the credit for? is required")).toBeInTheDocument();
 
     fireEvent.change(within(panel).getByRole("spinbutton"), { target: { value: "-50" } });
     fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "Short by two sacks." } });
-    fireEvent.submit(panel);
+    fireEvent.click(commit);
     expect(within(panel).getByText("How much is being credited? must be at least 0")).toBeInTheDocument();
     expect(creditMock).not.toHaveBeenCalled();
   });
@@ -317,9 +316,10 @@ describe("a blank correction (T-162)", () => {
     render(<InvoiceDetailPage />);
     fireEvent.click(screen.getByRole("button", { name: /void this bill/i }));
     const panel = screen.getByRole("form", { name: /void this invoice/i });
-    expect(within(panel).getByRole("button", { name: /void this bill/i })).toBeDisabled();
+    const commit = within(panel).getByRole("button", { name: /void this bill/i });
+    expect(commit).toBeEnabled();
 
-    fireEvent.submit(panel);
+    fireEvent.click(commit);
 
     expect(within(panel).getByText("Why was this bill never owed? is required")).toBeInTheDocument();
     expect(voidMock).not.toHaveBeenCalled();
@@ -330,11 +330,70 @@ describe("a blank correction (T-162)", () => {
     render(<InvoiceDetailPage />);
     fireEvent.click(screen.getByRole("button", { name: "Reverse" }));
     const panel = screen.getByRole("form", { name: /reverse this payment/i });
-    expect(within(panel).getByRole("button", { name: /reverse this payment/i })).toBeDisabled();
+    const commit = within(panel).getByRole("button", { name: /reverse this payment/i });
+    expect(commit).toBeEnabled();
 
-    fireEvent.submit(panel);
+    fireEvent.click(commit);
 
     expect(within(panel).getByText("What happened? is required")).toBeInTheDocument();
     expect(reverseMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * T-172. Two entries get past `Form` on these dialogs: a reason of only spaces, which passes
+   * `required`, and a credit of exactly 0, which passes `min="0"`. The buttons used to stay disabled
+   * for both. They are pressable now, and each dialog's own check stops the send. Neither has a
+   * sentence of its own yet (the wording is Rajeev's to choose, see T-172's proof), so what is asserted
+   * is that nothing is sent — and then that a proper entry, pressed once, sends once, which is what
+   * shows the button was live all along rather than the absence being a dead button.
+   */
+  it("sends no credit for a reason of only spaces or an amount of 0, then a proper one once (T-172)", async () => {
+    render(<InvoiceDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /record a credit note/i }));
+    const panel = screen.getByRole("form", { name: /record a credit note/i });
+    const commit = within(panel).getByRole("button", { name: /record the credit note/i });
+    const amount = within(panel).getByRole("spinbutton");
+    const reason = within(panel).getByRole("textbox");
+
+    fireEvent.change(amount, { target: { value: "400" } });
+    fireEvent.change(reason, { target: { value: "   " } });
+    fireEvent.click(commit);
+
+    fireEvent.change(amount, { target: { value: "0" } });
+    fireEvent.change(reason, { target: { value: "Short by two sacks." } });
+    fireEvent.click(commit);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(creditMock).not.toHaveBeenCalled();
+
+    fireEvent.change(amount, { target: { value: "400" } });
+    fireEvent.click(commit);
+    await waitFor(() => expect(creditMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("strikes and reverses nothing for a reason of only spaces, then each sends once (T-172)", async () => {
+    paymentsRef.current = [payment()];
+    const { unmount } = render(<InvoiceDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /void this bill/i }));
+    let panel = screen.getByRole("form", { name: /void this invoice/i });
+    fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "   " } });
+    fireEvent.click(within(panel).getByRole("button", { name: /void this bill/i }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(voidMock).not.toHaveBeenCalled();
+    fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "Billed twice." } });
+    fireEvent.click(within(panel).getByRole("button", { name: /void this bill/i }));
+    await waitFor(() => expect(voidMock).toHaveBeenCalledTimes(1));
+    unmount();
+
+    render(<InvoiceDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Reverse" }));
+    panel = screen.getByRole("form", { name: /reverse this payment/i });
+    fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "   " } });
+    fireEvent.click(within(panel).getByRole("button", { name: /reverse this payment/i }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reverseMock).not.toHaveBeenCalled();
+    fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "The cheque bounced." } });
+    fireEvent.click(within(panel).getByRole("button", { name: /reverse this payment/i }));
+    await waitFor(() => expect(reverseMock).toHaveBeenCalledTimes(1));
   });
 });

@@ -90,7 +90,9 @@ function ChooseVendorView() {
           <ButtonLink href="/orders" variant="secondary">
             Cancel
           </ButtonLink>
-          <Button type="submit" form={FORM} disabled={loading || vendorId === ""}>
+          {/* Disabled only while the vendors load. Not while none is chosen (T-172): a press on a
+              blank picker is how `Form` gets to say "Vendor is required". */}
+          <Button type="submit" form={FORM} disabled={loading}>
             Continue
           </Button>
         </>

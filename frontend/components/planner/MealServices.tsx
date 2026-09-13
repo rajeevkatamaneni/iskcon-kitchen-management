@@ -6,6 +6,7 @@ import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
 import { EmptyState } from "@/components/ds/EmptyState";
+import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -1055,7 +1056,12 @@ function CorrectMeal({
     setEntries((list) => list.map((e) => (e.mealPlanId === id ? { ...e, ...patch } : e)));
   }
 
-  async function save() {
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    // `Form` has named a blank reason before this runs. A reason of only spaces passes `required`, and
+    // the button used to stay disabled for it; now that the button is pressable (T-172) the same
+    // check stops the send here.
+    if (written === "") return;
     setBusy(true);
     setRefusal(null);
     try {
@@ -1085,7 +1091,12 @@ function CorrectMeal({
   }
 
   return (
-    <section aria-label={`Correct ${meal.mealKind}`} className="card mt-2 grid gap-3 p-5">
+    // A form, not a section (T-172). The button used to call `save` from its click and stay disabled
+    // until a reason was typed, so the reason box carried no `required` and nothing could ever say it
+    // was blank. As a `Form`, a press on a blank reason says "Why the figures are being changed is
+    // required" beside the box. It also means the figure boxes' own `min` and `max` are now read on
+    // submit, and Enter in a box submits, as on every other form.
+    <Form onSubmit={save} aria-label={`Correct ${meal.mealKind}`} className="card mt-2 grid gap-3 p-5">
       <p className="text-sm text-ink-secondary">
         What this meal was recorded as, and what it should say. The figures on file are in the boxes
         — change the ones that were wrong.
@@ -1171,6 +1182,7 @@ function CorrectMeal({
       <label className="grid gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Why the figures are being changed</span>
         <input
+          required
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="The card was read as 400 — the kitchen confirms 640 went out"
@@ -1191,10 +1203,9 @@ function CorrectMeal({
       {refusal && <ErrorNotice error={refusal} />}
 
       <div className="flex items-center gap-3">
-        {/* Refused until there are words in the box. The server refuses a blank reason too, and the
-            column's CHECK refuses one behind that; this is only the earliest and kindest of the
-            three, and the one that does not make somebody press a button to be told. */}
-        <Button size="sm" disabled={busy || written === ""} onClick={save} busy={busy}>
+        {/* Pressable while the reason is blank (T-172), so the press is what has `Form` name it. The
+            server refuses a blank reason too, and the column's CHECK behind that. */}
+        <Button type="submit" size="sm" disabled={busy} busy={busy}>
           {busy ? (
             <span className="inline-flex items-center gap-2">
               <BusyPot />
@@ -1208,7 +1219,7 @@ function CorrectMeal({
           Cancel
         </Button>
       </div>
-    </section>
+    </Form>
   );
 }
 

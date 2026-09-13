@@ -12,6 +12,7 @@ import { FocusScreen } from "@/components/ds/FocusScreen";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { BanRecord } from "@/components/staff/Ban";
 import { ConductNotes } from "@/components/staff/ConductNotes";
+import { Reinstate } from "@/components/staff/Reinstate";
 import { StaffNotFound } from "@/components/staff/StaffNotFound";
 import { ACCESS_LABELS, STATUS_LABELS, dayMonthYear, employmentTypeLabel, whoLine } from "@/components/staff/labels";
 import { useStaffRecord } from "@/components/staff/use-staff-record";
@@ -24,11 +25,7 @@ import {
   type ApiError,
   type BanCategory,
   type StaffProfileView,
-  type SystemAccess,
 } from "@/lib/api";
-
-/** The control shape the ban panel on this same screen uses, so the two read as one screen. */
-const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
 /**
  * One person's whole record, read (E6-S8, B9).
@@ -71,15 +68,6 @@ function StaffRecordScreen() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [revealedPan, setRevealedPan] = useState<string | null>(null);
-
-  // The reinstatement panel (T-014). Closed until asked for: this screen is a record to read, and
-  // bringing somebody back is a deliberate act rather than something to fall into while reading.
-  const [takingBack, setTakingBack] = useState(false);
-  const [rejoinedOn, setRejoinedOn] = useState("");
-  // "" is no login at all, which is an ordinary answer for a cook and is the one this starts on. A
-  // value nobody chose must not be an access level somebody did not mean to grant.
-  const [comingBackAs, setComingBackAs] = useState<SystemAccess | "">("");
-  const [takeBackReason, setTakeBackReason] = useState("");
 
   // Everything this temple recorded about this person. Almost always none or one; a second can only
   // exist where the first was taken back, and both belong on the record rather than the newer one
@@ -174,87 +162,16 @@ function StaffRecordScreen() {
                   <p>There is a record against this person from when they left.</p>
                   <p>Take that record back first, below, if they are to be taken back on.</p>
                 </InlineNotice>
-              ) : !takingBack ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-sm text-ink-secondary">
-                    They left on {staff.lastWorkingDay ? dayMonthYear(staff.lastWorkingDay) : "a day nobody recorded"}.
-                  </p>
-                  <Button variant="secondary" size="sm" disabled={busy} onClick={() => setTakingBack(true)}>
-                    Take them back on
-                  </Button>
-                </div>
               ) : (
-                <div className="grid gap-3" role="group" aria-label="Take them back on">
-                  <InlineNotice tone="info">
-                    <p>Their record can be edited again, and the ending comes off it.</p>
-                    <p>What they can do in the app is set here, because nothing remembers what it was.</p>
-                  </InlineNotice>
-
-                  <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    <span className="pl-field-inset font-medium text-ink">What day did they come back?</span>
-                    <input
-                      type="date"
-                      name="dateOfRejoining"
-                      required
-                      value={rejoinedOn}
-                      onChange={(e) => setRejoinedOn(e.target.value)}
-                      className={FIELD}
-                    />
-                  </label>
-
-                  <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    <span className="pl-field-inset font-medium text-ink">What can they do in the app?</span>
-                    <select
-                      name="systemAccess"
-                      value={comingBackAs}
-                      onChange={(e) => setComingBackAs(e.target.value as SystemAccess | "")}
-                      className={FIELD}
-                    >
-                      <option value="">No login</option>
-                      {(Object.keys(ACCESS_LABELS) as SystemAccess[]).map((a) => (
-                        <option key={a} value={a}>
-                          {ACCESS_LABELS[a]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-                    <span className="pl-field-inset font-medium text-ink">Why are they coming back?</span>
-                    <input
-                      name="reason"
-                      value={takeBackReason}
-                      onChange={(e) => setTakeBackReason(e.target.value)}
-                      className={FIELD}
-                    />
-                  </label>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      disabled={busy || rejoinedOn === ""}
-                      onClick={() =>
-                        void run(
-                          (t) =>
-                            api.reinstateStaff(
-                              staff.id,
-                              {
-                                dateOfRejoining: rejoinedOn,
-                                systemAccess: comingBackAs === "" ? null : comingBackAs,
-                                reason: takeBackReason.trim() === "" ? null : takeBackReason.trim(),
-                              },
-                              t
-                            ),
-                          "We couldn’t take them back on."
-                        )
-                      }
-                    >
-                      Take them back on
-                    </Button>
-                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => setTakingBack(false)}>
-                      Leave it
-                    </Button>
-                  </div>
-                </div>
+                // Its own component, as the ban correction and the conduct note are (T-172): this
+                // screen is a read-only record, and the form lives beside it rather than in it.
+                <Reinstate
+                  lastWorkingDay={staff.lastWorkingDay}
+                  busy={busy}
+                  onReinstate={(input) =>
+                    void run((t) => api.reinstateStaff(staff.id, input, t), "We couldn’t take them back on.")
+                  }
+                />
               )}
             </Card>
           )}

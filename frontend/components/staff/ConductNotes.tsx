@@ -123,7 +123,9 @@ function ConductNotesPanel({
         </p>
 
         <div className="mt-4">
-          <Button type="submit" busy={busy} disabled={busy || draft.trim() === ""}>
+          {/* Pressable while the box is blank (T-172), so a press has `Form` say "Add a note is
+              required". A note of only spaces passes `required` and is stopped in `submit`. */}
+          <Button type="submit" busy={busy} disabled={busy}>
             Save note
           </Button>
         </div>

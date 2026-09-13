@@ -107,9 +107,12 @@ describe("vendors", () => {
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent(/make govind wholesale inactive\?/i);
-    // Refused until there are words in the box: the reason is the whole point of the dialog.
+    // Refused until there are words in the box: the reason is the whole point of the dialog. Since
+    // T-172 the refusal is said, not a dead button: the press names the empty box.
     const commit = within(dialog).getByRole("button", { name: /make inactive/i });
-    expect(commit).toBeDisabled();
+    expect(commit).toBeEnabled();
+    fireEvent.click(commit);
+    expect(within(dialog).getByText("Why are they being dropped? is required")).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "Short-weighed three deliveries" },

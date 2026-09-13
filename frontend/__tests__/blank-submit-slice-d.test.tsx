@@ -402,13 +402,14 @@ describe("paying somebody (PayPanel's two forms)", () => {
 });
 
 describe("a conduct note (ConductNotes)", () => {
-  it("names a blank note when the form is submitted directly, and saves nothing", async () => {
+  it("names a blank note when Save note is pressed, and saves nothing", async () => {
     render(<ConductNotes staffId="s1" />);
     const form = screen.getByRole("form", { name: /add a conduct note/i });
-    // Save stays disabled until something is typed, so no click can reach a blank submit. T-172 owns
-    // that button; until then the form is submitted directly, which still runs through Form's check.
-    expect(within(form).getByRole("button", { name: "Save note" })).toBeDisabled();
-    fireEvent.submit(form);
+    // Until T-172 Save stayed disabled until something was typed, and this test had to submit the
+    // form directly. It is pressable now, so the real press is what names the blank note.
+    const save = within(form).getByRole("button", { name: "Save note" });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
 
     await refused(form, 'textarea[name="body"]', "Add a note is required");
     expect(mocks.addStaffConductNote).not.toHaveBeenCalled();

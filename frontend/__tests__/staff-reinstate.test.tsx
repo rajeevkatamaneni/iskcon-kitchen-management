@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type {
   ApiError,
   BanCategoryOption,
@@ -112,7 +112,7 @@ describe("taking a former member of staff back on", () => {
     render(<StaffRecordPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /take them back on/i }));
-    const panel = screen.getByRole("group", { name: /take them back on/i });
+    const panel = screen.getByRole("form", { name: /take them back on/i });
 
     fireEvent.change(panel.querySelector('input[name="dateOfRejoining"]')!, {
       target: { value: "2026-09-01" },
@@ -144,7 +144,7 @@ describe("taking a former member of staff back on", () => {
     render(<StaffRecordPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /take them back on/i }));
-    const panel = screen.getByRole("group", { name: /take them back on/i });
+    const panel = screen.getByRole("form", { name: /take them back on/i });
     fireEvent.change(panel.querySelector('input[name="dateOfRejoining"]')!, {
       target: { value: "2026-09-01" },
     });
@@ -174,9 +174,29 @@ describe("taking a former member of staff back on", () => {
     expect(screen.queryByRole("button", { name: /take them back on/i })).not.toBeInTheDocument();
   });
 
-  it("says nothing can be sent until the day they came back is given", () => {
+  /**
+   * T-172. The panel is a `Form` now (it was a `<div role="group">` whose button called the server
+   * from its click), and Take them back on is pressable before a date is given. It used to stay
+   * disabled, so the required date was never named. A press now says so beside the box and sends
+   * nothing; once the date is in, one press sends once.
+   */
+  it("names a blank return date when Take them back on is pressed, and sends nothing until it is given", async () => {
     render(<StaffRecordPage />);
     fireEvent.click(screen.getByRole("button", { name: /take them back on/i }));
-    expect(screen.getByRole("button", { name: /^take them back on$/i })).toBeDisabled();
+    const panel = screen.getByRole("form", { name: /take them back on/i });
+    const commit = within(panel).getByRole("button", { name: /^take them back on$/i });
+    const date = panel.querySelector('input[name="dateOfRejoining"]')!;
+
+    expect(commit).toBeEnabled();
+    fireEvent.click(commit);
+
+    const said = within(panel).getByText("What day did they come back? is required");
+    expect(date).toHaveAttribute("aria-invalid", "true");
+    expect(date.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+    expect(reinstateMock).not.toHaveBeenCalled();
+
+    fireEvent.change(date, { target: { value: "2026-09-01" } });
+    fireEvent.click(commit);
+    await waitFor(() => expect(reinstateMock).toHaveBeenCalledTimes(1));
   });
 });

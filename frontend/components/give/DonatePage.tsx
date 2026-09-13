@@ -183,6 +183,9 @@ function MoneyTab({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // `Form` has already refused another amount below 1 by name. This is the old disabled button's
+    // check, kept where a press arrives, for the one case a box rule cannot see: no amount at all.
+    if (given <= 0) return;
     const f = new FormData(event.currentTarget);
     setBusy(true);
     setError(null);
@@ -264,7 +267,23 @@ function MoneyTab({
           <label className="mt-2 grid gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Or another amount</span>
             <span className="relative flex">
+              {/* A number box of whole rupees, at least 1 (T-172). It was a plain text box with no
+                  rule, and the disabled Give button was the only thing between "-5" and the
+                  checkout. That button is pressable now, so the rule lives on the box, where `Form`
+                  reads it and says "Or another amount must be at least 1".
+
+                  Why these three. `type="number"` is what makes `min` mean anything. `step="1"`
+                  because the box already opened a numeric keypad (`inputMode="numeric"`, which has
+                  no decimal point on a phone) and the presets are all whole rupees, so it says out
+                  loud what the keypad already assumed. `min="1"` then follows: the server refuses a
+                  gift that is not above zero ("A gift has to be more than zero."), and the smallest
+                  whole rupee above zero is one.
+
+                  Not `required`: blank is an ordinary answer, and means the preset above is the gift. */}
               <input
+                type="number"
+                min="1"
+                step="1"
                 inputMode="numeric"
                 value={other}
                 onChange={(e) => setOther(e.target.value)}
@@ -306,7 +325,7 @@ function MoneyTab({
 
         <button
           type="submit"
-          disabled={busy || given <= 0}
+          disabled={busy}
           className="btn btn-primary min-h-touch px-6 transition-colors duration-state disabled:opacity-60"
         >
           {busy ? "Just a moment…" : `Give ${money(given, "INR")}`}

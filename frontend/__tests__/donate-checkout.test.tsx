@@ -170,10 +170,10 @@ describe("taking the money", () => {
 
 /*
  * T-166, slice F of the blank-required-fields wave. The money form is now a Form, and nothing about
- * the checkout may change with it. The form has no box a browser rule applies to: "Or another
- * amount" is a plain text box with a numeric keyboard, no `required` and no `min`, and the 80G
- * boxes are not required. So Form refuses nothing, and the page's own check is what stops a bad
- * amount: the Give button is disabled while the amount is not above nothing.
+ * the checkout may change with it. Until T-172 "Or another amount" was a plain text box with no rule,
+ * and the Give button was disabled while the amount was not above nothing — the page's only guard.
+ * T-172 put the rule on the box instead (a number of whole rupees, at least 1, still not required)
+ * and made Give pressable, so a bad amount is refused by name beside the box.
  */
 describe("the amount, under Form (T-166)", () => {
   beforeEach(() => {
@@ -184,7 +184,8 @@ describe("the amount, under Form (T-166)", () => {
   it("gives the chosen preset when the other amount is left blank, and says nothing about the box", async () => {
     render(<DonatePage />);
     await waitFor(() => expect(screen.getByRole("button", { name: /^Give ₹/ })).toBeInTheDocument());
-    expect(screen.getByLabelText(/or another amount/i)).toHaveValue("");
+    // A blank number box reads as null, not "" (T-172 made it a number box).
+    expect(screen.getByLabelText(/or another amount/i)).toHaveValue(null);
 
     fireEvent.click(screen.getByRole("button", { name: /^Give ₹/ }));
 
@@ -194,23 +195,39 @@ describe("the amount, under Form (T-166)", () => {
     expect(screen.queryByText(/is required|must be|can be at most/i)).not.toBeInTheDocument();
   });
 
-  it("stops a negative or non-numeric amount with the page's disabled button, not with a sentence", async () => {
+  /**
+   * T-172. Give is pressable whatever the amount says, and a 0 or a negative amount is refused by name
+   * beside the box, with nothing sent. Then a proper amount, pressed once, is given once.
+   *
+   * "abc" is no longer tried. A number box holds no letters: a browser that lets them be typed
+   * reports the box as not a number, which `Form` refuses as "must be a number" (a check `Form`'s own
+   * tests cover, since jsdom cannot produce it), and jsdom simply clears the box to blank, which is
+   * the preset — the ordinary answer the test above covers.
+   */
+  it("refuses an amount of 0 or below by name when Give is pressed, and gives a proper one once (T-172)", async () => {
     render(<DonatePage />);
     await waitFor(() => expect(screen.getByRole("button", { name: /^Give/ })).toBeInTheDocument());
     const other = screen.getByLabelText(/or another amount/i);
     expect(other).not.toBeRequired();
-    expect(other).not.toHaveAttribute("min");
+    expect(other).toHaveAttribute("type", "number");
+    expect(other).toHaveAttribute("min", "1");
 
-    fireEvent.change(other, { target: { value: "-5" } });
-    expect(screen.getByRole("button", { name: /^Give/ })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: /^Give/ }));
-
-    fireEvent.change(other, { target: { value: "abc" } });
-    expect(screen.getByRole("button", { name: /^Give/ })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: /^Give/ }));
+    for (const value of ["0", "-5"]) {
+      fireEvent.change(other, { target: { value } });
+      const give = screen.getByRole("button", { name: /^Give/ });
+      expect(give).toBeEnabled();
+      fireEvent.click(give);
+      expect(screen.getByText("Or another amount must be at least 1")).toBeInTheDocument();
+      expect(other).toHaveAttribute("aria-invalid", "true");
+    }
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(giveOnce).not.toHaveBeenCalled();
-    expect(screen.queryByText(/is required|must be|is not valid/i)).not.toBeInTheDocument();
+
+    fireEvent.change(other, { target: { value: "250" } });
+    expect(screen.queryByText("Or another amount must be at least 1")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Give/ }));
+    await waitFor(() => expect(giveOnce).toHaveBeenCalledTimes(1));
+    expect(giveOnce.mock.calls[0][0]).toBe(250);
   });
 });

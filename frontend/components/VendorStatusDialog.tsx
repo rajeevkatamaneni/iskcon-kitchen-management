@@ -13,8 +13,10 @@ import { useAuth } from "@/lib/auth-context";
  * <p>Deactivating used to be a single click on a row. It is not that kind of act: months later
  * somebody stands in front of the same list wondering whether this supplier can be used again, and
  * the only honest answer is the one whoever dropped them wrote at the time. So the click opens this
- * instead, and the commit button stays refused until there are words in the box — the server refuses
- * a blank one too (KMS-400011), and this is only the earlier, kinder half of the same rule.
+ * instead, and a blank reason is refused there — the server refuses a blank one too (KMS-400011), and
+ * this is only the earlier, kinder half of the same rule. The commit button stays pressable while the
+ * box is blank (T-172), so that pressing it has `Form` name the empty box in red rather than leave
+ * somebody guessing why a button will not respond.
  *
  * <p>Coming back is the other way round. The reason is offered and never demanded: restoring a
  * supplier explains itself, and asking somebody to justify a decision that undoes a harm is how a
@@ -53,6 +55,9 @@ export function VendorStatusDialog({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Spaces pass `required`. The button used to stay disabled for them; now it is pressable (T-172),
+    // so the same check sits here and nothing is sent.
+    if (dropping && written === "") return;
     setBusy(true);
     setError(null);
     try {
@@ -130,7 +135,6 @@ export function VendorStatusDialog({
             type="submit"
             variant={dropping ? "danger" : "primary"}
             busy={busy}
-            disabled={dropping && written === ""}
           >
             {dropping ? "Make inactive" : "Bring back"}
           </Button>

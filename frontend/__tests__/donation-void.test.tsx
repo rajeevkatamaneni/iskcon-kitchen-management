@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ApiError, type LedgerRow, type PeriodSummary } from "@/lib/api";
 import { todayIso } from "@/lib/format";
 
@@ -173,7 +173,14 @@ describe("striking a gift that was recorded wrongly", () => {
     expect(within(cash).queryByText(/goes back out of stock/i)).not.toBeInTheDocument();
   });
 
-  it("sends nothing until a reason has been written, and a space is not one", () => {
+  /**
+   * T-172. Void this gift is pressable while the reason is blank, because the press is what has the
+   * dialog say which box is empty. It used to stay disabled until there were words in the box, and
+   * nothing on the page said why it would not respond. A space bar is still not a reason: spaces pass
+   * `required`, so the dialog's own trim check stops them where the press arrives, and nothing is sent.
+   * The server refuses a blank reason too, and the column's CHECK behind it.
+   */
+  it("keeps Void this gift pressable while the reason is blank, sends nothing for spaces, and a reason once (T-172)", async () => {
     render(<DonationsPage />);
     fireEvent.click(within(rowFor("Govind Das")).getByRole("button", { name: "Void" }));
 
@@ -181,29 +188,29 @@ describe("striking a gift that was recorded wrongly", () => {
     const commit = within(dialog).getByRole("button", { name: /void this gift/i });
     const box = within(dialog).getByLabelText(/why it is being voided/i);
 
-    expect(commit).toBeDisabled();
-    // A space bar is not a reason. The server refuses a blank one and the column's CHECK refuses one
-    // behind that; this is only the earliest of the three, and the one that does not make somebody
-    // press a button to be told.
+    expect(commit).toBeEnabled();
+
     fireEvent.change(box, { target: { value: "   " } });
-    expect(commit).toBeDisabled();
+    expect(commit).toBeEnabled();
+    fireEvent.click(commit);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(voidMock).not.toHaveBeenCalled();
 
     fireEvent.change(box, { target: { value: "Entered twice." } });
-    expect(commit).toBeEnabled();
-    expect(voidMock).not.toHaveBeenCalled();
+    fireEvent.click(commit);
+    await waitFor(() => expect(voidMock).toHaveBeenCalledTimes(1));
+    expect(voidMock.mock.calls[0][1]).toBe("Entered twice.");
   });
 
   /**
-   * T-161. The dialog is a Form now, but a person cannot reach its sentence: the button above stays
-   * disabled until a reason is written, and pressing a disabled button submits nothing. So the real
-   * click is shown doing nothing, and then `requestSubmit()` — the submit that click would make if
-   * the button were enabled — shows what Form says once it does run.
+   * T-161, and since T-172 by a real press. Until T-172 the button stayed disabled and this test had
+   * to call `requestSubmit()` itself to reach the sentence; now the click a person makes does it.
    *
    * The hint under the box sits inside the same <label>. Until T-171, Form read it as part of the
    * name, and this sentence was the question run straight into the hint and then "is required".
    * Form now leaves out words coloured as a hint, so the name is the question alone, asserted whole.
    */
-  it("names a blank reason beside its box once the form is submitted, and sends nothing (T-161)", () => {
+  it("names a blank reason beside its box when Void this gift is pressed, and sends nothing (T-161)", () => {
     render(<DonationsPage />);
     fireEvent.click(within(rowFor("Govind Das")).getByRole("button", { name: "Void" }));
 
@@ -214,11 +221,8 @@ describe("striking a gift that was recorded wrongly", () => {
     const sentence = "Why it is being voided is required";
 
     expect(form).toHaveAttribute("novalidate");
-    expect(commit).toBeDisabled();
+    expect(commit).toBeEnabled();
     fireEvent.click(commit);
-    expect(within(dialog).queryByText(/ is required$/)).not.toBeInTheDocument();
-
-    act(() => form.requestSubmit());
 
     const said = within(dialog).getByText(sentence);
     expect(box).toHaveAttribute("aria-invalid", "true");
