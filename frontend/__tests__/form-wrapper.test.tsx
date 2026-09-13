@@ -320,6 +320,83 @@ describe("Form wrapper", () => {
   });
 });
 
+/**
+ * The name a wrapping `<label>` gives its box when the label holds more than the question (T-171).
+ *
+ * <p>Each fixture copies a real screen's markup and classes, because the classes are what `Form`
+ * reads: a question is `text-ink` or uncoloured, a hint or note `text-ink-secondary` or
+ * `text-ink-muted`, an error `text-danger`. Before T-171 the first fixture read "Serviced onA service
+ * dated next Tuesday has not happened yet. is required".
+ */
+describe("a label's name, without its hint, error or note", () => {
+  it("a question span and a hint span: the question alone (Record a service)", () => {
+    const { save } = renderOne(
+      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+        <span className="pl-field-inset font-medium text-ink">Serviced on</span>
+        <input name="servicedOn" type="date" required />
+        <span className="pl-field-inset text-sm text-ink-secondary">
+          A service dated next Tuesday has not happened yet.
+        </span>
+      </label>
+    );
+    save();
+    const box = screen.getByLabelText(/serviced on/i);
+    expectSentence(box, "Serviced on is required", box.closest("label")!);
+  });
+
+  it("a question span and an inline error: the question alone (a kitchen's duplicate name)", () => {
+    const { save } = renderOne(
+      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+        <span className="pl-field-inset font-medium text-ink">Name</span>
+        <input required />
+        <span className="pl-field-inset text-danger">Another kitchen here already goes by this name.</span>
+      </label>
+    );
+    save();
+    const box = screen.getByRole("textbox");
+    expectSentence(box, "Name is required", box.closest("label")!);
+  });
+
+  it("plain text only, in a label coloured as secondary itself: the text (the label's own colour does not count)", () => {
+    const { save } = renderOne(
+      <label className="flex items-center gap-2 text-sm text-ink-secondary">
+        <input type="checkbox" required />
+        Direct, with no purchase order
+      </label>
+    );
+    save();
+    const box = screen.getByRole("checkbox");
+    expectSentence(box, "Direct, with no purchase order is required", box.closest("label")!);
+  });
+
+  it("a tick-box's words and the grey note after them: the words alone (meal kinds)", () => {
+    const { save } = renderOne(
+      <label className="flex items-baseline gap-2 text-sm">
+        <input type="checkbox" required />
+        <span>
+          <span className="text-ink">This kind of meal is a feast</span>{" "}
+          <span className="text-ink-muted">it must name the festival it is for, such as Janmastami</span>
+        </span>
+      </label>
+    );
+    save();
+    const box = screen.getByRole("checkbox");
+    expectSentence(box, "This kind of meal is a feast is required", box.closest("label")!);
+  });
+
+  it("a label whose only words are coloured as a note keeps them, rather than being left nameless", () => {
+    const { save } = renderOne(
+      <label>
+        <span className="text-ink-secondary">Reference</span>
+        <input required />
+      </label>
+    );
+    save();
+    const box = screen.getByRole("textbox");
+    expectSentence(box, "Reference is required", box.closest("label")!);
+  });
+});
+
 describe("form sentences", () => {
   const facts = (over: Omit<Partial<ControlFacts>, "validity"> & { validity?: Partial<ValidityState> }): ControlFacts => ({
     type: "text",

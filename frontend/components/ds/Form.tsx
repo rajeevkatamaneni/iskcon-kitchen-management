@@ -105,6 +105,14 @@ const CONTROL_TAGS = new Set(["INPUT", "SELECT", "TEXTAREA"]);
 const SLOT_ATTRIBUTE = "data-form-error-slot";
 /** `Field` appends "(required)" to its label. A sentence that already says "is required" drops it. */
 const REQUIRED_MARKER = /\s*\(required\)\s*$/i;
+/**
+ * The text colours that mark words inside a `<label>` as *about* the box rather than the box's name
+ * (T-171): `text-ink-secondary` is `FIELD_HINT`'s colour and every grey note under a question,
+ * `text-ink-muted` is `Field`'s "(required)" and the grey half of a tick-box's line, and
+ * `text-danger` is `FIELD_ERROR`'s and every inline error. Every question in a label is `text-ink`
+ * or carries no colour of its own, so the colour is the one mark the two already reliably differ by.
+ */
+const NOT_THE_NAME = ["text-ink-secondary", "text-ink-muted", "text-danger"];
 
 function isControl(el: Element | EventTarget | null): el is Control {
   return el instanceof Element && CONTROL_TAGS.has(el.tagName);
@@ -114,11 +122,34 @@ function isRefused(control: Control): boolean {
   return control.willValidate && !control.validity.valid;
 }
 
+/** A node's text on one line, with `Field`'s "(required)" taken off the end. */
+function textOf(node: Node): string {
+  return (node.textContent ?? "").replace(/\s+/g, " ").replace(REQUIRED_MARKER, "").trim();
+}
+
 /**
  * The field's name, as the reader sees it: its aria-label, else its label's text, else its `name`.
  *
  * <p>A label's text is read from a copy with the controls taken out, because a wrapping label holds
  * its own box — and a `<select>` inside a label would otherwise lend the label every option it has.
+ *
+ * <p>Then anything inside the label coloured as a hint, a note or an error is taken out too (T-171).
+ * Screens put a question and the sentence under it in one `<label>` — "Serviced on" and "A service
+ * dated next Tuesday has not happened yet." — and `textContent` joins the two spans with nothing
+ * between them, so the refusal read "Serviced onA service dated next Tuesday has not happened yet. is
+ * required". Adding a space would only have made the same wrong name legible: the hint is not the
+ * name at all.
+ *
+ * <p>Why the colour and not the position. "The words before the box" fits a question above its box,
+ * and fails every tick-box and radio, whose words come after the box and are often followed by a grey
+ * note of their own ("This kind of meal is a feast" then "it must name the festival it is for"). And
+ * no hint inside a label carries an id or a role to go by: the one hint in these forms pointed at by
+ * `aria-describedby`, on closing an order, was put outside its label on purpose. The colour is on
+ * every hint and error, and on no question.
+ *
+ * <p>Only an element's own classes count, never the label's: most labels are `text-ink-secondary`
+ * themselves, and a tick-box whose words sit straight in the label ("Preferred") would lose its name.
+ * If taking the marked pieces out leaves nothing, the label's whole text is the name, as before.
  */
 function nameOf(control: Control): string {
   const ariaLabel = control.getAttribute("aria-label")?.trim();
@@ -128,7 +159,11 @@ function nameOf(control: Control): string {
   if (label) {
     const copy = label.cloneNode(true) as HTMLElement;
     copy.querySelectorAll(`input, select, textarea, button, [${SLOT_ATTRIBUTE}]`).forEach((n) => n.remove());
-    const text = (copy.textContent ?? "").replace(/\s+/g, " ").replace(REQUIRED_MARKER, "").trim();
+    const whole = textOf(copy);
+    copy.querySelectorAll("*").forEach((n) => {
+      if (NOT_THE_NAME.some((token) => n.classList.contains(token))) n.remove();
+    });
+    const text = textOf(copy) || whole;
     if (text) return text;
   }
 
