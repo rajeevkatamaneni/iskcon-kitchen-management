@@ -101,6 +101,12 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 
 	private static final OffsetDateTime LONG_AGO = OffsetDateTime.of(2026, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
 
+	/**
+	 * T-178: every Reload ends by taking the temple's stored copy of Meta's status, which is T-173's
+	 * comparison, one lookup per template. So a Reload's lookups are its own plus these.
+	 */
+	private static final int STATUS_COPY_LOOKUPS = NotificationTemplate.values().length;
+
 	/** T-159's own record of shift_reminder's wording before it was reworded. */
 	private static final String OLD_SHIFT_REMINDER = "Reminder: your {{1}} shift at {{2}} is on {{3}} at {{4}}.";
 
@@ -402,7 +408,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 
 		reload().andExpect(status().isOk());
 		assertThat(meta.creates.get()).isEqualTo(NotificationTemplate.values().length);
-		assertThat(meta.lookups.get()).as("every held template compared, since none was known").isEqualTo(20);
+		assertThat(meta.lookups.get()).as("every held template compared, since none was known").isEqualTo(20 + STATUS_COPY_LOOKUPS);
 		assertThat(meta.edits.get()).as("Meta already holds this release's wording").isZero();
 		assertThat(storedFingerprints()).isEqualTo(everyFingerprintAsReleased());
 		assertThat(view().get("templatesPending").toString())
@@ -447,7 +453,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		assertThat(meta.createPaths).containsOnly("/waba-new/message_templates");
 		assertThat(meta.lookups.get())
 				.as("fingerprints recorded against the old account prove nothing about the new one")
-				.isEqualTo(20);
+				.isEqualTo(20 + STATUS_COPY_LOOKUPS);
 		mvc.perform(get("/api/v1/settings/whatsapp"))
 				.andExpect(jsonPath("$.templatesPending.accountChanged").value(false));
 
@@ -499,7 +505,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		assertThat(meta.editedTemplateIds).as("only shift_reminder, not volunteer_shift_reminder").containsExactly("id-shift_reminder");
 		assertThat(meta.held("shift_reminder").body()).isEqualTo(template("shift_reminder").whatsappBodyText());
 		assertThat(meta.lastEditBody).contains("\"type\":\"BODY\"").doesNotContain("category");
-		assertThat(meta.lookups.get()).as("only the template whose held wording was not known to be current").isEqualTo(1);
+		assertThat(meta.lookups.get()).as("only the template whose held wording was not known to be current").isEqualTo(1 + STATUS_COPY_LOOKUPS);
 
 		assertThat(storedFingerprints()).isEqualTo(everyFingerprintAsReleased());
 		assertThat(storedList()).isEmpty();
@@ -620,6 +626,50 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		signInAs("uid-admin-t169a");
 		securedMvc.perform(post("/api/v1/settings/whatsapp/templates/reload")).andExpect(status().isOk());
 		assertThat(meta.creates.get()).isEqualTo(NotificationTemplate.values().length);
+	}
+
+	/**
+	 * T-178: a temple's own Reload takes the stored copy of Meta's status that the operator's screens read,
+	 * and records no operator audit entry, because the temple acted. Its own Reload entry is still written.
+	 * The copy starts stale, with a row this release does not have, so a Reload that wrote nothing, or
+	 * only added rows, cannot pass.
+	 */
+	@Test
+	@DisplayName("a temple's own Reload replaces the stored copy of Meta's status and writes no operator audit entry")
+	void reloadRefreshesTheStatusCopyWithoutAnOperatorAudit() throws Exception {
+		save().andExpect(status().isOk());
+		jdbc.update("""
+				INSERT INTO whatsapp_template_status_copy (tenant_id, template_name, our_category, meta_status,
+				    meta_category, held, wording_matches, taken_at)
+				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, 'a_retired_template', 'UTILITY',
+				    'APPROVED', 'UTILITY', true, true, ?)
+				""", LONG_AGO);
+		meta.resetCounts();
+
+		reload().andExpect(status().isOk());
+
+		List<Map<String, Object>> copy = jdbc.queryForList(
+				"SELECT template_name, meta_status, held, wording_matches FROM whatsapp_template_status_copy");
+		assertThat(copy).extracting(row -> (String) row.get("template_name"))
+				.containsExactlyInAnyOrderElementsOf(Arrays.stream(NotificationTemplate.values())
+						.map(NotificationTemplate::whatsappTemplateName).toList());
+		Map<String, Object> shiftReminder = copy.stream()
+				.filter(row -> "shift_reminder".equals(row.get("template_name"))).findFirst().orElseThrow();
+		assertThat(shiftReminder.get("meta_status")).as("the first Save left Meta reviewing it").isEqualTo("PENDING");
+		assertThat(shiftReminder.get("held")).isEqualTo(true);
+		assertThat(shiftReminder.get("wording_matches")).isEqualTo(true);
+		assertThat(jdbc.queryForObject(
+				"SELECT count(*) FROM whatsapp_template_status_copy WHERE taken_at <= ?", Integer.class, LONG_AGO))
+				.as("nothing left from the stale copy").isZero();
+		assertThat(meta.lookups.get()).as("Reload needed no lookups of its own; the copy took one per template")
+				.isEqualTo(STATUS_COPY_LOOKUPS);
+
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM audit_events WHERE action = 'WHATSAPP_TEMPLATE_STATUS_REFRESHED'", Integer.class))
+				.as("no operator audit entry anywhere").isZero();
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM audit_events WHERE tenant_id = ? AND reason = 'WhatsApp templates sent to Meta.'",
+				Integer.class, govinda)).as("the temple's own Reload entry").isEqualTo(1);
 	}
 
 	// ---- Meta, played by a local server that keeps what it holds -------------------------------------

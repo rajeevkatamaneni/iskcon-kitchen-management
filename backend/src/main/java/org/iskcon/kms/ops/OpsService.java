@@ -7,9 +7,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.notification.WhatsAppTemplateComparison;
 import org.iskcon.kms.tenancy.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -23,10 +27,71 @@ import org.springframework.stereotype.Service;
 @Service
 public class OpsService {
 
-	private final JdbcTemplate jdbc;
+	private static final Logger log = LoggerFactory.getLogger(OpsService.class);
 
-	public OpsService(JdbcTemplate jdbc) {
+	private final JdbcTemplate jdbc;
+	private final WhatsAppTemplateComparison templateComparison;
+	private final TemplateStatusCopy templateStatusCopy;
+
+	public OpsService(JdbcTemplate jdbc, WhatsAppTemplateComparison templateComparison,
+			TemplateStatusCopy templateStatusCopy) {
 		this.jdbc = jdbc;
+		this.templateComparison = templateComparison;
+		this.templateStatusCopy = templateStatusCopy;
+	}
+
+	/**
+	 * One temple's stored copy of Meta's status per WhatsApp template (T-178), read inside that temple's
+	 * own context, as {@link #tenantOperations} reads its sends. Nothing here asks Meta.
+	 */
+	public TemplateStatusCopy.View templeTemplateStatus(UUID tenantId) {
+		tenantName(tenantId);
+		TenantContext.set(tenantId);
+		try {
+			return templateStatusCopy.read(tenantId);
+		} finally {
+			TenantContext.clear();
+		}
+	}
+
+	/**
+	 * The operator's Refresh for one temple (T-178): asks Meta again and replaces the stored copy, with an
+	 * audit entry on the temple.
+	 *
+	 * <p><strong>Whose token, and why that makes it an act.</strong> Meta only answers about a temple's
+	 * templates to that temple's own business account, so {@link WhatsAppTemplateComparison#compare()}
+	 * takes the temple's access token from the secret store, inside this temple's context, and sends it to
+	 * Meta on the operator's behalf. That is using a temple's credential to call an outside service, which
+	 * is why this needs {@code MANAGE_TENANTS} rather than the read permission, and why it is recorded on
+	 * the temple. The token travels only in the Authorization header of twenty GETs: it is never logged,
+	 * never stored in the copy, and never returned.
+	 *
+	 * <p>The comparison runs first, in its own read-only transaction and outside the write, so no
+	 * connection holds a write transaction open while Meta is asked. The replacement and its audit entry
+	 * then commit together. A temple that is not connected is refused by the comparison with the same
+	 * {@code KMS-400001} Reload and Test give it, before Meta or the audit log is touched.
+	 */
+	public TemplateStatusCopy.View refreshTempleTemplateStatus(UUID tenantId, AuthenticatedUser actor) {
+		tenantName(tenantId);
+		TenantContext.set(tenantId);
+		try {
+			WhatsAppTemplateComparison.Report report = templateComparison.compare();
+			TemplateStatusCopy.View view = templateStatusCopy.replaceForOperator(actor, report);
+			// Counts and ids only: never the token, never Meta's wording.
+			log.info("Platform operator {} refreshed Meta's status for {} WhatsApp templates of temple {}",
+					actor.getUserId(), view.templates().size(), tenantId);
+			return view;
+		} finally {
+			TenantContext.clear();
+		}
+	}
+
+	/**
+	 * Per template, how many temples' stored copies say approved, pending, refused or marketing (T-178).
+	 * Counts only; see {@link TemplateStatusCounts} for why that may cross temples and a list may not.
+	 */
+	public List<TemplateStatusCounts> whatsappTemplateStatusCounts() {
+		return templateStatusCopy.countsAcrossTemples();
 	}
 
 	/** The temples an operator can drill into. The tenant registry is not tenant-scoped. */

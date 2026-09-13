@@ -147,7 +147,7 @@ public class WhatsAppTemplateComparison {
 			return Entry.notAnswered(name, ourCategory, META_ANSWERED_WITH_AN_ERROR);
 		}
 		if (found.isEmpty()) {
-			return new Entry(name, ourCategory, null, null, false, null, null, null, null, null);
+			return new Entry(name, ourCategory, null, null, false, null, null, null, null, null, null);
 		}
 		MetaWhatsAppClient.HeldTemplate held = found.get();
 		String ours = template.whatsappBodyText();
@@ -155,7 +155,7 @@ public class WhatsAppTemplateComparison {
 		boolean exact = ours.equals(theirs);
 		boolean afterTrim = theirs != null && ours.strip().equals(theirs.strip());
 		return new Entry(name, ourCategory, held.category(), held.status(), true, exact, afterTrim,
-				exact ? null : theirs, exact ? null : ours, null);
+				exact ? null : theirs, exact ? null : ours, null, held.rejectedReason());
 	}
 
 	private record Account(String phoneNumberId, String wabaId) {
@@ -190,13 +190,16 @@ public class WhatsAppTemplateComparison {
 	 * @param ourBody              our body, only where the exact match fails
 	 * @param lookupProblem        a plain sentence when Meta was not reached or answered with an error for
 	 *                             this template; null when it answered
+	 * @param metaRejectedReason   Meta's {@code rejected_reason} exactly as sent, e.g. {@code INVALID_FORMAT};
+	 *                             null unless held and Meta sent one (T-178, which stores it to tell a
+	 *                             formatting refusal from any other)
 	 */
 	public record Entry(String name, String ourCategory, String metaCategory, String metaStatus, Boolean held,
 			Boolean bodyMatchesExactly, Boolean bodyMatchesAfterTrim, String metaBody, String ourBody,
-			String lookupProblem) {
+			String lookupProblem, String metaRejectedReason) {
 
 		static Entry notAnswered(String name, String ourCategory, String problem) {
-			return new Entry(name, ourCategory, null, null, null, null, null, null, null, problem);
+			return new Entry(name, ourCategory, null, null, null, null, null, null, null, problem, null);
 		}
 	}
 }

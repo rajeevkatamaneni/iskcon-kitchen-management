@@ -1,19 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
-import type { WhatsAppTemplateCatalogue } from "@/lib/api";
+import { toApiError, type TemplateStatusCounts, type WhatsAppTemplateCatalogue } from "@/lib/api";
 import { moment, templeDay } from "@/lib/format";
 
 /**
- * The operator's catalogue of WhatsApp templates (T-177).
+ * The operator's catalogue of WhatsApp templates (T-177), with Meta's status counted across temples on
+ * each card (T-178).
  *
  * <p>The query hook is replaced, as the Operations test does, so each case states exactly what the
  * API answered. The dates on screen are computed here with the same formatters the page uses, so a
  * change of date format fails here only if the page stops using them.
  */
-const { catalogueFn, catalogueRef, authRef } = vi.hoisted(() => ({
+const { catalogueFn, countsFn, catalogueRef, countsRef, authRef } = vi.hoisted(() => ({
   catalogueFn: () => {},
+  countsFn: () => {},
   catalogueRef: {
     current: { data: null as WhatsAppTemplateCatalogue | null, error: null as unknown, loading: false },
+  },
+  countsRef: {
+    current: { data: null as TemplateStatusCounts[] | null, error: null as unknown, loading: false },
   },
   authRef: {
     current: { status: "signed-in", appUser: { role: "SUPER_ADMIN", fullName: "Test Person" } } as {
@@ -27,12 +32,16 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: 
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => authRef.current }));
 vi.mock("@/lib/api", async (orig) => {
   const actual = await orig<typeof import("@/lib/api")>();
-  return { ...actual, api: { ...actual.api, whatsappTemplateCatalogue: catalogueFn } };
+  return {
+    ...actual,
+    api: { ...actual.api, whatsappTemplateCatalogue: catalogueFn, whatsappTemplateStatusCounts: countsFn },
+  };
 });
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fetcher: unknown) => {
-    if (fetcher !== catalogueFn) throw new Error("the page asked for something other than the catalogue");
-    return catalogueRef.current;
+    if (fetcher === catalogueFn) return catalogueRef.current;
+    if (fetcher === countsFn) return countsRef.current;
+    throw new Error("the page asked for something other than the catalogue and the counts");
   },
 }));
 
@@ -80,6 +89,15 @@ const CATALOGUE: WhatsAppTemplateCatalogue = {
   ],
 };
 
+/** Five temples counted for one, one for another, none for the third. */
+const COUNTS: TemplateStatusCounts[] = [
+  { name: "shift_reminder", templesCounted: 5, approved: 2, pending: 1, refused: 1, marketing: 0, formattingRefusal: false },
+  { name: "temple_announcement", templesCounted: 1, approved: 0, pending: 1, refused: 0, marketing: 1, formattingRefusal: true },
+  { name: "donation_receipt", templesCounted: 0, approved: 0, pending: 0, refused: 0, marketing: 0, formattingRefusal: false },
+];
+
+const NOT_COUNTED = "Temples without WhatsApp, or never checked, are not counted.";
+
 function card(name: string) {
   return within(screen.getByRole("article", { name }));
 }
@@ -88,6 +106,7 @@ describe("whatsapp templates", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "SUPER_ADMIN", fullName: "Test Person" } };
     catalogueRef.current = { data: CATALOGUE, error: null, loading: false };
+    countsRef.current = { data: COUNTS, error: null, loading: false };
   });
 
   it("shows the operator every template's name, category, body with examples, and what sends it", () => {
@@ -142,6 +161,7 @@ describe("whatsapp templates", () => {
     expect(unrecorded.queryByText("Not changed since tracking began")).not.toBeInTheDocument();
 
     // Nothing on the screen claims a wording was created, which would imply somebody authored it then.
+    // Checked with the counts on screen too (T-178), since they add words to every card.
     expect(document.body.textContent).not.toMatch(/created/i);
   });
 
@@ -163,6 +183,51 @@ describe("whatsapp templates", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Not your page" })).toBeInTheDocument();
     expect(screen.queryByText("Wording last changed")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Meta’s status across temples/)).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "WhatsApp templates" })).not.toBeInTheDocument();
+  });
+
+  // ---- T-178: Meta's status, counted across temples ----------------------------------------------
+
+  it("shows each card's counts across temples, what is left over, and says who is not counted", () => {
+    render(<WhatsAppTemplatesPage />);
+
+    // Two approved, one pending and one refused of five leaves one: said, not dropped.
+    expect(
+      card("shift_reminder").getByText(
+        "Approved in 2 of 5 temples. Pending in 1. Refused in 1. Held as marketing in 0. Not held, unanswered or other in 1."
+      )
+    ).toBeInTheDocument();
+    // One temple, singular, and nothing left over, so no remainder sentence.
+    expect(
+      card("temple_announcement").getByText("Approved in 0 of 1 temple. Pending in 1. Refused in 0. Held as marketing in 1.")
+    ).toBeInTheDocument();
+    // Counted in no temple at all.
+    expect(card("donation_receipt").getByText("No temple has a stored copy of Meta’s status yet.")).toBeInTheDocument();
+
+    for (const template of CATALOGUE.templates) {
+      const c = card(template.name);
+      expect(c.getByRole("heading", { level: 3, name: "Meta’s status across temples" })).toBeInTheDocument();
+      expect(c.getByText(NOT_COUNTED)).toBeInTheDocument();
+    }
+  });
+
+  it("flags a formatting refusal on its own card only, as something every temple should know", () => {
+    render(<WhatsAppTemplatesPage />);
+
+    const warning = /Meta refused this for its formatting in a temple\. That applies to every temple\./;
+    expect(card("temple_announcement").getByText(warning)).toBeInTheDocument();
+    expect(card("shift_reminder").queryByText(warning)).not.toBeInTheDocument();
+    expect(card("donation_receipt").queryByText(warning)).not.toBeInTheDocument();
+  });
+
+  it("still shows every template's wording when the counts cannot be loaded", () => {
+    countsRef.current = { data: null, error: toApiError(new Error("down"), "We couldn’t load this."), loading: false };
+    render(<WhatsAppTemplatesPage />);
+
+    expect(screen.getAllByRole("article")).toHaveLength(CATALOGUE.templates.length);
+    expect(card("shift_reminder").getByText(CATALOGUE.templates[0].body)).toBeInTheDocument();
+    expect(screen.queryByText(NOT_COUNTED)).not.toBeInTheDocument();
+    expect(screen.getByText("We couldn’t load this.")).toBeInTheDocument();
   });
 });

@@ -328,7 +328,7 @@ public class MetaWhatsAppClient {
 	public Optional<HeldTemplate> findTemplate(String wabaId, String accessToken, String name, String languageCode) {
 		HttpResponse<String> response = call(HttpRequest.newBuilder(
 						URI.create(graphBaseUrl + "/" + encode(wabaId) + "/message_templates?name=" + encode(name)
-								+ "&fields=id,name,language,status,category,components"))
+								+ "&fields=id,name,language,status,category,components,rejected_reason"))
 				.timeout(TIMEOUT)
 				.header("Authorization", "Bearer " + accessToken)
 				.GET());
@@ -358,7 +358,8 @@ public class MetaWhatsAppClient {
 					body = text(component, "text");
 				}
 			}
-			return Optional.of(new HeldTemplate(id, text(held, "status"), text(held, "category"), body));
+			return Optional.of(new HeldTemplate(id, text(held, "status"), text(held, "category"), body,
+					text(held, "rejected_reason")));
 		}
 		return Optional.empty();
 	}
@@ -433,8 +434,15 @@ public class MetaWhatsAppClient {
 	 * @param status   Meta's review status, e.g. {@code APPROVED}, {@code PENDING}, {@code REJECTED}
 	 * @param category the category Meta holds it under, which may not be ours (T-168)
 	 * @param bodyText the body as Meta holds it, with its {@code {{1}}} placeholders; null if it listed none
+	 * @param rejectedReason Meta's {@code rejected_reason}, exactly as sent, e.g. {@code INVALID_FORMAT}; null
+	 *     when Meta sent none (T-178). The Graph API reference for the template node lists it as "The reason
+	 *     the message template was rejected. enum {ABUSIVE_CONTENT, INVALID_FORMAT, NONE, PROMOTIONAL,
+	 *     TAG_CONTENT_MISMATCH, SCAM}":
+	 *     https://developers.facebook.com/docs/graph-api/reference/whats-app-business-hsm/ . Asked for in the
+	 *     same lookup Reload makes rather than in a second call, so the operator's status copy and Reload's
+	 *     comparison cannot read two different answers. Nothing in Reload reads it.
 	 */
-	public record HeldTemplate(String id, String status, String category, String bodyText) {
+	public record HeldTemplate(String id, String status, String category, String bodyText, String rejectedReason) {
 	}
 
 	/**

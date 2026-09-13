@@ -25,10 +25,12 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ops.TemplateStatusCopy;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.iskcon.kms.tenancy.TenantSecretStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -77,16 +79,35 @@ public class TenantWhatsAppSettingsService {
 	private final TenantSecretStore secrets;
 	private final AuditService auditService;
 	private final MetaWhatsAppClient meta;
+	private final WhatsAppTemplateComparison comparison;
+	private final TemplateStatusCopy statusCopy;
 	private final String apiBaseUrl;
 
+	@Autowired
 	public TenantWhatsAppSettingsService(JdbcTemplate jdbc, TenantSecretStore secrets,
-			AuditService auditService, MetaWhatsAppClient meta,
-			@Value("${kms.api-base-url:}") String apiBaseUrl) {
+			AuditService auditService, MetaWhatsAppClient meta, WhatsAppTemplateComparison comparison,
+			TemplateStatusCopy statusCopy, @Value("${kms.api-base-url:}") String apiBaseUrl) {
 		this.jdbc = jdbc;
 		this.secrets = secrets;
 		this.auditService = auditService;
 		this.meta = meta;
+		this.comparison = comparison;
+		this.statusCopy = statusCopy;
 		this.apiBaseUrl = apiBaseUrl;
+	}
+
+	/**
+	 * The constructor three integration tests in this package build the service with by hand (T-178).
+	 *
+	 * <p>It builds a real comparison and a real copy from the same collaborators rather than passing null,
+	 * so a Reload in those tests takes exactly the production path, stored copy included, against whatever
+	 * Meta the test supplies. Package-private so nothing outside the package can pick it, and Spring uses
+	 * the {@code @Autowired} one.
+	 */
+	TenantWhatsAppSettingsService(JdbcTemplate jdbc, TenantSecretStore secrets, AuditService auditService,
+			MetaWhatsAppClient meta, String apiBaseUrl) {
+		this(jdbc, secrets, auditService, meta, new WhatsAppTemplateComparison(jdbc, secrets, meta),
+				new TemplateStatusCopy(jdbc, auditService), apiBaseUrl);
 	}
 
 	/**
@@ -246,6 +267,13 @@ public class TenantWhatsAppSettingsService {
 		auditService.record(actor, AuditAction.SETTINGS_UPDATED, AuditEntityType.TENANT, tenantId,
 				pendingForAudit(current.templatesPending()), pendingForAudit(after.templatesPending()),
 				"WhatsApp templates sent to Meta.");
+
+		// T-178: the temple's stored copy of Meta's status, read by the operator's screens, is taken again
+		// now, because a Reload is when the wording at Meta changes. It is T-173's comparison, twenty GETs
+		// and no POST, inside this transaction so the copy commits with the Reload it describes. No
+		// operator audit: the temple acted, and its Reload is already recorded just above. The Refresh an
+		// operator presses is the audited path, in OpsService.
+		statusCopy.replace(comparison.compare());
 		return after;
 	}
 

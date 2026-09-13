@@ -516,6 +516,13 @@ public enum AuditAction {
 	SETTINGS_UPDATED,
 
 	/**
+	 * The platform operator refreshed one temple's stored copy of Meta's WhatsApp template status (T-178),
+	 * using that temple's own access token on the operator's behalf. Recorded on the temple, because it is an
+	 * act on the temple rather than a view. A refresh at the end of the temple's own Reload is not this.
+	 */
+	WHATSAPP_TEMPLATE_STATUS_REFRESHED,
+
+	/**
 	 * A recipe was added to, corrected in, or removed from the shared library (E2-S15). Platform
 	 * acts: the library belongs to no temple, and an operator editing it changes what every temple
 	 * on the platform is offered. A copy a temple has already taken is untouched by any of the

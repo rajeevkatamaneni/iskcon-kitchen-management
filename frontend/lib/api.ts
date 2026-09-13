@@ -375,6 +375,44 @@ export interface HealthStatus {
 }
 
 /** Platform-wide notification-send figures for the Super-Admin Operations page. */
+/** Meta's status for one template in one temple, from the stored copy (T-178). */
+export interface TempleTemplateStatus {
+  /** Meta's template name. */
+  name: string;
+  /** The category the app submits. */
+  ourCategory: string;
+  /** What Meta holds, e.g. APPROVED, PENDING, REJECTED. Null where Meta did not answer or does not hold it. */
+  metaStatus: string | null;
+  metaCategory: string | null;
+  /** Whether Meta holds the template at all. Null where Meta did not answer. */
+  held: boolean | null;
+  /** Whether Meta's wording matches the app's, after trimming, as Reload compares. Null unless held. */
+  wordingMatches: boolean | null;
+  /** A plain sentence where Meta could not be asked for this template. */
+  lookupProblem: string | null;
+}
+
+export interface TempleTemplateStatusView {
+  tenantId: string;
+  /** When the stored copy was taken. Null if it has never been taken. */
+  asOf: string | null;
+  templates: TempleTemplateStatus[];
+}
+
+/** One template's counts across temples (T-178). Counts only, never which temples. */
+export interface TemplateStatusCounts {
+  name: string;
+  /** Temples with a stored copy: the M in "approved in N of M". */
+  templesCounted: number;
+  approved: number;
+  pending: number;
+  refused: number;
+  /** Temples where Meta holds it as MARKETING. */
+  marketing: number;
+  /** True when any temple's copy shows a refusal for a formatting reason, which applies to every temple. */
+  formattingRefusal: boolean;
+}
+
 /** One successful gift that belongs to the signed-in person (T-179). */
 export interface MyDonation {
   id: string;
@@ -4231,6 +4269,26 @@ export const api = {
   // wording and when a running app first saw that wording (T-177). No temple data.
   whatsappTemplateCatalogue: (token?: string) =>
     request<WhatsAppTemplateCatalogue>("/api/v1/ops/whatsapp-templates", { method: "GET", token }),
+
+  // Super-Admin (VIEW_PLATFORM_OPERATIONS). Counts only, per template, across every temple's stored copy of
+  // Meta's status (T-178). Never a list of temples.
+  whatsappTemplateStatusCounts: (token?: string) =>
+    request<TemplateStatusCounts[]>("/api/v1/ops/whatsapp-templates/status-counts", { method: "GET", token }),
+
+  // Super-Admin (VIEW_PLATFORM_OPERATIONS). One temple's stored copy of Meta's status per template (T-178).
+  templeTemplateStatus: (tenantId: string, token?: string) =>
+    request<TempleTemplateStatusView>(`/api/v1/ops/tenants/${tenantId}/whatsapp-templates`, {
+      method: "GET",
+      token,
+    }),
+
+  // Super-Admin (MANAGE_TENANTS). Asks Meta again with that temple's own token, replaces the stored copy,
+  // and is audited on the temple (T-178). Creates and edits nothing at Meta.
+  refreshTempleTemplateStatus: (tenantId: string, token?: string) =>
+    request<TempleTemplateStatusView>(`/api/v1/ops/tenants/${tenantId}/whatsapp-templates/refresh`, {
+      method: "POST",
+      token,
+    }),
 
   // Temple user management (E1-S12). All behind MANAGE_USERS server-side, RLS-scoped to the tenant.
   // `role` narrows the list: the devotee register asks for VOLUNTEER, so a temple's staff never

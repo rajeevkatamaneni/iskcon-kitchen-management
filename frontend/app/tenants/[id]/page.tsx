@@ -7,7 +7,14 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { CookingLoader } from "@/components/CookingLoader";
-import { api, toApiError, type ApiError, type TenantDetail } from "@/lib/api";
+import {
+  api,
+  toApiError,
+  type ApiError,
+  type TempleTemplateStatus,
+  type TempleTemplateStatusView,
+  type TenantDetail,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { BusyPot, Loading } from "@/components/Loading";
@@ -82,6 +89,8 @@ function TenantDetailView() {
                 </dl>
               </section>
 
+              <WhatsAppTemplatesSection id={id} />
+
               <section className="card mt-6 px-6 py-5">
                 <h2 className="text-lg">Data export</h2>
                 <p className="mt-1 text-sm text-ink-secondary">
@@ -127,6 +136,191 @@ function TenantDetailView() {
         </div>
       </main>
     </div>
+  );
+}
+
+/** Meta's category, as a word. The stored value is upper case and is not printed as it is. */
+const CATEGORY_LABEL: Record<string, string> = {
+  UTILITY: "Utility",
+  MARKETING: "Marketing",
+  AUTHENTICATION: "Authentication",
+};
+
+/**
+ * Meta's status, as a word. `REJECTED` reads "Refused", the word the rest of the app already uses for
+ * Meta saying no to a template.
+ */
+const META_STATUS_LABEL: Record<string, string> = {
+  APPROVED: "Approved",
+  PENDING: "Pending",
+  IN_APPEAL: "In appeal",
+  REJECTED: "Refused",
+  PAUSED: "Paused",
+  DISABLED: "Disabled",
+  LIMIT_EXCEEDED: "Limit exceeded",
+  PENDING_DELETION: "Being deleted",
+  DELETED: "Deleted",
+  ARCHIVED: "Archived",
+};
+
+/** A value Meta sends that the map above does not know yet, still said as a word. */
+function asWord(stored: string): string {
+  const spaced = stored.replace(/_/g, " ").toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function metaStatusWords(row: TempleTemplateStatus): string {
+  if (row.held === null) return row.lookupProblem ?? "Meta did not answer for this message.";
+  if (!row.held) return "Not held by Meta";
+  if (!row.metaStatus) return "No status given";
+  return META_STATUS_LABEL[row.metaStatus] ?? asWord(row.metaStatus);
+}
+
+function categoryWords(row: TempleTemplateStatus): string {
+  if (!row.metaCategory) return "Not known";
+  const theirs = CATEGORY_LABEL[row.metaCategory] ?? asWord(row.metaCategory);
+  if (row.metaCategory === row.ourCategory) return theirs;
+  return `${theirs}, app sends ${CATEGORY_LABEL[row.ourCategory] ?? asWord(row.ourCategory)}`;
+}
+
+function wordingWords(row: TempleTemplateStatus): string {
+  if (row.wordingMatches === null) return "Not known";
+  return row.wordingMatches ? "Matches" : "Differs";
+}
+
+/**
+ * This temple's WhatsApp templates as Meta holds them (T-178): each one's status, Meta's category and
+ * whether the wording matches, from the copy stored when the temple last reloaded or an operator last
+ * refreshed.
+ *
+ * <p><strong>Collapsed by default, and nothing is fetched until it is opened.</strong> Twenty rows open
+ * on arrival would push this page's export and delete, the two acts it exists for, below the fold. So
+ * the section is one line until somebody asks for it.
+ *
+ * <p><strong>Refresh is an act on the temple, not a view.</strong> It asks Meta again with this temple's
+ * own token and is recorded on the temple's audit log, which is why the line beside it says so. It creates
+ * and edits nothing at Meta.
+ */
+function WhatsAppTemplatesSection({ id }: { id: string }) {
+  const { getToken } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<TempleTemplateStatusView | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  async function toggle() {
+    const opening = !open;
+    setOpen(opening);
+    if (!opening || view || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      setView(await api.templeTemplateStatus(id, await getToken()));
+    } catch (e) {
+      setError(toApiError(e, "We couldn’t load this temple’s WhatsApp templates."));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function refresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    setError(null);
+    try {
+      setView(await api.refreshTempleTemplateStatus(id, await getToken()));
+    } catch (e) {
+      setError(toApiError(e, "We couldn’t ask Meta about this temple’s templates."));
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  return (
+    <section className="card mt-6 px-6 py-5">
+      <h2 className="text-lg">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          aria-controls="temple-whatsapp-templates"
+          className="flex w-full items-center justify-between gap-4 text-left"
+        >
+          <span>WhatsApp templates</span>
+          <i className={`ti ti-chevron-${open ? "up" : "down"} text-ink-secondary`} aria-hidden="true" />
+        </button>
+      </h2>
+
+      {open && (
+        <div id="temple-whatsapp-templates" className="mt-3">
+          {loading ? (
+            <Loading label="Loading the templates…" />
+          ) : (
+            <>
+              {view && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={refresh}
+                    disabled={refreshing}
+                    className="min-h-touch rounded-sm border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-canvas disabled:opacity-60"
+                  >
+                    {refreshing ? (
+                      <span className="inline-flex items-center gap-2">
+                        <BusyPot />
+                        Asking Meta…
+                      </span>
+                    ) : (
+                      "Refresh from Meta"
+                    )}
+                  </button>
+                  <span className="text-sm text-ink-muted">
+                    {view.asOf ? `As of ${moment(view.asOf)}.` : "Meta has not been asked for this temple yet."}
+                  </span>
+                </div>
+              )}
+              {view && (
+                <p className="mt-2 text-sm text-ink-secondary">
+                  Refresh uses this temple’s own WhatsApp token. The temple’s audit log records it.
+                </p>
+              )}
+
+              {error && (
+                <div className="mt-3">
+                  <ErrorNotice error={error} />
+                </div>
+              )}
+
+              {view && view.templates.length > 0 && (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-ink-secondary">
+                        <th className="py-2 pr-4 font-medium">Message</th>
+                        <th className="py-2 pr-4 font-medium">Meta status</th>
+                        <th className="py-2 pr-4 font-medium">Category at Meta</th>
+                        <th className="py-2 font-medium">Wording</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {view.templates.map((row) => (
+                        <tr key={row.name} className="hover:bg-sunken">
+                          <td className="py-2 pr-4 font-mono">{row.name}</td>
+                          <td className="py-2 pr-4">{metaStatusWords(row)}</td>
+                          <td className="py-2 pr-4">{categoryWords(row)}</td>
+                          <td className="py-2">{wordingWords(row)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

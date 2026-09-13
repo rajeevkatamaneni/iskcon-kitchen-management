@@ -113,7 +113,9 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 	private static final AtomicInteger POSTS_ACROSS_THE_CLASS = new AtomicInteger();
 
 	private static final Set<String> ENTRY_FIELDS = Set.of("name", "ourCategory", "metaCategory", "metaStatus",
-			"held", "bodyMatchesExactly", "bodyMatchesAfterTrim", "metaBody", "ourBody", "lookupProblem");
+			"held", "bodyMatchesExactly", "bodyMatchesAfterTrim", "metaBody", "ourBody", "lookupProblem",
+			// T-178: Meta's rejected_reason, carried for the operator's stored copy.
+			"metaRejectedReason");
 
 	@Autowired
 	private JdbcTemplate jdbc;
@@ -430,7 +432,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 		assertThat(entry.get("held").isBoolean()).isTrue();
 		assertThat(entry.get("held").asBoolean()).isFalse();
 		for (String absent : List.of("metaCategory", "metaStatus", "bodyMatchesExactly", "bodyMatchesAfterTrim",
-				"metaBody", "ourBody", "lookupProblem")) {
+				"metaBody", "ourBody", "lookupProblem", "metaRejectedReason")) {
 			assertThat(entry.get(absent).isNull()).as(absent).isTrue();
 		}
 	}
