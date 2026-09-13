@@ -1182,6 +1182,41 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-13 — The templates button stops saying nothing is waiting when it cannot know, a donor's old and new phone forms group again, a refused box has a red border, and no plain form tag is left (wave 4c; tasks T-188, T-187, T-170, T-167)
+
+**No migration**; staging stays at `V131`. No new error code, no new permission. **Not driven in a
+browser, and not seen working by Rajeev.**
+
+**The WhatsApp templates button no longer claims templates were last sent when it cannot know
+(T-188).** A temple that last sent templates before `V129` has no record of which wording Meta holds.
+The count skipped those templates, so on staging a temple whose Meta held the old wording of 11
+reworded templates read *"Templates last sent to Meta on …"*, as if nothing were waiting. The count now
+has a fourth figure, `unchecked`, for templates whose wording at Meta nothing has recorded. When it is
+above zero the button is the primary style and reads *"Current template wording waiting to go to
+Meta"*, or *"Templates not yet sent to Meta"* if nothing was ever sent. The page still asks Meta
+nothing when it opens. Stored refusal reasons no longer say *"Press Reload"*, since no button is
+labelled Reload: they now say to use *"the templates button in the WhatsApp section of Settings"*.
+
+**A donor's history groups old and new counter gifts again (T-187).** Since wave 4b saved counter-gift
+phones as `+91`, the Temple Admin's donor history grouped by exact phone, so gifts typed `98765 43210`
+fell away from the same donor's `+919876543210` ones. It now compares both phones after the counter
+form's own rule, at read time. Nothing stored changes. My donations still matches exactly, so a gift
+typed without `+91` is not listed for a donor verified as `+919876543210`; a test reads the same two
+gifts both ways. A landline typed two different ways still does not group, as before.
+
+**A refused box gets a red border in every theme pack (T-170)**, not only a red sentence. Any input,
+select or textarea marked `aria-invalid="true"` takes the pack's danger colour for its border; width
+and focus ring are unchanged. Open, a matter of taste: the WhatsApp composer's message box shows its
+accent border while focused, and red once focus leaves.
+
+**Every form uses the shared Form (T-167).** A guard test fails on any plain `<form>` element under
+`app/` or `components/` other than the one inside `components/ds/Form.tsx`, naming the file and line.
+It reads the files with the TypeScript parser, so comments and strings do not trip it. No exemption was
+needed.
+
+**Not done:** none of the four has been seen in a real browser. Proofs with negative controls are in
+`docs/work/proof/T-188.md`, `T-187.md`, `T-170.md` and `T-167.md`.
+
 ### 2026-09-13 — WhatsApp messages reworded as Rajeev reviewed them, counter-gift phones saved as +91, and Language opens read-only (wave 4b; tasks T-180, T-186, T-185, T-175)
 
 **No migration**; staging stays at `V131`. No new error code, no new permission. **Not driven in a

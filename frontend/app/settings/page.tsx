@@ -803,7 +803,7 @@ function CopyRow({ value }: { value: string }) {
  * field is optional in `api.ts` only while the settings test fixtures catch up, so this exists for
  * the type, and reads as nothing waiting.
  */
-const NOTHING_PENDING: WhatsAppTemplatesPending = { changed: 0, refused: 0, accountChanged: false };
+const NOTHING_PENDING: WhatsAppTemplatesPending = { changed: 0, refused: 0, accountChanged: false, unchecked: 0 };
 
 /** How Meta answered for one template, in words. `HELD_UNDER_ANOTHER_CATEGORY` is a note, not a fault. */
 const TEMPLATE_ISSUE_LABEL: Record<WhatsAppTemplateIssueKind, string> = {
@@ -821,10 +821,20 @@ const TEMPLATE_ISSUE_LABEL: Record<WhatsAppTemplateIssueKind, string> = {
  * the new account whatever the counts say. A temple with no recorded send and nothing else to say is
  * waiting too, since "last sent on" would have no date to give.
  *
+ * <p><b>Unknown is not nothing (T-188).</b> `unchecked` counts templates whose wording at Meta nothing has
+ * recorded, as on a temple that last sent before V129. On staging, 2026-09-13, such a temple read "last
+ * sent to Meta on …" while Meta held the old wording of eleven templates. So it comes straight after a
+ * changed account and ahead of the counts, because "1 template changed" beside eighteen nobody has checked
+ * would read as the whole story. With nothing ever sent, "not yet sent" is the truer thing to say. Read as
+ * `?? 0` while `api.ts` carries the field as optional mid-wave.
+ *
  * <p>Every one of these is twelve words or fewer, in sentence case (§9).
  */
 function templatesButtonLabel(pending: WhatsAppTemplatesPending, submittedAt: string | null): string {
   if (pending.accountChanged) return "Templates not yet sent to your new WhatsApp account";
+  if ((pending.unchecked ?? 0) > 0) {
+    return submittedAt ? "Current template wording waiting to go to Meta" : "Templates not yet sent to Meta";
+  }
   if (pending.changed > 0 && pending.refused > 0) {
     return `${pending.changed + pending.refused} templates waiting to go to Meta`;
   }
@@ -902,7 +912,9 @@ function MessagingSection({
   const pending = settings.templatesPending ?? NOTHING_PENDING;
   const issues = settings.refusedTemplates ?? [];
   const waiting =
-    pending.accountChanged || pending.changed + pending.refused > 0 || !settings.templatesSubmittedAt;
+    pending.accountChanged ||
+    pending.changed + pending.refused + (pending.unchecked ?? 0) > 0 ||
+    !settings.templatesSubmittedAt;
   const reloadStyle = waiting ? "btn-primary" : "btn-quiet";
   // Waiting ones first. A note about a category is not something to act on, so it goes last.
   const listed = [...issues].sort(

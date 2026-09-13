@@ -280,7 +280,8 @@ public class TenantWhatsAppSettingsService {
 	private static Map<String, Object> pendingForAudit(TenantWhatsAppSettings.TemplatesPending pending) {
 		return Map.of("whatsappTemplatesChanged", pending.changed(),
 				"whatsappTemplatesRefused", pending.refused(),
-				"whatsappAccountChanged", pending.accountChanged());
+				"whatsappAccountChanged", pending.accountChanged(),
+				"whatsappTemplatesUnchecked", pending.unchecked());
 	}
 
 	/**
@@ -741,17 +742,31 @@ public class TenantWhatsAppSettingsService {
 	/** "Only templates with an APPROVED, REJECTED, or PAUSED status can be edited." */
 	private static final Set<String> EDITABLE_STATUSES = Set.of("APPROVED", "REJECTED", "PAUSED");
 
+	/**
+	 * What every "try again" in a stored reason calls the button that sends templates (T-188).
+	 *
+	 * <p>These sentences used to tell the reader to press Reload, and no button on the screen says so. The button's
+	 * label changes with what is waiting ("Templates last sent to Meta on …", "3 templates changed since they
+	 * were last sent"), so no label can be quoted. What stays put is where it is: under the heading
+	 * "WhatsApp" on Settings. One phrase in every reason, so an administrator reads one name for one thing
+	 * (DESIGN_SYSTEM §9).
+	 */
+	static final String TEMPLATES_BUTTON = "the templates button in the WhatsApp section of Settings";
+
 	static final String NOT_TOLD_WHAT_META_HOLDS =
-			"Meta did not say which wording it holds for this message. Press Reload to try again.";
+			"Meta did not say which wording it holds for this message. Try again with " + TEMPLATES_BUTTON + ".";
 
 	static final String STILL_IN_REVIEW =
-			"Meta is still reviewing this message, so its new wording has to wait. Press Reload again once the review is over.";
+			"Meta is still reviewing this message, so its new wording has to wait. Once the review is over, use "
+					+ TEMPLATES_BUTTON + ".";
 
 	static final String EDIT_LIMIT =
-			"Meta allows a message to be reworded only once a day and ten times a month. Press Reload again tomorrow.";
+			"Meta allows a message to be reworded only once a day and ten times a month. Use " + TEMPLATES_BUTTON
+					+ " tomorrow.";
 
 	static final String IN_REVIEW_OR_EDIT_LIMIT =
-			"Meta is not taking new wording for this message yet, because of a review or a recent change. Press Reload again tomorrow.";
+			"Meta is not taking new wording for this message yet, because of a review or a recent change. Use "
+					+ TEMPLATES_BUTTON + " tomorrow.";
 
 	static final String CANNOT_BE_REWORDED =
 			"Meta holds this message in a state that cannot be reworded. Report it with the message name shown here.";
@@ -821,28 +836,44 @@ public class TenantWhatsAppSettingsService {
 	}
 
 	/**
-	 * What the Reload button is waiting to send (T-169a), from nothing but what this temple's row
-	 * records.
+	 * What the templates button is waiting to send (T-169a, T-188), from nothing but what this temple's
+	 * row records. Never from Meta: this runs on every read of Settings.
 	 *
 	 * <p><strong>{@code refused}</strong> counts the stored entries of kind REFUSED or NOT_REACHED, as the
 	 * screen's contract defines it. A template Meta holds under a category of its own is not counted:
 	 * Reload cannot change a category, and a count that no press can clear would leave the button
 	 * primary forever.
 	 *
-	 * <p><strong>{@code changed}</strong> counts templates in this release that are not already counted as
-	 * refused and whose stored fingerprint is either different from today's or missing:
+	 * <p>Every other template in this release is read against its stored fingerprint and lands in exactly
+	 * one place:
 	 * <ul>
-	 *   <li><strong>A temple with no fingerprints at all counts nothing.</strong> That is every temple that
-	 *       sent before V129, South Bengaluru on staging among them: Meta holds all twenty there, and the
-	 *       six T-159 reworded already carry the new wording, so "20 changed" would be false and even
-	 *       "6 changed" would be. Nothing was recorded, so nothing is claimed. The next Reload asks Meta,
-	 *       finds the wording current, and records it.</li>
-	 *   <li>A fingerprint recorded as null, unknown, counts nothing, for the same reason.</li>
-	 *   <li>A template with no key at all, on a temple that has fingerprints, is one the app did not have
-	 *       when it last sent: new in this release, so waiting.</li>
-	 *   <li>A refused template is left to {@code refused}, so the two numbers never count one template
-	 *       twice and the screen can add them.</li>
+	 *   <li><strong>{@code unchecked}</strong> when nothing records what Meta holds for it: the temple has no
+	 *       fingerprints at all, or this template's is recorded as null.</li>
+	 *   <li><strong>{@code changed}</strong> when the stored fingerprint differs from today's, or when a temple
+	 *       that has fingerprints has no key for this template, which means the app did not have it when it
+	 *       last sent: new in this release.</li>
+	 *   <li>Nowhere, when the stored fingerprint is today's.</li>
 	 * </ul>
+	 * A refused template is left to {@code refused}, so the three numbers never count one template twice
+	 * and the screen can add them.
+	 *
+	 * <p><strong>Why an unknown is counted, which reverses T-169a (T-188).</strong> T-169a decided that a
+	 * temple with no fingerprints counts nothing: every temple that sent before V129, South Bengaluru on
+	 * staging among them, would otherwise read "20 changed", which nobody had checked. That reasoning still
+	 * holds against counting an unknown as <em>changed</em>, and it is not. But reading zero is a claim as
+	 * well. On staging, 2026-09-13, after the release that reworded eleven templates, Meta's comparison
+	 * found those eleven holding the old wording while this count said nothing was waiting, and the button
+	 * read "Templates last sent to Meta on …". The main session's instruction for T-188 is that the count
+	 * must never read "nothing waiting" when it cannot know. It must not ask Meta either, because this runs
+	 * on every page load, so the unknown gets its own number. The next Reload asks Meta and records what it
+	 * holds, which clears it. {@code WhatsAppTemplateReloadIT} reproduces staging.
+	 *
+	 * <p><strong>A null fingerprint has two writers, and only one reaches {@code unchecked}.</strong> A
+	 * Reload that could not bring the wording up to date writes null and always stores a list entry too, so
+	 * that template is counted in {@code refused}. A first connection writes null for every template Meta
+	 * already held, because it does not ask Meta which wording (see {@link #submitTemplates}). So since
+	 * T-188 a first connection to an account that already held templates reads as unchecked, where before it
+	 * read as nothing waiting.
 	 *
 	 * <p><strong>{@code accountChanged}</strong> compares the account last sent to with the one saved now.
 	 * Never sent since V129 reads as not changed: there is no record to differ from.
@@ -856,26 +887,24 @@ public class TenantWhatsAppSettingsService {
 				.map(TenantWhatsAppSettings.RefusedTemplate::name)
 				.collect(Collectors.toSet());
 		int changed = 0;
-		if (!fingerprints.isEmpty()) {
-			for (NotificationTemplate template : NotificationTemplate.values()) {
-				String name = template.whatsappTemplateName();
-				if (refusedNames.contains(name)) {
-					continue;
-				}
-				if (!fingerprints.containsKey(name)) {
-					changed++;
-					continue;
-				}
-				String held = fingerprints.get(name);
-				if (held != null && !held.equals(template.whatsappFingerprint(TEMPLATE_LANGUAGE))) {
-					changed++;
-				}
+		int unchecked = 0;
+		for (NotificationTemplate template : NotificationTemplate.values()) {
+			String name = template.whatsappTemplateName();
+			if (refusedNames.contains(name)) {
+				continue;
+			}
+			String held = fingerprints.get(name);
+			if (fingerprints.isEmpty() || (fingerprints.containsKey(name) && held == null)) {
+				unchecked++;
+			} else if (held == null || !held.equals(template.whatsappFingerprint(TEMPLATE_LANGUAGE))) {
+				// held is null here only for a missing key on a temple that has fingerprints: new since.
+				changed++;
 			}
 		}
 		int refused = (int) stored.stream().filter(TenantWhatsAppSettingsService::waitsForReload).count();
 		boolean accountChanged = sentWabaId != null
 				&& (!sentWabaId.equals(wabaId) || !Objects.equals(sentPhoneNumberId, phoneNumberId));
-		return new TenantWhatsAppSettings.TemplatesPending(changed, refused, accountChanged);
+		return new TenantWhatsAppSettings.TemplatesPending(changed, refused, accountChanged, unchecked);
 	}
 
 	private static boolean waitsForReload(TenantWhatsAppSettings.RefusedTemplate entry) {
@@ -903,11 +932,13 @@ public class TenantWhatsAppSettingsService {
 	}
 
 	/**
-	 * Since T-169a a later Save no longer sends templates, so every "try again" says Reload. That is
-	 * the button that sends them, on a first connection's refusals as on any other.
+	 * Since T-169a a later Save no longer sends templates, so every "try again" names the templates
+	 * button, on a first connection's refusals as on any other. See {@link #TEMPLATES_BUTTON} for why it
+	 * is named by where it is rather than by the word Reload (T-188).
 	 */
 	private static final String NOT_REACHED =
-			"Meta could not be reached while this message was being registered. Press Reload to try again.";
+			"Meta could not be reached while this message was being registered. Try again with " + TEMPLATES_BUTTON
+					+ ".";
 
 	/**
 	 * A template Meta holds under a category it chose, in words that tell the truth and give no
@@ -950,8 +981,8 @@ public class TenantWhatsAppSettingsService {
 			return "Meta found no fixed wording of its own, too many blank lines or too many emoji."
 					+ NEEDS_AN_APP_CHANGE;
 		}
-		return "Meta did not accept this message. Press Reload to try again, and if it is refused again, "
-				+ "report it with the message name shown here.";
+		return "Meta did not accept this message. Try again with " + TEMPLATES_BUTTON
+				+ ", and report it with the message name shown here if it is refused again.";
 	}
 
 	private static String json(List<TenantWhatsAppSettings.RefusedTemplate> refused) {

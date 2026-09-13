@@ -19,7 +19,7 @@ const WHATSAPP_NONE: WhatsAppSettingsView = {
   templatesSubmittedAt: null,
   // Both always come from the server (T-169a). Optional in the type only until this wave lands.
   refusedTemplates: [],
-  templatesPending: { changed: 0, refused: 0, accountChanged: false },
+  templatesPending: { changed: 0, refused: 0, accountChanged: false, unchecked: 0 },
 };
 
 const EVENT_GROUPS = [
@@ -299,7 +299,7 @@ describe("the WhatsApp connection", () => {
     webhookSeenAt: null,
     templatesSubmittedAt: "2026-08-16T10:00:05Z",
     refusedTemplates: [],
-    templatesPending: { changed: 0, refused: 0, accountChanged: false },
+    templatesPending: { changed: 0, refused: 0, accountChanged: false, unchecked: 0 },
   };
 
   const messaging = () => within(screen.getByRole("region", { name: "WhatsApp" }));

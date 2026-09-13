@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -473,5 +474,67 @@ describe("E11 — one unit vocabulary, said one way", () => {
       offenders,
       "these hard-code a unit list — import FOOD_UNITS or YIELD_UNITS from lib/format instead",
     ).toEqual([]);
+  });
+});
+
+/**
+ * Every form on the site is the shared `Form`, and nobody writes a plain `<form>` again (T-167).
+ *
+ * <p>`components/ds/Form.tsx` is what turns a refused box into a red sentence under it: it sets
+ * `noValidate`, so the browser's own bubble — which vanishes after a second, in the browser's
+ * language, over whatever happens to be beneath it — never appears, and it writes the sentence
+ * itself. T-160 onward converted every form in the app to it. A plain `<form>` written tomorrow
+ * gets none of that and looks fine in review, because the bubble only shows when somebody submits
+ * with a box left wrong, which is exactly the case nobody tries while building a screen.
+ *
+ * <p>Why the TypeScript parser and not a regex, when every other rule in this file is a regex.
+ * The rule is about a JSX *element*, and the things that look like one without being one are
+ * precisely what is in the tree today: three comments that say `<form>` in prose — a doc comment
+ * and a line comment in Form.tsx, and a `{/* … *\/}` block in PurchaseOrderEditor — plus the
+ * `<Form`, `<FormRow` and `<formatted…` spellings a looser pattern would catch. Stripping comments
+ * with a regex first is how `prose()` above does it, and it is fine there because a miss only
+ * lets a sentence through. Here it would be a hole: a `/*` inside a string — `accept="image/*"` on
+ * a file input — opens a "comment" that runs to the next `*\/` in the file and hides whatever real
+ * `<form>` sits in between. The parser has no such case. Comments are trivia to it, never nodes,
+ * and a string is a string, so what this walks is exactly the set of JSX elements whose tag is
+ * the lowercase intrinsic `form`.
+ */
+function plainFormElements({ file, text }: { file: string; text: string }): string[] {
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  const found: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (
+      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      ts.isIdentifier(node.tagName) &&
+      node.tagName.text === "form"
+    ) {
+      found.push(`${file}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1}`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return found;
+}
+
+describe("T-167 — every form is the shared Form", () => {
+  const FORM_ITSELF = "components/ds/Form.tsx";
+
+  it("renders no plain <form> outside components/ds/Form", () => {
+    const offenders = FILES.filter(({ file }) => file !== FORM_ITSELF).flatMap(plainFormElements);
+
+    expect(
+      offenders,
+      "these render a plain <form> — use Form from components/ds/Form, which sets noValidate and says what is wrong with each box in red",
+    ).toEqual([]);
+  });
+
+  it("still finds the one <form> it exempts", () => {
+    // The exemption is only honest while it excludes something. If Form.tsx stopped rendering a
+    // <form>, or the parse above silently stopped seeing JSX — a wrong ScriptKind reads every
+    // element as a syntax error and finds nothing, which would leave the rule above green over
+    // any tree at all — this is the test that says so.
+    const itself = FILES.find(({ file }) => file === FORM_ITSELF);
+    expect(itself, `${FORM_ITSELF} is missing from the scan`).toBeDefined();
+    expect(plainFormElements(itself!)).toHaveLength(1);
   });
 });

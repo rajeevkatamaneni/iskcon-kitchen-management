@@ -16,7 +16,7 @@ const WHATSAPP_NONE: WhatsAppSettingsView = {
   templatesSubmittedAt: null,
   // Both always come from the server (T-169a). Optional in the type only until this wave lands.
   refusedTemplates: [],
-  templatesPending: { changed: 0, refused: 0, accountChanged: false },
+  templatesPending: { changed: 0, refused: 0, accountChanged: false, unchecked: 0 },
 };
 
 const {

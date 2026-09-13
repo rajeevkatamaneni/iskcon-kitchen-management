@@ -425,7 +425,7 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 
 		assertThat(storedRefusals()).hasSize(NotificationTemplate.values().length)
 				.allSatisfy((name, reason) -> assertThat(reason)
-						.startsWith("Meta did not accept this message. Press Reload to try again")
+						.startsWith("Meta did not accept this message. Try again with the templates button in the WhatsApp section of Settings")
 						.doesNotContain("never said before"));
 	}
 

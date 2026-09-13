@@ -59,25 +59,32 @@ public record TenantWhatsAppSettings(
 	 * "Templates last sent to Meta on &lt;date&gt;"; with something waiting it says what, e.g. "3
 	 * templates changed since they were last sent". These three are what it can say.
 	 *
-	 * <p><strong>Each number only counts what is known.</strong> A temple that sent its templates
-	 * before fingerprints were kept (V129) has nothing to compare with, and reads zero changed until
-	 * its next Reload records what Meta holds. A screen that said "20 changed" the morning after a
-	 * deploy would be claiming something nobody checked. The rule is in
-	 * {@code TenantWhatsAppSettingsService#pending}.
+	 * <p><strong>A known change and an unknown are different numbers, and neither is ever zero by
+	 * default (T-188).</strong> A temple that sent its templates before fingerprints were kept (V129)
+	 * has nothing to compare with. T-169a counted that as nothing changed, because "20 changed" the
+	 * morning after a deploy would claim something nobody checked. That half stands: an unknown is
+	 * never counted in {@code changed}. But zero was a claim too, and a false one. On staging,
+	 * 2026-09-13, South Bengaluru's button read "Templates last sent to Meta on …" while Meta held the
+	 * old wording of eleven templates. So an unknown is counted, as {@code unchecked}, and the button
+	 * says the current wording is waiting. The rule is in {@code TenantWhatsAppSettingsService#pending}.
 	 *
 	 * @param changed        templates in this release whose wording differs from what Meta was last
 	 *                       found holding, or that are new since the last send. Never counts one
-	 *                       already counted in {@code refused}.
+	 *                       already counted in {@code refused} or {@code unchecked}.
 	 * @param refused        stored entries of kind {@link Kind#REFUSED} or {@link Kind#NOT_REACHED}.
 	 *                       {@link Kind#HELD_UNDER_ANOTHER_CATEGORY} is not counted: Meta holds those,
 	 *                       and a Reload cannot move a category, so counting them would keep the
 	 *                       button asking for a press that can never help.
 	 * @param accountChanged the WhatsApp Business Account id or phone number id differs from the one
 	 *                       templates were last sent to
+	 * @param unchecked      templates in this release whose wording at Meta nothing has recorded: the
+	 *                       temple has no fingerprints at all, or this one's is null. Never counts one
+	 *                       already counted in {@code refused}. Last in the record so the JSON adds a
+	 *                       field rather than moving one (T-188).
 	 */
-	public record TemplatesPending(int changed, int refused, boolean accountChanged) {
+	public record TemplatesPending(int changed, int refused, boolean accountChanged, int unchecked) {
 
-		public static final TemplatesPending NOTHING = new TemplatesPending(0, 0, false);
+		public static final TemplatesPending NOTHING = new TemplatesPending(0, 0, false, 0);
 	}
 
 	/**

@@ -301,6 +301,40 @@ input:disabled      { background: var(--sunken); color: var(--ink-muted); }
 .sidebar-surface  { background: var(--surface-card-bg);
                     backdrop-filter: var(--surface-card-backdrop);
                     border-right: 1px solid var(--hairline); }
+
+/*
+ * A box the form refused wears a red edge, whoever built the box (T-170).
+ *
+ * The shared `Form` marks every control the browser refuses with `aria-invalid="true"` and writes a
+ * red sentence under it. Until this rule only `Field` painted the edge red, and only from its own
+ * `error` prop — so the hand-rolled boxes, which are most of the forms in the application, got the
+ * sentence beside a border that still looked fine. The attribute is the one fact every refused box
+ * already carries, so the rule keys on that rather than on a class somebody has to remember.
+ *
+ * Why it is written exactly like this:
+ *
+ * - `--kms-danger`, the channel token, and not the hex `--danger`. It is the token Tailwind's
+ *   `border-danger` compiles to (`rgb(var(--kms-danger) / var(--tw-border-opacity))`, opacity 1),
+ *   so a `Field` in error — which has both this attribute and that class — resolves to the same
+ *   colour twice and there is nothing for the two to disagree about. Both names are rewritten by
+ *   `applyPalette` when a temple changes pack, so either would follow the pack; the channel one is
+ *   chosen because "the same colour as `border-danger`" is then true by construction, not by
+ *   coincidence.
+ * - `border-color` only. Width and style stay with whatever the box already had — the 1px solid
+ *   above, or a `border` utility — so a refused box does not grow, shift its text or double its edge.
+ * - Specificity 0,1,1, which beats a single colour utility such as `border-hairline-strong` whatever
+ *   order the layers are emitted in. Without that, a hand-rolled box with a neutral border class
+ *   would keep it and this rule would do nothing on exactly the boxes it is for.
+ * - No outline, no box-shadow. The `:focus-visible` ring above is an outline, so a refused box
+ *   under the keyboard shows the red edge with the focus ring 2px outside it — the one indicator a
+ *   keyboard user has is untouched. A box that sets its own `focus:` border colour (0,2,0) still
+ *   wins while focused, which is that box's choice about focus and is left alone.
+ * - Only `"true"`. `Field` writes `aria-invalid="false"` on a box that is fine, and a box that
+ *   nobody has marked has no attribute; neither matches.
+ */
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] { border-color: rgb(var(--kms-danger) / 1); }
 }
 
 @layer base {

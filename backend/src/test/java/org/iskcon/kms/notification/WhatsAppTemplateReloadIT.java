@@ -122,6 +122,15 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 			"po_delivery", "shift_broadcast", "temple_announcement",
 			"temple_communication", "low_stock_digest");
 
+	/**
+	 * Eleven templates whose code changed in the release that reworded them (651bdbd), standing in for the
+	 * eleven staging's comparison reported on 2026-09-13 (T-188).
+	 */
+	private static final Set<String> REWORDED_IN_THE_LAST_RELEASE = Set.of(
+			"donation_receipt", "donation_thank_you", "leave_declined", "leave_revoked", "removed_from_shift",
+			"shift_cancelled", "shift_signup_confirmed", "staff_schedule_updated", "waitlist_promoted",
+			"wishlist_gift_split", "wishlist_sponsorship_converted");
+
 	@Autowired
 	private JdbcTemplate jdbc;
 
@@ -277,6 +286,21 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 				.filter(t -> t.whatsappTemplateName().equals(name)).findFirst().orElseThrow();
 	}
 
+	/**
+	 * Whether the view's templatesPending says anything at all is waiting: any count above zero or any flag
+	 * set. Read field by field rather than by name, so it means the same on any shape of the view (T-188).
+	 */
+	private static boolean somethingIsWaiting(JsonNode pending) {
+		boolean[] waiting = {false};
+		pending.fields().forEachRemaining(field -> {
+			JsonNode value = field.getValue();
+			if ((value.isInt() && value.asInt() > 0) || (value.isBoolean() && value.asBoolean())) {
+				waiting[0] = true;
+			}
+		});
+		return waiting[0];
+	}
+
 	private static Set<String> fieldNames(JsonNode node) {
 		Set<String> names = new HashSet<>();
 		node.fieldNames().forEachRemaining(names::add);
@@ -315,7 +339,8 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		// Keys, then values: a missing field and a zero read alike to a matcher that only checks values.
 		assertThat(fieldNames(view)).contains("refusedTemplates", "templatesPending");
 		JsonNode pending = view.get("templatesPending");
-		assertThat(fieldNames(pending)).containsExactlyInAnyOrder("changed", "refused", "accountChanged");
+		assertThat(fieldNames(pending)).containsExactlyInAnyOrder("changed", "refused", "accountChanged", "unchecked");
+		assertThat(pending.get("unchecked").isInt()).isTrue();
 		assertThat(pending.get("changed").isInt()).isTrue();
 		assertThat(pending.get("refused").isInt()).isTrue();
 		assertThat(pending.get("accountChanged").isBoolean()).isTrue();
@@ -333,6 +358,9 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		assertThat(pending.get("refused").asInt()).isEqualTo(1);
 		assertThat(pending.get("changed").asInt()).isZero();
 		assertThat(pending.get("accountChanged").asBoolean()).isFalse();
+		// T-188: Meta already held donation_thank_you, and a first connection does not ask which wording, so
+		// what Meta holds for it is unknown. The other seventeen were created with this release's wording.
+		assertThat(pending.get("unchecked").asInt()).isEqualTo(1);
 	}
 
 	// ---- Save: the first connection sends, and never again -------------------------------------------
@@ -353,7 +381,11 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.templatesSubmittedAt").value(notNullValue()))
 				.andExpect(jsonPath("$.templatesPending.changed").value(0))
 				.andExpect(jsonPath("$.templatesPending.refused").value(0))
-				.andExpect(jsonPath("$.templatesPending.accountChanged").value(false));
+				.andExpect(jsonPath("$.templatesPending.accountChanged").value(false))
+				// T-188's second criterion: fingerprints matching this release's wording leave nothing unknown.
+				.andExpect(jsonPath("$.templatesPending.unchecked").value(0));
+		assertThat(view().get("templatesPending").toString())
+				.isEqualTo("{\"changed\":0,\"refused\":0,\"accountChanged\":false,\"unchecked\":0}");
 	}
 
 	/**
@@ -395,18 +427,26 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 	}
 
 	/**
-	 * The hard case, decided: a temple that sent templates before V129 has no fingerprints, and an
-	 * absent record means unknown, not changed. The Save afterwards proves the same temple is not a
-	 * "first connection" either, and the Reload proves the unknown is resolved by asking Meta, without
-	 * rewording anything Meta already holds correctly.
+	 * The hard case. A temple that sent templates before V129 has no fingerprints, and an absent record
+	 * means unknown, not changed. The Save afterwards proves the same temple is not a "first connection"
+	 * either, and the Reload proves the unknown is resolved by asking Meta, without rewording anything Meta
+	 * already holds correctly.
+	 *
+	 * <p><strong>T-188 reversed what this test used to assert.</strong> It was written for T-169a's rule,
+	 * that such a temple counts nothing at all, and asserted all three numbers zero. On staging, 2026-09-13,
+	 * that zero put "Templates last sent to Meta on …" on the button while Meta held old wording for eleven
+	 * templates. The main session's instruction for T-188 is that the count never reads "nothing waiting"
+	 * when it cannot know. So it now asserts the half of T-169a that stands, nothing counted as changed, and
+	 * the half that was reversed, all nineteen counted as unchecked.
 	 */
 	@Test
-	@DisplayName("a temple that sent before V129 is claimed to have nothing changed; its Save sends nothing; its first Reload records all nineteen and edits none")
-	void aTempleThatSentBeforeV129ClaimsNothing() throws Exception {
+	@DisplayName("a temple that sent before V129 reads nineteen unchecked and none changed; its Save sends nothing; its first Reload records all nineteen, edits none and clears them")
+	void aTempleThatSentBeforeV129IsUncheckedNotChanged() throws Exception {
 		aTempleThatSentBeforeV129();
 
 		JsonNode pending = view().get("templatesPending");
 		assertThat(pending.get("changed").asInt()).as("not 19, and not the six T-159 reworded").isZero();
+		assertThat(pending.get("unchecked").asInt()).as("nothing recorded, so none of them is known").isEqualTo(19);
 		assertThat(pending.get("refused").asInt()).isZero();
 		assertThat(pending.get("accountChanged").asBoolean()).isFalse();
 
@@ -419,7 +459,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		assertThat(meta.edits.get()).as("Meta already holds this release's wording").isZero();
 		assertThat(storedFingerprints()).isEqualTo(everyFingerprintAsReleased());
 		assertThat(view().get("templatesPending").toString())
-				.isEqualTo("{\"changed\":0,\"refused\":0,\"accountChanged\":false}");
+				.isEqualTo("{\"changed\":0,\"refused\":0,\"accountChanged\":false,\"unchecked\":0}");
 	}
 
 	@Test
@@ -441,6 +481,68 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		}
 		assertThat(storedFingerprints()).isEqualTo(everyFingerprintAsReleased());
 		assertThat(storedList()).isEmpty();
+	}
+
+	/**
+	 * T-188, the defect found on staging on 2026-09-13 at 23:10Z, reproduced. South Bengaluru last sent its
+	 * templates before V129, so it has no fingerprints. The release then reworded eleven templates. Meta's
+	 * comparison said eleven of nineteen no longer matched, while the settings view said nothing was waiting
+	 * and the button read "Templates last sent to Meta on …".
+	 *
+	 * <p>The eleven names are taken from the templates whose code changed in that release. Which eleven
+	 * staging reported is not asserted here and does not matter: the count on the view is computed from the
+	 * row alone, never from Meta, so any wording Meta holds reads the same to it.
+	 *
+	 * <p>{@link #somethingIsWaiting} is deliberately generic over the view's fields, so this test compiled and
+	 * ran red against the code before the fix, whose view had no field for an unknown wording at all. The
+	 * last two assertions name the fix: nineteen unknown, none claimed as changed.
+	 */
+	@Test
+	@DisplayName("staging, 2026-09-13: a temple that sent before V129, whose Meta holds older wording for eleven templates, is not shown as nothing waiting, and the page asks Meta nothing")
+	void aPreV129TempleWithOlderWordingAtMetaIsNotShownAsNothingWaiting() throws Exception {
+		aTempleThatSentBeforeV129();
+		for (String name : REWORDED_IN_THE_LAST_RELEASE) {
+			meta.hold(name, template(name).whatsappCategory(), "APPROVED", "An earlier wording of " + name + " for {{1}}.");
+		}
+
+		// The staging symptom, read by the same comparison the operator's screen uses.
+		WhatsAppTemplateComparison.Report report = new WhatsAppTemplateComparison(jdbc, secrets,
+				new MetaWhatsAppClient(objectMapper, meta.url())).compare();
+		assertThat(report.templates().stream()
+				.filter(entry -> Boolean.FALSE.equals(entry.bodyMatchesAfterTrim()))
+				.map(WhatsAppTemplateComparison.Entry::name))
+				.containsExactlyInAnyOrderElementsOf(REWORDED_IN_THE_LAST_RELEASE);
+		meta.resetCounts();
+
+		JsonNode pending = view().get("templatesPending");
+
+		assertThat(meta.creates.get() + meta.lookups.get() + meta.edits.get() + meta.phoneChecks.get())
+				.as("reading Settings asks Meta nothing").isZero();
+		assertThat(somethingIsWaiting(pending)).as("templatesPending was %s", pending).isTrue();
+		assertThat(pending.get("unchecked").asInt()).as("templatesPending was %s", pending).isEqualTo(19);
+		assertThat(pending.get("changed").asInt()).as("an unknown is never claimed as a change").isZero();
+	}
+
+	/**
+	 * T-188's behaviour change, stated as a test. A first connection does not ask Meta which wording it
+	 * holds for a template that already exists, so it records null for each. Before T-188 that read as
+	 * nothing waiting; now it reads as unchecked, until a Reload asks.
+	 */
+	@Test
+	@DisplayName("a first connection to an account that already held every template reads nineteen unchecked, until a Reload asks Meta")
+	void aFirstConnectionToAnAccountThatAlreadyHeldTemplatesIsUnchecked() throws Exception {
+		meta.holdEveryTemplateAsReleased();
+
+		save().andExpect(status().isOk());
+
+		assertThat(storedFingerprints().values()).as("not asked, so not known").containsOnly("null");
+		assertThat(view().get("templatesPending").toString())
+				.isEqualTo("{\"changed\":0,\"refused\":0,\"accountChanged\":false,\"unchecked\":19}");
+
+		reload().andExpect(status().isOk());
+
+		assertThat(view().get("templatesPending").toString())
+				.isEqualTo("{\"changed\":0,\"refused\":0,\"accountChanged\":false,\"unchecked\":0}");
 	}
 
 	@Test
@@ -526,8 +628,9 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 
 	/**
 	 * The focused form of the rule the button depends on: after a Reload that brought Meta into line,
-	 * the screen must say nothing is waiting. It starts from a temple WITH fingerprints on purpose. A
-	 * temple without any reads zero whether or not a Reload records anything, and would prove nothing.
+	 * the screen must say nothing is waiting. It starts from a temple WITH fingerprints on purpose, so the
+	 * one thing waiting is a known change. {@link #aTempleThatSentBeforeV129IsUncheckedNotChanged} covers a
+	 * Reload clearing an unknown (T-188).
 	 */
 	@Test
 	@DisplayName("nothing is waiting after a Reload that rewords a changed template")
@@ -540,7 +643,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		reload().andExpect(status().isOk());
 
 		assertThat(view().get("templatesPending").toString())
-				.isEqualTo("{\"changed\":0,\"refused\":0,\"accountChanged\":false}");
+				.isEqualTo("{\"changed\":0,\"refused\":0,\"accountChanged\":false,\"unchecked\":0}");
 	}
 
 	@Test
@@ -558,12 +661,16 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		assertThat(entry.get("kind").asText()).isEqualTo("REFUSED");
 		assertThat(entry.get("reason").asText())
 				.isEqualTo(TenantWhatsAppSettingsService.EDIT_LIMIT)
-				.doesNotContain("status").doesNotContain("template");
+				// Not Meta's own sentence, "The status for this message template can't be changed". Until T-188
+				// this said doesNotContain("template"). T-188 names the button as the screen shows it, under the
+				// heading "Message templates" with labels such as "Templates last sent to Meta on …", so the
+				// word the screen uses is allowed and Meta's phrase is what stays out.
+				.doesNotContain("status").doesNotContain("message template");
 		assertThat(storedList()).hasSize(1);
 		assertThat(storedFingerprints().get("volunteer_shift_reminder")).as("Meta still holds the old wording").isEqualTo("null");
 		assertThat(meta.held("volunteer_shift_reminder").body()).isEqualTo(OLD_VOLUNTEER_REMINDER);
 		assertThat(view().get("templatesPending").toString())
-				.isEqualTo("{\"changed\":0,\"refused\":1,\"accountChanged\":false}");
+				.isEqualTo("{\"changed\":0,\"refused\":1,\"accountChanged\":false,\"unchecked\":0}");
 	}
 
 	@Test

@@ -3745,6 +3745,13 @@ export interface WhatsAppTemplatesPending {
   refused: number;
   /** The WhatsApp account changed since templates were last sent. */
   accountChanged: boolean;
+  /**
+   * Templates whose wording at Meta nothing has recorded (T-188): the temple last sent them before the
+   * app kept a record (V129), or Meta already held them when they were first sent. Unknown is not the same
+   * as unchanged, so while this is above zero the templates button is the primary button. Never counts a
+   * template already counted in `changed` or `refused`.
+   */
+  unchecked: number;
 }
 
 export interface SaveWhatsAppSettingsInput {

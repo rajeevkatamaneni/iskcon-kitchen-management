@@ -109,7 +109,7 @@ const UNCONFIGURED: PaymentSettingsView = {
   webhookRegisteredAt: null,
 };
 
-const NOTHING_WAITING = { changed: 0, refused: 0, accountChanged: false };
+const NOTHING_WAITING = { changed: 0, refused: 0, accountChanged: false, unchecked: 0 };
 
 const CONNECTED: WhatsAppSettingsView = {
   connected: true,
@@ -519,13 +519,18 @@ describe("the WhatsApp templates button (option 2)", () => {
   });
 
   it.each([
-    [{ changed: 3, refused: 0, accountChanged: false }, "3 templates changed since they were last sent"],
-    [{ changed: 1, refused: 0, accountChanged: false }, "1 template changed since it was last sent"],
-    [{ changed: 0, refused: 2, accountChanged: false }, "2 templates Meta did not accept last time"],
-    [{ changed: 0, refused: 1, accountChanged: false }, "1 template Meta did not accept last time"],
-    [{ changed: 2, refused: 1, accountChanged: false }, "3 templates waiting to go to Meta"],
-    [{ changed: 0, refused: 0, accountChanged: true }, "Templates not yet sent to your new WhatsApp account"],
-    [{ changed: 4, refused: 2, accountChanged: true }, "Templates not yet sent to your new WhatsApp account"],
+    [{ changed: 3, refused: 0, accountChanged: false, unchecked: 0 }, "3 templates changed since they were last sent"],
+    [{ changed: 1, refused: 0, accountChanged: false, unchecked: 0 }, "1 template changed since it was last sent"],
+    [{ changed: 0, refused: 2, accountChanged: false, unchecked: 0 }, "2 templates Meta did not accept last time"],
+    [{ changed: 0, refused: 1, accountChanged: false, unchecked: 0 }, "1 template Meta did not accept last time"],
+    [{ changed: 2, refused: 1, accountChanged: false, unchecked: 0 }, "3 templates waiting to go to Meta"],
+    [{ changed: 0, refused: 0, accountChanged: true, unchecked: 0 }, "Templates not yet sent to your new WhatsApp account"],
+    [{ changed: 4, refused: 2, accountChanged: true, unchecked: 0 }, "Templates not yet sent to your new WhatsApp account"],
+    // T-188: wording nobody has recorded at Meta is waiting too. It outranks the counts, and a changed
+    // account outranks it.
+    [{ changed: 0, refused: 0, accountChanged: false, unchecked: 19 }, "Current template wording waiting to go to Meta"],
+    [{ changed: 1, refused: 2, accountChanged: false, unchecked: 16 }, "Current template wording waiting to go to Meta"],
+    [{ changed: 0, refused: 0, accountChanged: true, unchecked: 19 }, "Templates not yet sent to your new WhatsApp account"],
   ])("becomes the primary button saying what is waiting: %o", async (pending, words) => {
     whatsappSettings.mockResolvedValue({ ...CONNECTED, templatesPending: pending });
     render(<SettingsRoute />);
@@ -536,6 +541,34 @@ describe("the WhatsApp templates button (option 2)", () => {
     expect(button).not.toHaveClass("btn-quiet");
     // Twelve words or fewer (§9).
     expect(words.split(" ").length).toBeLessThanOrEqual(12);
+  });
+
+  it("says the current wording is waiting, as the primary button, when nothing records what Meta holds (T-188)", async () => {
+    // South Bengaluru on staging, 2026-09-13: it sent before the app kept a record, so all nineteen are
+    // unknown, and the button used to read "Templates last sent to Meta on 16 Aug 2026" here.
+    whatsappSettings.mockResolvedValue({
+      ...CONNECTED,
+      templatesPending: { changed: 0, refused: 0, accountChanged: false, unchecked: 19 },
+    });
+    render(<SettingsRoute />);
+    const section = await regionLoaded("WhatsApp");
+
+    const button = within(section).getByRole("button", { name: "Current template wording waiting to go to Meta" });
+    expect(button).toHaveClass("btn-primary");
+    expect(button).not.toHaveClass("btn-quiet");
+    expect(within(section).queryByRole("button", { name: /^Templates last sent/ })).not.toBeInTheDocument();
+  });
+
+  it("says not yet sent, rather than waiting wording, when unknown templates were never sent at all", async () => {
+    whatsappSettings.mockResolvedValue({
+      ...CONNECTED,
+      templatesSubmittedAt: null,
+      templatesPending: { changed: 0, refused: 0, accountChanged: false, unchecked: 19 },
+    });
+    render(<SettingsRoute />);
+    const section = await regionLoaded("WhatsApp");
+
+    expect(within(section).getByRole("button", { name: "Templates not yet sent to Meta" })).toHaveClass("btn-primary");
   });
 
   it("is not shown before WhatsApp is connected, since sending would be refused", async () => {
@@ -562,7 +595,7 @@ describe("the WhatsApp templates button (option 2)", () => {
   });
 
   it("sends once however often it is pressed, says it is working, then shows Meta's answer", async () => {
-    whatsappSettings.mockResolvedValue({ ...CONNECTED, templatesPending: { changed: 2, refused: 0, accountChanged: false } });
+    whatsappSettings.mockResolvedValue({ ...CONNECTED, templatesPending: { changed: 2, refused: 0, accountChanged: false, unchecked: 0 } });
     let answer!: (view: WhatsAppSettingsView) => void;
     reloadWhatsAppTemplates.mockImplementation(
       () => new Promise<WhatsAppSettingsView>((resolve) => (answer = resolve))
@@ -599,17 +632,17 @@ describe("the WhatsApp templates button (option 2)", () => {
   });
 
   it("says so when some templates still need attention after it has run", async () => {
-    whatsappSettings.mockResolvedValue({ ...CONNECTED, templatesPending: { changed: 1, refused: 0, accountChanged: false } });
+    whatsappSettings.mockResolvedValue({ ...CONNECTED, templatesPending: { changed: 1, refused: 0, accountChanged: false, unchecked: 0 } });
     reloadWhatsAppTemplates.mockResolvedValue({
       ...CONNECTED,
       refusedTemplates: [
         {
           name: "shift_reminder",
-          reason: "Meta allows a message to be reworded only once a day and ten times a month. Press Reload again tomorrow.",
+          reason: "Meta allows a message to be reworded only once a day and ten times a month. Use the templates button in the WhatsApp section of Settings tomorrow.",
           kind: "REFUSED",
         },
       ],
-      templatesPending: { changed: 0, refused: 1, accountChanged: false },
+      templatesPending: { changed: 0, refused: 1, accountChanged: false, unchecked: 0 },
     });
     render(<SettingsRoute />);
     const section = await regionLoaded("WhatsApp");
@@ -656,7 +689,7 @@ describe("what Meta said about each template", () => {
   };
   const NOT_REACHED = {
     name: "volunteer_welcome",
-    reason: "Meta did not say which wording it holds for this message. Press Reload to try again.",
+    reason: "Meta did not say which wording it holds for this message. Try again with the templates button in the WhatsApp section of Settings.",
     kind: "NOT_REACHED" as const,
   };
 
@@ -667,7 +700,7 @@ describe("what Meta said about each template", () => {
     whatsappSettings.mockResolvedValue({
       ...CONNECTED,
       refusedTemplates: [HELD, REFUSED, NOT_REACHED],
-      templatesPending: { changed: 0, refused: 2, accountChanged: false },
+      templatesPending: { changed: 0, refused: 2, accountChanged: false, unchecked: 0 },
     });
     render(<SettingsRoute />);
     const section = await regionLoaded("WhatsApp");
