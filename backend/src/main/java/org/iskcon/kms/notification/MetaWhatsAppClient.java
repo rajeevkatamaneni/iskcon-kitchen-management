@@ -2,6 +2,7 @@ package org.iskcon.kms.notification;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.MissingNode;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -11,7 +12,10 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,6 +38,38 @@ public class MetaWhatsAppClient {
 
 	private static final Logger log = LoggerFactory.getLogger(MetaWhatsAppClient.class);
 	private static final Duration TIMEOUT = Duration.ofSeconds(15);
+
+	/**
+	 * Meta's {@code error_subcode} for creating a template whose name already exists in that language.
+	 *
+	 * <p>Documented, which is why it is the primary test (T-168): "Creating a template with a name that
+	 * already exists for the same language returns error code 100, subcode 2388024, with message
+	 * 'Content in This Language Already Exists'."
+	 * https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/template-management
+	 */
+	static final int CONTENT_IN_THIS_LANGUAGE_ALREADY_EXISTS = 2388024;
+
+	/**
+	 * STOPGAP until Meta's code for it is confirmed from staging's DEBUG log (T-168). Meta's own
+	 * sentence for an existing template, as staging received it on 2026-09-13 for eleven templates:
+	 * "There is already English content for this template. You can create a new template and try
+	 * again." The language is part of the sentence, so any language is matched.
+	 */
+	private static final Pattern ALREADY_HAS_CONTENT_FALLBACK =
+			Pattern.compile("there is already .+ content for this template", Pattern.CASE_INSENSITIVE);
+
+	/**
+	 * STOPGAP, and the only test there is for this answer (T-168): Meta documents no code or subcode
+	 * for it on its error codes, template management or categorization pages, so it is matched on
+	 * Meta's sentence as staging received it on 2026-09-13 for {@code donation_thank_you} and
+	 * {@code wishlist_gift_split}: "The category UTILITY doesn't match the one that's already
+	 * associated with this template, MARKETING." Both apostrophe forms are accepted, and the second
+	 * captured word is the category Meta holds. Replace with the code once staging's DEBUG log shows
+	 * one.
+	 */
+	private static final Pattern HELD_UNDER_ANOTHER_CATEGORY_FALLBACK = Pattern.compile(
+			"category\\s+(\\w+)\\s+does(?:n['’]t| not)\\s+match the one that['’]s already associated with this template,?\\s*(\\w+)",
+			Pattern.CASE_INSENSITIVE);
 
 	private final ObjectMapper objectMapper;
 	private final String graphBaseUrl;
@@ -136,6 +172,11 @@ public class MetaWhatsAppClient {
 	 * <p>That also means a template Meta already holds is never re-worded by this call: a changed body
 	 * under an existing name comes back "already exists" and Meta keeps the old one. Meta's rules make
 	 * a new name the way to change what is registered — see {@link NotificationTemplate#WHATSAPP_TEST}.
+	 * Staging confirmed this on 2026-09-13: the second Save got "already exists" for all thirteen
+	 * templates it had registered before, and none went back to review.
+	 *
+	 * <p>Meta being unreachable is thrown, as {@link WhatsAppCredentialsRejected}, never returned: it
+	 * is not an answer from Meta, and the caller records it differently.
 	 *
 	 * @return the outcome, and for a refusal Meta's own sentence (T-159) — for the log and for the
 	 *     caller to translate, never to show an administrator as it stands
@@ -153,27 +194,94 @@ public class MetaWhatsAppClient {
 				Map.of("name", name, "category", category, "language", languageCode,
 						"components", List.of(component)));
 
-		if (response.statusCode() < 400) {
-			return new TemplateSubmission(TemplateOutcome.SUBMITTED, null);
-		}
-		String error = readableError(response);
-		if (error.toLowerCase().contains("already exists")) {
-			return new TemplateSubmission(TemplateOutcome.ALREADY_EXISTS, null);
-		}
-		log.warn("Meta refused template {}: {}", name, error);
-		return new TemplateSubmission(TemplateOutcome.REFUSED, error);
+		return templateOutcome(name, response.statusCode(), response.body());
 	}
 
-	/** What became of a template we asked Meta to register. Approval is Meta's, and is not instant. */
-	public enum TemplateOutcome { SUBMITTED, ALREADY_EXISTS, REFUSED }
+	/**
+	 * Meta's answer to a template registration, sorted into what it means for the temple (T-168).
+	 *
+	 * <p><strong>Why this is not a text match any more.</strong> T-159 treated a template as already
+	 * registered only when Meta's sentence contained "already exists". Meta's real sentence for that
+	 * case is "There is already English content for this template…", so on staging's second Save
+	 * eleven templates Meta held perfectly well were stored as refused, with advice to press Save
+	 * again that could never work. The documented subcode is now the primary test.
+	 *
+	 * <p>Every non-2xx answer is logged at DEBUG with Meta's raw code, subcode and title, so the
+	 * values Meta really sends can be read from a deployed log and the two text fallbacks below
+	 * replaced by codes.
+	 */
+	private TemplateSubmission templateOutcome(String name, int status, String body) {
+		if (status < 400) {
+			return new TemplateSubmission(TemplateOutcome.SUBMITTED, null);
+		}
+		JsonNode error = errorNode(body);
+		String readable = readableError(status, body);
+		log.debug("Meta answered template {} with HTTP {}: error.code={} error.error_subcode={} error_user_title={}",
+				name, status, raw(error, "code"), raw(error, "error_subcode"), raw(error, "error_user_title"));
+
+		TemplateSubmission outcome = classify(error, readable);
+
+		if (outcome.outcome() == TemplateOutcome.REFUSED) {
+			log.warn("Meta refused template {}: {}", name, readable);
+		}
+		return outcome;
+	}
+
+	/**
+	 * The decision itself, from Meta's error object and its readable sentence.
+	 *
+	 * <p>The order matters. A category mismatch is checked first because it is the more specific
+	 * answer about a template Meta already holds, and Meta does not say whether that answer also
+	 * carries the already-exists subcode; if it did, checking the subcode first would hide the
+	 * mismatch. Then the documented subcode. Then the stopgap text matches, which also keep T-159's
+	 * "already exists" phrase so nothing that used to be recognised stops being recognised.
+	 */
+	private static TemplateSubmission classify(JsonNode error, String readable) {
+		Matcher heldAs = HELD_UNDER_ANOTHER_CATEGORY_FALLBACK.matcher(messages(error, readable));
+		if (heldAs.find()) {
+			return new TemplateSubmission(TemplateOutcome.HELD_UNDER_ANOTHER_CATEGORY, null,
+					heldAs.group(2).toUpperCase(Locale.ROOT));
+		}
+		if (error.path("error_subcode").asInt(0) == CONTENT_IN_THIS_LANGUAGE_ALREADY_EXISTS) {
+			return new TemplateSubmission(TemplateOutcome.ALREADY_EXISTS, null);
+		}
+		// STOPGAP until the code is confirmed from staging: Meta's words, not its code.
+		String words = messages(error, readable);
+		if (ALREADY_HAS_CONTENT_FALLBACK.matcher(words).find()
+				|| words.toLowerCase(Locale.ROOT).contains("already exists")) {
+			return new TemplateSubmission(TemplateOutcome.ALREADY_EXISTS, null);
+		}
+		return new TemplateSubmission(TemplateOutcome.REFUSED, readable);
+	}
+
+	/** Every human-readable field Meta may put its sentence in, joined, for the stopgap matches. */
+	private static String messages(JsonNode error, String readable) {
+		return String.join(" | ", readable,
+				String.valueOf(text(error, "error_user_title")), String.valueOf(text(error, "message")));
+	}
+
+	/**
+	 * What became of a template we asked Meta to register. Approval is Meta's, and is not instant.
+	 *
+	 * <p>{@link #HELD_UNDER_ANOTHER_CATEGORY} is T-168's: Meta holds a template of that name, but
+	 * under a category it chose itself, and refuses to register it under ours. It is neither refused
+	 * (the template exists and can be sent) nor submitted (nothing new was registered).
+	 */
+	public enum TemplateOutcome { SUBMITTED, ALREADY_EXISTS, HELD_UNDER_ANOTHER_CATEGORY, REFUSED }
 
 	/**
 	 * A template registration's outcome, with Meta's reason when it refused.
 	 *
 	 * @param metaReason Meta's {@code error_user_msg} or {@code message}, only for
 	 *     {@link TemplateOutcome#REFUSED}; null otherwise
+	 * @param heldCategory the category Meta holds the template under, only for
+	 *     {@link TemplateOutcome#HELD_UNDER_ANOTHER_CATEGORY}, e.g. {@code MARKETING}; null otherwise
 	 */
-	public record TemplateSubmission(TemplateOutcome outcome, String metaReason) {
+	public record TemplateSubmission(TemplateOutcome outcome, String metaReason, String heldCategory) {
+
+		public TemplateSubmission(TemplateOutcome outcome, String metaReason) {
+			this(outcome, metaReason, null);
+		}
 	}
 
 	// ---------------------------------------------------------------------
@@ -209,16 +317,31 @@ public class MetaWhatsAppClient {
 	 * ago. Nothing here is secret: it is Meta describing our own request back to us.
 	 */
 	private String readableError(HttpResponse<String> response) {
-		try {
-			JsonNode error = objectMapper.readTree(response.body()).path("error");
-			String message = text(error, "error_user_msg");
-			if (message == null) {
-				message = text(error, "message");
-			}
-			return message == null ? "Meta answered HTTP " + response.statusCode() : message;
-		} catch (IOException e) {
-			return "Meta answered HTTP " + response.statusCode();
+		return readableError(response.statusCode(), response.body());
+	}
+
+	private String readableError(int status, String body) {
+		JsonNode error = errorNode(body);
+		String message = text(error, "error_user_msg");
+		if (message == null) {
+			message = text(error, "message");
 		}
+		return message == null ? "Meta answered HTTP " + status : message;
+	}
+
+	/** Meta's {@code error} object, or a missing node when the body is not Meta's JSON at all. */
+	private JsonNode errorNode(String body) {
+		try {
+			return body == null ? MissingNode.getInstance() : objectMapper.readTree(body).path("error");
+		} catch (IOException e) {
+			return MissingNode.getInstance();
+		}
+	}
+
+	/** A field's raw value for the log, or "absent" — so a missing subcode reads as missing, not 0. */
+	private static String raw(JsonNode node, String field) {
+		JsonNode value = node.get(field);
+		return value == null || value.isNull() ? "absent" : value.asText();
 	}
 
 	private static String text(JsonNode node, String field) {

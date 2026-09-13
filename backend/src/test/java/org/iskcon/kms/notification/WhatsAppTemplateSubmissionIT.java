@@ -12,10 +12,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
@@ -64,6 +72,12 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * connection; a test that differed there could not speak to the defect at all. The first test proves
  * the transaction is really open while Meta is being called.
  *
+ * <p><strong>T-168: the second Save, where Meta already held most templates.</strong> A mock client
+ * cannot find that defect, because the defect was in the client: it decided what Meta's answer meant.
+ * So the T-168 tests use the <em>real</em> {@link MetaWhatsAppClient}, pointed at a JDK
+ * {@link HttpServer} on 127.0.0.1 that answers with Meta's error bodies (their sources are in
+ * {@link MetaTemplateOutcomeTest}). Nothing reaches Meta.
+ *
  * <p>The database is real and the application connects as the unprivileged {@code kms_app} role, so
  * every read and write here passes through {@code tenant_settings}' Row-Level Security policy.
  */
@@ -73,6 +87,21 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 	private static final Set<String> REFUSED_ON_STAGING = Set.of(
 			"shift_reminder", "po_delivery", "shift_broadcast", "temple_announcement",
 			"temple_communication", "low_stock_digest");
+
+	/**
+	 * The eleven staging's second Save, 2026-09-13 01:35:58Z, got "There is already English content
+	 * for this template" for.
+	 */
+	private static final Set<String> ALREADY_HELD_ON_STAGING = Set.of(
+			"leave_revoked", "leave_declined", "leave_approved", "staff_schedule_updated", "shift_cancelled",
+			"removed_from_shift", "waitlist_promoted", "shift_signup_confirmed", "volunteer_shift_reminder",
+			"donation_receipt", "wishlist_sponsorship_converted");
+
+	/** The two Meta re-categorised as MARKETING itself, and refused to register as UTILITY on that save. */
+	private static final Set<String> HELD_AS_MARKETING_ON_STAGING = Set.of("donation_thank_you", "wishlist_gift_split");
+
+	private static final String HELD_AS_MARKETING_REASON =
+			"Meta holds this message as marketing, which some countries do not deliver.";
 
 	@Autowired
 	private JdbcTemplate jdbc;
@@ -99,6 +128,7 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 	private MetaWhatsAppClient meta;
 	private MockMvc mvc;
 	private UUID govinda;
+	private HttpServer metaServer;
 	private final AtomicBoolean transactionOpenWhileCallingMeta = new AtomicBoolean();
 
 	@BeforeEach
@@ -120,9 +150,18 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 			transactionOpenWhileCallingMeta.set(TransactionSynchronizationManager.isActualTransactionActive());
 			return "Temple Kitchen (+1 555-010-0159)";
 		});
+		useMeta(meta);
 
+		TenantContext.set(govinda);
+		AuthenticatedUser actor = new AuthenticatedUser(users.findByFirebaseUid("uid-admin-t159").orElseThrow());
+		SecurityContextHolder.getContext().setAuthentication(
+				new UsernamePasswordAuthenticationToken(actor, null, actor.getAuthorities()));
+	}
+
+	/** Builds the service around this client, in the application's own transaction, behind the controller. */
+	private void useMeta(MetaWhatsAppClient client) {
 		TenantWhatsAppSettingsService target = new TenantWhatsAppSettingsService(
-				jdbc, secrets, auditService, meta, "https://kms.example");
+				jdbc, secrets, auditService, client, "https://kms.example");
 		ProxyFactory proxy = new ProxyFactory(target);
 		proxy.setProxyTargetClass(true);
 		proxy.addAdvice(new TransactionInterceptor(transactionManager, new AnnotationTransactionAttributeSource()));
@@ -133,15 +172,13 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 				.setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
 				.setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
 				.build();
-
-		TenantContext.set(govinda);
-		AuthenticatedUser actor = new AuthenticatedUser(users.findByFirebaseUid("uid-admin-t159").orElseThrow());
-		SecurityContextHolder.getContext().setAuthentication(
-				new UsernamePasswordAuthenticationToken(actor, null, actor.getAuthorities()));
 	}
 
 	@AfterEach
 	void tearDown() {
+		if (metaServer != null) {
+			metaServer.stop(0);
+		}
 		SecurityContextHolder.clearContext();
 		TenantContext.clear();
 		admin.execute("DELETE FROM audit_events");
@@ -193,11 +230,75 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 				.thenReturn(accepted());
 	}
 
+	// ---- T-168: the real client against Meta's real answers ------------------------------------------
+
+	/** One HTTP answer from Meta. */
+	private record MetaAnswer(int status, String body) {
+	}
+
+	private static final MetaAnswer CREATED = new MetaAnswer(200,
+			"{\"id\":\"1234567890123456\",\"status\":\"PENDING\",\"category\":\"UTILITY\"}");
+
+	/** Documented code and subcode, staging's sentence. See MetaTemplateOutcomeTest for sources. */
+	private static final MetaAnswer ALREADY_EXISTS = new MetaAnswer(400, """
+			{"error":{"message":"Invalid parameter","type":"OAuthException","code":100,"error_subcode":2388024,
+			"error_user_title":"Content in This Language Already Exists",
+			"error_user_msg":"There is already English content for this template. You can create a new template and try again."}}
+			""");
+
+	/** Staging's sentence. No subcode: Meta documents none. */
+	private static final MetaAnswer HELD_AS_MARKETING = new MetaAnswer(400, """
+			{"error":{"message":"Invalid parameter","type":"OAuthException","code":100,
+			"error_user_msg":"The category UTILITY doesn't match the one that's already associated with this template, MARKETING."}}
+			""");
+
+	private static final MetaAnswer UNKNOWN_REFUSAL = new MetaAnswer(400,
+			"{\"error\":{\"message\":\"(#100) Invalid parameter\",\"type\":\"OAuthException\",\"code\":100}}");
+
+	/**
+	 * Swaps the mock for the production client, pointed at a local server playing Meta: it describes
+	 * the phone number on a GET, and answers each template registration by the name in its JSON body.
+	 */
+	private void realMetaAnswering(Function<String, MetaAnswer> answerFor) throws Exception {
+		metaServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		metaServer.createContext("/", exchange -> {
+			String request = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+			MetaAnswer answer = "GET".equals(exchange.getRequestMethod())
+					? new MetaAnswer(200, "{\"display_phone_number\":\"+1 555-010-0159\",\"verified_name\":\"Temple Kitchen\"}")
+					: answerFor.apply(objectMapper.readTree(request).path("name").asText());
+			byte[] out = answer.body().getBytes(StandardCharsets.UTF_8);
+			exchange.getResponseHeaders().add("Content-Type", "application/json");
+			exchange.sendResponseHeaders(answer.status(), out.length);
+			try (OutputStream os = exchange.getResponseBody()) {
+				os.write(out);
+			}
+		});
+		metaServer.start();
+		useMeta(new MetaWhatsAppClient(objectMapper, "http://127.0.0.1:" + metaServer.getAddress().getPort()));
+	}
+
+	/** Meta as staging's second Save found it: seven new, eleven already held, two held as marketing. */
+	private MetaAnswer asOnStagingsSecondSave(String name) {
+		if (HELD_AS_MARKETING_ON_STAGING.contains(name)) {
+			return HELD_AS_MARKETING;
+		}
+		return ALREADY_HELD_ON_STAGING.contains(name) ? ALREADY_EXISTS : CREATED;
+	}
+
 	/** The refused list straight from tenant_settings, as the app role sees it, as name → reason. */
 	private Map<String, String> storedRefusals() throws Exception {
 		String stored = jdbc.queryForObject("SELECT whatsapp_refused_templates::text FROM tenant_settings", String.class);
 		Map<String, String> byName = new java.util.TreeMap<>();
 		objectMapper.readTree(stored).forEach(e -> byName.put(e.get("name").asText(), e.get("reason").asText()));
+		return byName;
+	}
+
+	/** The same list as name → kind, with a missing kind read as the text "absent". */
+	private Map<String, String> storedKinds() throws Exception {
+		String stored = jdbc.queryForObject("SELECT whatsapp_refused_templates::text FROM tenant_settings", String.class);
+		Map<String, String> byName = new java.util.TreeMap<>();
+		objectMapper.readTree(stored).forEach(e -> byName.put(e.get("name").asText(),
+				e.hasNonNull("kind") ? e.get("kind").asText() : "absent"));
 		return byName;
 	}
 
@@ -298,6 +399,7 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 				.as("a sentence for an administrator, not Meta's developer text")
 				.doesNotContainIgnoringCase("variables").doesNotContainIgnoringCase("template")
 				.doesNotContainIgnoringCase("newline").doesNotContainIgnoringCase("parameters"));
+		assertThat(storedKinds()).allSatisfy((name, kind) -> assertThat(kind).isEqualTo("REFUSED"));
 
 		// And it reaches the answer the screen reads.
 		mvc.perform(get("/api/v1/settings/whatsapp"))
@@ -335,13 +437,15 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 
 		assertThat(storedRefusals()).containsOnlyKeys("shift_cancelled");
 		assertThat(storedRefusals().get("shift_cancelled")).startsWith("Meta could not be reached");
+		assertThat(storedKinds()).containsEntry("shift_cancelled", "NOT_REACHED");
 	}
 
 	/**
 	 * The list is a snapshot of the last save, not a history. Note for a negative control: with the
 	 * write removed this test passes vacuously, because it ends by asserting an absence and a list
 	 * that was never written is also empty. {@link #refusalsAreStoredInPlainWords} is the one that
-	 * proves the write.
+	 * proves the write, and {@link #stagingsFalseRefusalsClearOnTheNextSave} proves the replacement
+	 * with a list that is not empty afterwards.
 	 */
 	@Test
 	@DisplayName("a later save where Meta accepts everything clears the list")
@@ -358,5 +462,120 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 		mvc.perform(get("/api/v1/settings/whatsapp"))
 				.andExpect(jsonPath("$.refusedTemplates").isArray())
 				.andExpect(jsonPath("$.refusedTemplates.length()").value(0));
+	}
+
+	// ---- T-168: Meta already holding templates is not a refusal ---------------------------------------
+
+	/**
+	 * The staging data in this class is a claim about the code's templates, so it is checked against
+	 * them: the eleven, the two, and what is left — which must be the six T-159 reworded plus the
+	 * renamed connection check, the seven staging's log counted as submitted.
+	 */
+	@Test
+	@DisplayName("the staging template names used here are the application's own, and account for all twenty")
+	void stagingNamesAreReal() {
+		Set<String> all = Arrays.stream(NotificationTemplate.values())
+				.map(NotificationTemplate::whatsappTemplateName).collect(Collectors.toSet());
+		assertThat(all).hasSize(20).containsAll(ALREADY_HELD_ON_STAGING).containsAll(HELD_AS_MARKETING_ON_STAGING);
+
+		Set<String> rest = new HashSet<>(all);
+		rest.removeAll(ALREADY_HELD_ON_STAGING);
+		rest.removeAll(HELD_AS_MARKETING_ON_STAGING);
+		Set<String> expected = new HashSet<>(REFUSED_ON_STAGING);
+		expected.add("whatsapp_connection_check");
+		assertThat(rest).isEqualTo(expected);
+	}
+
+	@Test
+	@DisplayName("staging's second save: no false refusals, the two held as marketing say so truthfully, and the date is set")
+	void stagingsSecondSaveStoresNoFalseRefusals() throws Exception {
+		realMetaAnswering(this::asOnStagingsSecondSave);
+
+		saveSettings().andExpect(status().isOk());
+
+		assertThat(storedRefusals())
+				.as("only the two Meta holds as marketing; none of the eleven it already held")
+				.containsOnlyKeys(HELD_AS_MARKETING_ON_STAGING)
+				.allSatisfy((name, reason) -> assertThat(reason).isEqualTo(HELD_AS_MARKETING_REASON));
+		assertThat(storedKinds()).allSatisfy((name, kind) -> assertThat(kind).isEqualTo("HELD_UNDER_ANOTHER_CATEGORY"));
+		assertThat(storedSubmittedAt()).isNotNull();
+
+		// DESIGN_SYSTEM §9: twelve words or fewer, no semicolon, sentence case.
+		assertThat(HELD_AS_MARKETING_REASON.split("\\s+")).hasSizeLessThanOrEqualTo(12);
+		assertThat(HELD_AS_MARKETING_REASON).doesNotContain(";").startsWith("Meta holds");
+
+		mvc.perform(get("/api/v1/settings/whatsapp"))
+				.andExpect(jsonPath("$.templatesSubmittedAt").value(notNullValue()))
+				.andExpect(jsonPath("$.refusedTemplates.length()").value(2))
+				.andExpect(jsonPath("$.refusedTemplates[0].kind").value("HELD_UNDER_ANOTHER_CATEGORY"))
+				.andExpect(jsonPath("$.refusedTemplates[1].kind").value("HELD_UNDER_ANOTHER_CATEGORY"))
+				.andExpect(jsonPath("$.refusedTemplates[0].reason").value(HELD_AS_MARKETING_REASON));
+	}
+
+	/** Every temple that saves twice: Meta holds all twenty, and that is a clean result. */
+	@Test
+	@DisplayName("a save where Meta already holds every template stores nothing and sets the date")
+	void everythingAlreadyHeldIsClean() throws Exception {
+		realMetaAnswering(name -> ALREADY_EXISTS);
+
+		saveSettings().andExpect(status().isOk());
+
+		assertThat(storedRefusals()).isEmpty();
+		assertThat(storedSubmittedAt()).isNotNull();
+	}
+
+	/**
+	 * The date decision for the new outcome, isolated: the only templates Meta holds are the two it
+	 * holds as marketing, and everything else is refused. They count, so the date is set.
+	 */
+	@Test
+	@DisplayName("a template Meta holds under another category counts toward the date on its own")
+	void heldUnderAnotherCategoryCountsTowardTheDate() throws Exception {
+		realMetaAnswering(name -> HELD_AS_MARKETING_ON_STAGING.contains(name) ? HELD_AS_MARKETING : UNKNOWN_REFUSAL);
+
+		saveSettings().andExpect(status().isOk());
+
+		assertThat(storedSubmittedAt()).isNotNull();
+		Map<String, String> kinds = storedKinds();
+		assertThat(kinds).hasSize(20);
+		assertThat(kinds.entrySet().stream().filter(e -> e.getValue().equals("HELD_UNDER_ANOTHER_CATEGORY"))
+				.map(Map.Entry::getKey)).containsExactlyInAnyOrderElementsOf(HELD_AS_MARKETING_ON_STAGING);
+		assertThat(kinds.values().stream().filter("REFUSED"::equals)).hasSize(18);
+	}
+
+	/**
+	 * What will actually happen on staging: its row holds thirteen false refusals written by T-159's
+	 * code, with no kind. They must read back (as refusals, which is what they were written as), and
+	 * the next save must replace them outright with the truth — not add to them, not keep them.
+	 */
+	@Test
+	@DisplayName("staging's thirteen false refusals read back, then clear on the next save")
+	void stagingsFalseRefusalsClearOnTheNextSave() throws Exception {
+		Set<String> falselyRefused = new HashSet<>(ALREADY_HELD_ON_STAGING);
+		falselyRefused.addAll(HELD_AS_MARKETING_ON_STAGING);
+		String t159Reason = "Meta did not accept this message. Press Save to try again, and if it is refused again, "
+				+ "report it with the message name shown here.";
+		String staleList = objectMapper.writeValueAsString(falselyRefused.stream()
+				.map(name -> Map.of("name", name, "reason", t159Reason)).toList());
+		// The row is made by a real save, as staging's was: tenant_settings_whatsapp_shape refuses a
+		// hand-made row missing the other WhatsApp columns. Then T-159's stale list is written over it.
+		metaAcceptsEverything();
+		saveSettings().andExpect(status().isOk());
+		jdbc.update("""
+				UPDATE tenant_settings SET whatsapp_refused_templates = ?::jsonb
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", staleList);
+		assertThat(storedKinds()).hasSize(13).allSatisfy((name, kind) -> assertThat(kind).isEqualTo("absent"));
+
+		realMetaAnswering(this::asOnStagingsSecondSave);
+		mvc.perform(get("/api/v1/settings/whatsapp"))
+				.andExpect(jsonPath("$.refusedTemplates.length()").value(13))
+				.andExpect(jsonPath("$.refusedTemplates[0].kind").value("REFUSED"));
+
+		saveSettings().andExpect(status().isOk());
+
+		assertThat(storedRefusals()).containsOnlyKeys(HELD_AS_MARKETING_ON_STAGING);
+		mvc.perform(get("/api/v1/settings/whatsapp"))
+				.andExpect(jsonPath("$.refusedTemplates.length()").value(2));
 	}
 }

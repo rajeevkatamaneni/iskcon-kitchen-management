@@ -420,27 +420,50 @@ public class TenantWhatsAppSettingsService {
 	 * could not be asked about at all is kept too, because to an administrator the consequence is the
 	 * same: that message will not go by WhatsApp until a later save registers it. The whole list is
 	 * written every time, so a later clean save leaves it empty.
+	 *
+	 * <p><strong>A template Meta holds under a category of its own is kept too, as its own kind
+	 * (T-168).</strong> Meta re-categorised {@code donation_thank_you} and {@code wishlist_gift_split}
+	 * as marketing on staging, and refuses to register them again as utility. They are not refused —
+	 * Meta holds them and they can be sent — so they are stored with a sentence that says what is true
+	 * and with {@link TenantWhatsAppSettings.Kind#HELD_UNDER_ANOTHER_CATEGORY}, never with a refusal's
+	 * advice to press Save, which would get the same answer forever.
+	 *
+	 * <p><strong>And they count toward the date.</strong> The date says Meta holds at least one of our
+	 * templates, and it holds these. Leaving them out would mean a save where Meta held everything,
+	 * two of them as marketing, could write no date if the other eighteen happened to be refused —
+	 * which would say nothing went to Meta when two plainly had.
 	 */
 	private void submitTemplates(UUID tenantId, String wabaId, String accessToken) {
-		int submitted = 0;
-		List<TenantWhatsAppSettings.RefusedTemplate> refused = new ArrayList<>();
+		int submittedNew = 0;
+		int alreadyHeld = 0;
+		int heldUnderAnotherCategory = 0;
+		List<TenantWhatsAppSettings.RefusedTemplate> needsAttention = new ArrayList<>();
 		for (NotificationTemplate template : NotificationTemplate.values()) {
 			String name = template.whatsappTemplateName();
 			try {
 				MetaWhatsAppClient.TemplateSubmission result = meta.createTemplate(
 						wabaId, accessToken, name, template.whatsappCategory(),
 						TEMPLATE_LANGUAGE, template.whatsappBodyText(), template.whatsappExampleValues());
-				if (result.outcome() == MetaWhatsAppClient.TemplateOutcome.REFUSED) {
-					refused.add(new TenantWhatsAppSettings.RefusedTemplate(name, plainReason(result.metaReason())));
-				} else {
-					submitted++;
+				switch (result.outcome()) {
+					case SUBMITTED -> submittedNew++;
+					case ALREADY_EXISTS -> alreadyHeld++;
+					case HELD_UNDER_ANOTHER_CATEGORY -> {
+						heldUnderAnotherCategory++;
+						needsAttention.add(new TenantWhatsAppSettings.RefusedTemplate(name,
+								heldUnderReason(result.heldCategory()),
+								TenantWhatsAppSettings.Kind.HELD_UNDER_ANOTHER_CATEGORY));
+					}
+					case REFUSED -> needsAttention.add(new TenantWhatsAppSettings.RefusedTemplate(name,
+							plainReason(result.metaReason()), TenantWhatsAppSettings.Kind.REFUSED));
 				}
 			} catch (RuntimeException e) {
 				log.warn("Could not submit template {} for temple {}: {}", name, tenantId, e.toString());
-				refused.add(new TenantWhatsAppSettings.RefusedTemplate(name, NOT_REACHED));
+				needsAttention.add(new TenantWhatsAppSettings.RefusedTemplate(name, NOT_REACHED,
+						TenantWhatsAppSettings.Kind.NOT_REACHED));
 			}
 		}
-		if (submitted > 0) {
+		int registered = submittedNew + alreadyHeld + heldUnderAnotherCategory;
+		if (registered > 0) {
 			jdbc.update("""
 					UPDATE tenant_settings SET whatsapp_templates_submitted_at = now()
 					WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
@@ -449,13 +472,32 @@ public class TenantWhatsAppSettingsService {
 		jdbc.update("""
 				UPDATE tenant_settings SET whatsapp_refused_templates = ?::jsonb
 				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-				""", json(refused));
-		log.info("Submitted {} of {} WhatsApp templates for temple {}",
-				submitted, NotificationTemplate.values().length, tenantId);
+				""", json(needsAttention));
+		log.info("Submitted {} of {} WhatsApp templates for temple {}: {} new, {} already held, "
+						+ "{} held under another category, {} not registered",
+				registered, NotificationTemplate.values().length, tenantId,
+				submittedNew, alreadyHeld, heldUnderAnotherCategory, needsAttention.size() - heldUnderAnotherCategory);
 	}
 
 	private static final String NOT_REACHED =
 			"Meta could not be reached while this message was being registered. Press Save to try again.";
+
+	/**
+	 * A template Meta holds under a category it chose, in words that tell the truth and give no
+	 * advice that cannot work (T-168). Pressing Save changes nothing, and the category can only be
+	 * appealed in Meta's own manager, so the sentence states the consequence and stops.
+	 *
+	 * <p>Why marketing matters enough to say: Meta "does not currently deliver marketing template
+	 * messages to WhatsApp users with United States phone numbers", and limits how many a person
+	 * receives elsewhere.
+	 * https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/marketing-templates/per-user-limits
+	 */
+	static String heldUnderReason(String heldCategory) {
+		if ("MARKETING".equalsIgnoreCase(heldCategory)) {
+			return "Meta holds this message as marketing, which some countries do not deliver.";
+		}
+		return "Meta holds this message under a different category from the app's.";
+	}
 
 	private static final String NEEDS_AN_APP_CHANGE = " This needs a change to the app, not to your WhatsApp account.";
 

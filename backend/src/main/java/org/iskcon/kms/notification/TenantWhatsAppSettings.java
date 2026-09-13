@@ -21,8 +21,11 @@ import java.util.List;
  *                      path works, and a different question from {@code verifiedAt}
  * @param templatesSubmittedAt when Meta last accepted, or already held, at least one of the message
  *                      templates. Null if no save has registered any.
- * @param refusedTemplates the templates the last save did not register, each with a sentence an
- *                      administrator can read (T-159). Empty, never null, when there are none.
+ * @param refusedTemplates the templates the last save left needing an administrator's attention,
+ *                      each with a sentence they can read (T-159) and what kind of problem it is
+ *                      (T-168). Empty, never null, when there are none. The name is T-159's and is
+ *                      kept because it is the column's and the screen's; since T-168 not every entry
+ *                      is a refusal — see {@link RefusedTemplate#kind()}.
  */
 public record TenantWhatsAppSettings(
 		boolean connected,
@@ -45,12 +48,34 @@ public record TenantWhatsAppSettings(
 	}
 
 	/**
-	 * One template Meta did not register at the last save.
+	 * One template the last save left needing attention.
 	 *
 	 * @param name   Meta's name for it, e.g. {@code shift_reminder}
 	 * @param reason a plain sentence saying why and what to do — never Meta's own developer text,
 	 *               which goes to the log
+	 * @param kind   what happened to it. Never null: an entry stored before T-168 had no kind, and
+	 *               every entry then was written as a refusal, so it reads back as {@link Kind#REFUSED}
 	 */
-	public record RefusedTemplate(String name, String reason) {
+	public record RefusedTemplate(String name, String reason, Kind kind) {
+
+		public RefusedTemplate {
+			kind = kind == null ? Kind.REFUSED : kind;
+		}
+	}
+
+	/**
+	 * Why a template is on the list (T-168). Three kinds, because each asks something different of an
+	 * administrator, and a screen that showed them alike would repeat staging's false alarm.
+	 */
+	public enum Kind {
+		/** Meta did not accept it. It will not go by WhatsApp. */
+		REFUSED,
+		/** Meta could not be asked. A later save may register it. */
+		NOT_REACHED,
+		/**
+		 * Meta holds it, under a category Meta chose, and will not take ours. It can be sent, but is
+		 * priced and delivered as that category — marketing is not delivered to United States numbers.
+		 */
+		HELD_UNDER_ANOTHER_CATEGORY
 	}
 }

@@ -1182,6 +1182,38 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-13 — A refused box names itself in red on meal kinds and occasions, and a template Meta already holds is no longer listed as refused (tasks T-160, T-168)
+
+No migration; the schema stays `V128`, and no new error code. **Not driven in a browser, and not seen
+working by Rajeev.** Settings → WhatsApp has not been saved on staging since this deploy; the main
+session does that.
+
+**A shared form wrapper, on two forms so far (T-160).** `components/ds/Form.tsx` is a `<form>` that
+switches off the browser's own check and does it visibly instead. A blank or out-of-range box gets a red
+sentence under it naming the field, such as *"Name is required"* or *"Day must be at least 1"*, in place
+of the browser's grey bubble. The first refused box takes focus, each box is marked `aria-invalid` and
+pointed at its sentence, and a sentence clears once the box is put right. The rules are still the
+`required`, `min`, `max`, `step` and `maxLength` on each control; nothing is checked twice. Every
+sentence lives in `components/ds/formMessages.ts`. Settings → Meal kinds and Settings → Occasions use it.
+The other 44 forms follow in slices.
+
+**Saving WhatsApp settings no longer lists templates Meta already holds as refused (T-168).** Staging's
+first save after T-159 stored 13 of 20 templates as refused. Eleven were Meta saying it already had
+them, and two were Meta holding them as marketing. An "already exists" answer is now recognised by
+Meta's documented code 100, subcode 2388024, and is not stored at all. Meta's English sentence stays as
+a fallback marked as a stopgap. A template Meta holds under another category is stored with its own
+kind, `HELD_UNDER_ANOTHER_CATEGORY`, and the reason *"Meta holds this message as marketing, which some
+countries do not deliver."* That category answer has no documented code, so it is matched on Meta's
+text, also marked as a stopgap. It counts toward "templates submitted". Entries stored before this
+read back as refused.
+
+**Not done:** the box border does not turn red yet, and the wrapper has not been checked in a real
+browser. The server's messages for the same rules are worded differently from the form's; bringing
+them into one shape is Rajeev's call. On WhatsApp, the DEBUG line that logs Meta's raw codes only shows
+if that logger is turned up; `donation_thank_you` and `wishlist_gift_split` cannot be moved back to
+utility by a save; and the screen does not yet show a held template differently from a refused one.
+Proofs, with negative controls, in `docs/work/proof/T-160.md` and `docs/work/proof/T-168.md`.
+
 ### 2026-09-12 — WhatsApp settings dates read back, six refused templates reworded, the connection test renamed, and refusals kept per temple (task T-159)
 
 Backend only: no frontend file, one migration (`V128`), no new error code. **Not driven in a browser,
