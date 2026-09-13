@@ -187,7 +187,7 @@ class WhatsAppTestSendIT extends AbstractIntegrationTest {
 		// Exactly one send, from the temple's own number and token, of the test template, naming the
 		// temple — and nothing else asked of Meta, so no credential check is hiding behind it.
 		verify(meta, times(1)).sendTemplate("phone-govinda", "token-govinda", TEST_NUMBER,
-				"connection_test", "en", List.of("Sri Sri Radha Govinda Temple"));
+				"whatsapp_connection_check", "en", List.of("Sri Sri Radha Govinda Temple"));
 		verifyNoMoreInteractions(meta);
 
 		assertThat(lastSent()).as("whatsapp_last_sent_at after Meta returned an id").isNotNull();
@@ -207,7 +207,7 @@ class WhatsAppTestSendIT extends AbstractIntegrationTest {
 
 		// Meta is handed the number itself, not the spacing somebody typed around it.
 		verify(meta, times(1)).sendTemplate("phone-govinda", "token-govinda", TEST_NUMBER,
-				"connection_test", "en", List.of("Sri Sri Radha Govinda Temple"));
+				"whatsapp_connection_check", "en", List.of("Sri Sri Radha Govinda Temple"));
 		assertThat(admin.queryForObject("""
 				SELECT after_state ->> 'whatsappTestSentTo' FROM audit_events WHERE tenant_id = ?
 				""", String.class, govinda))

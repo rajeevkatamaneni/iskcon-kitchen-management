@@ -1,9 +1,17 @@
 package org.iskcon.kms.notification;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.SecureRandom;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,7 +26,6 @@ import org.iskcon.kms.tenancy.TenantSecretStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +44,15 @@ public class TenantWhatsAppSettingsService {
 
 	private static final Logger log = LoggerFactory.getLogger(TenantWhatsAppSettingsService.class);
 	private static final SecureRandom RANDOM = new SecureRandom();
+
+	/**
+	 * For the refused-template list only: two strings per element, so a plain mapper is enough and
+	 * the service's constructor, which two integration tests build by hand, stays as it is.
+	 */
+	private static final ObjectMapper JSON = new ObjectMapper();
+	private static final TypeReference<List<TenantWhatsAppSettings.RefusedTemplate>> REFUSED_LIST =
+			new TypeReference<>() {
+			};
 
 	/**
 	 * The one language every template is registered in, so the one a test send must ask for.
@@ -63,34 +79,39 @@ public class TenantWhatsAppSettingsService {
 		this.apiBaseUrl = apiBaseUrl;
 	}
 
-	/** What the Settings screen shows. Never includes a secret. */
+	/**
+	 * What the Settings screen shows. Never includes a secret.
+	 *
+	 * <p><strong>Every date is read by naming its type, and that is the fix for T-159.</strong> This
+	 * used to be a {@code queryForMap}, which asks the PostgreSQL driver for each column with a plain
+	 * {@code getObject(int)}; for {@code timestamptz} the driver answers {@code java.sql.Timestamp}.
+	 * The old conversion accepted only {@code OffsetDateTime} and turned anything else into null. So
+	 * all three dates on this screen read as null for every temple, whatever the table held: on staging
+	 * a save stamped {@code whatsapp_templates_submitted_at}, and the GET a minute later said it was
+	 * empty. {@code WhatsAppTemplateSubmissionIT} reads the column both ways and pins the driver's
+	 * behaviour, so the explanation is tested rather than asserted here.
+	 */
 	@Transactional(readOnly = true)
 	public TenantWhatsAppSettings read() {
-		Map<String, Object> row;
-		try {
-			row = jdbc.queryForMap("""
-					SELECT whatsapp_phone_number_id, whatsapp_waba_id, whatsapp_webhook_token,
-						   whatsapp_display_number, whatsapp_verified_at, whatsapp_webhook_seen_at,
-						   whatsapp_templates_submitted_at
-					FROM tenant_settings
-					WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-					""");
-		} catch (EmptyResultDataAccessException noRowYet) {
-			return TenantWhatsAppSettings.none();
-		}
-		String phoneNumberId = (String) row.get("whatsapp_phone_number_id");
-		if (phoneNumberId == null) {
-			return TenantWhatsAppSettings.none();
-		}
-		return new TenantWhatsAppSettings(
-				true,
-				phoneNumberId,
-				(String) row.get("whatsapp_waba_id"),
-				(String) row.get("whatsapp_display_number"),
-				webhookUrl((String) row.get("whatsapp_webhook_token")),
-				instant(row.get("whatsapp_verified_at")),
-				instant(row.get("whatsapp_webhook_seen_at")),
-				instant(row.get("whatsapp_templates_submitted_at")));
+		return jdbc.query("""
+				SELECT whatsapp_phone_number_id, whatsapp_waba_id, whatsapp_webhook_token,
+					   whatsapp_display_number, whatsapp_verified_at, whatsapp_webhook_seen_at,
+					   whatsapp_templates_submitted_at, whatsapp_refused_templates::text AS refused_templates
+				FROM tenant_settings
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", (rs, n) -> rs.getString("whatsapp_phone_number_id") == null
+						? TenantWhatsAppSettings.none()
+						: new TenantWhatsAppSettings(
+								true,
+								rs.getString("whatsapp_phone_number_id"),
+								rs.getString("whatsapp_waba_id"),
+								rs.getString("whatsapp_display_number"),
+								webhookUrl(rs.getString("whatsapp_webhook_token")),
+								instant(rs, "whatsapp_verified_at"),
+								instant(rs, "whatsapp_webhook_seen_at"),
+								instant(rs, "whatsapp_templates_submitted_at"),
+								refusedTemplates(rs.getString("refused_templates"))))
+				.stream().findFirst().orElseGet(TenantWhatsAppSettings::none);
 	}
 
 	/**
@@ -385,20 +406,38 @@ public class TenantWhatsAppSettingsService {
 	 * approve in their own time, and a rejection is a thing to fix later, not a reason to refuse a
 	 * connection that otherwise works. Re-running is safe — a template that already exists is
 	 * reported as such rather than duplicated.
+	 *
+	 * <p><strong>What {@code whatsapp_templates_submitted_at} means.</strong> Stamped when at least one
+	 * template was accepted by Meta or was already there. V55 says the column "records that we asked,
+	 * never that they said yes", and the screen reads it as "your message templates went to Meta on
+	 * …". A save where Meta refused every one registered nothing, so no date is written for it, and a
+	 * date already there from an earlier save that did register some is left standing — it is still
+	 * true.
+	 *
+	 * <p><strong>What is refused is kept, and replaced on every save (T-159, V128).</strong> Until this
+	 * the only record of Meta refusing six templates on staging was a WARN in the log. Each refusal is
+	 * stored with a sentence from {@link #plainReason}, never Meta's developer text, and a template Meta
+	 * could not be asked about at all is kept too, because to an administrator the consequence is the
+	 * same: that message will not go by WhatsApp until a later save registers it. The whole list is
+	 * written every time, so a later clean save leaves it empty.
 	 */
 	private void submitTemplates(UUID tenantId, String wabaId, String accessToken) {
 		int submitted = 0;
+		List<TenantWhatsAppSettings.RefusedTemplate> refused = new ArrayList<>();
 		for (NotificationTemplate template : NotificationTemplate.values()) {
+			String name = template.whatsappTemplateName();
 			try {
-				MetaWhatsAppClient.TemplateOutcome outcome = meta.createTemplate(
-						wabaId, accessToken, template.whatsappTemplateName(), template.whatsappCategory(),
+				MetaWhatsAppClient.TemplateSubmission result = meta.createTemplate(
+						wabaId, accessToken, name, template.whatsappCategory(),
 						TEMPLATE_LANGUAGE, template.whatsappBodyText(), template.whatsappExampleValues());
-				if (outcome != MetaWhatsAppClient.TemplateOutcome.REFUSED) {
+				if (result.outcome() == MetaWhatsAppClient.TemplateOutcome.REFUSED) {
+					refused.add(new TenantWhatsAppSettings.RefusedTemplate(name, plainReason(result.metaReason())));
+				} else {
 					submitted++;
 				}
 			} catch (RuntimeException e) {
-				log.warn("Could not submit template {} for temple {}: {}",
-						template.whatsappTemplateName(), tenantId, e.toString());
+				log.warn("Could not submit template {} for temple {}: {}", name, tenantId, e.toString());
+				refused.add(new TenantWhatsAppSettings.RefusedTemplate(name, NOT_REACHED));
 			}
 		}
 		if (submitted > 0) {
@@ -407,8 +446,62 @@ public class TenantWhatsAppSettingsService {
 					WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
 					""");
 		}
+		jdbc.update("""
+				UPDATE tenant_settings SET whatsapp_refused_templates = ?::jsonb
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", json(refused));
 		log.info("Submitted {} of {} WhatsApp templates for temple {}",
 				submitted, NotificationTemplate.values().length, tenantId);
+	}
+
+	private static final String NOT_REACHED =
+			"Meta could not be reached while this message was being registered. Press Save to try again.";
+
+	private static final String NEEDS_AN_APP_CHANGE = " This needs a change to the app, not to your WhatsApp account.";
+
+	/**
+	 * Meta's refusal, as a sentence an administrator can act on.
+	 *
+	 * <p>Matched on the phrases Meta used on staging, 2026-09-12. The first three are faults in our
+	 * own wording, which {@code MetaTemplateRulesTest} now exists to stop, so the sentence says plainly
+	 * that nothing in the temple's account needs changing. Anything else is unknown to us, and gets a
+	 * next step rather than a guess. Meta's own text is already in the log from
+	 * {@link MetaWhatsAppClient#createTemplate}.
+	 */
+	static String plainReason(String metaReason) {
+		String meta = metaReason == null ? "" : metaReason.toLowerCase(Locale.ROOT);
+		if (meta.contains("too many variable")) {
+			return "Meta found too little fixed wording around the details the app fills in." + NEEDS_AN_APP_CHANGE;
+		}
+		if (meta.contains("start or end")) {
+			return "Meta will not accept a message that begins or ends with a detail the app fills in."
+					+ NEEDS_AN_APP_CHANGE;
+		}
+		if (meta.contains("consecutive newline") || meta.contains("only have parameters") || meta.contains("emoji")) {
+			return "Meta found no fixed wording of its own, too many blank lines or too many emoji."
+					+ NEEDS_AN_APP_CHANGE;
+		}
+		return "Meta did not accept this message. Press Save to try again, and if it is refused again, "
+				+ "report it with the message name shown here.";
+	}
+
+	private static String json(List<TenantWhatsAppSettings.RefusedTemplate> refused) {
+		try {
+			return JSON.writeValueAsString(refused);
+		} catch (JsonProcessingException e) {
+			throw new IllegalStateException("Could not write the refused-template list", e);
+		}
+	}
+
+	private static List<TenantWhatsAppSettings.RefusedTemplate> refusedTemplates(String stored) {
+		if (stored == null || stored.isBlank()) {
+			return List.of();
+		}
+		try {
+			return JSON.readValue(stored, REFUSED_LIST);
+		} catch (JsonProcessingException e) {
+			throw new IllegalStateException("Could not read the refused-template list", e);
+		}
 	}
 
 	/** The supplied value if there is one, else the stored one — a secret nobody can see again. */
@@ -435,8 +528,10 @@ public class TenantWhatsAppSettingsService {
 		return value != null && !value.isBlank();
 	}
 
-	private static Instant instant(Object value) {
-		return value instanceof OffsetDateTime odt ? odt.toInstant() : null;
+	/** A timestamptz column, asked for as an OffsetDateTime by name — see {@link #read()} for why. */
+	private static Instant instant(ResultSet rs, String column) throws SQLException {
+		OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
+		return value == null ? null : value.toInstant();
 	}
 
 	private static String randomToken() {

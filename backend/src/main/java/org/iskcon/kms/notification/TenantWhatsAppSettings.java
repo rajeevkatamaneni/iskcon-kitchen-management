@@ -1,6 +1,7 @@
 package org.iskcon.kms.notification;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * A temple's WhatsApp connection as its administrator sees it (E1, E5).
@@ -18,7 +19,10 @@ import java.time.Instant;
  * @param verifiedAt    when the credentials last reached Meta
  * @param webhookSeenAt when a correctly signed callback last arrived — the only proof the return
  *                      path works, and a different question from {@code verifiedAt}
- * @param templatesSubmittedAt when the message templates were last sent to Meta for approval
+ * @param templatesSubmittedAt when Meta last accepted, or already held, at least one of the message
+ *                      templates. Null if no save has registered any.
+ * @param refusedTemplates the templates the last save did not register, each with a sentence an
+ *                      administrator can read (T-159). Empty, never null, when there are none.
  */
 public record TenantWhatsAppSettings(
 		boolean connected,
@@ -28,10 +32,25 @@ public record TenantWhatsAppSettings(
 		String webhookUrl,
 		Instant verifiedAt,
 		Instant webhookSeenAt,
-		Instant templatesSubmittedAt) {
+		Instant templatesSubmittedAt,
+		List<RefusedTemplate> refusedTemplates) {
+
+	public TenantWhatsAppSettings {
+		refusedTemplates = refusedTemplates == null ? List.of() : List.copyOf(refusedTemplates);
+	}
 
 	/** A temple that has not connected WhatsApp. */
 	public static TenantWhatsAppSettings none() {
-		return new TenantWhatsAppSettings(false, null, null, null, null, null, null, null);
+		return new TenantWhatsAppSettings(false, null, null, null, null, null, null, null, List.of());
+	}
+
+	/**
+	 * One template Meta did not register at the last save.
+	 *
+	 * @param name   Meta's name for it, e.g. {@code shift_reminder}
+	 * @param reason a plain sentence saying why and what to do — never Meta's own developer text,
+	 *               which goes to the log
+	 */
+	public record RefusedTemplate(String name, String reason) {
 	}
 }

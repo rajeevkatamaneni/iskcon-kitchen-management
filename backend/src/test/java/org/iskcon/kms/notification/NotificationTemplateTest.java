@@ -52,8 +52,12 @@ class NotificationTemplateTest {
 		String sms = NotificationTemplate.SHIFT_REMINDER.render(values).body();
 		String whatsapp = NotificationTemplate.SHIFT_REMINDER.whatsappBodyText();
 
-		assertThat(sms).isEqualTo("Reminder: your Kitchen shift at Bengaluru Temple is on 12 August at 6:00 am.");
-		assertThat(whatsapp).isEqualTo("Reminder: your {{1}} shift at {{2}} is on {{3}} at {{4}}.");
+		// Reworded by T-159, because Meta refused the shorter sentence for its length.
+		assertThat(sms).isEqualTo(
+				"This is a reminder that your Kitchen shift at Bengaluru Temple is scheduled for 12 August at 6:00 am. "
+						+ "Thank you for your seva.");
+		assertThat(whatsapp).isEqualTo(
+				"This is a reminder that your {{1}} shift at {{2}} is scheduled for {{3}} at {{4}}. Thank you for your seva.");
 	}
 
 	@Test

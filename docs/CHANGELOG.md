@@ -1182,6 +1182,40 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-12 — WhatsApp settings dates read back, six refused templates reworded, the connection test renamed, and refusals kept per temple (task T-159)
+
+Backend only: no frontend file, one migration (`V128`), no new error code. **Not driven in a browser,
+and not seen working by Rajeev.** Templates are only resubmitted when an administrator presses Save in
+Settings → WhatsApp; the main session does that on staging after this deploy.
+
+**The three dates on Settings → WhatsApp read back.** Templates submitted, last checked and webhook last
+seen have read empty for every temple since the feature was written on 16 August. The table held them;
+the read threw them away, because the PostgreSQL driver returns a `timestamptz` as `java.sql.Timestamp`
+and the old conversion accepted only `OffsetDateTime`. Each date is now read by naming its type.
+`WhatsAppTemplateSubmissionIT` reproduces staging's symptom and pins the driver's behaviour.
+
+**Six templates Meta refused are reworded to Meta's rules**: `shift_reminder`, `po_delivery`,
+`shift_broadcast`, `temple_communication`, `temple_announcement` and `low_stock_digest`. The refusals
+were too many variables for the length, a body that was only a variable, and a body starting or ending
+on a variable. Each message is one shared sentence, so its SMS and email wording changes with it. None
+of the six was ever approved at Meta. `MetaTemplateRulesTest` now checks all twenty templates against
+those rules.
+
+**The connection test template is renamed `whatsapp_connection_check`** and reworded to say what it
+confirms and who asked for it. Meta filed the old `connection_test` as Marketing, which it will not
+deliver to the US test number, and Meta will neither edit a template in review nor change an approved
+one's category. The old template stays in each temple's Meta account, unused.
+
+**Refused templates are stored per temple.** `V128` adds `tenant_settings.whatsapp_refused_templates`
+(JSONB, default `[]`), replaced whole on every save, each entry a name and a plain sentence rather than
+Meta's developer text. The settings GET returns it as `refusedTemplates`. **The screen does not show it
+yet**; that waits for the Settings redesign.
+
+**Not done:** a Save never updates the wording of a template Meta already holds, since "already exists"
+counts as done; the save still submits twenty templates one after another inside the request; and a
+multi-line shift broadcast will still be refused by WhatsApp and fall back to SMS. Proof, with negative
+controls, in `docs/work/proof/T-159.md`.
+
 ### 2026-09-12 — The planner's "Ask for volunteers" opens the real shift form, and editing a shift keeps its meal (tasks T-155, T-158)
 
 Frontend only: no backend file, no migration (the schema stays `V127`), no new error code. Released to

@@ -14,12 +14,19 @@ import java.util.Map;
  */
 public enum NotificationTemplate {
 
+	/**
+	 * T-159: Meta refused "Reminder: your {{1}} shift at {{2}} is on {{3}} at {{4}}." as having "too
+	 * many variables for its length" — seven fixed words for four details. Reworded to say the same
+	 * thing at a length Meta accepts, and closed with the thanks the signup confirmation Meta accepted
+	 * already carries, because a first rewording that stopped at "at {{4}}." ended on a detail and
+	 * {@code MetaTemplateRulesTest} refused it.
+	 */
 	SHIFT_REMINDER("shift_reminder") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Shift reminder",
-					"Reminder: your %s shift at %s is on %s at %s.".formatted(
+					"This is a reminder that your %s shift at %s is scheduled for %s at %s. Thank you for your seva.".formatted(
 							value(params, "role"), value(params, "temple"),
 							value(params, "date"), value(params, "time")));
 		}
@@ -48,13 +55,18 @@ public enum NotificationTemplate {
 	 * three means re-registering it, and until that is approved every send fails as an unapproved
 	 * template and cascades to SMS. Done now because the product is pre-beta and no temple depends on
 	 * it; after that it would need a second template and a migration between them.
+	 *
+	 * <p>T-159: Meta refused the five-detail version, "Purchase order {{1}} for {{2}} is ready: {{3}}.
+	 * Raised {{4}}, needed by {{5}}.", as having too many variables for its length. The dates are the
+	 * same two, now in a sentence long enough for Meta; it had never been approved, so no temple holds
+	 * the old wording.
 	 */
 	PO_DELIVERY("po_delivery") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Purchase order " + value(params, "poNumber"),
-					"Purchase order %s for %s is ready: %s. Raised %s, needed by %s.".formatted(
+					"Purchase order %s for %s is ready: %s. It was raised on %s, and the items are needed by %s at the latest.".formatted(
 							value(params, "poNumber"), value(params, "vendor"),
 							value(params, "summary"), value(params, "raised"),
 							value(params, "neededBy")));
@@ -201,12 +213,18 @@ public enum NotificationTemplate {
 		}
 	},
 
+	/**
+	 * T-159: Meta refused "Update about your {{1}} shift: {{2}}" for its length, and it also ended on
+	 * the coordinator's message, which Meta does not allow either. The message is now quoted inside a
+	 * sentence, so whatever punctuation the coordinator typed, the body never ends on it.
+	 */
 	SHIFT_BROADCAST("shift_broadcast") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Update about your shift: " + value(params, "title"),
-					"Update about your %s shift: %s".formatted(value(params, "title"), value(params, "message")));
+					"There is an update about your %s shift. The message reads: \"%s\" Please check the app for the latest details."
+							.formatted(value(params, "title"), value(params, "message")));
 		}
 
 		@Override
@@ -341,11 +359,17 @@ public enum NotificationTemplate {
 	 * A letter a temple wrote (E8-S2). Its body does not travel in these parameters — see
 	 * {@link OutboundBodySource} — so what renders here is the fallback for a communication whose
 	 * record has since gone, which should not happen and should still say something sensible.
+	 *
+	 * <p>T-159: the body used to be the subject alone, which on Meta's side is a body of nothing but
+	 * {@code {{1}}}, and Meta refuses a body that is "only parameters". It is still registered with
+	 * Meta like every template, so it now says in words what the fallback is.
 	 */
 	TEMPLE_COMMUNICATION("temple_communication") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
-			return new RenderedMessage(value(params, "subject"), value(params, "subject"));
+			return new RenderedMessage(value(params, "subject"),
+					"There is a new message from the temple: %s. If it did not reach you in full, please ask at the temple office for a copy."
+							.formatted(value(params, "subject")));
 		}
 
 		@Override
@@ -372,13 +396,16 @@ public enum NotificationTemplate {
 	 * the admin writes, and a link to the full thing. It is the one MARKETING template we have —
 	 * priced higher, reviewed harder, and rate-limited by the number's quality rating — and calling
 	 * it UTILITY to avoid that would be untrue.
+	 *
+	 * <p>T-159: Meta refused "A message from {{1}} — {{2}}: {{3}} Read it here: {{4}}" for its length,
+	 * and it ended on the link, which Meta does not allow either. The link now sits inside a sentence.
 	 */
 	TEMPLE_ANNOUNCEMENT("temple_announcement") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					value(params, "subject"),
-					"A message from %s — %s: %s Read it here: %s".formatted(
+					"A message from %s — %s: %s You can read the whole message at this link: %s (it opens in your browser).".formatted(
 							value(params, "temple"), value(params, "subject"),
 							value(params, "intro"), value(params, "link")));
 		}
@@ -457,12 +484,16 @@ public enum NotificationTemplate {
 		}
 	},
 
+	/**
+	 * T-159: Meta refused "{{1}} item(s) at {{2}} are below their reorder level: {{3}}." because it
+	 * began with a detail. It now begins with words and ends with a sentence of its own.
+	 */
 	LOW_STOCK_DIGEST("low_stock_digest") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
 					"Low stock at " + value(params, "temple"),
-					"%s item(s) at %s are below their reorder level: %s.".formatted(
+					"Low stock: %s item(s) at %s are below their reorder level: %s. Please review them in the app.".formatted(
 							value(params, "count"), value(params, "temple"), value(params, "items")));
 		}
 
@@ -501,13 +532,36 @@ public enum NotificationTemplate {
 	 *
 	 * <p>UTILITY and OPERATIONAL like the rest: it is the direct consequence of an administrator
 	 * pressing a button to send it, to a number they chose, and there is nothing in it to opt out of.
+	 *
+	 * <p><strong>Renamed from {@code connection_test} by T-159, and why a new name was the only
+	 * way.</strong> Staging registered the first wording — "Hare Krishna. This is a test message from
+	 * {{1}}. If it has reached you, the temple can send WhatsApp messages." — as UTILITY, and Meta put
+	 * it in review as MARKETING. Meta does not deliver marketing templates to US numbers, and the test
+	 * phone is one. Meta's categorization guide says a template whose "contents are unclear" is
+	 * categorized as marketing, and that a utility template must be "specific to or requested by the
+	 * user" or "essential or critical to the user". A greeting followed by "this is a test message"
+	 * says neither. So the wording now states the one fact it confirms and who asked for it.
+	 * <ul>
+	 *   <li>A template in review cannot be changed: "Only templates with an APPROVED, REJECTED, or
+	 *       PAUSED status can be edited", and "You cannot edit the category of an approved template"
+	 *       (https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/template-management).</li>
+	 *   <li>Once reviewed, "If you selected UTILITY as the template's category and WhatsApp determined
+	 *       it should be MARKETING, the template is approved as MARKETING"; a review can be requested,
+	 *       and changes nothing we control
+	 *       (https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/template-categorization).</li>
+	 *   <li>And the old name cannot simply be reused: Save treats "already exists" as done, so a new
+	 *       body under {@code connection_test} would never reach Meta; and "If you delete an approved
+	 *       template, you cannot create a new template with the same name for 30 days".</li>
+	 * </ul>
+	 * The old {@code connection_test} stays in each temple's Meta account, unused, until somebody
+	 * deletes it there. Nothing sends it.
 	 */
-	WHATSAPP_TEST("connection_test") {
+	WHATSAPP_TEST("whatsapp_connection_check") {
 		@Override
 		public RenderedMessage render(Map<String, Object> params) {
 			return new RenderedMessage(
-					"WhatsApp test message",
-					"Hare Krishna. This is a test message from %s. If it has reached you, the temple can send WhatsApp messages."
+					"WhatsApp connection check",
+					"Connection check for %s: this WhatsApp number can send messages. A temple administrator asked for this check in the app's settings, and no reply is needed."
 							.formatted(value(params, "temple")));
 		}
 

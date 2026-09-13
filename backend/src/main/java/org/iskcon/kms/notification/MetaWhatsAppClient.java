@@ -132,8 +132,15 @@ public class MetaWhatsAppClient {
 	 * <p>Idempotent from the caller's point of view: a template that already exists comes back as an
 	 * error naming that, which is reported as {@link TemplateOutcome#ALREADY_EXISTS} rather than
 	 * thrown, so re-running the sync is safe.
+	 *
+	 * <p>That also means a template Meta already holds is never re-worded by this call: a changed body
+	 * under an existing name comes back "already exists" and Meta keeps the old one. Meta's rules make
+	 * a new name the way to change what is registered — see {@link NotificationTemplate#WHATSAPP_TEST}.
+	 *
+	 * @return the outcome, and for a refusal Meta's own sentence (T-159) — for the log and for the
+	 *     caller to translate, never to show an administrator as it stands
 	 */
-	public TemplateOutcome createTemplate(String wabaId, String accessToken, String name,
+	public TemplateSubmission createTemplate(String wabaId, String accessToken, String name,
 			String category, String languageCode, String bodyText, List<String> exampleValues) {
 
 		Map<String, Object> component = exampleValues.isEmpty()
@@ -147,18 +154,27 @@ public class MetaWhatsAppClient {
 						"components", List.of(component)));
 
 		if (response.statusCode() < 400) {
-			return TemplateOutcome.SUBMITTED;
+			return new TemplateSubmission(TemplateOutcome.SUBMITTED, null);
 		}
 		String error = readableError(response);
 		if (error.toLowerCase().contains("already exists")) {
-			return TemplateOutcome.ALREADY_EXISTS;
+			return new TemplateSubmission(TemplateOutcome.ALREADY_EXISTS, null);
 		}
 		log.warn("Meta refused template {}: {}", name, error);
-		return TemplateOutcome.REFUSED;
+		return new TemplateSubmission(TemplateOutcome.REFUSED, error);
 	}
 
 	/** What became of a template we asked Meta to register. Approval is Meta's, and is not instant. */
 	public enum TemplateOutcome { SUBMITTED, ALREADY_EXISTS, REFUSED }
+
+	/**
+	 * A template registration's outcome, with Meta's reason when it refused.
+	 *
+	 * @param metaReason Meta's {@code error_user_msg} or {@code message}, only for
+	 *     {@link TemplateOutcome#REFUSED}; null otherwise
+	 */
+	public record TemplateSubmission(TemplateOutcome outcome, String metaReason) {
+	}
 
 	// ---------------------------------------------------------------------
 
