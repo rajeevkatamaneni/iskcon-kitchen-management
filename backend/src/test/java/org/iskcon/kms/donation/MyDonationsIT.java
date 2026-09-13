@@ -316,6 +316,35 @@ class MyDonationsIT extends AbstractIntegrationTest {
 				.isEqualTo(VERIFIED_PHONE);
 	}
 
+	/**
+	 * T-187. The office's donor history now compares phones after {@code CounterPhone.normalise}, so an
+	 * old gift typed {@code 98765 43210} and a new one saved as {@code +919876543210} group together on
+	 * the Temple Admin's screen. My donations must not follow it: an assumed country code is how a
+	 * PAN-bearing receipt reaches the wrong phone, and T-186 deliberately left old rows as typed. So the
+	 * same two rows are read both ways in one test. The first half proves the grouping is live on this
+	 * data, so the second half cannot pass merely because nothing was normalised anywhere.
+	 */
+	@Test
+	@DisplayName("T-187: a gift stored as typed 98765 43210 is still not listed for +919876543210, though the office's donor history groups it")
+	void typedGiftStaysOffMyDonationsThoughTheOfficeHistoryGroupsIt() throws Exception {
+		UUID typed = gift(temple, g -> {
+			g.put("donor_name", "Gopal Das");
+			g.put("donor_phone", "98765 43210");
+		});
+		UUID saved = gift(temple, g -> {
+			g.put("donor_name", "Gopal Das");
+			g.put("donor_phone", VERIFIED_PHONE);
+		});
+
+		mvc.perform(as(ADMIN, get("/api/v1/donations/ledger/donor/" + typed)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[*].id").value(containsInAnyOrder(typed.toString(), saved.toString())));
+
+		mvc.perform(as(GOPAL, get("/api/v1/my-donations")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[*].id").value(containsInAnyOrder(saved.toString())));
+	}
+
 	// Two tests rather than one, so that a leak in the list and a leak in the download each fail on
 	// their own. As a single test the listing assertion failed first and the download was never reached,
 	// which left the more dangerous half (the PDF itself) unproven by the negative control.

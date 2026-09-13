@@ -1,13 +1,17 @@
 package org.iskcon.kms.donation;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.TokenVerifier;
@@ -203,41 +207,175 @@ class DonationLedgerIT extends AbstractIntegrationTest {
 	}
 
 	/**
-	 * T-186, recorded rather than fixed. The donor's history groups a counter gift with that donor's
-	 * other gifts by exact phone ({@code donor_phone IS NOT DISTINCT FROM ?} in
-	 * {@code DonationLedgerService.donorHistory}). New counter gifts are now saved in +91 form and old
-	 * ones keep what was typed, so a regular donor's history splits in two at the day T-186 shipped.
-	 * Changing the ledger's matching was not T-186's decision, so this pins the behaviour as it is.
+	 * T-187, replacing the split T-186 recorded here. New counter gifts are saved in +91 form and old ones
+	 * keep what was typed, so compared exactly a regular donor's history split in two on the day T-186
+	 * shipped. {@code DonationLedgerService.donorHistory} now puts both stored phones through
+	 * {@code CounterPhone.normalise} before comparing them, and the history is whole again — asked from
+	 * any of the gifts, because a grouping that depended on which row the office happened to open would be
+	 * two answers to one question.
 	 *
-	 * <p>The new row's phone is written by {@code CounterPhone.normalise}, the call the recorder makes;
-	 * that the endpoint stores it is proven in {@code DonationIntakeIT} and {@code MyDonationsIT}.
+	 * <p>This test used to assert the opposite: {@code older} grouped only with {@code alsoOlder}, and
+	 * {@code newer} only with {@code newerTypedWithZero}. The new rows' phones are still written by
+	 * {@code CounterPhone.normalise}, the call the recorder makes; that the endpoint stores them that way
+	 * is proven in {@code DonationIntakeIT} and {@code MyDonationsIT}. This is the test the negative
+	 * control removes the read-time normalisation under.
 	 */
 	@Test
-	@DisplayName("T-186: a new counter gift saved as +919876543210 does not group with the donor's older gift typed 98765 43210")
-	void newPlusNinetyOneGiftDoesNotGroupWithOlderTypedGift() throws Exception {
-		// Before T-186, both typed the same way: these two group, as they always did.
-		UUID older = counterGift("Govind Das", "98765 43210");
-		UUID alsoOlder = counterGift("Govind Das", "98765 43210");
-		// After T-186, the same donor, typed the same way, saved in +91 form.
-		UUID newer = counterGift("Govind Das", CounterPhone.normalise("98765 43210"));
-		// And a second new gift typed differently, which before T-186 would not have grouped either.
-		UUID newerTypedWithZero = counterGift("Govind Das", CounterPhone.normalise("09876543210"));
+	@DisplayName("T-187: an old gift typed 98765 43210 and a new one saved as +919876543210 group together, from either gift")
+	void oldTypedGiftsAndNewPlusNinetyOneGiftsGroupTogether() throws Exception {
+		// Before T-186, typed as the office heard it, two ways.
+		UUID older = counterGift("Govind Das", "98765 43210", null);
+		UUID alsoOlder = counterGift("Govind Das", "+91 98765-43210", null);
+		// After T-186, the same donor, saved in +91 form however it was typed.
+		UUID newer = counterGift("Govind Das", CounterPhone.normalise("98765 43210"), null);
+		UUID newerTypedWithZero = counterGift("Govind Das", CounterPhone.normalise("09876543210"), null);
+		assertThat(admin.queryForObject("SELECT donor_phone FROM donations WHERE id = ?", String.class, newer))
+				.isEqualTo("+919876543210");
 
-		mvc.perform(authed(get("/api/v1/donations/ledger/donor/" + older)))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[*].id").value(containsInAnyOrder(older.toString(), alsoOlder.toString())));
-		mvc.perform(authed(get("/api/v1/donations/ledger/donor/" + newer)))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[*].id").value(containsInAnyOrder(newer.toString(), newerTypedWithZero.toString())));
+		for (UUID from : List.of(older, alsoOlder, newer, newerTypedWithZero)) {
+			mvc.perform(authed(get("/api/v1/donations/ledger/donor/" + from)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$[*].id").value(containsInAnyOrder(older.toString(), alsoOlder.toString(),
+							newer.toString(), newerTypedWithZero.toString())));
+		}
 	}
 
-	private UUID counterGift(String donorName, String phone) {
+	@Test
+	@DisplayName("T-187: with the same email on both, old and new group; the email is still compared exactly as stored")
+	void sameEmailGroupsAndTheEmailHalfIsUnchanged() throws Exception {
+		UUID older = counterGift("Govind Das", "98765 43210", "govind@example.com");
+		UUID newer = counterGift("Govind Das", "+919876543210", "govind@example.com");
+		// The same phone under another email, under no email, and under the same email in other case.
+		// Each stays apart, exactly as before T-187: only the phone half of the comparison moved.
+		UUID otherEmail = counterGift("Govind Das", "+919876543210", "someone@example.com");
+		UUID noEmail = counterGift("Govind Das", "98765 43210", null);
+		UUID otherCase = counterGift("Govind Das", "+919876543210", "Govind@Example.com");
+
+		historyIs(older, older, newer);
+		historyIs(newer, older, newer);
+		historyIs(otherEmail, otherEmail);
+		historyIs(noEmail, noEmail);
+		historyIs(otherCase, otherCase);
+	}
+
+	@Test
+	@DisplayName("T-187: phones the counter rule does not make equal stay apart, even when their last ten digits agree")
+	void phonesTheRuleDoesNotEquateStayApart() throws Exception {
+		UUID plusNinetyOne = counterGift("Govind Das", "+919876543210", null);
+		// The same last ten digits under a foreign country code: the SQL net lets it through, the rule
+		// does not, and the rule decides.
+		UUID foreign = counterGift("Govind Das", "+44 98765 43210", null);
+		// A prefix the rule deliberately leaves as typed: also the same last ten digits.
+		UUID international = counterGift("Govind Das", "0091 98765 43210", null);
+		// One digit off.
+		UUID oneDigitOff = counterGift("Govind Das", "98765 43211", null);
+
+		historyIs(plusNinetyOne, plusNinetyOne);
+		historyIs(foreign, foreign);
+		historyIs(international, international);
+		historyIs(oneDigitOff, oneDigitOff);
+	}
+
+	@Test
+	@DisplayName("T-187: a landline kept as typed, 022 2345 6789, groups only with gifts typed exactly that way")
+	void landlineKeptAsTypedGroupsOnlyWithItself() throws Exception {
+		UUID landline = counterGift("Lakshmi Devi", "022 2345 6789", null);
+		UUID typedTheSame = counterGift("Lakshmi Devi", "022 2345 6789", null);
+		// Kept as typed means as typed: the rule does not guess at a landline, so a hyphenated copy is
+		// another string, as it was before T-187.
+		UUID hyphenated = counterGift("Lakshmi Devi", "022-2345-6789", null);
+		UUID mobile = counterGift("Lakshmi Devi", "+919876543210", null);
+
+		historyIs(landline, landline, typedTheSame);
+		historyIs(typedTheSame, landline, typedTheSame);
+		historyIs(hyphenated, hyphenated);
+		historyIs(mobile, mobile);
+	}
+
+	/**
+	 * Anonymous gifts never join a history. V38's {@code donations_anonymous_has_no_pii} means an
+	 * anonymous row carries no phone and no email, so a phone comparison alone already keeps them out;
+	 * the {@code is_anonymous = false} clause is kept as well, and this test is the fixture that would
+	 * show a leak if both went.
+	 *
+	 * <p>And the one case normalising at read time could have opened: a phone saved as a run of spaces
+	 * normalises to nothing, as does every gift with no phone. Compared naively, that one gift would
+	 * gather every contactless and every anonymous gift in the temple. It has no contact, so it has no
+	 * history, like a gift with none.
+	 */
+	@Test
+	@DisplayName("T-187: anonymous and contactless gifts never join a history, including one whose phone is only spaces")
+	void anonymousAndContactlessGiftsNeverJoin() throws Exception {
+		UUID named = counterGift("Govind Das", "98765 43210", null);
+		money("ONE_TIME", "5000", null, null, null);   // anonymous: no name, no contact
+		UUID walkIn = counterGift("Walk-in Devotee", null, null);
+		UUID spaces = counterGift("Hari Das", "   ", null);
+
+		historyIs(named, named);
+		historyIs(walkIn);
+		historyIs(spaces);
+	}
+
+	/**
+	 * The donor history narrows its candidates in SQL with {@code DonationLedgerService.PHONE_NET} and
+	 * then decides with {@code CounterPhone.normalise}. The net may be wider than the rule; it must never
+	 * be narrower, or a gift the rule groups would silently drop out of a history. Checked on
+	 * {@code CounterPhoneTest}'s own lists, so a case added to the rule's tests is checked here too: every
+	 * pair of inputs the rule makes equal must get equal keys from the database.
+	 */
+	@Test
+	@DisplayName("T-187: the donor history's SQL net gives equal keys to every pair of CounterPhoneTest inputs the rule makes equal")
+	void phoneNetIsWiderThanTheCounterRule() {
+		List<String> inputs = new ArrayList<>();
+		CounterPhoneTest.recognised().forEach(a -> inputs.add((String) a.get()[1]));
+		CounterPhoneTest.keptAsTyped().forEach(a -> {
+			inputs.add((String) a.get()[1]);
+			inputs.add((String) a.get()[2]);
+		});
+		// CounterPhoneTest's single cases, and the two this task's own tests lean on.
+		inputs.addAll(Arrays.asList("080 2345 6789", "+918023456789", null, "", "   ",
+				"+44 98765 43210", "022-2345-6789"));
+
+		Map<String, String> keys = new HashMap<>();
+		for (String input : inputs) {
+			keys.put(input, admin.queryForObject(
+					"SELECT " + DonationLedgerService.PHONE_NET.formatted("?::text"), String.class, input));
+		}
+
+		int equalPairs = 0;
+		for (String a : inputs) {
+			for (String b : inputs) {
+				if (Objects.equals(CounterPhone.normalise(a), CounterPhone.normalise(b))) {
+					equalPairs++;
+					assertThat(keys.get(b))
+							.as("\"%s\" and \"%s\" normalise alike, so the net must key them alike", a, b)
+							.isEqualTo(keys.get(a));
+				}
+			}
+		}
+		// Not vacuous: the nine recognised shapes alone make 81 ordered pairs, beyond the reflexive ones.
+		assertThat(equalPairs).isGreaterThan(inputs.size() + 70);
+	}
+
+	/** Asserts the donor history opened from {@code from} is exactly {@code expected}, in any order. */
+	private void historyIs(UUID from, UUID... expected) throws Exception {
+		mvc.perform(authed(get("/api/v1/donations/ledger/donor/" + from)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(expected.length));
+		if (expected.length > 0) {
+			mvc.perform(authed(get("/api/v1/donations/ledger/donor/" + from)))
+					.andExpect(jsonPath("$[*].id").value(containsInAnyOrder(
+							Arrays.stream(expected).map(UUID::toString).toArray(String[]::new))));
+		}
+	}
+
+	private UUID counterGift(String donorName, String phone, String email) {
 		return admin.queryForObject("""
 				INSERT INTO donations (tenant_id, type, amount_inr, status, is_anonymous, donor_name, donor_phone,
-					payment_mode, donated_on)
-				VALUES (?, 'ONE_TIME', 500, 'COMPLETED', false, ?, ?, 'CASH', CURRENT_DATE)
+					donor_email, payment_mode, donated_on)
+				VALUES (?, 'ONE_TIME', 500, 'COMPLETED', false, ?, ?, ?, 'CASH', CURRENT_DATE)
 				RETURNING id
-				""", UUID.class, tenant, donorName, phone);
+				""", UUID.class, tenant, donorName, phone, email);
 	}
 
 	@Test

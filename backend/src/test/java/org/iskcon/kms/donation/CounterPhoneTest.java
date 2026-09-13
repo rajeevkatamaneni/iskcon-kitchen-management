@@ -14,6 +14,10 @@ import org.junit.jupiter.params.provider.MethodSource;
  * The two lists are meant to be read side by side: if one side's rule moves, the other side's test is
  * where somebody should notice. Invisible characters are escaped rather than pasted, so an editor cannot
  * turn one back into a plain space and leave the test passing for the wrong reason.
+ *
+ * <p>{@link #recognised()} and {@link #keptAsTyped()} are also read by
+ * {@code DonationLedgerIT.phoneNetIsWiderThanTheCounterRule} (T-187), which checks the donor history's
+ * SQL net against this rule on exactly these inputs. Add a case here and that check gains it too.
  */
 class CounterPhoneTest {
 

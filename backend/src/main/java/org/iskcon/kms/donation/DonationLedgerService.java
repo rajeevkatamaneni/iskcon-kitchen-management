@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.iskcon.kms.error.ApplicationException;
@@ -142,7 +143,39 @@ public class DonationLedgerService {
 		return found.get(0);
 	}
 
-	/** Every gift matching this donation's donor identity (E7-S7): account, else PAN, else exact contact. */
+	/**
+	 * Every gift matching this donation's donor identity (E7-S7): account, else PAN, else contact.
+	 *
+	 * <p><strong>The contact arm compares phones by {@link CounterPhone#normalise}, on both sides, at
+	 * read time (T-187).</strong> Since T-186 the counter saves an unambiguous Indian mobile as
+	 * {@code +919876543210}, while every gift recorded before it keeps what the office typed,
+	 * {@code 98765 43210}. Compared exactly, a regular donor's history split in two on the day T-186
+	 * shipped: the old gifts under one string, the new under the other. Nothing stored is rewritten to
+	 * mend that — whether to rewrite old rows is a separate decision, because it widens who can
+	 * download a receipt on My donations — so the grouping applies the one rule the recorder applies,
+	 * to the stored value of every candidate and of the gift being looked at. Two strings that the rule
+	 * turns into the same thing group; two that it does not, stay apart. A landline kept as typed
+	 * therefore groups only with gifts typed exactly the same way, which is what it did before.
+	 *
+	 * <p>The email half is deliberately untouched: still {@code IS NOT DISTINCT FROM} on the stored
+	 * value, so the same phone under a different email, or under an email on one gift and none on the
+	 * other, stays apart as it always has.
+	 *
+	 * <p><strong>This is the office's view and only the office's.</strong> It is behind
+	 * {@code VIEW_DONATIONS}, which is the Temple Admin's alone, and RLS keeps it to one temple. My
+	 * donations ({@code MyDonationsService}) is a different page with a different rule and must stay
+	 * exact: grouping two gifts on one screen for the person who recorded both is not the same act as
+	 * handing a stranger a PAN-bearing receipt because a country code was assumed.
+	 *
+	 * <p><strong>Why the rule runs in Java, and what the SQL is for.</strong> The rule is decided in
+	 * Java by calling {@code CounterPhone.normalise} itself, so there is no second copy of it to drift.
+	 * The database only narrows: {@link #PHONE_NET} keeps the rows whose last ten ASCII digits equal the
+	 * looked-at gift's. Without that narrowing the candidates for a gift with no email are every named
+	 * gift the temple has ever recorded without one — most of the counter's register, read in full
+	 * each time somebody opens a donor. The net is wider than the rule, never narrower, and
+	 * {@code DonationLedgerIT} holds it to that on {@code CounterPhoneTest}'s own inputs. See the
+	 * constant for why it is a superset.
+	 */
 	@Transactional(readOnly = true)
 	public List<LedgerRow> donorHistory(UUID donationId) {
 		Map<String, Object> d;
@@ -162,14 +195,59 @@ public class DonationLedgerService {
 			return jdbc.query(SELECT + " WHERE d.pan_fingerprint = ? ORDER BY d.created_at DESC",
 					MAPPER, d.get("pan_fingerprint"));
 		}
-		if (d.get("donor_phone") != null || d.get("donor_email") != null) {
-			return jdbc.query(SELECT + """
-					 WHERE d.is_anonymous = false AND d.donor_phone IS NOT DISTINCT FROM ?
-					   AND d.donor_email IS NOT DISTINCT FROM ? ORDER BY d.created_at DESC
-					""", MAPPER, d.get("donor_phone"), d.get("donor_email"));
+		String storedPhone = (String) d.get("donor_phone");
+		String phone = CounterPhone.normalise(storedPhone);
+		Object email = d.get("donor_email");
+		// A phone that normalises to nothing is no phone. Tested on the normalised value rather than the
+		// stored one because the comparison below is: a gift whose phone was saved as a run of spaces
+		// would otherwise match every contactless gift in the temple, since each of those normalises to
+		// nothing as well. Such a gift has no contact to group by, so, like a gift with none, it has no
+		// history.
+		if (phone == null && email == null) {
+			return List.of();
 		}
-		return List.of();
+		List<UUID> sameDonor = new ArrayList<>();
+		jdbc.query("""
+				SELECT d.id, d.donor_phone FROM donations d
+				WHERE d.is_anonymous = false AND d.donor_email IS NOT DISTINCT FROM ?
+				  AND %s = %s
+				""".formatted(PHONE_NET.formatted("d.donor_phone"), PHONE_NET.formatted("?::text")),
+				rs -> {
+					if (Objects.equals(CounterPhone.normalise(rs.getString("donor_phone")), phone)) {
+						sameDonor.add(rs.getObject("id", UUID.class));
+					}
+				},
+				email, storedPhone);
+		if (sameDonor.isEmpty()) {
+			return List.of();
+		}
+		return jdbc.query(connection -> {
+			var ps = connection.prepareStatement(SELECT + " WHERE d.id = ANY(?) ORDER BY d.created_at DESC");
+			ps.setArray(1, connection.createArrayOf("uuid", sameDonor.toArray()));
+			return ps;
+		}, MAPPER);
 	}
+
+	/**
+	 * The database's half of the donor history's phone comparison: a net, not the rule (T-187). A
+	 * {@code String.format} template taking the column or parameter to key.
+	 *
+	 * <p>It keys a phone by the last ten ASCII digits left after removing everything else, null reading
+	 * as no digits. Any two phones {@link CounterPhone#normalise} makes equal have equal keys, because
+	 * there are only two ways for them to be equal. Either both were recognised as a mobile, and then
+	 * each is separators, an optional {@code +91}, {@code 91} or {@code 0}, and the same ten digits last
+	 * — none of the separators or trimmed characters is a digit, so the last ten digits are those ten.
+	 * Or both were kept as typed, and then they are the same string once trimmed, and trimming removes
+	 * no digit. (One recognised and one kept can never be equal: the kept one would have to read
+	 * {@code +91} and ten digits starting 6 to 9, which the rule recognises.) Blank and null both key as
+	 * no digits, as they both normalise to null.
+	 *
+	 * <p>The converse does not hold, on purpose: {@code +44 98765 43210} and {@code 0091 98765 43210}
+	 * key the same as {@code +919876543210}, and the Java comparison is what keeps them apart. If
+	 * {@code CounterPhone}'s rule ever changes so that this stops being a superset, the history would
+	 * silently lose gifts; {@code DonationLedgerIT.phoneNetIsWiderThanTheCounterRule} fails first.
+	 */
+	static final String PHONE_NET = "right(regexp_replace(coalesce(%s, ''), '[^0-9]', '', 'g'), 10)";
 
 	/**
 	 * CSV of the same rows the on-screen filters show — the accountant's real interface.

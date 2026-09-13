@@ -51,6 +51,14 @@ import java.util.regex.Pattern;
  *
  * <p><strong>New gifts only.</strong> Rows recorded before this keep what was typed. Whether to rewrite
  * them is a separate decision (it widens who can download a receipt), and it is Rajeev's.
+ *
+ * <p><strong>Its one reader (T-187).</strong> Because old rows keep what was typed, the office's donor
+ * history ({@code DonationLedgerService.donorHistory}) calls {@link #normalise} on both stored phones
+ * when it groups a donor's gifts, so a regular donor's history does not split at the day this shipped.
+ * That is a read behind {@code VIEW_DONATIONS} and nothing is rewritten. My donations deliberately does
+ * <em>not</em> call it: it stays exact. The ledger narrows its candidates in SQL with a digits-only net
+ * that must stay wider than this rule; if the rule changes, {@code DonationLedgerIT}'s
+ * {@code phoneNetIsWiderThanTheCounterRule} checks that on {@code CounterPhoneTest}'s inputs.
  */
 final class CounterPhone {
 
