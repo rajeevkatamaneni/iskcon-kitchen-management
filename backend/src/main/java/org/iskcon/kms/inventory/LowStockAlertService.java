@@ -74,11 +74,23 @@ public class LowStockAlertService {
 		return true;
 	}
 
-	/** The people who should see a low-stock digest: those who can act on it. */
+	/**
+	 * The people who should see a low-stock digest: those who can act on it.
+	 *
+	 * <p>The temple is named in the query even though, as this runs today, the row policy would do it
+	 * alone (T-190). The policy on {@code users} also admits the signed-in caller's own accounts at
+	 * other temples ({@code firebase_uid = app.auth_uid}, V2), but only the authentication filter ever
+	 * sets that uid, and this is reached only from {@link LowStockDigestRunner} on a Quartz worker
+	 * thread, where it is never set — so the escape matches nothing here and RLS gives exactly this
+	 * temple. The condition is for the day somebody adds a "send today's digest now" button: run from
+	 * a request, the caller's own kitchen account at another temple would be sent this temple's
+	 * shopping list. It costs a line, and it matches how the leave approvers are read.
+	 */
 	private List<UUID> digestRecipients() {
 		return jdbc.query("""
 				SELECT id FROM users
-				WHERE role IN ('KITCHEN_STAFF', 'KITCHEN_MANAGER', 'TEMPLE_ADMIN') AND status = 'ACTIVE'
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				  AND role IN ('KITCHEN_STAFF', 'KITCHEN_MANAGER', 'TEMPLE_ADMIN') AND status = 'ACTIVE'
 				""", (rs, n) -> rs.getObject("id", UUID.class));
 	}
 

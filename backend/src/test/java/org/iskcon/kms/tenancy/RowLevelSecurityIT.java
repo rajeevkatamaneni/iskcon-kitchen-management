@@ -287,6 +287,62 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 		}
 	}
 
+	/**
+	 * Pins, as intended, the one place a signed-in request can read rows outside its temple: its own
+	 * accounts at other temples.
+	 *
+	 * <p>The read policy on {@code users} admits {@code firebase_uid = app.auth_uid} (V2, V4) so that
+	 * sign-in can find a person's memberships before a temple is chosen, and the temple switcher can
+	 * list them afterwards ({@code WhoAmIController.temples}). Since V52 one person may hold an account
+	 * at several temples, and the authentication filter leaves the uid set for the whole request, so
+	 * this visibility lasts the whole request too. That is the design, not a leak in the policy; the
+	 * leak was application queries on {@code users} that trusted RLS to name the temple and so picked
+	 * these rows up as well — see {@code OwnAccountsAtOtherTemplesIT}. This test is here so the next
+	 * person to notice the visibility reads it as deliberate, and so it cannot quietly widen: it is the
+	 * person's own rows only, readable only, and gone the moment the uid is.
+	 */
+	@Test
+	@DisplayName("a signed-in person can read their own accounts at other temples, and change none of them")
+	void ownAccountsAtOtherTemplesAreReadableAndNotWritable() {
+		UUID atA = insertPerson(templeA, "uid-two-temples", "+919800000031");
+		UUID atB = insertPerson(templeB, "uid-two-temples", "+919800000031");
+		UUID strangerAtB = insertPerson(templeB, "uid-stranger", "+919800000032");
+		try {
+			// Signed in at temple A, exactly as AuthenticationFilter leaves the request.
+			TenantContext.set(templeA);
+			TenantContext.setAuthLookupUid("uid-two-temples");
+
+			assertThat(jdbc.queryForList("SELECT id FROM users", UUID.class))
+					.as("this temple's rows plus the caller's own account at temple B — and nobody else's")
+					.containsExactlyInAnyOrder(atA, atB)
+					.doesNotContain(strangerAtB);
+
+			// The write policies (V8) are temple-only, with no uid branch.
+			assertThat(jdbc.update("UPDATE users SET full_name = 'Changed' WHERE id = ?", atB))
+					.as("an update to one's own account at another temple affects nothing").isZero();
+			assertThat(jdbc.update("DELETE FROM users WHERE id = ?", atB))
+					.as("nor does a delete").isZero();
+			assertThatThrownBy(() -> jdbc.update("""
+					INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+					VALUES (?, 'uid-smuggled', 'Smuggled', 'smuggled@example.com', '+919800000033',
+							'VOLUNTEER', 'ACTIVE')
+					""", templeB))
+					.as("nor can an account be created at the other temple")
+					.isInstanceOf(Exception.class);
+
+			// Without the uid only the temple is left: the visibility comes from the escape alone.
+			TenantContext.clear();
+			TenantContext.set(templeA);
+			assertThat(jdbc.queryForList("SELECT id FROM users", UUID.class)).containsExactly(atA);
+
+			assertThat(admin.queryForObject("SELECT full_name FROM users WHERE id = ?", String.class, atB))
+					.isEqualTo("Person");
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM users WHERE id IN (?, ?, ?)", atA, atB, strangerAtB);
+		}
+	}
+
 	@Test
 	@DisplayName("switching tenants on a pooled connection does not leak the previous tenant")
 	void pooledConnectionDoesNotLeakTenant() {
@@ -316,6 +372,14 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 				RETURNING id
 				""",
 				UUID.class, slug, name);
+	}
+
+	private UUID insertPerson(UUID tenantId, String uid, String phone) {
+		return admin.queryForObject("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, ?, 'Person', ?, ?, 'VOLUNTEER', 'ACTIVE')
+				RETURNING id
+				""", UUID.class, tenantId, uid, uid + "@example.com", phone);
 	}
 
 	private void seedRecipe(UUID tenantId, String name) {

@@ -27,9 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><strong>Who runs the kitchen is validated in the application, not left to the foreign key.</strong>
  * An FK check runs as the table owner and is not subject to RLS, so {@code in_charge_user_id} naming
  * a person at another temple would satisfy the constraint and quietly bind a stranger to this
- * temple's kitchen. {@link #resolveInCharge} looks the user up through RLS first, so an id the
- * tenant cannot see is rejected as unknown — the same defence {@code RecipeService.resolveCategory}
- * makes for its category.
+ * temple's kitchen. {@link #resolveInCharge} looks the user up at this temple first, so an id that is
+ * not this temple's is rejected as unknown — the same defence {@code RecipeService.resolveCategory}
+ * makes for its category. For this table the temple is named in the query rather than left to RLS,
+ * because the users policy also shows a caller their own accounts at other temples (T-190).
  *
  * <p><strong>Exactly one main kitchen, and the database is what guarantees it.</strong>
  * {@code kitchens_one_main_per_tenant} is a partial unique index, so no sequence of application
@@ -297,16 +298,24 @@ public class KitchenService {
 	}
 
 	/**
-	 * Confirms the named person is somebody this tenant can see. The lookup goes through RLS, so an
-	 * id belonging to another temple's user finds nothing and is refused as unknown rather than
-	 * being accepted by a foreign key that does not know about tenants.
+	 * Confirms the named person has an account at this temple, so an id belonging to another temple's
+	 * user finds nothing and is refused as unknown rather than being accepted by a foreign key that
+	 * does not know about tenants.
+	 *
+	 * <p>The temple is named in the query and not left to RLS (T-190). The id comes from the request
+	 * body, and the read policy on {@code users} also shows the signed-in caller their own accounts at
+	 * other temples ({@code firebase_uid = app.auth_uid}, V2). Trusting RLS alone, an administrator
+	 * could put this temple's kitchen in the charge of their own account at another temple — which the
+	 * user register, before its own fix, even offered them to pick.
 	 */
 	private void resolveInCharge(UUID userId) {
 		if (userId == null) {
 			return;
 		}
-		Integer found = jdbc.queryForObject(
-				"SELECT count(*) FROM users WHERE id = ?", Integer.class, userId);
+		Integer found = jdbc.queryForObject("""
+				SELECT count(*) FROM users
+				WHERE id = ? AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", Integer.class, userId);
 		if (found == null || found == 0) {
 			throw new ApplicationException(
 					ErrorCode.VALIDATION_FAILED, Map.of("field", "inChargeUserId", "value", userId));

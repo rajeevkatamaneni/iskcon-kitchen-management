@@ -586,12 +586,22 @@ public class CommunicationService {
 	 * the temple, and the cooks already hear everything in the kitchen; if a temple wants its staff
 	 * included, that is a decision to make out loud rather than a side effect of them holding an
 	 * account.
+	 *
+	 * <p><strong>The temple is named in the query, and not left to the row policy alone</strong>
+	 * (T-190). Every other table's policy confines a request to its temple; the one on {@code users}
+	 * also lets the signed-in caller read their own accounts at other temples
+	 * ({@code firebase_uid = app.auth_uid}, V2), because that is how sign-in finds them, and the uid
+	 * stays set for the whole request. A send runs as the sender. So a Temple Admin here who is a
+	 * devotee at another temple was counted in this temple's audience, and sent its letter on that
+	 * other temple's account. This is the one list both the count before sending and
+	 * {@link #recordSend} read, so it is the one place the condition has to be.
 	 */
 	@Transactional(readOnly = true)
 	public List<UUID> audienceFor(CommunicationView c) {
 		return jdbc.queryForList("""
 				SELECT u.id FROM users u
-				WHERE u.role = 'VOLUNTEER'
+				WHERE u.tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				  AND u.role = 'VOLUNTEER'
 				  AND u.status = 'ACTIVE'
 				  AND u.contact_consent_at IS NOT NULL
 				  AND u.optional_communications_opt_out_at IS NULL

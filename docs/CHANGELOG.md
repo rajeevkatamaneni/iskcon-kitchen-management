@@ -1182,6 +1182,36 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-13 — A person's own accounts at other temples stop showing up in this temple (task T-190)
+
+**No migration**, and the row-level security policies are unchanged. No new error code, no new
+permission, no frontend change. **Not deployed, not driven in a browser, and not seen working by
+Rajeev.**
+
+The read rule on `users` lets a signed-in request also see the caller's own accounts at other
+temples, because that is how sign-in finds all of a person's temples. Six reads made while handling a
+request trusted that rule to keep them inside this temple, and it did not:
+
+- a newsletter's audience, and its reach count, included the Temple Admin's own volunteer account at
+  another temple;
+- the Temple Admin's user list showed that account as one of this temple's people, and disabling it
+  wrote an audit entry here even though nothing changed;
+- every document request by someone who belongs to two temples failed, because the author lookup
+  found two rows;
+- a kitchen could be put in the charge of that other-temple account;
+- a hire could point a staff record here at a user from another temple;
+- the daily low-stock digest could not reach it, because the job runs with no signed-in person, but
+  it names the temple too, in case a request ever sends it.
+
+Each of these now names the temple in its SQL. Writes to another temple's account were already refused
+and still are, and `RowLevelSecurityIT` now pins that down: an update or delete on one's own account
+elsewhere changes nothing, and inserting one is refused. `OwnAccountsAtOtherTemplesIT` covers the six
+reads, each with a check that fails without the fix.
+
+**Not done:** not on staging yet, because the release was held back from deploying while other
+uncommitted work sat in the tree. Proof, including a sweep of every other read on `users`, is in
+`docs/work/proof/T-190.md`.
+
 ### 2026-09-13 — The templates button stops saying nothing is waiting when it cannot know, a donor's old and new phone forms group again, a refused box has a red border, and no plain form tag is left (wave 4c; tasks T-188, T-187, T-170, T-167)
 
 **No migration**; staging stays at `V131`. No new error code, no new permission. **Not driven in a

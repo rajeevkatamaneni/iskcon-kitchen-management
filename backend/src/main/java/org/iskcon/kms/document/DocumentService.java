@@ -72,9 +72,7 @@ public class DocumentService {
 		String lang = (language == null || language.isBlank()) ? "en" : language;
 
 		UUID id = UUID.randomUUID();
-		UUID createdBy = jdbc.queryForObject(
-				"SELECT id FROM users WHERE firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')",
-				UUID.class);
+		UUID createdBy = requesterHere();
 		jdbc.update("""
 				INSERT INTO documents (id, tenant_id, kind, recipe_id, language, target_yield, status, created_by)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
@@ -101,9 +99,7 @@ public class DocumentService {
 				"SELECT COALESCE(MAX(version), 0) + 1 FROM documents WHERE po_id = ?",
 				Integer.class, purchaseOrderId);
 		UUID id = UUID.randomUUID();
-		UUID createdBy = jdbc.queryForObject(
-				"SELECT id FROM users WHERE firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')",
-				UUID.class);
+		UUID createdBy = requesterHere();
 		jdbc.update("""
 				INSERT INTO documents (id, tenant_id, kind, po_id, version, language, status, created_by)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
@@ -133,9 +129,7 @@ public class DocumentService {
 				"SELECT COALESCE(MAX(version), 0) + 1 FROM documents WHERE meal_service_id = ?",
 				Integer.class, mealServiceId);
 		UUID id = UUID.randomUUID();
-		UUID createdBy = jdbc.queryForObject(
-				"SELECT id FROM users WHERE firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')",
-				UUID.class);
+		UUID createdBy = requesterHere();
 		jdbc.update("""
 				INSERT INTO documents (id, tenant_id, kind, meal_service_id, version, language, status, created_by)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
@@ -170,9 +164,7 @@ public class DocumentService {
 				"SELECT COALESCE(MAX(version), 0) + 1 FROM documents WHERE ingredient_request_id = ?",
 				Integer.class, ingredientRequestId);
 		UUID id = UUID.randomUUID();
-		UUID createdBy = jdbc.queryForObject(
-				"SELECT id FROM users WHERE firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')",
-				UUID.class);
+		UUID createdBy = requesterHere();
 		jdbc.update("""
 				INSERT INTO documents (id, tenant_id, kind, ingredient_request_id, version, language,
 						status, created_by)
@@ -225,9 +217,7 @@ public class DocumentService {
 		}
 
 		UUID id = UUID.randomUUID();
-		UUID createdBy = jdbc.queryForObject(
-				"SELECT id FROM users WHERE firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')",
-				UUID.class);
+		UUID createdBy = requesterHere();
 		jdbc.update("""
 				INSERT INTO documents (id, tenant_id, kind, donation_id, language, status, created_by)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
@@ -290,6 +280,26 @@ public class DocumentService {
 		return jdbc.query(SELECT_COLUMNS + " WHERE id = ?", MAPPER, id).stream().findFirst()
 				.orElseThrow(() -> new ApplicationException(
 						ErrorCode.RESOURCE_NOT_FOUND, Map.of("documentId", id)));
+	}
+
+	/**
+	 * The requesting person's account at this temple, recorded as the document's author.
+	 *
+	 * <p>Looked up by the signed-in uid <em>and</em> this temple (T-190). By uid alone it relied on the
+	 * row policy to supply the temple, and the policy on {@code users} is the one that does not: its
+	 * {@code firebase_uid = app.auth_uid} branch shows a person every account they hold (V2), and since
+	 * V52 a person may hold one at each of several temples. For anybody with a second temple that
+	 * returned two rows and {@code queryForObject} threw before anything was written, so every document
+	 * they asked for — recipe card, PO sheet, job card, work order, receipt — failed. It never picked
+	 * the wrong account; it refused outright, which is why it went unnoticed only while nobody belonged
+	 * to two temples.
+	 */
+	private UUID requesterHere() {
+		return jdbc.queryForObject("""
+				SELECT id FROM users
+				WHERE firebase_uid = NULLIF(current_setting('app.auth_uid', true), '')
+				  AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", UUID.class);
 	}
 
 	private void requirePurchaseOrder(UUID poId) {

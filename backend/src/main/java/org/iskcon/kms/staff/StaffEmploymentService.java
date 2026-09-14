@@ -466,9 +466,21 @@ public class StaffEmploymentService {
 		}
 	}
 
+	/**
+	 * The account a hire names, which must be one this temple holds.
+	 *
+	 * <p>The temple is named in the query, not left to RLS (T-190). {@code existingUserId} arrives in
+	 * the request, and the read policy on {@code users} also shows the signed-in administrator their
+	 * own accounts at other temples ({@code firebase_uid = app.auth_uid}, V2). Trusting RLS alone, a
+	 * hire here could name the administrator's own account elsewhere: the role change that follows
+	 * would touch nothing, because writes are temple-only, but the staff record would be written at
+	 * this temple pointing at another temple's user.
+	 */
 	private Map<String, Object> userRow(UUID userId) {
-		List<Map<String, Object>> rows = jdbc.queryForList(
-				"SELECT id, full_name, email, phone, role FROM users WHERE id = ?", userId);
+		List<Map<String, Object>> rows = jdbc.queryForList("""
+				SELECT id, full_name, email, phone, role FROM users
+				WHERE id = ? AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", userId);
 		if (rows.isEmpty()) {
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("userId", userId));
 		}
