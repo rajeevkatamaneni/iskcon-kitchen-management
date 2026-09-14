@@ -184,7 +184,8 @@ Paths within a wave are disjoint.
   - Frontend: tsc clean, vitest 139 files / 1,900 tests, lint clean (including `rules-of-hooks` over source), `next build` compiled.
   - Logs: `scratchpad/merged-pb23-backend.log`, `scratchpad/merged-pb23-frontend.log`. Tree: `scratchpad/merged-pb23.tree.txt`.
   - PB-1's merged run is recorded above.
-- **Nothing is committed or released.** The release agent stages named paths only:
+- **Released 2026-09-14.** Commit `69da777`, clean-archive gate green (backend 2,721 tests, 0 failed, 7 skipped; frontend 139 files, 1,900 tests; tsc, eslint, next build), CI run 34848217310 success. Staging Cloud SQL backup taken before deploy: instance `kms-staging-5325bd0d`, on-demand backup id **`1789391583379`** (2026-09-14T13:13:03Z, SUCCESSFUL). V141 and V142 applied, schema now v142 (V142 rewrote 0 temples' stored reasons). Staging: `kms-staging-api-00168-zjc` `sha256:dd6a9716f8e7787167e740820829c848125c357355dde29c43b35a4c94637755`, `kms-staging-web-00156-25b` `sha256:99cb7076b0ec719bb73949bb04db1c7b6bf47d4f3674b3791ee1f843a88545fb`, worker `kms-staging-worker-00150-lnh`. Record: `docs/work/proof/RELEASE-phase-B.md`.
+- **What the release carried** (named paths only):
   - V141 and V142 are new.
   - `KMS-400154` and `KMS-400155` are new.
   - `frontend/package.json` and `package-lock.json` changed.
