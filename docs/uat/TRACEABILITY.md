@@ -214,7 +214,7 @@ added since say *No UAT test* or *No UAT step*, which means a surface nobody has
 accepted on automated tests.
 
 Complete to 2026-09-14: every story in `docs/stories/`, every task from T-000 to T-216 (Phase B's
-T-200 to T-210, T-212 and T-216 are in the working tree, not yet committed), and the work between 2026-08-20 and 2026-09-06 that
+T-200 to T-210, T-212 and T-216 were committed in `69da777` and released to staging on 2026-09-14, after Phase A in `74d3535` and its fixes in `6dd436c`), and the work between 2026-08-20 and 2026-09-06 that
 had no task id. Commits in that stretch that only fixed a defect in a story already listed have no row
 of their own.
 
