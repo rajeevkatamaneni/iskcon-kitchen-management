@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Edit an open shift (E6-S2). Reminder-offset changes reschedule pending reminder jobs (E6-S6).
@@ -31,22 +32,20 @@ public record UpdateShiftRequest(
 		List<@Positive(message = "A reminder goes out at least one minute before the shift.") Integer>
 				reminderOffsetsMinutes,
 		/**
-		 * The meal this shift is posted for (D-14), or nothing at all where it is not posted for one.
+		 * The meal this shift is for, sent back as it was read, or null for a shift not for a meal
+		 * (D-27).
 		 *
-		 * <p>{@code mealDate} and {@code mealKind} move together — half a link is a link to nothing,
-		 * and is refused with KMS-400125 rather than saved as something that would count toward no
-		 * meal while looking deliberate on the screen. {@code mealEventName} is given only where the
-		 * meal is a named event, and only alongside the other two.
+		 * <p>Not a way to change the link. A meal shift keeps its meal and its date (Rajeev, answer 4),
+		 * so for one of those this and {@code shiftDate} must be the values the shift already has, and
+		 * anything else — another meal, another date, or null, which would make it a shift not for a
+		 * meal — is refused with {@code KMS-400153}. For a shift not for a meal it must be null: a link
+		 * is made only from the meal, in the planner (answer 3).
 		 *
-		 * <p>Not a meal id, because there is no meal to have one: a meal is a date, a kind and an
-		 * event name inferred from the dish rows that share them, and a shift is posted weeks before
-		 * any of those rows exist. Nor validated against a planned meal, for the same reason — a
-		 * temple finds the hands first and decides the menu later, and a link refused because the
-		 * lunch has not been planned yet would make the field unusable in the order it is used.
+		 * <p>Carried in the request, rather than ignored and read from the row, so that a client which
+		 * believes it is moving a meal shift is told it cannot, instead of having the rest of its edit
+		 * saved and the move silently dropped.
 		 */
-		LocalDate mealDate,
-		@Size(max = 100, message = "That name is too long.") String mealKind,
-		@Size(max = 200, message = "That event name is too long.") String mealEventName) {
+		UUID mealId) {
 
 	/**
 	 * A shift has to have some length, and 20:00 to 20:00 does not say what length (T-146).

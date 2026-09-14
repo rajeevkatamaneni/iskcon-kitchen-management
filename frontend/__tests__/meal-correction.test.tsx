@@ -12,8 +12,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
  * argument for a compensating entry over a reopening.
  */
 
-const { mealServices, correctRecordedMeal, jobCardLanguages, mealCrew } = vi.hoisted(() => ({
-  mealServices: vi.fn(async (_from: string, _to: string, _token?: string) => [] as unknown[]),
+const { meals, correctRecordedMeal, jobCardLanguages, mealCrew } = vi.hoisted(() => ({
+  meals: vi.fn(async (_from: string, _to: string, _token?: string) => [] as unknown[]),
   correctRecordedMeal: vi.fn(
     async (_id: string, _input: Record<string, unknown>, _token?: string) => ({})
   ),
@@ -35,7 +35,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
-    api: { ...actual.api, mealServices, correctRecordedMeal, jobCardLanguages, mealCrew },
+    api: { ...actual.api, meals, correctRecordedMeal, jobCardLanguages, mealCrew },
   };
 });
 vi.mock("@/lib/use-authed-query", async () => {
@@ -80,24 +80,12 @@ function cooked(
 ) {
   return {
     id,
-    planDate: "2026-08-21",
-    mealKind: "Lunch",
-    readyBy: "12:00:00",
+    mealId: "meal-lunch",
     recipeId,
     recipeName,
     targetYield: 500,
-    dayType: "REGULAR",
-    occasionName: null,
+    targetYieldUnit: "KG",
     status: "COOKED",
-    eventName: null,
-    contactName: null,
-    contactPhone: null,
-    deliveryAddress: null,
-    purpose: null,
-    adults: 400,
-    children: 0,
-    seniors: 0,
-    kitchenNotes: null,
     actualServings: 400,
     consumedQuantity: null,
     notMade: false,
@@ -113,7 +101,10 @@ function cooked(
 /** The lunch, already written down. Every correction test starts from one of these. */
 function recordedLunch(overrides: Record<string, unknown> = {}) {
   return {
-    serviceId: "svc-1",
+    // The meal's own id (D-27). It used to be `serviceId`, a row that existed only once a card had
+    // been printed or the meal recorded; every meal has an id now, from the moment it is planned.
+    mealId: "meal-lunch",
+    mealKindId: "k-lunch",
     planDate: "2026-08-21",
     mealKind: "Lunch",
     readyBy: "12:00:00",
@@ -125,12 +116,23 @@ function recordedLunch(overrides: Record<string, unknown> = {}) {
     dayType: "REGULAR",
     occasionName: null,
     eventName: null,
+    isOutside: false,
+    handover: null,
     contactName: null,
     contactPhone: null,
     deliveryAddress: null,
+    deliverySubLocation: null,
+    deliveryPlaceId: null,
+    deliveryLatitude: null,
+    deliveryLongitude: null,
+    guestsEatAt: null,
+    travelMinutes: null,
+    travelMinutesSource: null,
     purpose: null,
     kitchenNotes: null,
     serverNotes: null,
+    status: "COOKED",
+    volunteerShift: null,
     cardNumber: "LC-2026-0142",
     cardIssuedAt: "2026-08-21T05:00:00Z",
     recorded: true,
@@ -146,8 +148,8 @@ function recordedLunch(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function open(meals: unknown[], heading = "Lunch") {
-  mealServices.mockResolvedValue(meals);
+async function open(onTheDay: unknown[], heading = "Lunch") {
+  meals.mockResolvedValue(onTheDay);
   render(
     <MealServices
       date="2026-08-21"
@@ -262,7 +264,7 @@ describe("correcting a recorded meal", () => {
    * is refused rather than assumed unchanged — the same rule as recording — so the unchanged Kesari
    * Bath has to be in the payload too.
    */
-  it("sends every dish, changed or not, against the meal's own row", async () => {
+  it("sends every dish, changed or not, against the meal's own id", async () => {
     await open([
       recordedLunch({
         dishes: [
@@ -282,13 +284,13 @@ describe("correcting a recorded meal", () => {
     fireEvent.click(screen.getByRole("button", { name: /record this correction/i }));
 
     await vi.waitFor(() => expect(correctRecordedMeal).toHaveBeenCalled());
-    const [serviceId, input] = correctRecordedMeal.mock.calls[0];
-    expect(serviceId).toBe("svc-1");
+    const [mealId, input] = correctRecordedMeal.mock.calls[0];
+    expect(mealId).toBe("meal-lunch");
     expect(input).toMatchObject({
       note: "The card was read as 400; the kitchen confirms 640",
       dishes: [
-        { mealPlanId: "m1", actualServings: 640, notMade: false },
-        { mealPlanId: "m2", actualServings: 300, notMade: false },
+        { dishId: "m1", actualServings: 640, notMade: false },
+        { dishId: "m2", actualServings: 300, notMade: false },
       ],
     });
 
@@ -315,7 +317,7 @@ describe("correcting a recorded meal", () => {
     await vi.waitFor(() => expect(correctRecordedMeal).toHaveBeenCalled());
     const [, input] = correctRecordedMeal.mock.calls[0];
     expect((input as { dishes: Record<string, unknown>[] }).dishes[0]).toEqual({
-      mealPlanId: "m1",
+      dishId: "m1",
       actualServings: null,
       consumedQuantity: null,
       notMade: true,

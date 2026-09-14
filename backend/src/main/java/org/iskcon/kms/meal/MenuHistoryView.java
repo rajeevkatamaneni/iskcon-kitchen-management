@@ -14,7 +14,7 @@ import java.util.UUID;
  * promise, and it reads data that has been there all along.
  *
  * <p>Matched on the occasion's <em>name</em> and not on an occasion id, which is the choice V48 made
- * for the meal kind and for the same reason: {@code meal_plans.occasion_name} is denormalized on
+ * for the meal kind and for the same reason: {@code meals.occasion_name} is denormalized on
  * purpose, "so removing an occasion never orphans the plan" (V22). A temple may delete an occasion,
  * and the feasts cooked under it must keep reading as what they were.
  *
@@ -33,6 +33,10 @@ import java.util.UUID;
  *                      than silently dropped: a menu that comes back two preparations shorter without
  *                      saying so is a menu somebody serves two preparations short.
  * @param preparations  the ones that can still be planned, in the order they read on the card.
+ * @param mealId        the meal that was cooked, by its own id (D-27), or null where there was none.
+ *                      Before D-27 "that meal" was a date and a kind's name, and its dishes were found
+ *                      again by matching both — which also swept in a second meal of the same kind
+ *                      that day.
  */
 public record MenuHistoryView(
 		String occasionName,
@@ -40,7 +44,8 @@ public record MenuHistoryView(
 		String mealKind,
 		int preparationCount,
 		int missingCount,
-		List<Preparation> preparations) {
+		List<Preparation> preparations,
+		UUID mealId) {
 
 	/** One preparation of last year's menu, as the composer needs to tick it. */
 	public record Preparation(UUID recipeId, String recipeName) {
@@ -48,6 +53,6 @@ public record MenuHistoryView(
 
 	/** Nothing to offer: this occasion has never been cooked for before. */
 	static MenuHistoryView none(String occasionName) {
-		return new MenuHistoryView(occasionName, null, null, 0, 0, List.of());
+		return new MenuHistoryView(occasionName, null, null, 0, 0, List.of(), null);
 	}
 }

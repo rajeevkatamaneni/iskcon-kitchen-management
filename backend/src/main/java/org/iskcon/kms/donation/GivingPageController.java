@@ -85,7 +85,7 @@ public class GivingPageController {
 	/**
 	 * Plates the kitchen is cooking today, across every meal on the plan. Null if nothing is planned.
 	 *
-	 * <p><strong>Per meal, never per dish.</strong> {@code meal_plans} holds one row per preparation,
+	 * <p><strong>Per meal, never per dish.</strong> The dish table holds one row per preparation,
 	 * so summing it counted a three-dish lunch for 250 as 750 plates — against the rule stated in
 	 * {@code ServedMeal}: "three dishes at 250 servings each is 250 plates, not 750". That number is
 	 * shown to donors, and {@link #costPerPlate} divides by it, so the error understated the cost of
@@ -98,15 +98,16 @@ public class GivingPageController {
 	 */
 	private Integer platesToday() {
 		Integer plates = jdbc.queryForObject(
-				PLATES_PER_MEAL.formatted("mp.plan_date = CURRENT_DATE AND mp.status <> 'CANCELLED'"),
+				PLATES_PER_MEAL.formatted("pd.plan_date = CURRENT_DATE AND d.status <> 'CANCELLED'"),
 				Integer.class);
 		return plates == null || plates == 0 ? null : plates;
 	}
 
 	/**
-	 * Plates per meal, summed. One row per preparation collapses to one figure per
-	 * {@code (date, meal kind)} by taking the largest — the kitchen cooks for whoever turns up, and
-	 * dishes of one meal disagree only when one was added against a changed head count.
+	 * Plates per meal, summed. Grouped on the meal's own row (D-27), so a three-dish lunch is one
+	 * figure: its head count, which lives on the meal once. Where a meal has no head count the figure
+	 * is derived per dish and the largest wins — the kitchen cooks for whoever turns up. Before D-27
+	 * this grouped on {@code (date, meal kind)}, which made two events on one Saturday one meal.
 	 */
 	private static final String PLATES_PER_MEAL = """
 			SELECT COALESCE(SUM(plates), 0)::int FROM (
@@ -126,21 +127,23 @@ public class GivingPageController {
 					-- Where a recipe has no per-head portion there is no honest plate count, and
 					-- the meal contributes nothing rather than a number somebody would quote.
 					CASE
-						WHEN mp.adults IS NULL AND mp.children IS NULL AND mp.seniors IS NULL
+						WHEN m.adults IS NULL AND m.children IS NULL AND m.seniors IS NULL
 							THEN CASE
 								WHEN r.per_head_qty IS NOT NULL AND r.per_head_qty > 0
 									AND r.per_head_unit = r.base_yield_unit
-								THEN mp.target_yield / r.per_head_qty
+								THEN d.target_yield / r.per_head_qty
 							END
-						ELSE coalesce(mp.adults, 0)
-							+ 0.6 * coalesce(mp.children, 0)
-							+ 0.8 * coalesce(mp.seniors, 0)
+						ELSE coalesce(m.adults, 0)
+							+ 0.6 * coalesce(m.children, 0)
+							+ 0.8 * coalesce(m.seniors, 0)
 					END
 				) AS plates
-				FROM meal_plans mp
-				JOIN recipes r ON r.id = mp.recipe_id
+				FROM meal_dishes d
+				JOIN meals m ON m.id = d.meal_id
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN recipes r ON r.id = d.recipe_id
 				WHERE %s
-				GROUP BY mp.plan_date, mp.meal_kind
+				GROUP BY m.id
 			) per_meal
 			""";
 
@@ -187,7 +190,7 @@ public class GivingPageController {
 				""", BigDecimal.class);
 		Integer plates = jdbc.queryForObject(
 				PLATES_PER_MEAL.formatted(
-						"mp.plan_date >= CURRENT_DATE - INTERVAL '30 days' AND mp.status = 'COOKED'"),
+						"pd.plan_date >= CURRENT_DATE - INTERVAL '30 days' AND d.status = 'COOKED'"),
 				Integer.class);
 		if (spend == null || plates == null || spend.signum() <= 0 || plates <= 0) {
 			return null;

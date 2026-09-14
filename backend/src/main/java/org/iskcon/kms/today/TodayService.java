@@ -21,7 +21,7 @@ import org.iskcon.kms.inventory.StockItemView;
 import org.iskcon.kms.invoice.VendorInvoiceService;
 import org.iskcon.kms.invoice.VendorInvoiceView;
 import org.iskcon.kms.meal.MealCrewService;
-import org.iskcon.kms.meal.MealPlanView;
+import org.iskcon.kms.meal.MealDishView;
 import org.iskcon.kms.meal.MealStatus;
 import org.iskcon.kms.meal.ServedMeal;
 import org.iskcon.kms.meal.ServedMealService;
@@ -136,6 +136,7 @@ public class TodayService {
 						.anyMatch(dish -> dish.status() != MealStatus.CANCELLED))
 				.sorted(Comparator.comparing(ServedMeal::readyBy))
 				.map(meal -> new TodayView.Meal(
+						meal.mealId(),
 						meal.mealKind(),
 						meal.eventName(),
 						meal.readyBy(),
@@ -147,7 +148,7 @@ public class TodayService {
 				.toList();
 	}
 
-	private static TodayView.Dish dish(MealPlanView plan) {
+	private static TodayView.Dish dish(MealDishView plan) {
 		return new TodayView.Dish(
 				plan.id(),
 				plan.recipeName(),

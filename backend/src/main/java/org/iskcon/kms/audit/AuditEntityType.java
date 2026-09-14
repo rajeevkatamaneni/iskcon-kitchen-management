@@ -42,8 +42,19 @@ public enum AuditEntityType {
 	/** A single day of the Vaishnava calendar — the entity of an override (E4-S3). */
 	CALENDAR_DAY,
 
-	/** A planned meal (E4-S4). */
+	/**
+	 * One dish of a meal (E4-S4). The name predates D-27, when a "meal plan" row was one dish and a
+	 * meal was only a group of them; the table is {@code meal_dishes} now and these entries still
+	 * carry the dish's id, which is unchanged by the rename.
+	 */
 	MEAL_PLAN,
+
+	/**
+	 * One meal on one day — Breakfast, Lunch, Dinner or a named event — with its own row (D-27).
+	 * Planning, changing and cancelling a meal are filed against the meal, because that is what the
+	 * planner did: saved one meal with its dishes and its volunteer shift in one press.
+	 */
+	MEAL,
 
 	/** A vendor (E5-S1). */
 	VENDOR,

@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { dateWithYear, shiftWindow } from "@/lib/format";
+import { mealLabel } from "./shift-form";
 import { Button } from "@/components/ds/Button";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 
@@ -21,9 +22,13 @@ import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE
  * Volunteer shifts, poster side (E6-S2) — what has been posted and how full it is.
  *
  * <p>Posting and correcting are both eight-field forms, so both are screens of their own rather than
- * a panel over this list. What comes back here is the confirmation, and — when a save has moved the
- * date or the time on a shift people have already claimed — the warning that their reminders moved
- * with it and nobody told them.
+ * a panel over this list. What comes back here is the confirmation, and — when a save gave a shift not
+ * for a meal a new date while people were signed up — the warning that their reminders moved with it
+ * and nobody told them (D-27 kept this for a new date; new times on the same day are told by the server).
+ *
+ * <p>A shift for a meal (D-27) is listed like any other and labelled with its meal — "For Lunch,
+ * 15 September", or an event by its own name. It is raised from that meal in the planner, but corrected
+ * here like any other shift.
  */
 
 export default function VolunteerShiftsPage() {
@@ -66,7 +71,7 @@ function VolunteerShiftsView() {
     router.replace("/volunteers");
   }, [posted, saved, movedId, router]);
 
-  // The shift whose reminders just moved under the volunteers already on it, if there is one.
+  // The shift whose date just changed under the volunteers already on it, if there is one.
   const movedShift = flash?.movedId ? shifts.find((s) => s.id === flash.movedId) ?? null : null;
 
   async function run(mutation: (t: string | undefined) => Promise<unknown>, failure: string) {
@@ -146,6 +151,7 @@ function VolunteerShiftsView() {
                       <td className={`${TD_TEXT} ${WRAP}`}>
                         <Link href={`/volunteers/${s.id}`} className="font-medium text-accent-text hover:underline">{s.title}</Link>
                         {s.location && <span className="ml-2 text-xs text-ink-muted">{s.location}</span>}
+                        {mealLabel(s) && <span className="block text-sm text-ink-secondary">{mealLabel(s)}</span>}
                       </td>
                       <td className={`${TD_DATE} text-ink-secondary tabular-nums`}>
                         {dateWithYear(s.shiftDate)} {shiftWindow(s.startTime, s.endTime)}

@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.meal.MealFixture;
 import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -100,7 +101,7 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 		// The shopping list is computed rather than stored (T-132), so this fixture builds real
 		// demand — a reorder threshold, a preferred vendor, and where a date is wanted, a planned
 		// meal. All of it holds the ingredient down through a foreign key and has to go first.
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM recipe_ingredients");
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
@@ -906,12 +907,10 @@ class PurchaseOrderIT extends AbstractIntegrationTest {
 				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
 				VALUES (?, ?, ?, 0.001, 'KG', 0)
 				""", tenant, recipe, ingredient);
-		admin.update("""
-				INSERT INTO meal_plans (
-					tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield, day_type, status, created_by)
-				VALUES (?, ?, 'Lunch', TIME '12:00', ?, 1, 'REGULAR', 'PLANNED',
-					(SELECT id FROM users WHERE tenant_id = ? AND firebase_uid = 'uid-staff-a'))
-				""", tenant, on, recipe, tenant);
+		MealFixture.plan(admin, tenant, on, "Lunch", java.time.LocalTime.NOON, recipe,
+				java.math.BigDecimal.ONE, "PLANNED",
+				admin.queryForObject("SELECT id FROM users WHERE tenant_id = ? AND firebase_uid = 'uid-staff-a'",
+						UUID.class, tenant));
 	}
 
 	private void signIn(String uid) {

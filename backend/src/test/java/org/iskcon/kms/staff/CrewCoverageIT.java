@@ -1,7 +1,6 @@
 package org.iskcon.kms.staff;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -18,7 +17,6 @@ import org.quartz.Scheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -91,12 +89,14 @@ class CrewCoverageIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
-		admin.execute("DELETE FROM meal_services");
-		admin.execute("DELETE FROM meal_card_sequence");
-		admin.execute("DELETE FROM meal_plans");
-		admin.execute("DELETE FROM meal_kinds");
+		// Shifts before meals: shifts.meal_id is RESTRICT (V136).
 		admin.execute("DELETE FROM shift_signups");
 		admin.execute("DELETE FROM shifts");
+		admin.execute("DELETE FROM meal_card_sequence");
+		admin.execute("DELETE FROM meal_dishes");
+		admin.execute("DELETE FROM meals");
+		admin.execute("DELETE FROM meal_plan_days");
+		admin.execute("DELETE FROM meal_kinds");
 		admin.execute("DELETE FROM staff_leave");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
@@ -140,7 +140,7 @@ class CrewCoverageIT extends AbstractIntegrationTest {
 		// Breakfast at 07:30 has the morning cook and asks for two: one short.
 		plan(DATE, "Breakfast", 2);
 		// Dinner at 19:30 has the evening cook and asks for four: three short, and the deeper gap.
-		plan(DATE, "Dinner", 4);
+		UUID dinner = plan(DATE, "Dinner", 4);
 
 		mvc.perform(authed(get("/api/v1/crew-coverage").param("from", DATE).param("to", DATE)))
 				.andExpect(jsonPath("$[0].state").value("SHORT"))
@@ -149,7 +149,9 @@ class CrewCoverageIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[0].shortBy").value(3))
 				.andExpect(jsonPath("$[0].shortAt").value("Dinner"))
 				.andExpect(jsonPath("$[0].shortAtRequired").value(4))
-				.andExpect(jsonPath("$[0].shortAtRostered").value(1));
+				.andExpect(jsonPath("$[0].shortAtRostered").value(1))
+				// And by id (D-27), so the screen can open that dinner rather than look for it.
+				.andExpect(jsonPath("$[0].shortAtMealId").value(dinner.toString()));
 	}
 
 	@Test
@@ -160,7 +162,8 @@ class CrewCoverageIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/crew-coverage").param("from", DATE).param("to", DATE)))
 				.andExpect(jsonPath("$[0].state").value("COVERED"))
 				.andExpect(jsonPath("$[0].shortBy").value(0))
-				.andExpect(jsonPath("$[0].shortAt").doesNotExist());
+				.andExpect(jsonPath("$[0].shortAt").doesNotExist())
+				.andExpect(jsonPath("$[0].shortAtMealId").doesNotExist());
 	}
 
 	@Test
@@ -235,13 +238,36 @@ class CrewCoverageIT extends AbstractIntegrationTest {
 
 	// ---- helpers ----------------------------------------------------------
 
-	private void plan(String date, String kind, Integer crew) throws Exception {
-		mvc.perform(authed(post("/api/v1/meal-plans"))
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("""
-								{"planDate":"%s","mealKind":"%s","recipeId":"%s","targetYield":200,"adults":200,"crewRequired":%s}
-								""".formatted(date, kind, khichdi, crew == null ? "null" : crew)))
-				.andExpect(status().isCreated());
+	private UUID plan(String date, String kind, Integer crew) {
+		return meal(date, kind, null, null, crew);
+	}
+
+	/**
+	 * A meal written straight into the D-27 tables: its day, the meal row with its kind by id, and
+	 * one dish. SQL rather than the planner's API so this class tests the crew count and nothing about
+	 * how a meal is saved, which is MealPlanIT's question. The ready-by is the kind's default unless
+	 * given, which is what the planner does too.
+	 */
+	private UUID meal(String date, String kind, String eventName, String readyBy, Integer crew) {
+		UUID day = admin.queryForObject("""
+				INSERT INTO meal_plan_days (tenant_id, plan_date, day_type) VALUES (?, ?::date, 'REGULAR')
+				ON CONFLICT (tenant_id, plan_date) DO UPDATE SET updated_at = now()
+				RETURNING id
+				""", UUID.class, tenant, date);
+		UUID kindId = admin.queryForObject(
+				"SELECT id FROM meal_kinds WHERE tenant_id = ? AND lower(name) = lower(?)", UUID.class, tenant, kind);
+		UUID meal = admin.queryForObject("""
+				INSERT INTO meals (tenant_id, meal_plan_day_id, meal_kind_id, event_name, ready_by, adults,
+						crew_required)
+				VALUES (?, ?, ?, ?, COALESCE(?::time, (SELECT default_ready_time FROM meal_kinds WHERE id = ?)),
+						200, ?)
+				RETURNING id
+				""", UUID.class, tenant, day, kindId, eventName, readyBy, kindId, crew);
+		admin.update("""
+				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by)
+				VALUES (?, ?, ?, 200, 'PLANNED', (SELECT id FROM users WHERE firebase_uid = 'uid-admin'))
+				""", tenant, meal, khichdi);
+		return meal;
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder builder) {

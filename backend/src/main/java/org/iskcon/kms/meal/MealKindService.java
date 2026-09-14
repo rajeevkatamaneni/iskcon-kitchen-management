@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -63,6 +64,19 @@ public class MealKindService {
 				Map.of("mealKind", String.valueOf(name), "known", list().stream().map(MealKindView::name).toList())));
 	}
 
+	/**
+	 * One kind by its id, as a meal points at it (D-27). An id from another temple reads as absent —
+	 * row-level security hides the row — and is refused exactly as an unknown name is.
+	 */
+	@Transactional(readOnly = true)
+	public MealKindView requireById(UUID id) {
+		return jdbc.query(SELECT + " WHERE id = ?", MAPPER, id).stream().findFirst()
+				.orElseThrow(() -> new ApplicationException(
+						ErrorCode.MEAL_KIND_UNKNOWN,
+						Map.of("mealKindId", String.valueOf(id),
+								"known", list().stream().map(MealKindView::name).toList())));
+	}
+
 	@Transactional
 	public UUID create(CreateMealKindRequest request) {
 		UUID id = UUID.randomUUID();
@@ -84,15 +98,14 @@ public class MealKindService {
 	 * Changes a kind's name, order and — the point of the screen — the time its meals are due. A
 	 * default of null is meaningful: it makes the kind always ask.
 	 *
-	 * <p>A rename carries the new name to everything already recorded under the old one. That is not
-	 * a nicety: a meal does not <em>reference</em> its kind, it <em>stores the name</em>, in three
-	 * places — {@code meal_plans.meal_kind}, {@code meal_services.meal_kind} (V64) and
-	 * {@code shifts.meal_kind} (V95). No foreign key is available to do it for us, because
-	 * {@code meal_kinds} is unique on an EXPRESSION index over {@code (tenant_id, lower(name))} and
-	 * PostgreSQL will not accept an expression index as the target of a foreign key. So the cascade
-	 * is written by hand here, and if it were not, a rename would orphan every plan, every recorded
-	 * meal and every linked shift the temple has — silently, and only visible later when a job card
-	 * or a reuse preview tried to resolve a kind that no longer exists.
+	 * <p><strong>A rename changes one row and nothing else (D-27).</strong> Until D-27 a meal did not
+	 * reference its kind, it stored the name, in three tables — the dish rows, the recorded meals and
+	 * the volunteer shifts linked to a meal — and this method carried every rename through all three
+	 * by hand, matching case-insensitively because one of the three writers stored whatever the caller
+	 * typed (T-038). That cascade is gone because the reason for it is gone: a meal now points at its
+	 * kind by {@code meals.meal_kind_id}, a shift points at its meal by id, and every screen reads the
+	 * kind's name through that key at the moment it reads. There is nothing left anywhere that could be
+	 * orphaned by a new name.
 	 *
 	 * <p>Renaming a kind onto a name the temple already has is a typo, and it is answered the way
 	 * {@link #create} answers the same typo — {@code MEAL_KIND_ALREADY_EXISTS}, caught off the
@@ -107,18 +120,11 @@ public class MealKindService {
 	@Transactional
 	public void update(UUID id, CreateMealKindRequest request) {
 		String newName = request.name().trim();
-		// Read before write: after the UPDATE the old name is gone, and it is the only thing the
-		// three tables can be found by. Scoped by RLS like everything else — an id belonging to
-		// another temple reads as absent, which is the refusal below.
-		String oldName = jdbc.query("SELECT name FROM meal_kinds WHERE id = ?",
-				rs -> rs.next() ? rs.getString(1) : null, id);
 
 		int rows;
 		try {
-			// Only this statement is inside the try. The cascade below must not be: meal_services is
-			// unique on (tenant_id, plan_date, meal_kind, ...) and could in principle raise a
-			// DuplicateKeyException of its own, which is a different fault entirely and must not be
-			// reported to the temple as "that kind of meal already exists".
+			// Scoped by RLS like everything else — an id belonging to another temple matches no row,
+			// which is the refusal below.
 			rows = jdbc.update("""
 					UPDATE meal_kinds
 					SET name = ?, sort_order = ?, default_ready_time = ?, is_event = ?, needs_occasion = ?
@@ -133,143 +139,39 @@ public class MealKindService {
 		if (rows == 0) {
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealKindId", id));
 		}
-
-		// Only when the name actually moved. Exact equality on purpose: changing "lunch" to "Lunch"
-		// IS a change — it is what every screen prints, and the stored copies have to print it too —
-		// so a case-only edit cascades rather than being dismissed as a no-op. The common edit is a
-		// ready-by time, and that must not walk three tables for nothing.
-		if (oldName != null && !oldName.equals(newName)) {
-			renameEverythingRecordedAs(oldName, newName);
-		}
-	}
-
-	/**
-	 * Carries a renamed kind to the three tables that store it by name.
-	 *
-	 * <p><strong>Matched case-insensitively</strong>, and that was decided on the evidence rather
-	 * than by symmetry with the uniqueness index. Two of the three columns are written from
-	 * {@code require(...).name()} and so hold the canonical spelling, where an exact match would have
-	 * done. The third does not: {@link org.iskcon.kms.shift.ShiftService} stores
-	 * {@code shifts.meal_kind} as the caller typed it — {@code trimToNull(request.mealKind())}, never
-	 * routed through this service — and it is read back through
-	 * {@link org.iskcon.kms.staff.MealMoment}, which folds both sides to lower case precisely so that
-	 * a shift posted for "lunch" counts toward the temple's "Lunch". A shift linked to "lunch" is
-	 * therefore a real, supported row, and an exact match would rename the meals around it and leave
-	 * it pointing at a kind that no longer exists. Folding matches everything an exact comparison
-	 * would match and nothing it would not, which is the same argument MealMoment makes for folding
-	 * the kind at all.
-	 *
-	 * <p><strong>No blanket UPDATE.</strong> There is no {@code tenant_id} in these statements
-	 * because there must not be one: all three tables carry FORCE ROW LEVEL SECURITY, the connection
-	 * is scoped to the request's tenant, and the policy is what confines the rewrite to this temple.
-	 * Another temple with a kind of the same name is untouched, and {@code MealKindIT} proves that
-	 * against a real database with a second tenant present rather than asserting it here.
-	 *
-	 * <p><strong>Not append-only</strong>, checked rather than assumed. {@code make_append_only()}
-	 * (V49, V50) refuses an UPDATE with a BEFORE UPDATE OR DELETE trigger rather than with a
-	 * constraint, which is nothing a reader of this method would see. The registered tables are
-	 * audit_events, platform_audit_events, stock_movements, equipment_state_changes, po_events,
-	 * goods_receipts, goods_receipt_lines, invoice_payments, shift_broadcasts, staff_conduct_notes,
-	 * equipment_services and vendor_status_changes. None of these three is among them, so the
-	 * rewrite is legitimate — and if one of them ever joins that list, this method stops working and
-	 * the design has to be revisited rather than worked around.
-	 */
-	private void renameEverythingRecordedAs(String oldName, String newName) {
-		// The planned dishes. A meal is a group of these rows sharing a date and a kind, so this is
-		// the one that keeps the planner, the menu history and the sufficiency read whole.
-		jdbc.update("""
-				UPDATE meal_plans SET meal_kind = ?, updated_at = now()
-				WHERE lower(meal_kind) = lower(?)
-				""", newName, oldName);
-
-		// The recorded meal and its job card. Its unique index is on the exact meal_kind, so in
-		// principle a case-insensitive rewrite could collide — but only if two rows for one date and
-		// event already differed by case, which is a duplicated meal the application cannot produce:
-		// every write here goes through require(...).name().
-		jdbc.update("""
-				UPDATE meal_services SET meal_kind = ?, updated_at = now()
-				WHERE lower(meal_kind) = lower(?)
-				""", newName, oldName);
-
-		// The volunteer shifts posted for a meal of this kind (D-14). The case a naive cascade
-		// forgets, because a shift is not a meal and lives in another package entirely.
-		jdbc.update("""
-				UPDATE shifts SET meal_kind = ?, updated_at = now()
-				WHERE lower(meal_kind) = lower(?)
-				""", newName, oldName);
 	}
 
 	/**
 	 * Removes a kind the temple has never used, and refuses to remove one it has.
 	 *
-	 * <p>This used to be unconditional, on the stated grounds that "a plan records its kind by name,
-	 * not by reference, so removing a kind never breaks the meals already planned under it — they
-	 * keep reading as what they were." That is true only if the stored name is a snapshot, and it is
-	 * not: four read-shaped paths take the stored historical name and resolve it back through
-	 * {@link #require} —
+	 * <p><strong>The database decides what "used" means now (D-27).</strong> Before D-27 this was a
+	 * text search: a kind was in use if its name, folded to lower case, appeared in the dish rows, the
+	 * recorded meals or a linked shift — and the shift was the case a check written from the
+	 * planner's side kept missing (T-038). A meal points at its kind by id now, with
+	 * {@code ON DELETE RESTRICT} (V136), and a shift points at a meal, so "used" is exactly "a meal
+	 * row refers to it", cancelled meals included, and PostgreSQL enforces it whoever deletes.
 	 *
-	 * <ul>
-	 *   <li>{@code MealPlanService.previewReuse}, reached by {@code POST /api/v1/meal-plans/reuse/preview}
-	 *       (a POST only because it carries a body; the controller says it is read-only). It walks
-	 *       every historical plan in the window and resolves each distinct stored kind, so one
-	 *       deleted kind anywhere in that window throws the whole preview away.
-	 *   <li>{@code ServedMealService.find}, reached from {@code GET /api/v1/job-cards/languages} and
-	 *       from {@code JobCardService.build()} rendering a meal that was already served.
-	 *   <li>{@code ServedMealService.issueCardNumber} and {@code serviceFor}, reached from
-	 *       {@code GET /api/v1/job-cards/print} and {@code GET /api/v1/job-cards/documents} as well
-	 *       as from {@code POST /api/v1/job-cards}.
-	 * </ul>
+	 * <p>Why refuse rather than let it go: a kind that has been cooked under names a year of meals, and
+	 * deleting it would have to delete or re-point every one of them. Deactivation, if a temple ever
+	 * asks to retire a kind it has used, is a strict superset of this refusal. The refusal points at
+	 * the rename, which is the thing the temple almost always meant.
 	 *
-	 * <p>So deleting a kind that has ever been used arms a failure in history nobody touched, and it
-	 * goes off far from the settings screen that caused it — on a job card, or on a reuse preview,
-	 * as KMS-400071. Refusing here is the smaller of the two honest answers. The larger one is to
-	 * deactivate rather than delete, which needs a column and a migration and answers a question
-	 * nobody has asked yet ("may a temple retire a kind it has used for a year?"); refusing forecloses
-	 * none of it, because deactivation is a strict superset of this. What refusing buys today is that
-	 * the delete button stops shipping a time bomb, while the common real case — a kind added by
-	 * mistake, used for nothing — still works.
-	 *
-	 * <p>The refusal points at the rename, which is the thing the temple almost always meant.
+	 * <p>Deleting a kind that is not there stays a silent no-op: the screen's delete is idempotent.
 	 */
 	@Transactional
 	public void delete(UUID id) {
-		// Deleting a kind that is not there stays a silent no-op, as it has always been: the screen's
-		// delete is idempotent and a second click must not raise.
 		String name = jdbc.query("SELECT name FROM meal_kinds WHERE id = ?",
 				rs -> rs.next() ? rs.getString(1) : null, id);
 		if (name == null) {
 			return;
 		}
-
-		// All three, and shifts is the one worth naming: a kind used by nothing but a linked shift is
-		// exactly the case a check written from the planner's point of view would miss, and the shift
-		// would be left pointing at a kind that no longer exists. Folded on both sides for the same
-		// reason the rename folds — shifts.meal_kind holds what the caller typed.
-		Usage usage = jdbc.queryForObject("""
-				SELECT EXISTS (SELECT 1 FROM meal_plans    WHERE lower(meal_kind) = lower(?)) AS in_plans,
-				       EXISTS (SELECT 1 FROM meal_services WHERE lower(meal_kind) = lower(?)) AS in_services,
-				       EXISTS (SELECT 1 FROM shifts        WHERE lower(meal_kind) = lower(?)) AS in_shifts
-				""",
-				(rs, n) -> new Usage(
-						rs.getBoolean("in_plans"), rs.getBoolean("in_services"), rs.getBoolean("in_shifts")),
-				name, name, name);
-
-		if (usage.anywhere()) {
-			throw new ApplicationException(ErrorCode.MEAL_KIND_IN_USE, Map.of(
-					"mealKindId", id,
-					"name", name,
-					"plannedMeals", usage.inPlans(),
-					"recordedMeals", usage.inServices(),
-					"linkedShifts", usage.inShifts()));
-		}
-
-		jdbc.update("DELETE FROM meal_kinds WHERE id = ?", id);
-	}
-
-	/** Where a kind's name still appears, per table, so the refusal can say which. */
-	private record Usage(boolean inPlans, boolean inServices, boolean inShifts) {
-		boolean anywhere() {
-			return inPlans || inServices || inShifts;
+		try {
+			jdbc.update("DELETE FROM meal_kinds WHERE id = ?", id);
+		} catch (DataIntegrityViolationException e) {
+			// meals_meal_kind_id_fkey, and only that: meal_kinds has no other table pointing at it. The
+			// statement failed, so this transaction rolls back with the exception and nothing is kept.
+			throw new ApplicationException(ErrorCode.MEAL_KIND_IN_USE,
+					Map.of("mealKindId", id, "name", name), e);
 		}
 	}
 

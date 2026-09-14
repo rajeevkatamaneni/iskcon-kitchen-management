@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.calendar.CalendarService;
@@ -31,9 +32,14 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * dish of a meal, that stock is drawn against what actually went out rather than what was planned,
  * and that a dish nobody made draws nothing at all. The refusals matter as much — what has been
  * cooked cannot be recorded twice, and a meal that was called off never went to the kitchen.
+ *
+ * <p>Since D-27 a meal is recorded by its own id ({@code POST /api/v1/meals/{id}/record}) and each
+ * dish is named by its id; the date, the kind and the event name are no longer in the request.
  */
 @AutoConfigureMockMvc
 class MealRecordingIT extends AbstractIntegrationTest {
+
+	private static final LocalDate DAY = LocalDate.of(2025, 3, 17);
 
 	@Autowired
 	private MockMvc mvc;
@@ -49,6 +55,7 @@ class MealRecordingIT extends AbstractIntegrationTest {
 
 	private JdbcTemplate admin;
 	private UUID tenant;
+	private UUID staff;
 	private UUID rice;
 	private UUID ghee;
 	private UUID khichdi;
@@ -64,6 +71,7 @@ class MealRecordingIT extends AbstractIntegrationTest {
 				RETURNING id
 				""", UUID.class);
 		insertUser("uid-staff-a", "staff-a@example.com", "KITCHEN_STAFF");
+		staff = admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'", UUID.class);
 
 		rice = ingredient("Rice");
 		ghee = ingredient("Ghee");
@@ -95,11 +103,8 @@ class MealRecordingIT extends AbstractIntegrationTest {
 	void tearDown() {
 		TenantContext.clear();
 		admin.execute("DELETE FROM documents");
-		admin.execute("DELETE FROM meal_services");
-		admin.execute("DELETE FROM meal_card_sequence");
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM stock_movements");
-		admin.execute("DELETE FROM meal_kinds");
 		admin.execute("DELETE FROM calendar_days");
 		admin.execute("DELETE FROM calendar_precompute_state");
 		admin.execute("DELETE FROM recipe_ingredients");
@@ -119,14 +124,17 @@ class MealRecordingIT extends AbstractIntegrationTest {
 	void recordsTheWholeMealAtTheActualFigure() throws Exception {
 		UUID first = plan("Lunch", khichdi, 300);
 		UUID second = plan("Lunch", halwa, 300);
+		UUID lunch = MealFixture.mealOf(admin, first);
+		assertThat(MealFixture.mealOf(admin, second)).as("two dishes of one Lunch are one meal").isEqualTo(lunch);
 
 		// The hall was smaller than expected. That gap is the whole reason the office types this in.
-		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","note":"Fewer than expected",
-				 "dishes":[{"mealPlanId":"%s","actualServings":220,"notMade":false},
-						   {"mealPlanId":"%s","actualServings":250,"notMade":false}]}
+		mvc.perform(record(lunch, """
+				{"note":"Fewer than expected",
+				 "dishes":[{"dishId":"%s","actualServings":220,"notMade":false},
+						   {"dishId":"%s","actualServings":250,"notMade":false}]}
 				""".formatted(first, second)))
 				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.mealId").value(lunch.toString()))
 				.andExpect(jsonPath("$.recorded").value(true))
 				.andExpect(jsonPath("$.recordingNote").value("Fewer than expected"))
 				.andExpect(jsonPath("$.dishes.length()").value(2));
@@ -135,10 +143,11 @@ class MealRecordingIT extends AbstractIntegrationTest {
 		assertThat(consumed(rice)).isEqualByComparingTo("2200");
 		assertThat(consumed(ghee)).isEqualByComparingTo("2500");
 
-		mvc.perform(get("/api/v1/meal-plans/{id}", first).header("Authorization", "Bearer valid-token"))
+		mvc.perform(get("/api/v1/meals/{id}", lunch).header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.status").value("COOKED"))
-				.andExpect(jsonPath("$.actualServings").value(220.0))
-				.andExpect(jsonPath("$.notMade").value(false));
+				.andExpect(jsonPath("$.dishes[?(@.id=='%s')].status".formatted(first)).value("COOKED"))
+				.andExpect(jsonPath("$.dishes[?(@.id=='%s')].actualServings".formatted(first)).value(220.0))
+				.andExpect(jsonPath("$.dishes[?(@.id=='%s')].notMade".formatted(first)).value(false));
 	}
 
 	@Test
@@ -146,34 +155,34 @@ class MealRecordingIT extends AbstractIntegrationTest {
 	void aDishNotMadeDrawsNothing() throws Exception {
 		UUID first = plan("Lunch", khichdi, 200);
 		UUID second = plan("Lunch", halwa, 200);
+		UUID lunch = MealFixture.mealOf(admin, first);
 
-		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch",
-				 "dishes":[{"mealPlanId":"%s","actualServings":200,"notMade":false},
-						   {"mealPlanId":"%s","notMade":true}]}
+		mvc.perform(record(lunch, """
+				{"dishes":[{"dishId":"%s","actualServings":200,"notMade":false},
+						   {"dishId":"%s","notMade":true}]}
 				""".formatted(first, second)))
 				.andExpect(status().isOk());
 
 		assertThat(consumed(rice)).isEqualByComparingTo("2000");
 		assertThat(consumed(ghee)).isEqualByComparingTo("0");
 
-		mvc.perform(get("/api/v1/meal-plans/{id}", second).header("Authorization", "Bearer valid-token"))
-				.andExpect(jsonPath("$.status").value("CANCELLED"))
-				.andExpect(jsonPath("$.notMade").value(true))
-				.andExpect(jsonPath("$.actualServings").value(0.0));
+		mvc.perform(get("/api/v1/meals/{id}", lunch).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.dishes[?(@.id=='%s')].status".formatted(second)).value("CANCELLED"))
+				.andExpect(jsonPath("$.dishes[?(@.id=='%s')].notMade".formatted(second)).value(true))
+				.andExpect(jsonPath("$.dishes[?(@.id=='%s')].actualServings".formatted(second)).value(0.0));
 	}
 
 	@Test
 	@DisplayName("what was cooked can't be recorded again")
 	void recordingTwiceIsRefused() throws Exception {
 		UUID id = plan("Lunch", khichdi, 100);
+		UUID lunch = MealFixture.mealOf(admin, id);
 		String body = """
-				{"planDate":"2025-03-17","mealKind":"Lunch",
-				 "dishes":[{"mealPlanId":"%s","actualServings":100,"notMade":false}]}
+				{"dishes":[{"dishId":"%s","actualServings":100,"notMade":false}]}
 				""".formatted(id);
 
-		mvc.perform(record(body)).andExpect(status().isOk());
-		mvc.perform(record(body))
+		mvc.perform(record(lunch, body)).andExpect(status().isOk());
+		mvc.perform(record(lunch, body))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400098"));
 
@@ -185,13 +194,13 @@ class MealRecordingIT extends AbstractIntegrationTest {
 	@DisplayName("a meal that was called off never went to the kitchen, so there is nothing to record")
 	void recordingACancelledMealIsRefused() throws Exception {
 		UUID id = plan("Dinner", khichdi, 100);
-		mvc.perform(post("/api/v1/meal-plans/{id}/cancel", id)
+		UUID dinner = MealFixture.mealOf(admin, id);
+		mvc.perform(post("/api/v1/meals/{id}/cancel", dinner)
 						.header("Authorization", "Bearer valid-token"))
-				.andExpect(status().isNoContent());
+				.andExpect(status().isOk());
 
-		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Dinner",
-				 "dishes":[{"mealPlanId":"%s","actualServings":100,"notMade":false}]}
+		mvc.perform(record(dinner, """
+				{"dishes":[{"dishId":"%s","actualServings":100,"notMade":false}]}
 				""".formatted(id)))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400099"));
@@ -203,9 +212,8 @@ class MealRecordingIT extends AbstractIntegrationTest {
 		UUID first = plan("Lunch", khichdi, 100);
 		plan("Lunch", halwa, 100);
 
-		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch",
-				 "dishes":[{"mealPlanId":"%s","actualServings":100,"notMade":false}]}
+		mvc.perform(record(MealFixture.mealOf(admin, first), """
+				{"dishes":[{"dishId":"%s","actualServings":100,"notMade":false}]}
 				""".formatted(first)))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("KMS-400009"));
@@ -214,13 +222,31 @@ class MealRecordingIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a dish of another meal is not this meal's to record")
+	void aDishOfAnotherMealIsRefused() throws Exception {
+		UUID lunchDish = plan("Lunch", khichdi, 100);
+		UUID dinnerDish = plan("Dinner", halwa, 100);
+
+		// Before D-27 the dish ids and the meal's date-and-kind travelled separately in one body, and
+		// nothing tied one to the other but a lookup. The meal is the path now, and a dish is only
+		// ever one of its own.
+		mvc.perform(record(MealFixture.mealOf(admin, lunchDish), """
+				{"dishes":[{"dishId":"%s","actualServings":100,"notMade":false},
+						   {"dishId":"%s","actualServings":100,"notMade":false}]}
+				""".formatted(lunchDish, dinnerDish)))
+				.andExpect(status().isNotFound());
+
+		assertThat(consumed(rice)).isEqualByComparingTo("0");
+		assertThat(consumed(ghee)).isEqualByComparingTo("0");
+	}
+
+	@Test
 	@DisplayName("a figure that isn't a number of servings is refused, naming the dish")
 	void servingsMustBeAFigure() throws Exception {
 		UUID id = plan("Lunch", khichdi, 100);
 
-		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch",
-				 "dishes":[{"mealPlanId":"%s","actualServings":0,"notMade":false}]}
+		mvc.perform(record(MealFixture.mealOf(admin, id), """
+				{"dishes":[{"dishId":"%s","actualServings":0,"notMade":false}]}
 				""".formatted(id)))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("KMS-400009"));
@@ -234,8 +260,8 @@ class MealRecordingIT extends AbstractIntegrationTest {
 		plan("Lunch", halwa, 250, 200, 40, 30);
 		plan("Breakfast", khichdi, 100, 100, 0, 0);
 
-		mvc.perform(get("/api/v1/meal-services/summary")
-						.param("from", "2025-03-17").param("to", "2025-03-17")
+		mvc.perform(get("/api/v1/meals/summary")
+						.param("from", DAY.toString()).param("to", DAY.toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk())
 				// 200 + 0.6 × 40 + 0.8 × 30 = 248.
@@ -250,39 +276,36 @@ class MealRecordingIT extends AbstractIntegrationTest {
 		UUID id = plan("Lunch", khichdi, 100);
 		plan("Dinner", khichdi, 100);
 
-		mvc.perform(get("/api/v1/meal-services/summary")
-						.param("from", "2025-03-17").param("to", "2025-03-17")
+		mvc.perform(get("/api/v1/meals/summary")
+						.param("from", DAY.toString()).param("to", DAY.toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.unrecorded").value(2));
 
-		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch",
-				 "dishes":[{"mealPlanId":"%s","actualServings":100,"notMade":false}]}
+		mvc.perform(record(MealFixture.mealOf(admin, id), """
+				{"dishes":[{"dishId":"%s","actualServings":100,"notMade":false}]}
 				""".formatted(id)))
 				.andExpect(status().isOk());
 
-		mvc.perform(get("/api/v1/meal-services/summary")
-						.param("from", "2025-03-17").param("to", "2025-03-17")
+		mvc.perform(get("/api/v1/meals/summary")
+						.param("from", DAY.toString()).param("to", DAY.toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.unrecorded").value(1));
 	}
 
 	// ---------------------------------------------------------------------
 
+	/** One dish of the day's meal of this kind, found or created. Answers with the dish's id. */
 	private UUID plan(String kind, UUID recipe, int servings) {
 		return plan(kind, recipe, servings, null, null, null);
 	}
 
 	private UUID plan(String kind, UUID recipe, int servings,
 			Integer adults, Integer children, Integer seniors) {
-		return admin.queryForObject("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_yield, day_type, status, adults, children, seniors, created_by)
-				VALUES (?, DATE '2025-03-17', ?, TIME '12:00', ?, ?, 'REGULAR', 'PLANNED', ?, ?, ?,
-						(SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'))
-				RETURNING id
-				""", UUID.class, tenant, kind, recipe, BigDecimal.valueOf(servings),
-				adults, children, seniors);
+		UUID meal = MealFixture.meal(admin, tenant, DAY, kind, LocalTime.NOON);
+		if (adults != null || children != null || seniors != null) {
+			MealFixture.headCount(admin, meal, adults, children, seniors);
+		}
+		return MealFixture.dish(admin, tenant, meal, recipe, BigDecimal.valueOf(servings), staff);
 	}
 
 	private BigDecimal consumed(UUID ingredient) {
@@ -323,8 +346,8 @@ class MealRecordingIT extends AbstractIntegrationTest {
 				""", tenant, ingredient, UUID.randomUUID(), kilos);
 	}
 
-	private MockHttpServletRequestBuilder record(String json) {
-		return post("/api/v1/meal-services/record").header("Authorization", "Bearer valid-token")
+	private MockHttpServletRequestBuilder record(UUID mealId, String json) {
+		return post("/api/v1/meals/{id}/record", mealId).header("Authorization", "Bearer valid-token")
 				.contentType(MediaType.APPLICATION_JSON).content(json);
 	}
 

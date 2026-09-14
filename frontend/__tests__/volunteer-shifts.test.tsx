@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ApiError, ShiftView } from "@/lib/api";
 
 const { authRef, queryRef, reloadMock, updateShiftMock, createShiftMock } = vi.hoisted(() => ({
@@ -47,6 +47,14 @@ vi.mock("@/lib/api", async (orig) => {
 import VolunteerShiftsPage from "@/app/volunteers/page";
 import NewShiftPage from "@/app/volunteers/new/page";
 import EditShiftPage from "@/app/volunteers/[id]/edit/page";
+import { todayIso } from "@/lib/format";
+
+/**
+ * This year, from the temple's own clock. The meal label writes a year only for a day outside the
+ * current year (`dayRange`'s rule), so a fixture dated this year reads "15 September" in any year the
+ * suite runs, rather than passing until December and then failing on a "2026".
+ */
+const YEAR = todayIso().slice(0, 4);
 
 function shift(o: Partial<ShiftView> = {}): ShiftView {
   return {
@@ -64,6 +72,9 @@ function shift(o: Partial<ShiftView> = {}): ShiftView {
     signedUpCount: 3,
     waitlistCount: 1,
     createdAt: "2026-08-01T00:00:00Z",
+    mealId: null,
+    mealKind: null,
+    mealEventName: null,
     ...o,
   };
 }
@@ -97,14 +108,60 @@ describe("volunteer shift management", () => {
     expect(replaceMock).toHaveBeenCalledWith("/volunteers");
   });
 
-  it("warns when a shift with a roster was moved, because nobody was told", () => {
+  it("warns, with the count and the way to tell them, when a shift's date changed under a roster", () => {
+    // Kept by D-27 for a new date: the server tells nobody then, so the list must say so.
+    queryRef.current = { data: [shift({ signedUpCount: 2 })], error: null, loading: false };
     paramsRef.current = new URLSearchParams("saved=Sunday%20prep&moved=s1");
     render(<VolunteerShiftsPage />);
-    expect(screen.getByText(/have not been told/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /send them an update/i })).toHaveAttribute(
-      "href",
-      "/volunteers/s1"
-    );
+    expect(
+      screen.getByText(/That shift moved, and the 2 volunteers already signed up have not been told\./)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /send them an update/i })).toHaveAttribute("href", "/volunteers/s1");
+  });
+
+  it("shows only the confirmation when the save carried no warning", () => {
+    paramsRef.current = new URLSearchParams("saved=Sunday%20prep");
+    render(<VolunteerShiftsPage />);
+    expect(screen.getByText(/Sunday prep was saved\./i)).toBeInTheDocument();
+    expect(screen.queryByText(/have not been told/i)).not.toBeInTheDocument();
+  });
+
+  it("labels a meal shift with its meal and day, an event by its own name, and a plain shift not at all (D-27)", () => {
+    queryRef.current = {
+      data: [
+        shift({ id: "m1", title: "Lunch preparation", shiftDate: `${YEAR}-09-15`, mealId: "meal-lunch", mealKind: "Lunch" }),
+        shift({
+          id: "e1",
+          title: "Festival cooking",
+          shiftDate: `${YEAR}-09-16`,
+          mealId: "meal-janmashtami",
+          mealKind: "Event",
+          mealEventName: "Janmashtami",
+        }),
+        shift({ id: "p1", title: "Garland making", shiftDate: `${YEAR}-09-15` }),
+      ],
+      error: null,
+      loading: false,
+    };
+    render(<VolunteerShiftsPage />);
+
+    const row = (title: string) => screen.getByRole("link", { name: title }).closest("tr") as HTMLElement;
+    expect(within(row("Lunch preparation")).getByText("For Lunch, 15 September")).toBeInTheDocument();
+    // An event is named by its own name, never as another "Event".
+    expect(within(row("Festival cooking")).getByText("For Janmashtami, 16 September")).toBeInTheDocument();
+    expect(row("Festival cooking").textContent).not.toMatch(/For Event/);
+    // A shift not for a meal carries no label at all.
+    expect(row("Garland making").textContent).not.toMatch(/\bFor /);
+  });
+
+  it("adds the year to a meal shift's label only where the date formatter does: outside this year", () => {
+    queryRef.current = {
+      data: [shift({ title: "Lunch preparation", shiftDate: `${Number(YEAR) + 1}-01-02`, mealId: "m", mealKind: "Lunch" })],
+      error: null,
+      loading: false,
+    };
+    render(<VolunteerShiftsPage />);
+    expect(screen.getByText(`For Lunch, 2 January ${Number(YEAR) + 1}`)).toBeInTheDocument();
   });
 
   it("says when a posted shift runs through midnight (T-146)", () => {
@@ -143,6 +200,57 @@ describe("posting a shift", () => {
     queryRef.current = { data: null, error: null, loading: false };
     createShiftMock.mockReset().mockResolvedValue({ id: "new" });
     pushMock.mockReset();
+  });
+
+  it("asks for exactly the eight ruled fields, in the ruled order, with no meal box (D-27)", () => {
+    render(<NewShiftPage />);
+    const form = screen.getByRole("form", { name: /post a shift/i });
+    const inputs = Array.from(form.querySelectorAll("input"));
+    // Each box's own label, in the order the boxes are on the form.
+    expect(inputs.map((i) => i.labels?.[0]?.textContent?.trim())).toEqual([
+      "Title",
+      "Date",
+      "Volunteers requested",
+      "Start time",
+      "End time",
+      "Location",
+      "Reminder hours before",
+      "Description",
+    ]);
+    expect(inputs.map((i) => i.name)).toEqual([
+      "title", "shiftDate", "capacity", "startTime", "endTime", "location", "reminderHours", "description",
+    ]);
+    // No "is this for a meal" check box and no drop-down of meals, anywhere on the screen.
+    expect(document.querySelectorAll('input[type="checkbox"], select')).toHaveLength(0);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Capacity")).not.toBeInTheDocument();
+  });
+
+  it("says where kitchen help for a meal is asked for, with a link to the planner (D-27)", () => {
+    render(<NewShiftPage />);
+    const sentence = screen.getByText((_, el) =>
+      el?.tagName === "P" && el.textContent === "Kitchen help for a meal? Ask from that meal in the planner."
+    );
+    const link = within(sentence).getByRole("link", { name: "in the planner" });
+    expect(link).toHaveAttribute("href", "/planner");
+  });
+
+  it("posts a request with no meal field in it (D-27)", async () => {
+    render(<NewShiftPage />);
+    const form = screen.getByRole("form", { name: /post a shift/i });
+    fireEvent.change(form.querySelector('input[name="title"]')!, { target: { value: "Garland making" } });
+    fireEvent.change(form.querySelector('input[name="shiftDate"]')!, { target: { value: "2026-12-06" } });
+    fireEvent.change(form.querySelector('input[name="startTime"]')!, { target: { value: "06:00" } });
+    fireEvent.change(form.querySelector('input[name="endTime"]')!, { target: { value: "09:00" } });
+    fireEvent.click(screen.getByRole("button", { name: /post shift/i }));
+
+    await waitFor(() => expect(createShiftMock).toHaveBeenCalledTimes(1));
+    const keys = Object.keys(createShiftMock.mock.calls[0][0]);
+    expect(keys.sort()).toEqual(
+      ["capacity", "description", "endTime", "location", "reminderOffsetsMinutes", "shiftDate", "startTime", "title"]
+    );
+    expect(keys.filter((k) => /meal/i.test(k))).toEqual([]);
   });
 
   it("commits from the header and returns to the list with the confirmation", async () => {
@@ -276,15 +384,20 @@ describe("correcting a shift", () => {
     expect(pushMock).toHaveBeenCalledWith("/volunteers?saved=Sunday%20cooking");
   });
 
-  it("carries the warning back to the list when the shift moved under a roster", async () => {
+  it("lets a shift not for a meal change its date, and sends the new one", async () => {
+    queryRef.current = { data: shift({ signedUpCount: 0 }), error: null, loading: false };
     render(<EditShiftPage />);
     const form = screen.getByRole("form", { name: /edit a shift/i });
 
-    fireEvent.change(form.querySelector('input[name="startTime"]')!, { target: { value: "16:00" } });
+    fireEvent.change(form.querySelector('input[name="shiftDate"]')!, { target: { value: "2026-12-07" } });
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
-    await waitFor(() => expect(updateShiftMock).toHaveBeenCalled());
-    expect(pushMock).toHaveBeenCalledWith("/volunteers?saved=Sunday%20prep&moved=s1");
+    await waitFor(() => expect(updateShiftMock).toHaveBeenCalledTimes(1));
+    expect(updateShiftMock.mock.calls[0][1].shiftDate).toBe("2026-12-07");
+    expect(updateShiftMock.mock.calls[0][1].mealId).toBeNull();
+    // A new date with the times left alone is not the times-changed case, so nothing stops the save.
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(pushMock).toHaveBeenCalledWith("/volunteers?saved=Sunday%20prep");
   });
 
   it("stays quiet when an edit leaves the time alone", async () => {
@@ -321,8 +434,8 @@ describe("a blank shift form names each box it refused (T-165)", () => {
     const expected: [string, string][] = [
       ["title", "Title is required"],
       ["shiftDate", "Date is required"],
-      ["startTime", "Start is required"],
-      ["endTime", "End is required"],
+      ["startTime", "Start time is required"],
+      ["endTime", "End time is required"],
     ];
     for (const [name, sentence] of expected) {
       const said = await screen.findByText(sentence);

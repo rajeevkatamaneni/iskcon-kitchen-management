@@ -106,8 +106,7 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
-		admin.execute("DELETE FROM meal_plans");
-		admin.execute("DELETE FROM meal_kinds");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM audit_events");
@@ -123,7 +122,7 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 
 		UUID id = create(delivery("13:00", "Hare Krishna Hill, Rajajinagar 560010"));
 
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)))
+		mvc.perform(authed(get("/api/v1/meals/{id}/travel-estimate", id)))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.available").value(true))
 				// Guests eat at 13:00; the slower end of the drive is 45 minutes. A driver can act on
@@ -136,7 +135,7 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 		// It is asked again every time it is shown, never remembered — both because the licence
 		// forbids keeping durations and because Friday's traffic is not Tuesday's.
 		router.answer(Duration.ofMinutes(50), Duration.ofMinutes(70));
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)))
+		mvc.perform(authed(get("/api/v1/meals/{id}/travel-estimate", id)))
 				.andExpect(jsonPath("$.leaveBy").value("11:50:00"))
 				.andExpect(jsonPath("$.pessimisticMinutes").value(70));
 	}
@@ -147,7 +146,7 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 		geocoder.place("Hare Krishna Hill, Rajajinagar 560010", 12.9, 77.55);
 		router.answer(Duration.ofMinutes(35), Duration.ofMinutes(45));
 		UUID id = create(delivery("13:00", "Hare Krishna Hill, Rajajinagar 560010"));
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)));
+		mvc.perform(authed(get("/api/v1/meals/{id}/travel-estimate", id)));
 
 		// This test used to assert that no column anywhere could hold a duration, on the E4-S16 D4
 		// reading of Maps ToS §3.2.3(b). Rajeev reversed that on 2026-09-05 — "We are splitting hairs
@@ -165,12 +164,12 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 				""", Integer.class)).isZero();
 
 		assertThat(admin.queryForObject(
-				"SELECT count(*) FROM meal_plans WHERE travel_minutes IS NOT NULL", Integer.class))
+				"SELECT count(*) FROM meals WHERE travel_minutes IS NOT NULL", Integer.class))
 				.isZero();
 
 		// What is kept is the pin, and when we asked for it.
 		assertThat(admin.queryForObject(
-				"SELECT count(*) FROM meal_plans WHERE delivery_latitude IS NOT NULL AND geocoded_at IS NOT NULL",
+				"SELECT count(*) FROM meals WHERE delivery_latitude IS NOT NULL AND geocoded_at IS NOT NULL",
 				Integer.class)).isEqualTo(1);
 	}
 
@@ -188,7 +187,7 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 		assertThat(travelSourceOf(id)).isEqualTo("ESTIMATED");
 
 		// Somebody who drives that road says otherwise.
-		admin.update("UPDATE meal_plans SET travel_minutes = 70, travel_minutes_source = 'MANUAL' WHERE id = ?", id);
+		admin.update("UPDATE meals SET travel_minutes = 70, travel_minutes_source = 'MANUAL' WHERE id = ?", id);
 
 		// Rajeev asked for both a refresh at print time and a manual override, and the two collide:
 		// a recalculation would discard the correction of the one person who knew better, on the
@@ -204,7 +203,7 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 	void anEstimateBeforeTheresAPlan() throws Exception {
 		router.answer(Duration.ofMinutes(35), Duration.ofMinutes(45));
 
-		// The saved endpoint takes a plan id, which a form has not got — somebody is still typing.
+		// The saved endpoint takes a meal id, which a form has not got — somebody is still typing.
 		mvc.perform(authed(get("/api/v1/meal-plans/travel-estimate")
 						.param("latitude", "12.9").param("longitude", "77.55")
 						.param("planDate", "2025-03-20").param("guestsEatAt", "13:00")))
@@ -215,7 +214,7 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 
 		// And it writes nothing, because there is nothing to write to.
 		assertThat(admin.queryForObject(
-				"SELECT count(*) FROM meal_plans WHERE travel_minutes IS NOT NULL", Integer.class))
+				"SELECT count(*) FROM meals WHERE travel_minutes IS NOT NULL", Integer.class))
 				.isZero();
 	}
 
@@ -241,11 +240,11 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 	}
 
 	private Integer travelMinutesOf(UUID id) {
-		return admin.queryForObject("SELECT travel_minutes FROM meal_plans WHERE id = ?", Integer.class, id);
+		return admin.queryForObject("SELECT travel_minutes FROM meals WHERE id = ?", Integer.class, id);
 	}
 
 	private String travelSourceOf(UUID id) {
-		return admin.queryForObject("SELECT travel_minutes_source FROM meal_plans WHERE id = ?", String.class, id);
+		return admin.queryForObject("SELECT travel_minutes_source FROM meals WHERE id = ?", String.class, id);
 	}
 
 	@Test
@@ -256,19 +255,19 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 		// Rajeev's own example, 2026-09-05: cooked at 16:00, guests eating at 17:00, seventy minutes
 		// of driving. It arrives at 17:10 and used to save without a word — the person who found out
 		// was a driver on the morning, holding a job card that promised something impossible.
-		mvc.perform(authed(post("/api/v1/meal-plans")).contentType(MediaType.APPLICATION_JSON)
-						.content("""
+		mvc.perform(authed(post("/api/v1/meals")).contentType(MediaType.APPLICATION_JSON)
+						.content(saveBody("""
 								{"planDate":"2025-03-20","mealKind":"Event","recipeId":"%s","targetYield":80,
 								 "readyBy":"16:00","eventName":"Impossible delivery","isOutside":true,
 								 "handover":"DELIVERY","contactName":"Mrs Latha Rao",
 								 "contactPhone":"+919000000001","adults":80,
 								 "deliveryAddress":"Hare Krishna Hill, Rajajinagar 560010",
 								 "guestsEatAt":"17:00","travelMinutes":70}
-								""".formatted(khichdi)))
+								""".formatted(khichdi))))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400079"));
 
-		assertThat(admin.queryForObject("SELECT count(*) FROM meal_plans", Integer.class)).isZero();
+		assertThat(admin.queryForObject("SELECT count(*) FROM meals", Integer.class)).isZero();
 	}
 
 	@Test
@@ -280,18 +279,18 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 		// out and load it is not enough in practice, and the composer says so — but nobody here knows
 		// this temple's courtyard, so the endpoint does not refuse it. "That is impractical" is a
 		// different statement from "that is impossible", and only the second one is a rule.
-		mvc.perform(authed(post("/api/v1/meal-plans")).contentType(MediaType.APPLICATION_JSON)
-						.content("""
+		mvc.perform(authed(post("/api/v1/meals")).contentType(MediaType.APPLICATION_JSON)
+						.content(saveBody("""
 								{"planDate":"2025-03-20","mealKind":"Event","recipeId":"%s","targetYield":80,
 								 "readyBy":"16:00","eventName":"Tight but possible","isOutside":true,
 								 "handover":"DELIVERY","contactName":"Mrs Latha Rao",
 								 "contactPhone":"+919000000001","adults":80,
 								 "deliveryAddress":"Hare Krishna Hill, Rajajinagar 560010",
 								 "guestsEatAt":"17:00","travelMinutes":45}
-								""".formatted(khichdi)))
+								""".formatted(khichdi))))
 				.andExpect(status().isCreated());
 
-		assertThat(admin.queryForObject("SELECT count(*) FROM meal_plans", Integer.class)).isEqualTo(1);
+		assertThat(admin.queryForObject("SELECT count(*) FROM meals", Integer.class)).isEqualTo(1);
 	}
 
 	@Test
@@ -301,15 +300,15 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 
 		// The address was typed rather than picked, so there is no allowance. Inventing one in order
 		// to refuse the plan would be worse than saying nothing.
-		mvc.perform(authed(post("/api/v1/meal-plans")).contentType(MediaType.APPLICATION_JSON)
-						.content("""
+		mvc.perform(authed(post("/api/v1/meals")).contentType(MediaType.APPLICATION_JSON)
+						.content(saveBody("""
 								{"planDate":"2025-03-20","mealKind":"Event","recipeId":"%s","targetYield":80,
 								 "readyBy":"16:55","eventName":"Nobody measured it","isOutside":true,
 								 "handover":"DELIVERY","contactName":"Mrs Latha Rao",
 								 "contactPhone":"+919000000001","adults":80,
 								 "deliveryAddress":"Hare Krishna Hill, Rajajinagar 560010",
 								 "guestsEatAt":"17:00"}
-								""".formatted(khichdi)))
+								""".formatted(khichdi))))
 				.andExpect(status().isCreated());
 	}
 
@@ -327,14 +326,14 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 				""".formatted(khichdi));
 
 		for (UUID id : List.of(pickup, inHouse)) {
-			mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)))
+			mvc.perform(authed(get("/api/v1/meals/{id}/travel-estimate", id)))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.available").value(false))
 					.andExpect(jsonPath("$.reason").value("NOT_A_DELIVERY"));
 		}
 		// And neither of them was ever asked for an address.
 		assertThat(admin.queryForObject(
-				"SELECT count(*) FROM meal_plans WHERE delivery_address IS NOT NULL", Integer.class))
+				"SELECT count(*) FROM meals WHERE delivery_address IS NOT NULL", Integer.class))
 				.isZero();
 		assertThat(geocoder.asked()).as("nobody should have been geocoded").isEmpty();
 	}
@@ -348,11 +347,11 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 		UUID id = create(delivery("13:00", "Hare Krishna Hill, Rajajinagar 560010"));
 
 		// Saved whole, in the same call, with no warning — nobody looked, so nothing was not found.
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}", id)))
+		mvc.perform(authed(get("/api/v1/meals/{id}", id)))
 				.andExpect(jsonPath("$.deliveryAddress").value("Hare Krishna Hill, Rajajinagar 560010"))
 				.andExpect(jsonPath("$.guestsEatAt").value("13:00:00"));
 
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)))
+		mvc.perform(authed(get("/api/v1/meals/{id}/travel-estimate", id)))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.available").value(false))
 				.andExpect(jsonPath("$.reason").value("NO_MAP_SERVICE"))
@@ -372,12 +371,12 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 
 		// Re-open it: whole, with everything that was typed. A map service that could not find a
 		// street has not cost anybody the meal plan.
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}", id)))
+		mvc.perform(authed(get("/api/v1/meals/{id}", id)))
 				.andExpect(jsonPath("$.deliveryAddress").value("Zzzz Qqqq, 999999"))
 				.andExpect(jsonPath("$.guestsEatAt").value("13:00:00"))
 				.andExpect(jsonPath("$.status").value("PLANNED"));
 
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)))
+		mvc.perform(authed(get("/api/v1/meals/{id}/travel-estimate", id)))
 				.andExpect(jsonPath("$.available").value(false))
 				.andExpect(jsonPath("$.reason").value("ADDRESS_NOT_FOUND"));
 	}
@@ -403,12 +402,12 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 		assertThat(geocoder.asked()).hasSize(1);
 
 		// Asking again inside the thirty days spends nothing: the pin we hold is still ours to use.
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)));
+		mvc.perform(authed(get("/api/v1/meals/{id}/travel-estimate", id)));
 		assertThat(geocoder.asked()).hasSize(1);
 
 		// Age it past the licence and the answer has to be asked for again.
-		admin.update("UPDATE meal_plans SET geocoded_at = now() - INTERVAL '31 days' WHERE id = ?", id);
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)))
+		admin.update("UPDATE meals SET geocoded_at = now() - INTERVAL '31 days' WHERE id = ?", id);
+		mvc.perform(authed(get("/api/v1/meals/{id}/travel-estimate", id)))
 				.andExpect(jsonPath("$.available").value(true));
 		assertThat(geocoder.asked()).hasSize(2);
 	}
@@ -420,10 +419,10 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 		router.explode();
 
 		UUID id = create(delivery("13:00", "Hare Krishna Hill, Rajajinagar 560010"));
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}", id)))
+		mvc.perform(authed(get("/api/v1/meals/{id}", id)))
 				.andExpect(jsonPath("$.deliveryAddress").value("Hare Krishna Hill, Rajajinagar 560010"));
 
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)))
+		mvc.perform(authed(get("/api/v1/meals/{id}/travel-estimate", id)))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.available").value(false));
 	}
@@ -436,7 +435,7 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 
 		UUID id = create(delivery("18:00", "Tirupati, Andhra Pradesh"));
 
-		mvc.perform(authed(get("/api/v1/meal-plans/{id}/travel-estimate", id)))
+		mvc.perform(authed(get("/api/v1/meals/{id}/travel-estimate", id)))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.available").value(true))
 				.andExpect(jsonPath("$.leaveBy").value("14:00:00"))
@@ -461,8 +460,13 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 	}
 
 	private MockHttpServletRequestBuilder createRequest(String json) {
-		return post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
-				.contentType(MediaType.APPLICATION_JSON).content(json);
+		return post("/api/v1/meals").header("Authorization", "Bearer valid-token")
+				.contentType(MediaType.APPLICATION_JSON).content(saveBody(json));
+	}
+
+	/** The one-dish plan these tests are written in, as the meal-shaped body the endpoint takes. */
+	private String saveBody(String json) {
+		return MealRequests.save(json, admin, tenant);
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder request) {

@@ -104,10 +104,9 @@ public class WorkforceService {
 	 * is coming to one — and a devotee who took two shifts on one day counts twice, because the
 	 * question is how many pairs of hands turn up, not how many people the temple knows.
 	 *
-	 * <p>Deliberately still the shift's own date and not the linked meal's (D-14). This is the
-	 * day-grain figure — <em>who is in the building on Tuesday</em> — and somebody who comes in on
-	 * Thursday to grind masala for Sunday's feast is in the building on Thursday. The meal link
-	 * answers a different question and is read where that question is asked, in {@link #countAt}.
+	 * <p>The shift's own date. Since D-27 a meal shift's date is its meal's date, so for those the
+	 * two agree; this is the day-grain figure — <em>who is in the building on Tuesday</em> — and the
+	 * meal link answers a different question, read where that question is asked, in {@link #countAt}.
 	 */
 	private Map<LocalDate, Integer> volunteersByDate(LocalDate from, LocalDate to) {
 		Map<LocalDate, Integer> byDate = new LinkedHashMap<>();
@@ -159,8 +158,8 @@ public class WorkforceService {
 		LocalDate to = moments.stream().map(MealMoment::date).max(LocalDate::compareTo).orElseThrow();
 
 		ScheduleResolver.Resolution resolution = resolver.resolve(from, to);
-		// Not list(from, to): a shift linked to a meal in this range counts toward it however far
-		// ahead of it the shift itself falls, so the shifts are fetched by either date (D-14).
+		// Not list(from, to): a shift for a meal in this range counts toward it by id, and is fetched
+		// by the meal's date as well as its own so the two can never part silently (D-14, D-27).
 		List<ShiftView> shifts = shiftService.listCountingTowardMeals(from, to);
 
 		Map<MealMoment, WorkforceCount> counts = new LinkedHashMap<>();
@@ -186,17 +185,16 @@ public class WorkforceService {
 	 * when the food is due, with both ends of the window inclusive — the same rule the staff side
 	 * uses, because somebody signed up until 14:00 is in the kitchen at 14:00.
 	 *
-	 * <p>The matching itself is {@link MealMoment#isFor}, and it is there rather than here on
-	 * purpose. The meal's key folds its event name — blank and null alike become nothing, the rest is
-	 * trimmed and lower-cased — and a link folded differently matches nothing at all while looking
-	 * like a shift nobody signed up for. One implementation of that rule, in the record both sides
-	 * pass through, is the only arrangement in which it cannot drift.
+	 * <p>The matching itself is {@link MealMoment#isFor}, which since D-27 compares the shift's meal
+	 * id with the meal's. Before D-27 it folded the case and spacing of three copied texts, and a link
+	 * folded one character differently matched nothing while looking like a shift nobody signed up
+	 * for; an id cannot be typed differently.
 	 */
 	private static int volunteersAt(List<ShiftView> shifts, MealMoment moment) {
 		int in = 0;
 		for (ShiftView shift : shifts) {
 			if (shift.linkedToAMeal()) {
-				if (moment.isFor(shift.mealDate(), shift.mealKind(), shift.mealEventName())) {
+				if (moment.isFor(shift.mealId())) {
 					in += shift.signedUpCount();
 				}
 				continue;

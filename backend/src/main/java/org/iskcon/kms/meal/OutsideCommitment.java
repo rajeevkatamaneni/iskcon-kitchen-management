@@ -16,8 +16,12 @@ import java.time.LocalTime;
  *
  * <p>What is on it is what somebody can act on without opening anything: when it is, what it is
  * called, who to ring, and where it is going.
+ *
+ * <p>{@code mealId} is the meal's own id (D-27), so a row on this list opens that meal rather than
+ * whichever meal on that date happens to share its kind and name.
  */
 public record OutsideCommitment(
+		java.util.UUID mealId,
 		LocalDate planDate,
 		String eventName,
 		String mealKind,

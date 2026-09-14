@@ -2,6 +2,7 @@ package org.iskcon.kms.staff;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.UUID;
 
 /**
  * One day of the schedule with what it <em>needs</em> beside what it <em>has</em> (E6-S15).
@@ -26,6 +27,8 @@ import java.time.LocalTime;
  * @param shortAt    the meal that is deepest short — its name, when it is due, what it asked for and
  *                   what it has. All four are null when the day is not short, because there is then
  *                   no meal they would be about.
+ * @param shortAtMealId the id of that meal (D-27), so the screen can open it rather than find it again
+ *                   by its date and name. Null exactly when the four above are.
  */
 public record DayCoverageView(
 		LocalDate date,
@@ -36,5 +39,6 @@ public record DayCoverageView(
 		String shortAt,
 		LocalTime shortAtReadyBy,
 		Integer shortAtRequired,
-		Integer shortAtRostered) {
+		Integer shortAtRostered,
+		UUID shortAtMealId) {
 }

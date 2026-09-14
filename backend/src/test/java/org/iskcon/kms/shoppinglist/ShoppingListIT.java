@@ -15,6 +15,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.meal.MealFixture;
 import org.iskcon.kms.perf.StatementRecorder;
 import org.iskcon.kms.perf.StatementRecordingConfiguration;
 import org.iskcon.kms.testsupport.StubTokenVerifier;
@@ -95,10 +96,8 @@ class ShoppingListIT extends AbstractIntegrationTest {
 				""", UUID.class, tenant, cat);
 		admin.update("INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order) VALUES (?, ?, ?, 5, 'KG', 0)", tenant, khichdi, rice);
 		LocalDate soon = LocalDate.now(IST).plusDays(2);
-		admin.update("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield, day_type, status, created_by)
-				VALUES (?, ?, 'Lunch', TIME '12:00', ?, 200, 'REGULAR', 'PLANNED', ?)
-				""", tenant, soon, khichdi, staffId);
+		MealFixture.plan(admin, tenant, soon, "Lunch", java.time.LocalTime.NOON, khichdi,
+				java.math.BigDecimal.valueOf(200), "PLANNED", staffId);
 
 		// Preferred vendor for rice.
 		UUID vendor = admin.queryForObject("""
@@ -121,7 +120,7 @@ class ShoppingListIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM shopping_list_lines");
 		admin.execute("DELETE FROM vendor_supplies");
 		admin.execute("DELETE FROM vendors");
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM recipe_ingredients");

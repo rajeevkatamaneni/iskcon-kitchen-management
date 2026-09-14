@@ -59,7 +59,7 @@ function CatchUpView() {
     useCallback(
       (t?: string) => {
         void nonce;
-        return api.mealServices(from, to, t);
+        return api.meals(from, to, t);
       },
       [from, to, nonce]
     )

@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.LocalDate;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.meal.MealFixture;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.testsupport.StubTokenVerifier;
@@ -61,7 +62,7 @@ class GivingPageIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM purchase_order_lines");
 		admin.execute("DELETE FROM purchase_orders");
 		admin.execute("DELETE FROM vendors");
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM recipe_ingredients");
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
@@ -343,14 +344,11 @@ class GivingPageIT extends AbstractIntegrationTest {
 		planKind(tenantId, recipe, date, servings, status, kind, staff);
 	}
 
-	/** One preparation. Rows sharing a date and a kind are preparations of the same meal. */
+	/** One preparation of that day's meal of this kind — the meal is found or created (D-27). */
 	private void planKind(
 			UUID tenantId, UUID recipe, LocalDate date, int servings, String status, String kind, UUID by) {
-		admin.update("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-					target_yield, day_type, status, created_by)
-				VALUES (?, ?, ?, TIME '12:00', ?, ?, 'REGULAR', ?, ?)
-				""", tenantId, date, kind, recipe, servings, status, by);
+		UUID meal = MealFixture.meal(admin, tenantId, date, kind, java.time.LocalTime.NOON);
+		MealFixture.dish(admin, tenantId, meal, recipe, java.math.BigDecimal.valueOf(servings), status, by);
 	}
 
 	private UUID vendor(UUID tenantId, String name, String phone) {

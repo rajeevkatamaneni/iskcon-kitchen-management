@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.calendar.CalendarService;
@@ -52,6 +53,9 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * had to draw: a {@code USED_BEYOND_RECORDED_STOCK} row records that a meal was cooked with more
  * than the books held, and counts as zero, because on hand is a count of a shelf and no shelf holds
  * less than nothing.
+ *
+ * <p>Since D-27 a meal has its own row, and the correction is addressed by that row's id — the id the
+ * meal had from the moment it was planned, rather than the id of a second row made on first print.
  */
 @AutoConfigureMockMvc
 class MealCorrectionIT extends AbstractIntegrationTest {
@@ -128,11 +132,8 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 	void tearDown() {
 		TenantContext.clear();
 		admin.execute("DELETE FROM documents");
-		admin.execute("DELETE FROM meal_services");
-		admin.execute("DELETE FROM meal_card_sequence");
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM stock_movements");
-		admin.execute("DELETE FROM meal_kinds");
 		admin.execute("DELETE FROM calendar_days");
 		admin.execute("DELETE FROM calendar_precompute_state");
 		admin.execute("DELETE FROM recipe_ingredients");
@@ -170,9 +171,9 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		assertThat(consumed(rice)).isEqualByComparingTo("4000");
 		assertThat(onHand(rice)).isEqualByComparingTo("46000");
 
-		mvc.perform(correct(serviceId(), """
+		mvc.perform(correct(mealId(), """
 				{"note":"The card was read as 400; the kitchen confirms 640 went out",
-				 "dishes":[{"mealPlanId":"%s","actualServings":640,"consumedQuantity":600,
+				 "dishes":[{"dishId":"%s","actualServings":640,"consumedQuantity":600,
 							"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isOk())
@@ -194,7 +195,7 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		assertThat(onHand(rice)).isEqualByComparingTo("43600");
 
 		// And the recording itself was never rewritten: who recorded it, and when, stand as they were.
-		mvc.perform(authed(get("/api/v1/meal-services")
+		mvc.perform(authed(get("/api/v1/meals")
 						.param("from", "2025-03-17").param("to", "2025-03-17")))
 				.andExpect(jsonPath("$[0].recordedByName").value("Anand Das"))
 				.andExpect(jsonPath("$[0].recordingNote").value("As read off the card"));
@@ -223,8 +224,8 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		doThrow(new IllegalStateException("the stock ledger is unavailable"))
 				.when(stockMovementService).compensate(any(), any(UUID.class), anyString());
 
-		mvc.perform(correct(serviceId(), """
-				{"note":"640 went out","dishes":[{"mealPlanId":"%s","actualServings":640,
+		mvc.perform(correct(mealId(), """
+				{"note":"640 went out","dishes":[{"dishId":"%s","actualServings":640,
 				 "consumedQuantity":null,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().is5xxServerError());
@@ -232,18 +233,18 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		// The mark is gone with it. Without one transaction this meal would read "corrected to 640"
 		// over a store room still drawn against 400, and nothing anywhere would say which was right.
 		assertThat(admin.queryForObject(
-				"SELECT corrected_at FROM meal_services WHERE id = ?",
-				java.sql.Timestamp.class, serviceId())).isNull();
+				"SELECT corrected_at FROM meals WHERE id = ?",
+				java.sql.Timestamp.class, mealId())).isNull();
 		assertThat(admin.queryForObject(
-				"SELECT correction_note FROM meal_services WHERE id = ?",
-				String.class, serviceId())).isNull();
+				"SELECT correction_note FROM meals WHERE id = ?",
+				String.class, mealId())).isNull();
 
 		// And so is the dish half: the figure, and the shadow of the figure.
 		assertThat(admin.queryForObject(
-				"SELECT actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, dish))
+				"SELECT actual_servings FROM meal_dishes WHERE id = ?", BigDecimal.class, dish))
 				.isEqualByComparingTo("400");
 		assertThat(admin.queryForObject(
-				"SELECT original_actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, dish))
+				"SELECT original_actual_servings FROM meal_dishes WHERE id = ?", BigDecimal.class, dish))
 				.isNull();
 
 		assertThat(consumed(rice)).isEqualByComparingTo("4000");
@@ -259,13 +260,13 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		record400(dish);
 
 		String body = """
-				{"note":"640 went out","dishes":[{"mealPlanId":"%s","actualServings":640,
+				{"note":"640 went out","dishes":[{"dishId":"%s","actualServings":640,
 				 "consumedQuantity":null,"notMade":false}]}
 				""".formatted(dish);
 
-		mvc.perform(correct(serviceId(), body)).andExpect(status().isOk());
-		mvc.perform(correct(serviceId(), """
-				{"note":"no, 700","dishes":[{"mealPlanId":"%s","actualServings":700,
+		mvc.perform(correct(mealId(), body)).andExpect(status().isOk());
+		mvc.perform(correct(mealId(), """
+				{"note":"no, 700","dishes":[{"dishId":"%s","actualServings":700,
 				 "consumedQuantity":null,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isConflict())
@@ -276,10 +277,10 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		// twice for food cooked once.
 		assertThat(onHand(rice)).isEqualByComparingTo("43600");
 		assertThat(admin.queryForObject(
-				"SELECT actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, dish))
+				"SELECT actual_servings FROM meal_dishes WHERE id = ?", BigDecimal.class, dish))
 				.isEqualByComparingTo("640");
 		assertThat(admin.queryForObject(
-				"SELECT original_actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, dish))
+				"SELECT original_actual_servings FROM meal_dishes WHERE id = ?", BigDecimal.class, dish))
 				.isEqualByComparingTo("400");
 	}
 
@@ -299,20 +300,20 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 
 		signIn("uid-staff");
 		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","note":"As read off the card",
-				 "dishes":[{"mealPlanId":"%s","actualServings":400,"notMade":false}]}
+				{"note":"As read off the card",
+				 "dishes":[{"dishId":"%s","actualServings":400,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isOk());
 
-		mvc.perform(correct(serviceId(), """
-				{"note":"640 went out","dishes":[{"mealPlanId":"%s","actualServings":640,
+		mvc.perform(correct(mealId(), """
+				{"note":"640 went out","dishes":[{"dishId":"%s","actualServings":640,
 				 "consumedQuantity":null,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isForbidden());
 
 		assertThat(admin.queryForObject(
-				"SELECT corrected_at FROM meal_services WHERE id = ?",
-				java.sql.Timestamp.class, serviceId())).isNull();
+				"SELECT corrected_at FROM meals WHERE id = ?",
+				java.sql.Timestamp.class, mealId())).isNull();
 		assertThat(onHand(rice)).isEqualByComparingTo("46000");
 	}
 
@@ -334,9 +335,9 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		UUID second = plan("Lunch", halwa, 500);
 
 		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","note":"As read off the card",
-				 "dishes":[{"mealPlanId":"%s","actualServings":400,"notMade":false},
-						   {"mealPlanId":"%s","actualServings":300,"notMade":false}]}
+				{"note":"As read off the card",
+				 "dishes":[{"dishId":"%s","actualServings":400,"notMade":false},
+						   {"dishId":"%s","actualServings":300,"notMade":false}]}
 				""".formatted(first, second)))
 				.andExpect(status().isOk());
 
@@ -387,8 +388,8 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 
 		// Correcting the meal now finds nothing left standing to reverse, and says so by simply
 		// drawing the new figure. The shelf ends where a 640-serving lunch leaves it either way.
-		mvc.perform(correct(serviceId(), """
-				{"note":"640 went out","dishes":[{"mealPlanId":"%s","actualServings":640,
+		mvc.perform(correct(mealId(), """
+				{"note":"640 went out","dishes":[{"dishId":"%s","actualServings":640,
 				 "consumedQuantity":null,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isOk())
@@ -407,9 +408,9 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		UUID dish = plan("Lunch", khichdi, 500);
 		record400(dish);
 
-		mvc.perform(correct(serviceId(), """
+		mvc.perform(correct(mealId(), """
 				{"note":"It was never made — the pot went to Tuesday's event",
-				 "dishes":[{"mealPlanId":"%s","actualServings":null,"consumedQuantity":null,
+				 "dishes":[{"dishId":"%s","actualServings":null,"consumedQuantity":null,
 							"notMade":true}]}
 				""".formatted(dish)))
 				.andExpect(status().isOk())
@@ -422,7 +423,7 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 
 		assertThat(onHand(rice)).isEqualByComparingTo("50000");
 		assertThat(admin.queryForObject(
-				"SELECT cooked_at FROM meal_plans WHERE id = ?", java.sql.Timestamp.class, dish))
+				"SELECT cooked_at FROM meal_dishes WHERE id = ?", java.sql.Timestamp.class, dish))
 				.isNull();
 	}
 
@@ -443,26 +444,26 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		UUID second = plan("Lunch", halwa, 500);
 
 		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","note":"As read off the card",
-				 "dishes":[{"mealPlanId":"%s","actualServings":400,"notMade":false},
-						   {"mealPlanId":"%s","actualServings":300,"notMade":false}]}
+				{"note":"As read off the card",
+				 "dishes":[{"dishId":"%s","actualServings":400,"notMade":false},
+						   {"dishId":"%s","actualServings":300,"notMade":false}]}
 				""".formatted(first, second)))
 				.andExpect(status().isOk());
 
-		mvc.perform(correct(serviceId(), """
+		mvc.perform(correct(mealId(), """
 				{"note":"The khichdi was 640; the halwa was right",
-				 "dishes":[{"mealPlanId":"%s","actualServings":640,"consumedQuantity":null,
+				 "dishes":[{"dishId":"%s","actualServings":640,"consumedQuantity":null,
 							"notMade":false},
-						   {"mealPlanId":"%s","actualServings":300,"consumedQuantity":null,
+						   {"dishId":"%s","actualServings":300,"consumedQuantity":null,
 							"notMade":false}]}
 				""".formatted(first, second)))
 				.andExpect(status().isOk());
 
 		assertThat(admin.queryForObject(
-				"SELECT original_actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, first))
+				"SELECT original_actual_servings FROM meal_dishes WHERE id = ?", BigDecimal.class, first))
 				.isEqualByComparingTo("400");
 		assertThat(admin.queryForObject(
-				"SELECT original_actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, second))
+				"SELECT original_actual_servings FROM meal_dishes WHERE id = ?", BigDecimal.class, second))
 				.isNull();
 
 		// The halwa drew three kilos of ghee once and has not been touched since.
@@ -477,16 +478,16 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		UUID dish = plan("Lunch", khichdi, 500);
 		record400(dish);
 
-		mvc.perform(correct(serviceId(), """
-				{"note":"Checking the card again","dishes":[{"mealPlanId":"%s","actualServings":400,
+		mvc.perform(correct(mealId(), """
+				{"note":"Checking the card again","dishes":[{"dishId":"%s","actualServings":400,
 				 "consumedQuantity":null,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("KMS-400001"));
 
 		assertThat(admin.queryForObject(
-				"SELECT corrected_at FROM meal_services WHERE id = ?",
-				java.sql.Timestamp.class, serviceId())).isNull();
+				"SELECT corrected_at FROM meals WHERE id = ?",
+				java.sql.Timestamp.class, mealId())).isNull();
 	}
 
 	/** Silence is not an answer here either, exactly as it is not when recording. */
@@ -497,14 +498,14 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		UUID second = plan("Lunch", halwa, 500);
 
 		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","note":"As read off the card",
-				 "dishes":[{"mealPlanId":"%s","actualServings":400,"notMade":false},
-						   {"mealPlanId":"%s","actualServings":300,"notMade":false}]}
+				{"note":"As read off the card",
+				 "dishes":[{"dishId":"%s","actualServings":400,"notMade":false},
+						   {"dishId":"%s","actualServings":300,"notMade":false}]}
 				""".formatted(first, second)))
 				.andExpect(status().isOk());
 
-		mvc.perform(correct(serviceId(), """
-				{"note":"640 went out","dishes":[{"mealPlanId":"%s","actualServings":640,
+		mvc.perform(correct(mealId(), """
+				{"note":"640 went out","dishes":[{"dishId":"%s","actualServings":640,
 				 "consumedQuantity":null,"notMade":false}]}
 				""".formatted(first)))
 				.andExpect(status().isBadRequest())
@@ -520,15 +521,15 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		UUID dish = plan("Lunch", khichdi, 500);
 		record400(dish);
 
-		mvc.perform(correct(serviceId(), """
-				{"note":"   ","dishes":[{"mealPlanId":"%s","actualServings":640,
+		mvc.perform(correct(mealId(), """
+				{"note":"   ","dishes":[{"dishId":"%s","actualServings":640,
 				 "consumedQuantity":null,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isBadRequest());
 
 		assertThat(admin.queryForObject(
-				"SELECT corrected_at FROM meal_services WHERE id = ?",
-				java.sql.Timestamp.class, serviceId())).isNull();
+				"SELECT corrected_at FROM meals WHERE id = ?",
+				java.sql.Timestamp.class, mealId())).isNull();
 	}
 
 	// ---- What a correction does NOT move, pinned deliberately ---------------
@@ -538,7 +539,7 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 	 *
 	 * <p>The task's acceptance asked that cost-per-serving "recompute from the corrected number". It
 	 * does not, and it should not: {@code MealKindCostService:167} costs each dish at
-	 * {@code mp.target_yield} — what was <em>planned</em> — and divides by the head count, and its
+	 * {@code d.target_yield} — what was <em>planned</em> — and divides by the head count, and its
 	 * own comment at :160 says why in as many words ("The dish is costed at what was planned, not at
 	 * what the returned job card said was cooked… a period of days must add up to the days in it").
 	 * A correction moves {@code actual_servings}; it moves neither of the columns this report reads.
@@ -558,8 +559,8 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		BigDecimal before = costPerServing();
 		assertThat(before).isNotNull();
 
-		mvc.perform(correct(serviceId(), """
-				{"note":"640 went out","dishes":[{"mealPlanId":"%s","actualServings":640,
+		mvc.perform(correct(mealId(), """
+				{"note":"640 went out","dishes":[{"dishId":"%s","actualServings":640,
 				 "consumedQuantity":null,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isOk());
@@ -596,8 +597,8 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		// 640 servings wants 6.4 Kg against the 4 Kg the books hold. It is recorded, not refused,
 		// and the 2.4 Kg nobody can account for is booked as its own movement.
 		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","note":"As read off the card",
-				 "dishes":[{"mealPlanId":"%s","actualServings":640,"notMade":false}]}
+				{"note":"As read off the card",
+				 "dishes":[{"dishId":"%s","actualServings":640,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isOk());
 
@@ -607,8 +608,8 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 				.isEqualByComparingTo("0");
 
 		// The card said 400, which the shelf covered all along.
-		mvc.perform(correct(serviceId(), """
-				{"note":"Misread off the card; it said 400","dishes":[{"mealPlanId":"%s",
+		mvc.perform(correct(mealId(), """
+				{"note":"Misread off the card; it said 400","dishes":[{"dishId":"%s",
 				 "actualServings":400,"consumedQuantity":null,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isOk())
@@ -639,9 +640,10 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 	 * one reversal that has happened and none of the ones that are about to, and refuses with
 	 * {@code KMS-400042} for a shortfall that does not exist thirty lines later.
 	 *
-	 * <p>Which dish is reached first is decided by {@code mp.ready_by} — {@code MealPlanService:195}
-	 * orders by date, then ready-by, then kind — so this is written twice, once with the rising dish
-	 * due first and once with the falling dish due first, and both must pass. One of the two would have
+	 * <p>Which dish is reached first is decided by the order the meal's dishes are read in — by ready-by
+	 * before D-27, by the order they were added since, the ready-by being the meal's — so this is
+	 * written twice, once with the rising dish first and once with the falling dish first, and both
+	 * must pass. One of the two would have
 	 * passed against the broken code: <em>reverse the dish order and the same correction succeeds</em>
 	 * is the defect's own signature, so a single-order test proves nothing about it. Pinning both is
 	 * the assertion that the answer no longer depends on the sort.
@@ -666,7 +668,7 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 	/**
 	 * Records a two-dish lunch that draws the shelf to exactly zero, then swaps the two figures.
 	 *
-	 * @param risingFirst whether the dish going 400 → 640 is the earlier of the two by ready-by, and
+	 * @param risingFirst whether the dish going 400 → 640 is the earlier of the two in the meal, and
 	 *     so the one the correction reaches first
 	 */
 	private void swappedRiceDishes(boolean risingFirst) throws Exception {
@@ -681,15 +683,24 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		line(pulao, sonaMasuri, "1");
 		stock(sonaMasuri, "10.4");
 
-		// ready_by is what decides which dish the correction reaches first, so it is what this test
-		// varies. Everything else about the two runs is identical.
-		UUID rising = plan("Lunch", khichadi, 500, risingFirst ? "12:00" : "12:30");
-		UUID falling = plan("Lunch", pulao, 500, risingFirst ? "12:30" : "12:00");
+		// Which dish the correction reaches first is what this test varies. Since D-27 the two dishes
+		// share their meal's one ready-by, and a meal's dishes are read in the order they were added
+		// (ServedMealService's DISH_ORDER), so the order of these two inserts is that order. Everything
+		// else about the two runs is identical.
+		UUID rising;
+		UUID falling;
+		if (risingFirst) {
+			rising = plan("Lunch", khichadi, 500);
+			falling = plan("Lunch", pulao, 500);
+		} else {
+			falling = plan("Lunch", pulao, 500);
+			rising = plan("Lunch", khichadi, 500);
+		}
 
 		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","note":"As read off the card",
-				 "dishes":[{"mealPlanId":"%s","actualServings":400,"notMade":false},
-						   {"mealPlanId":"%s","actualServings":640,"notMade":false}]}
+				{"note":"As read off the card",
+				 "dishes":[{"dishId":"%s","actualServings":400,"notMade":false},
+						   {"dishId":"%s","actualServings":640,"notMade":false}]}
 				""".formatted(rising, falling)))
 				.andExpect(status().isOk());
 
@@ -702,11 +713,11 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 
 		// The card was read across the wrong two rows. Neither figure is new to the store room; they
 		// have swapped dishes, and a temple that cooked this food is entitled to be believed.
-		mvc.perform(correct(serviceId(), """
+		mvc.perform(correct(mealId(), """
 				{"note":"The two rice dishes were entered against each other",
-				 "dishes":[{"mealPlanId":"%s","actualServings":640,"consumedQuantity":null,
+				 "dishes":[{"dishId":"%s","actualServings":640,"consumedQuantity":null,
 							"notMade":false},
-						   {"mealPlanId":"%s","actualServings":400,"consumedQuantity":null,
+						   {"dishId":"%s","actualServings":400,"consumedQuantity":null,
 							"notMade":false}]}
 				""".formatted(rising, falling)))
 				.andExpect(status().isOk())
@@ -720,16 +731,16 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		assertThat(consumed(sonaMasuri)).isEqualByComparingTo("20800");
 
 		assertThat(admin.queryForObject(
-				"SELECT actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, rising))
+				"SELECT actual_servings FROM meal_dishes WHERE id = ?", BigDecimal.class, rising))
 				.isEqualByComparingTo("640");
 		assertThat(admin.queryForObject(
-				"SELECT original_actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, rising))
+				"SELECT original_actual_servings FROM meal_dishes WHERE id = ?", BigDecimal.class, rising))
 				.isEqualByComparingTo("400");
 		assertThat(admin.queryForObject(
-				"SELECT actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, falling))
+				"SELECT actual_servings FROM meal_dishes WHERE id = ?", BigDecimal.class, falling))
 				.isEqualByComparingTo("400");
 		assertThat(admin.queryForObject(
-				"SELECT original_actual_servings FROM meal_plans WHERE id = ?", BigDecimal.class, falling))
+				"SELECT original_actual_servings FROM meal_dishes WHERE id = ?", BigDecimal.class, falling))
 				.isEqualByComparingTo("640");
 
 		// Both dishes were corrected, and both said so.
@@ -754,23 +765,27 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 	/** Records the meal at 400 as the admin, which every correction test starts from. */
 	private void record400(UUID dish) throws Exception {
 		mvc.perform(record("""
-				{"planDate":"2025-03-17","mealKind":"Lunch","note":"As read off the card",
-				 "dishes":[{"mealPlanId":"%s","actualServings":400,"notMade":false}]}
+				{"note":"As read off the card",
+				 "dishes":[{"dishId":"%s","actualServings":400,"notMade":false}]}
 				""".formatted(dish)))
 				.andExpect(status().isOk());
 	}
 
-	private UUID serviceId() {
-		return admin.queryForObject(
-				"SELECT id FROM meal_services WHERE plan_date = DATE '2025-03-17' AND meal_kind = 'Lunch'",
-				UUID.class);
+	/** The day's Lunch, by its own row (D-27). */
+	private UUID mealId() {
+		return admin.queryForObject("""
+				SELECT m.id FROM meals m
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN meal_kinds k ON k.id = m.meal_kind_id
+				WHERE pd.plan_date = DATE '2025-03-17' AND k.name = 'Lunch'
+				""", UUID.class);
 	}
 
-	private String movementFor(UUID mealPlanId) {
+	private String movementFor(UUID dishId) {
 		return admin.queryForObject("""
 				SELECT id::text FROM stock_movements
 				WHERE reference_type = 'MEAL_PLAN' AND reference_id = ?
-				""", String.class, mealPlanId);
+				""", String.class, dishId);
 	}
 
 	/** What was ever drawn: CONSUMPTION rows only, so a reversal does not reduce it. */
@@ -850,35 +865,19 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		return count == null ? 0 : count;
 	}
 
+	/** One dish of the day's meal of this kind, found or created. Answers with the dish's id. */
 	private UUID plan(String kind, UUID recipe, int servings) {
 		return plan(kind, recipe, servings, null, null, null);
 	}
 
-	/**
-	 * A dish due at a stated hour. Every other test leaves this at noon because it does not care;
-	 * the two-dish corrections do, because ready-by is what orders the dishes of a meal
-	 * ({@code MealPlanService:195}) and so decides which one a correction reaches first.
-	 */
-	private UUID plan(String kind, UUID recipe, int servings, String readyBy) {
-		return admin.queryForObject("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_yield, day_type, status, created_by)
-				VALUES (?, DATE '2025-03-17', ?, CAST(? AS time), ?, ?, 'REGULAR', 'PLANNED',
-						(SELECT id FROM users WHERE firebase_uid = 'uid-admin'))
-				RETURNING id
-				""", UUID.class, tenant, kind, readyBy, recipe, BigDecimal.valueOf(servings));
-	}
-
 	private UUID plan(String kind, UUID recipe, int servings,
 			Integer adults, Integer children, Integer seniors) {
-		return admin.queryForObject("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_yield, day_type, status, adults, children, seniors, created_by)
-				VALUES (?, DATE '2025-03-17', ?, TIME '12:00', ?, ?, 'REGULAR', 'PLANNED', ?, ?, ?,
-						(SELECT id FROM users WHERE firebase_uid = 'uid-admin'))
-				RETURNING id
-				""", UUID.class, tenant, kind, recipe, BigDecimal.valueOf(servings),
-				adults, children, seniors);
+		UUID meal = MealFixture.meal(admin, tenant, LocalDate.of(2025, 3, 17), kind, LocalTime.NOON);
+		if (adults != null || children != null || seniors != null) {
+			MealFixture.headCount(admin, meal, adults, children, seniors);
+		}
+		return MealFixture.dish(admin, tenant, meal, recipe, BigDecimal.valueOf(servings),
+				admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'uid-admin'", UUID.class));
 	}
 
 	private UUID ingredient(String name) {
@@ -933,13 +932,17 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		return request.header("Authorization", "Bearer valid-token");
 	}
 
+	/**
+	 * Records the day's Lunch. Every recording here is of that one meal — the dishes named in the body
+	 * are all dishes of it — so the meal is looked up rather than threaded through every test.
+	 */
 	private MockHttpServletRequestBuilder record(String json) {
-		return authed(post("/api/v1/meal-services/record"))
+		return authed(post("/api/v1/meals/{id}/record", mealId()))
 				.contentType(MediaType.APPLICATION_JSON).content(json);
 	}
 
-	private MockHttpServletRequestBuilder correct(UUID serviceId, String json) {
-		return authed(post("/api/v1/meal-services/{id}/correct", serviceId))
+	private MockHttpServletRequestBuilder correct(UUID mealId, String json) {
+		return authed(post("/api/v1/meals/{id}/correct", mealId))
 				.contentType(MediaType.APPLICATION_JSON).content(json);
 	}
 

@@ -59,12 +59,15 @@ public class MaterialsCostService {
 	 * it to CANCELLED.
 	 */
 	private List<MealRow> mealsOn(LocalDate date) {
+		// The date is the meal's day (D-27): a dish no longer carries a date of its own.
 		return jdbc.query("""
-				SELECT mp.recipe_id, mp.target_yield
-				FROM meal_plans mp
-				JOIN recipes r ON r.id = mp.recipe_id
-				WHERE mp.status <> 'CANCELLED' AND mp.plan_date = ?
-				ORDER BY mp.ready_by, mp.created_at
+				SELECT d.recipe_id, d.target_yield
+				FROM meal_dishes d
+				JOIN meals m ON m.id = d.meal_id
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN recipes r ON r.id = d.recipe_id
+				WHERE d.status <> 'CANCELLED' AND pd.plan_date = ?
+				ORDER BY m.ready_by, d.created_at, d.id
 				""", (rs, n) -> new MealRow(
 				rs.getObject("recipe_id", UUID.class),
 				rs.getBigDecimal("target_yield")), date);

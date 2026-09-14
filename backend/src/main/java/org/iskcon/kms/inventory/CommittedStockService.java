@@ -124,7 +124,7 @@ public class CommittedStockService {
 				continue;
 			}
 			out.add(new CommittedMeal(
-					claim.mealPlanId(), claim.planDate(), claim.mealKind(), claim.eventName(),
+					claim.dishId(), claim.mealId(), claim.planDate(), claim.mealKind(), claim.eventName(),
 					claim.recipeName(), InventoryUnits.fromBase(claim.quantityBase(), canonicalUnit),
 					canonicalUnit.name()));
 		}
@@ -148,7 +148,7 @@ public class CommittedStockService {
 	public List<MealClaim> claimsInHorizon() {
 		Map<UUID, Map<UUID, BigDecimal>> byMeal = new LinkedHashMap<>();
 		for (Claim claim : claims()) {
-			byMeal.computeIfAbsent(claim.mealPlanId(), k -> new LinkedHashMap<>())
+			byMeal.computeIfAbsent(claim.dishId(), k -> new LinkedHashMap<>())
 					.merge(claim.ingredientId(), claim.quantityBase(), BigDecimal::add);
 		}
 
@@ -257,8 +257,8 @@ public class CommittedStockService {
 			}
 
 			for (Map.Entry<UUID, BigDecimal> e : perIngredient.entrySet()) {
-				claims.add(new Claim(dish.id(), dish.planDate(), dish.mealKind(), dish.eventName(),
-						dish.recipeName(), e.getKey(), e.getValue()));
+				claims.add(new Claim(dish.id(), dish.mealId(), dish.planDate(), dish.mealKind(),
+						dish.eventName(), dish.recipeName(), e.getKey(), e.getValue()));
 			}
 		}
 		return claims;
@@ -362,20 +362,29 @@ public class CommittedStockService {
 	 * The dishes still intending to be cooked in the window.
 	 *
 	 * <p>{@code status = 'PLANNED'} is the whole of the double-subtraction guard, and RLS is the
-	 * whole of the tenant scoping — this query names no tenant because it must not: the policy on
-	 * {@code meal_plans} answers that from the verified token, and a predicate here would be a second
-	 * opinion about it.
+	 * whole of the tenant scoping — this query names no tenant because it must not: the policies on
+	 * {@code meal_dishes}, {@code meals} and {@code meal_plan_days} answer that from the verified
+	 * token, and a predicate here would be a second opinion about it.
+	 *
+	 * <p>The date, the ready-by and the event name are the meal's (D-27); the kind's name is read
+	 * through its id at this moment, so a kind renamed yesterday reads renamed. The order — day, then
+	 * ready-by, then the order the dishes were added — is the order the store is drawn down in, and
+	 * {@code SufficiencyService.loadPlannedMeals} reports in the same order.
 	 */
 	private List<PlannedDish> plannedDishes(LocalDate from, LocalDate to) {
 		return jdbc.query("""
-				SELECT mp.id, mp.plan_date, mp.meal_kind, mp.event_name, mp.recipe_id,
-					   r.name AS recipe_name, mp.target_yield
-				FROM meal_plans mp
-				JOIN recipes r ON r.id = mp.recipe_id
-				WHERE mp.status = 'PLANNED' AND mp.plan_date BETWEEN ? AND ?
-				ORDER BY mp.plan_date, mp.ready_by, mp.created_at
+				SELECT d.id, d.meal_id, pd.plan_date, k.name AS meal_kind, m.event_name, d.recipe_id,
+					   r.name AS recipe_name, d.target_yield
+				FROM meal_dishes d
+				JOIN meals m ON m.id = d.meal_id
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN meal_kinds k ON k.id = m.meal_kind_id
+				JOIN recipes r ON r.id = d.recipe_id
+				WHERE d.status = 'PLANNED' AND pd.plan_date BETWEEN ? AND ?
+				ORDER BY pd.plan_date, m.ready_by, d.created_at, d.id
 				""", (rs, n) -> new PlannedDish(
 				rs.getObject("id", UUID.class),
+				rs.getObject("meal_id", UUID.class),
 				rs.getObject("plan_date", LocalDate.class),
 				rs.getString("meal_kind"),
 				rs.getString("event_name"),
@@ -392,17 +401,17 @@ public class CommittedStockService {
 	 * file because it means nothing on its own: it is a position in that list, and the position — the
 	 * order the dishes reach the pot — is half of what it says.
 	 */
-	public record MealClaim(UUID mealPlanId, Map<UUID, BigDecimal> requirementsBase) {
+	public record MealClaim(UUID dishId, Map<UUID, BigDecimal> requirementsBase) {
 	}
 
 	private record PlannedDish(
-			UUID id, LocalDate planDate, String mealKind, String eventName, UUID recipeId,
+			UUID id, UUID mealId, LocalDate planDate, String mealKind, String eventName, UUID recipeId,
 			String recipeName, BigDecimal targetYield) {
 	}
 
 	private record Claim(
-			UUID mealPlanId, LocalDate planDate, String mealKind, String eventName, String recipeName,
-			UUID ingredientId, BigDecimal quantityBase) {
+			UUID dishId, UUID mealId, LocalDate planDate, String mealKind, String eventName,
+			String recipeName, UUID ingredientId, BigDecimal quantityBase) {
 	}
 
 	/** A recipe scaled to a yield. Both halves matter, so both are in the key. */

@@ -50,6 +50,14 @@ class DeliveryPinBackfillIT extends AbstractIntegrationTest {
 	 */
 	private static final String BEFORE_THE_BACKFILL = "96";
 
+	/**
+	 * Where the second run stops (T-195). V135 deletes every meal plan and V136 moves the delivery
+	 * fields off the dish rows onto meals (D-27), so a run to the end would find nothing to read back
+	 * and no column to read it from. Pinned to the last schema V97 was written against, the backfill
+	 * is still proved on the rows it repaired; the reset that follows is MealRebuildMigrationIT's.
+	 */
+	private static final String LAST_VERSION_WITH_MEAL_PLANS = "134";
+
 	private static final String DATABASE = "kms_delivery_pin_check";
 
 	/** Seeded onto every fixture row so "was this row touched at all?" is answerable exactly. */
@@ -72,6 +80,7 @@ class DeliveryPinBackfillIT extends AbstractIntegrationTest {
 		var result = Flyway.configure()
 				.dataSource(url(), MIGRATION_ROLE, MIGRATION_PASSWORD)
 				.locations("classpath:db/migration")
+				.target(LAST_VERSION_WITH_MEAL_PLANS)
 				.load()
 				.migrate();
 

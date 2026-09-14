@@ -94,7 +94,7 @@ public class DocumentGenerationService {
 		Map<String, Object> doc;
 		try {
 			doc = jdbc.queryForMap("""
-					SELECT kind, recipe_id, po_id, meal_service_id, ingredient_request_id, donation_id,
+					SELECT kind, recipe_id, po_id, meal_id, ingredient_request_id, donation_id,
 						   target_yield, language, status
 					FROM documents WHERE id = ?
 					""", documentId);
@@ -122,7 +122,7 @@ public class DocumentGenerationService {
 				path = "generated/purchase-orders/" + documentId + ".pdf";
 			} else if ("JOB_CARD_PDF".equals(kind)) {
 				JobCardService.RenderedCard card =
-						jobCardService.renderForPdf((UUID) doc.get("meal_service_id"), language);
+						jobCardService.renderForPdf((UUID) doc.get("meal_id"), language);
 				html = card.html();
 				footer = card.footer();
 				path = "generated/job-cards/" + documentId + ".pdf";
@@ -179,8 +179,8 @@ public class DocumentGenerationService {
 	 * Renders a job card to HTML directly (B5), for the browser print view — no PDF, no worker. The
 	 * same template the PDF is built from, so what is printed and what is filed are the same sheet.
 	 */
-	public String renderJobCardHtml(UUID mealServiceId, String language) {
-		return jobCardService.render(mealServiceId, language);
+	public String renderJobCardHtml(UUID mealId, String language) {
+		return jobCardService.render(mealId, language);
 	}
 
 	/**

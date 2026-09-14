@@ -123,6 +123,7 @@ describe("leave queue", () => {
     impactRef.current = {
       data: [
         {
+          mealId: "meal-lunch-3-sep",
           planDate: "2026-09-03",
           mealKind: "Lunch",
           readyBy: "12:00:00",

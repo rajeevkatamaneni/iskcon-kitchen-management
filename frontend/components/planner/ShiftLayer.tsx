@@ -1,70 +1,53 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Button } from "@/components/ds/Button";
-import { ErrorNotice } from "@/components/ErrorNotice";
-import { api, toApiError, type ApiError, type ShiftInput, type ShiftView } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import type { MealShiftDraft, ShiftView } from "@/lib/api";
 import { longDate } from "@/lib/format";
 import {
   SHIFT_FORM,
   ShiftFields,
-  movedUnderRoster,
   readShiftForm,
   type ShiftFormValues,
 } from "@/app/volunteers/shift-form";
 
 /**
- * A seva shift for one meal, posted or corrected over the planner (T-019, rebuilt by T-155).
+ * The volunteer shift for one meal, drafted over the meal it is for (T-019, T-155, rebuilt by D-27).
  *
- * <p>The planner shows a meal short of hands and offers to ask for volunteers. This is where that
- * offer opens: over the day, not away from it, and closing onto the same day and the same meal,
- * scrolled where the reader left it. Nothing navigates — a day being planned is work in progress, and
- * a trip to another screen and back would throw away the scroll position and everything the day's
- * blocks hold open (the language a job card is set to print in, a correction half typed).
+ * <p>It opens from section 4 of the meal composer — *Ask for volunteers* when the meal needs more
+ * people than are rostered, *View volunteer shift* once there is one — and it closes back onto the
+ * same form, scrolled where the planner left it.
+ *
+ * <h2>It saves nothing</h2>
+ *
+ * <p>Until D-27 this layer posted the shift the moment its button was pressed. Rajeev, 2026-09-13:
+ * <em>"IF the user does the shift setup and all from the meal planner page and abandons the meal plan
+ * with out saving, we should not be left with an orphan shift."</em> And, for a change to a shift that
+ * already exists (answer 7): <em>"nothing saved until the meal is saved: Aggreed."</em> So the button
+ * reads **Done**, pressing it hands the draft back to the composer, and the composer sends it with
+ * *Save this meal* or *Update this meal*, where the server saves the meal and the shift in one
+ * transaction. Walking away from the meal walks away from the shift with it. There is no API call in
+ * this file, and a test holds it to that.
  *
  * <h2>The volunteers' own form, not a copy of it</h2>
  *
- * <p>T-019 built this with three fields of its own — start, end, how many — because the design
- * system then said a form of four fields or more must be a screen, and the shift form has eight.
- * Rajeev restated the rule on 2026-09-12 (DESIGN_SYSTEM v1.8 §4): <em>a record from another part of
- * the app opens as a layer showing that record's own full form, never a cut-down copy, so the two
- * cannot drift apart.</em> A shift is the volunteers' record and the planner only borrows it, so this
- * layer now renders `ShiftFields` — the same component `/volunteers/new` and `/volunteers/[id]/edit`
- * render — and reads it with the same `readShiftForm`.
- *
- * <p>That removed two things the copy had got wrong without anybody deciding it. It never said
- * "Ends the next day" for a shift typed as 20:00 to 02:00, because T-146 taught that to the real form
- * and the copy did not hear about it. And it could not set a location, a description or reminders at
- * all, so a planner had to leave for the volunteers screen to finish the shift they had just raised.
- *
- * <h2>What the planner fills in, and what it adds</h2>
+ * <p>DESIGN_SYSTEM v1.8 §4: a record from another part of the app opens as a layer showing that
+ * record's own full form, so the two cannot drift apart. So this renders `ShiftFields`, the form
+ * `/volunteers/new` and `/volunteers/[id]/edit` render, and reads it with the same `readShiftForm`.
+ * What differs is only what the planner fixes:
  *
  * <ul>
- *   <li><strong>Fixed</strong>: the date. It is the meal's day, shown read-only on a new shift and
- *       on a correction alike — Rajeev, 2026-09-12: <em>"Should be restricted to the day of the meal
- *       plan and read only."</em> `ShiftFields` takes it as `fixedDate`, which only this layer passes.</li>
- *   <li><strong>Prefilled, and still editable</strong>, on a new shift: the title
- *       ("Lunch preparation on Tuesday, 1 September 2026"), the capacity (how many hands the meal is short, floored at one) and the end time (the meal's
- *       ready-by — the crew is wanted up to the moment the food goes out, which is right often
- *       enough to offer and wrong often enough to leave editable). Start, location and description
- *       open empty and reminders open on the form's own default, as they do on the volunteers
- *       screen.</li>
- *   <li><strong>Added, never asked</strong>: the meal link — `mealDate`, `mealKind` and
- *       `mealEventName` (D-14). It is the reason this affordance exists: the shift counts toward
- *       <em>this</em> lunch rather than whatever the clock happened to catch. It is sent on a
- *       correction too, and that matters: `updateShift` replaces the whole shift, and a save without
- *       the link <em>takes it off</em> (`ShiftMealLinkIT.anEditCanUnlinkAShift`).</li>
+ *   <li><strong>Fixed</strong>: the date, which is the meal's day, shown read-only. A meal shift's day
+ *       is always its meal's (D-27 answer 4).</li>
+ *   <li><strong>Not asked</strong>: which meal. There is no meal checkbox and no meal picker here — the
+ *       shift is for the meal being saved, and the server links them when it saves.</li>
+ *   <li><strong>Prefilled, and still editable</strong>, on a new shift: the title, *Volunteers
+ *       requested* as People needed minus Rostered (answer 1), and the end time as the meal's
+ *       ready-by. A shift already drafted or saved opens on its own values.</li>
  * </ul>
  *
- * <h2>A correction that moves people's shift says so</h2>
- *
- * <p>Saving a new start or end time on a shift somebody has signed up for moves their reminders and
- * tells them nothing. The volunteers edit screen has always warned about that; this layer warns in
- * the same words, under the same rule (`movedUnderRoster`), with the same `MovedNotice` — Rajeev,
- * 2026-09-12: <em>"They need to know what their actions are resulting in. Cant be silent about
- * it."</em> The layer closes on save, so it hands the shift's id to the planner, which shows the
- * warning in that meal's block. With the date fixed, only a change of times can set it off here.
+ * <p>The escape hatch is Cancel, and the backdrop deliberately does not close it: a stray click beside
+ * a half-typed form must not throw it away.
  */
 export function ShiftLayer({
   date,
@@ -72,44 +55,39 @@ export function ShiftLayer({
   mealEventName,
   readyBy,
   suggestedCapacity,
-  shift,
+  values,
+  saved,
   onClose,
-  onSaved,
+  onDone,
 }: {
-  /** The planner day this was opened from; a new shift opens on it and is linked to it. */
+  /** The meal's day. The shift is on it, and it cannot be changed here. */
   date: string;
   mealKind: string;
-  /** The event's own name where the meal is one, and null everywhere else. Part of the link. */
+  /** The event's own name where the meal is one, and null everywhere else. */
   mealEventName: string | null;
-  /** "HH:mm:ss" — what a new shift's end time opens on. */
+  /** "HH:mm" or "HH:mm:ss" — what a new shift's end time opens on. */
   readyBy: string;
-  /** How many hands the meal is short, floored at one. What a new shift's capacity opens on. */
+  /** People needed minus Rostered. What a new shift's *Volunteers requested* opens on. */
   suggestedCapacity: number;
-  /** The shift being viewed and corrected, or null when one is being posted. */
-  shift: ShiftView | null;
-  onClose: () => void;
+  /** What the form opens on: the draft in hand, or the meal's saved shift. Null for a new one. */
+  values: ShiftFormValues | null;
   /**
-   * Saved. The planner re-reads its crew and its shifts; nothing about the address changes. Handed
-   * the shift's id when the save moved it under a roster, so the planner can warn, and null otherwise.
+   * Whether the meal already has a saved shift. It decides what the form announces itself as: a
+   * drafted shift nobody has saved is still one being posted, however many times it is reopened.
    */
-  onSaved: (movedShiftId: string | null) => void;
+  saved: boolean;
+  onClose: () => void;
+  /** Done: the draft, for the composer to hold until the meal is saved. */
+  onDone: (draft: MealShiftDraft) => void;
 }) {
-  const { getToken } = useAuth();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  // Escape closes, as it does over any panel covering what somebody was reading. The backdrop
-  // deliberately does not: this commits, and a stray click beside a half-typed form must not throw
-  // it away. That is the same split the meal-kind and vendor dialogs make, and the reason the way
-  // out of this one is called Cancel rather than Close.
+  // Escape closes, as it does over any panel covering what somebody was reading.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
     document.addEventListener("keydown", onKey);
-    // The planner behind must not scroll under the layer — the place the reader is coming back to
-    // is the place they left, and it moving while they were away is the one thing this whole
-    // arrangement exists to prevent.
+    // The planner behind must not scroll under the layer — the place the reader is coming back to is
+    // the place they left.
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -118,9 +96,7 @@ export function ShiftLayer({
     };
   }, [onClose]);
 
-  // A shift already raised opens on its own values, title included — re-deriving the title would
-  // rename a shift somebody had deliberately retitled. A new one opens on what the planner knows.
-  const values: ShiftFormValues = shift ?? {
+  const opening: ShiftFormValues = values ?? {
     title: derivedTitle(mealKind, mealEventName, date),
     shiftDate: date,
     endTime: readyBy,
@@ -128,33 +104,20 @@ export function ShiftLayer({
   };
   const meal = mealEventName || mealKind;
 
-  async function save(event: React.FormEvent<HTMLFormElement>) {
+  function done(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const input: ShiftInput = {
-      ...readShiftForm(new FormData(event.currentTarget)),
-      // D-14. All three move together — the server refuses half a link — and they are sent on a
-      // correction as well as on a new shift, because a save without them unlinks the shift.
-      mealDate: date,
-      mealKind,
-      mealEventName: mealEventName ?? null,
-    };
-
-    setBusy(true);
-    setError(null);
-    try {
-      const token = await getToken();
-      if (shift) {
-        await api.updateShift(shift.id, input, token);
-      } else {
-        await api.createShift(input, token);
-      }
-      onSaved(shift && movedUnderRoster(shift, input) ? shift.id : null);
-    } catch (e) {
-      setError(
-        toApiError(e, shift ? "We couldn’t save that change." : "We couldn’t post that shift.")
-      );
-      setBusy(false);
-    }
+    // Only what the meal save takes. The date is left behind on purpose: the server reads it off the
+    // meal, so there is no second copy of it to disagree.
+    const read = readShiftForm(new FormData(event.currentTarget));
+    onDone({
+      title: read.title,
+      description: read.description ?? null,
+      startTime: read.startTime,
+      endTime: read.endTime,
+      location: read.location ?? null,
+      capacity: read.capacity,
+      reminderOffsetsMinutes: read.reminderOffsetsMinutes ?? [],
+    });
   }
 
   return (
@@ -167,30 +130,34 @@ export function ShiftLayer({
       <div className="modal m-auto w-full max-w-prose">
         {/* The volunteers screen's own header, carried into the layer: the task, one line saying
             whose record this is, and `[Cancel] [Primary]` top right with no second copy at the foot
-            (§4, rules 3, 4 and 6). The same words as that screen, because it is that screen. */}
+            (§4, rules 3, 4 and 6). */}
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-hairline px-8 py-4">
           <div className="min-w-0">
             <h2 id="shift-layer-title" className="text-xl font-semibold text-ink">
-              {shift ? "Edit a shift" : "Post a shift"}
+              {saved ? "Edit a shift" : "Post a shift"}
             </h2>
-            {/* The meal it is for and the day, said once — the link is not a field, so this is the
-                only place a planner who opened the wrong block can see that they did. */}
+            {/* The meal it is for and the day, said once — there is no meal field, so this is the only
+                place a planner can see which meal the shift will belong to. */}
             <p className="mt-0.5 text-sm text-ink-secondary">
               For {meal} · {longDate(date)}
             </p>
           </div>
           <div className="flex flex-none gap-2">
-            <Button variant="secondary" onClick={onClose} disabled={busy}>
+            <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" form={SHIFT_FORM} busy={busy}>
-              {shift ? "Save changes" : "Post shift"}
+            {/* "Done", not "Post shift" or "Save changes" (D-27 answer 7). Nothing is posted or saved
+                by it, and a button that said so would be the one lie on the screen. */}
+            <Button type="submit" form={SHIFT_FORM}>
+              Done
             </Button>
           </div>
         </header>
         <div className="grid gap-6 px-8 pb-8 pt-6">
-          {error && <ErrorNotice error={error} />}
-          <ShiftFields shift={values} editing={shift !== null} fixedDate={date} onSubmit={save} />
+          {/* Said once, where the button is read, because it is the one thing about this layer that is
+              different from the volunteers screen it looks like. */}
+          <p className="text-sm text-ink-secondary">Saved when you save the meal.</p>
+          <ShiftFields shift={opening} editing={saved} fixedDate={date} onSubmit={done} />
         </div>
       </div>
     </div>
@@ -198,17 +165,40 @@ export function ShiftLayer({
 }
 
 /**
- * "Lunch preparation on Tuesday, 1 September 2026" — what a volunteer scrolling a list of shifts
- * needs to be able to tell apart at a glance.
+ * Whether a change to a shift touches when people have to turn up: its start or its end.
  *
- * <p>Day-first with the month spelled out, which is how this application writes every date
- * (`longDate`); the build row's example wrote it month-first, and one screen writing dates the
- * American way while every other writes them the Indian way is the drift that formatter exists to
- * stop.
+ * <p>The date is not compared, because a meal shift's date cannot change (D-27 answer 4). This is what
+ * decides the warning before *Update this meal* saves — *"3 volunteers are signed up. They’ll be told
+ * the new times."* (answer 6) — and the server makes the same comparison when it decides to tell them.
+ */
+export function timesChanged(
+  before: Pick<ShiftView, "startTime" | "endTime">,
+  after: Pick<MealShiftDraft, "startTime" | "endTime">
+): boolean {
+  return hhmm(before.startTime) !== hhmm(after.startTime) || hhmm(before.endTime) !== hhmm(after.endTime);
+}
+
+/**
+ * The warning before times change under a roster (D-27 answer 6), with the count said properly for one.
  *
- * <p>An event is named by its own name, as it is everywhere else on the planner: "Children's
- * Bhagavad-gita Reading preparation on …", not "Event preparation on …".
+ * <p>Exported so the Volunteer shifts edit screen can say the same sentence in the same words.
+ */
+export function timesChangedWarning(signedUp: number): string {
+  return signedUp === 1
+    ? "1 volunteer is signed up. They’ll be told the new times."
+    : `${signedUp} volunteers are signed up. They’ll be told the new times.`;
+}
+
+/**
+ * "Lunch preparation on Tuesday, 1 September 2026" — what a volunteer scrolling a list of shifts needs
+ * to be able to tell apart at a glance. Day-first with the month spelled out (`longDate`), and an event
+ * named by its own name rather than as another "Event".
  */
 export function derivedTitle(mealKind: string, mealEventName: string | null, date: string): string {
   return `${mealEventName || mealKind} preparation on ${longDate(date)}`;
+}
+
+/** "HH:mm" out of "HH:mm" or "HH:mm:ss". */
+function hhmm(time: string): string {
+  return time.slice(0, 5);
 }

@@ -1,12 +1,10 @@
 package org.iskcon.kms.document;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.meal.ServedMealService;
 import org.springframework.core.io.InputStreamResource;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -27,14 +25,11 @@ import org.springframework.web.bind.annotation.RestController;
  * permission would mean a cook has to ask somebody else for their own job sheet (brief §15 item 9).
  * Anybody who can see the plan can print the card for it.
  *
- * <p>A meal is addressed by its date and its kind rather than by an id, because that is what the
- * caller has — the meal's own row is created on demand by the first print, and asking a screen to
- * know an id that does not exist yet would be backwards.
- *
- * <p>An event is addressed by its name as well (V89, E4-S15 D1): every event is of kind Event, so
- * the date and the kind alone would print one card for the morning children's reading and the
- * evening Bhajan Prasadam together. {@code eventName} is optional and absent for Breakfast, Lunch
- * and Dinner, which are reached by exactly what they always were.
+ * <p><strong>A meal is addressed by its id (D-27).</strong> Until D-27 a card was asked for by a date,
+ * a kind's name and, for an event, the event's name, because the meal's own row was created on demand
+ * by the first print and a screen had no id to send. That identification is what let two unnamed
+ * events on one Saturday print as one card. Every meal has a row from the moment it is planned now,
+ * and the planner holds its id.
  */
 @RestController
 @RequestMapping("/api/v1/job-cards")
@@ -59,51 +54,35 @@ public class JobCardController {
 	 *
 	 * <p>{@code language} is the recipes appendix's language, not the sheet's — the worksheet is
 	 * always English. {@code none} asks for the worksheet on its own, and no language at all means
-	 * the temple's own where this meal's recipes are translated into it.
+	 * the temple's own.
 	 */
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public ResponseEntity<Map<String, Object>> request(
-			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-			@RequestParam String mealKind,
-			@RequestParam(name = "eventName", required = false) String eventName,
+			@RequestParam UUID mealId,
 			@RequestParam(name = "language", required = false) String language) {
 
-		String cardNumber = servedMealService.issueCardNumber(date, mealKind, eventName);
-		UUID documentId = documentService.requestJobCardPdf(
-				servedMealService.serviceFor(date, mealKind, eventName), language);
+		String cardNumber = servedMealService.issueCardNumber(mealId);
+		UUID documentId = documentService.requestJobCardPdf(mealId, language);
 		return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
 				"documentId", documentId, "cardNumber", cardNumber, "status", "PENDING"));
 	}
 
-	/**
-	 * What languages this meal's recipes can be printed in, and which the picker opens on (item 17).
-	 *
-	 * <p>The list is never the full picker of 23 languages. It is English — always, because English
-	 * is the source text — plus only those a translation actually exists in for this meal's
-	 * preparations. Offering Kannada with nothing behind it would print an English appendix under a
-	 * Kannada heading, which is worse than not offering it.
-	 */
+	/** What languages this meal's recipes can be printed in, and which the picker opens on (item 17). */
 	@GetMapping("/languages")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
-	public JobCardService.AppendixLanguages languages(
-			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-			@RequestParam String mealKind,
-			@RequestParam(name = "eventName", required = false) String eventName) {
-
-		return jobCardService.appendixLanguages(date, mealKind, eventName);
+	public JobCardService.AppendixLanguages languages(@RequestParam UUID mealId) {
+		return jobCardService.appendixLanguages(mealId);
 	}
 
 	/** Every card printed for this meal, latest version first. */
 	@GetMapping("/documents")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
-	public List<DocumentView> list(
-			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-			@RequestParam String mealKind,
-			@RequestParam(name = "eventName", required = false) String eventName) {
-
-		return documentService.listForMealService(
-				servedMealService.serviceFor(date, mealKind, eventName));
+	public List<DocumentView> list(@RequestParam UUID mealId) {
+		// Through require first, so a meal that is not this temple's is a refusal rather than an empty
+		// list that reads as "never printed".
+		servedMealService.require(mealId);
+		return documentService.listForMeal(mealId);
 	}
 
 	@GetMapping("/documents/{documentId}")
@@ -128,17 +107,14 @@ public class JobCardController {
 	@GetMapping(value = "/print", produces = "text/html;charset=UTF-8")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public ResponseEntity<String> print(
-			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-			@RequestParam String mealKind,
-			@RequestParam(name = "eventName", required = false) String eventName,
+			@RequestParam UUID mealId,
 			@RequestParam(name = "language", required = false) String language) {
 
 		// Printing issues the number too. A sheet that came out of the printer without one could not
 		// be traced back later, which is the only reason the number exists.
-		servedMealService.issueCardNumber(date, mealKind, eventName);
-		UUID mealServiceId = servedMealService.serviceFor(date, mealKind, eventName);
+		servedMealService.issueCardNumber(mealId);
 		return ResponseEntity.ok()
 				.contentType(new MediaType(MediaType.TEXT_HTML, java.nio.charset.StandardCharsets.UTF_8))
-				.body(generationService.renderJobCardHtml(mealServiceId, language));
+				.body(generationService.renderJobCardHtml(mealId, language));
 	}
 }

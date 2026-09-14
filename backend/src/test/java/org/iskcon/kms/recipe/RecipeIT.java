@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.meal.MealFixture;
 import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,9 +56,9 @@ class RecipeIT extends AbstractIntegrationTest {
 	void tearDown() {
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM recipe_ingredients");
-		// Ahead of recipes: meal_plans.recipe_id is ON DELETE RESTRICT, which is the whole reason a
+		// Ahead of recipes: meal_dishes.recipe_id is ON DELETE RESTRICT, which is the whole reason a
 		// cooked recipe cannot be deleted, and it holds this clean-up up just the same.
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		// Anything that moved through the stock ledger is tracked now, so the item rows exist
@@ -241,7 +242,7 @@ class RecipeIT extends AbstractIntegrationTest {
 		String id = createKhichdi();
 		planAMealOf(id);
 
-		// meal_plans.recipe_id is ON DELETE RESTRICT precisely so the record of what was served
+		// meal_dishes.recipe_id is ON DELETE RESTRICT precisely so the record of what was served
 		// cannot be hollowed out. The refusal names the alternative rather than just saying no.
 		mvc.perform(authed(delete("/api/v1/recipes/{id}", id)))
 				.andExpect(status().isConflict())
@@ -304,12 +305,9 @@ class RecipeIT extends AbstractIntegrationTest {
 	 * the reference, not the planning.
 	 */
 	private void planAMealOf(String recipeId) {
-		admin.update("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, recipe_id, target_yield,
-					day_type, status, ready_by, created_by)
-				VALUES (?, CURRENT_DATE, 'Lunch', ?::uuid, 100, 'REGULAR', 'PLANNED', '12:00',
-					(SELECT id FROM users WHERE firebase_uid = 'uid-admin-a'))
-				""", templeA, recipeId);
+		MealFixture.plan(admin, templeA, java.time.LocalDate.now(), "Lunch", java.time.LocalTime.NOON,
+				UUID.fromString(recipeId), java.math.BigDecimal.valueOf(100), "PLANNED",
+				admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'uid-admin-a'", UUID.class));
 	}
 
 	private String createKhichdi() throws Exception {

@@ -88,8 +88,7 @@ class SufficiencyIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
-		admin.execute("DELETE FROM meal_plans");
-		admin.execute("DELETE FROM meal_kinds");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM recipe_ingredients");
 		admin.execute("DELETE FROM recipes");
@@ -277,7 +276,11 @@ class SufficiencyIT extends AbstractIntegrationTest {
 		plan(d2);
 		day(d2).andExpect(jsonPath("$[0].status").value("SHORT"));
 
-		admin.update("UPDATE meal_plans SET status = 'COOKED' WHERE plan_date = ?", d1);
+		admin.update("""
+				UPDATE meal_dishes d SET status = 'COOKED'
+				FROM meals m JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				WHERE d.meal_id = m.id AND pd.plan_date = ?
+				""", d1);
 
 		day(d1).andExpect(jsonPath("$.length()").value(0));
 		day(d2).andExpect(jsonPath("$[0].status").value("SUFFICIENT"));
@@ -384,6 +387,23 @@ class SufficiencyIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[0].orderUrgency").doesNotExist());
 	}
 
+	/**
+	 * Each badge names its dish and the meal the dish belongs to (D-27), so the planner puts the
+	 * badge on a meal by its id rather than by matching a date and a kind's name.
+	 */
+	@Test
+	@DisplayName("a badge names its dish and its meal, by id")
+	void aBadgeNamesItsDishAndItsMeal() throws Exception {
+		plan(d1);
+		UUID dish = admin.queryForObject("SELECT id FROM meal_dishes", UUID.class);
+		UUID meal = admin.queryForObject("SELECT id FROM meals", UUID.class);
+
+		day(d1)
+				.andExpect(jsonPath("$[0].dishId").value(dish.toString()))
+				.andExpect(jsonPath("$[0].mealId").value(meal.toString()))
+				.andExpect(jsonPath("$[0].mealKind").value("Lunch"));
+	}
+
 	@Test
 	@DisplayName("a volunteer cannot read sufficiency")
 	void volunteerForbidden() throws Exception {
@@ -406,11 +426,11 @@ class SufficiencyIT extends AbstractIntegrationTest {
 	 * calendar hands them, and one of them will eventually be an Ekadashi.
 	 */
 	private void plan(LocalDate date, String targetYield) throws Exception {
-		mvc.perform(post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
+		mvc.perform(post("/api/v1/meals").header("Authorization", "Bearer valid-token")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"planDate\":\"" + date + "\",\"mealKind\":\"Lunch\",\"recipeId\":\"" + khichdi
-								+ "\",\"targetYield\":" + targetYield
-								+ ",\"adults\":100,\"dayType\":\"REGULAR\",\"ekadashiAcknowledged\":true}"))
+						.content(MealRequests.save("{\"planDate\":\"" + date + "\",\"mealKind\":\"Lunch\",\"recipeId\":\""
+								+ khichdi + "\",\"targetYield\":" + targetYield
+								+ ",\"adults\":100,\"ekadashiAcknowledged\":true}", admin, tenant)))
 				.andExpect(status().isCreated());
 	}
 

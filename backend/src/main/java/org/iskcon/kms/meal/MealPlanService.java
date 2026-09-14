@@ -8,18 +8,17 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
 import org.iskcon.kms.audit.AuditService;
@@ -33,38 +32,47 @@ import org.iskcon.kms.geo.PlaceSuggestionProvider;
 import org.iskcon.kms.geo.TravelTimeProvider;
 import org.iskcon.kms.occasion.OccasionService;
 import org.iskcon.kms.occasion.ResolvedOccasion;
+import org.iskcon.kms.shift.MealShiftDraft;
+import org.iskcon.kms.shift.ShiftService;
+import org.iskcon.kms.shift.ShiftView;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.iskcon.kms.tenancy.TempleClock;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Meal planning (E4-S4, redesigned by E4-S7). A plan is a recipe, a target quantity, a kind of meal,
- * and the time it must be ready.
+ * Meal planning (E4-S4, redesigned by E4-S7, rebuilt on meal rows by D-27).
+ *
+ * <p><strong>A meal is a row of its own.</strong> Rajeev's design, in his words: <em>"Meal Plan for
+ * each day wil be saved in a dedicated table with its own unique ID and related info. Then each Meal
+ * for that day (breakfast, Lunch, Dinner ....etc) will be created in a dedicated Meal table. Each
+ * meal gets its own unique ID and related infomration and a Foreign Key relation to the Meal Plan's
+ * ID."</em> So planning writes three things, in order: the day ({@code meal_plan_days}, one per temple
+ * per date, found or created), the meal ({@code meals}, found or created by its day, its kind's id and
+ * its event name), and the dishes ({@code meal_dishes}, each pointing at the meal). Before D-27 there
+ * was only the third, and a meal was whatever dish rows happened to share a date and two names.
+ *
+ * <p><strong>A meal and its volunteer shift are saved together.</strong> His ruling: <em>"The Sift
+ * when saved shoudl be left uncommited until the meal is saved. Once the meal is saved, we take the ID
+ * of the meal and update the Volenteer reruest with that ID and then commit everything."</em> Every
+ * save here runs in one transaction and hands the meal's id to {@link ShiftService#saveForMeal} once
+ * the meal row exists, so a refusal anywhere — a dish, the head count, the shift — leaves nothing
+ * behind: no meal, no dishes, no shift.
  *
  * <p>What a planner is <em>not</em> asked is what sort of day it is: weekend follows from the date
- * and festival from the calendar. The day type is derived here and stored, because a festival still
- * explains a large serving count a year later — but nobody chooses it. CATERING was the fourth value
- * and is gone (E4-S15): catering was never a kind of day, and a temple that caters now plans an
- * event that is going outside.
+ * and festival from the calendar. The day type is derived, stored on the day, and never chosen.
  *
  * <p><strong>Three main meals, and everything else is an event.</strong> Breakfast, Lunch and Dinner
- * are cooked 365 days a year for a small army and work from a head count. An event — a Bhajan
- * Prasadam, a Saturday reading for the children, food going to a school — is quantified by how much
- * to make, and its head count is context: thirty laddus and some chiwda is a real thing a temple
- * cooks, and the temple's own FHC Sabjis sheet plans bulk distribution in gross kilograms per dish
- * with no head count anywhere on it. So an event saves with an amount and nobody counted; a
- * Breakfast still does not.
+ * work from a head count. An event is quantified by how much to make, and its head count is context:
+ * thirty laddus and some chiwda is a real thing a temple cooks.
  *
- * <p>What this class no longer does is cook. Marking one dish cooked was a button beside every dish
- * on the planner, and the brief took it away: a cook with hot oil in front of them does not touch a
- * screen, and the temple wants what actually went out rather than a tick. Drawing stock now happens
- * once for a whole meal, from the returned job card, in {@link ServedMealService} — and a dish that
- * has been through that can no longer be edited or cancelled, because the stock has moved and a
- * mistake there is corrected with an inventory adjustment (E3-S7), not by erasing history.
+ * <p>What this class does not do is cook. Drawing stock happens once for a whole meal, from the
+ * returned job card, in {@link ServedMealService} — and a meal that has been through that can no
+ * longer be edited or cancelled, because the stock has moved.
  */
 @Service
 public class MealPlanService {
@@ -81,41 +89,44 @@ public class MealPlanService {
 	private final GeocodingProvider geocodingProvider;
 	private final TravelTimeProvider travelTimeProvider;
 	private final PlaceSuggestionProvider placeSuggestionProvider;
+	private final ServedMealService servedMealService;
+	private final ShiftService shiftService;
 
 	/**
 	 * How long a geocoded coordinate may be kept before it is looked up again (E4-S16 D4). Maps
-	 * Platform ToS §6.3.1 permits thirty days; §6.3.2's indefinite permission is deliberately not
-	 * relied on, because it requires the cache to be isolated to one end user and ours is read by
-	 * everyone at the temple.
+	 * Platform ToS §6.3.1 permits thirty days.
 	 */
 	private static final int GEOCODE_LIFE_DAYS = 30;
 
-	/**
-	 * How many event names the autocomplete offers (E4-S15 D9).
-	 *
-	 * <p>Ten, because this is read while somebody is typing. A longer list is not a better list: past
-	 * about ten the reader stops scanning it and goes back to typing the name out, which is the cost
-	 * this exists to remove.
-	 */
+	/** How many event names the autocomplete offers (E4-S15 D9): read while typing, so ten. */
 	private static final int MAX_EVENT_SUGGESTIONS = 10;
 
 	/**
 	 * How long before the guests eat we assume the vehicle leaves, when asking what the traffic will
-	 * be like at that hour. A traffic-aware route needs a departure time before it can tell you how
-	 * long the drive is, and the drive is what we are asking for — so something has to be assumed to
-	 * break the circle. An hour is close enough for a traffic model that reasons in bands of hours,
-	 * and being wrong about it moves the estimate by minutes, not by the answer.
+	 * be like at that hour. Being wrong about it moves the estimate by minutes, not by the answer.
 	 */
 	private static final Duration ASSUMED_DEPARTURE_LEAD = Duration.ofHours(1);
 
-	// No consumption service here any more: drawing stock belongs to recording a whole meal, which
-	// ServedMealService owns. This class plans; it no longer cooks.
+	/**
+	 * What volunteers are told when a meal is cancelled and the planner gave no reason. True, and all
+	 * a volunteer needs to stop coming.
+	 */
+	static final String DEFAULT_CANCEL_REASON = "The meal this shift was for has been cancelled.";
+
+	/**
+	 * {@code @Lazy} on the shift service, and the reason is a boundary rather than a cycle that exists
+	 * today. The shift package is another builder's, and the week view already reaches this package
+	 * from the other side (WorkforceService → ShiftService, MealCrewService → WorkforceService). A
+	 * proxy resolved on first use means a later constructor dependency from shifts back into meals is
+	 * a design question somebody can answer, not an application that will not start.
+	 */
 	public MealPlanService(
 			JdbcTemplate jdbc, AuditService auditService, OccasionService occasionService,
 			CalendarService calendarService,
 			MealKindService mealKindService, EkadashiPolicy ekadashiPolicy,
 			GeocodingProvider geocodingProvider, TravelTimeProvider travelTimeProvider,
-			PlaceSuggestionProvider placeSuggestionProvider, TempleClock clock) {
+			PlaceSuggestionProvider placeSuggestionProvider, TempleClock clock,
+			ServedMealService servedMealService, @Lazy ShiftService shiftService) {
 		this.clock = clock;
 		this.placeSuggestionProvider = placeSuggestionProvider;
 		this.jdbc = jdbc;
@@ -126,6 +137,8 @@ public class MealPlanService {
 		this.ekadashiPolicy = ekadashiPolicy;
 		this.geocodingProvider = geocodingProvider;
 		this.travelTimeProvider = travelTimeProvider;
+		this.servedMealService = servedMealService;
+		this.shiftService = shiftService;
 	}
 
 	// ---- Day-type suggestion --------------------------------------------
@@ -154,9 +167,9 @@ public class MealPlanService {
 	}
 
 	/**
-	 * Enforces the Ekadashi rule and returns whether an acknowledgment should be recorded on the plan.
+	 * Enforces the Ekadashi rule and returns whether an acknowledgment should be recorded on the dish.
 	 * If the day is Ekadashi and the recipe is not compatible, planning is blocked unless the caller
-	 * explicitly acknowledged it — the only, always-recorded path past the warning (no silent bypass).
+	 * explicitly acknowledged it — the only, always-recorded path past the warning.
 	 */
 	private boolean resolveEkadashiAck(LocalDate date, UUID recipeId, boolean acknowledged) {
 		EkadashiCheck check = ekadashiCheck(date, recipeId);
@@ -172,36 +185,37 @@ public class MealPlanService {
 
 	// ---- Read -----------------------------------------------------------
 
+	/**
+	 * The meals in a range as the planner reads them: each with its dishes, its card and recording,
+	 * and its live volunteer shift.
+	 *
+	 * <p>The shifts are read once for the range rather than once per meal. A meal shift's date always
+	 * comes from its meal (D-27, answer 4), so the range's own shifts are the ones that can belong to
+	 * these meals; the window is widened by a day each way only so that nothing about how a shift's
+	 * date is written can drop one off the edge of a week, and each is then matched by id.
+	 */
 	@Transactional(readOnly = true)
-	public List<MealPlanView> list(LocalDate from, LocalDate to, MealStatus status, DayType dayType) {
-		StringBuilder sql = new StringBuilder(SELECT + " WHERE 1 = 1");
-		List<Object> args = new ArrayList<>();
-		if (from != null) {
-			sql.append(" AND mp.plan_date >= ?");
-			args.add(from);
+	public List<ServedMeal> meals(LocalDate from, LocalDate to) {
+		List<ServedMeal> meals = servedMealService.list(from, to);
+		if (meals.isEmpty()) {
+			return meals;
 		}
-		if (to != null) {
-			sql.append(" AND mp.plan_date <= ?");
-			args.add(to);
+		Map<UUID, ShiftView> byMeal = new HashMap<>();
+		for (ShiftView shift : shiftService.list(
+				from == null ? null : from.minusDays(1), to == null ? null : to.plusDays(1), false)) {
+			if (shift.mealId() != null) {
+				byMeal.putIfAbsent(shift.mealId(), shift);
+			}
 		}
-		if (status != null) {
-			sql.append(" AND mp.status = ?");
-			args.add(status.name());
-		}
-		if (dayType != null) {
-			sql.append(" AND mp.day_type = ?");
-			args.add(dayType.name());
-		}
-		sql.append(" ORDER BY mp.plan_date, mp.ready_by, mp.meal_kind");
-		return jdbc.query(sql.toString(), MAPPER, args.toArray());
+		return meals.stream().map(m -> m.withVolunteerShift(byMeal.get(m.mealId()))).toList();
 	}
 
+	/** One meal as the planner reads it, with its live volunteer shift. */
 	@Transactional(readOnly = true)
-	public MealPlanView get(UUID id) {
-		return findById(id).orElseThrow(() -> notFound(id));
+	public ServedMeal meal(UUID mealId) {
+		ServedMeal meal = servedMealService.require(mealId);
+		return meal.withVolunteerShift(shiftService.findForMeal(mealId).orElse(null));
 	}
-
-	// ---- Write ----------------------------------------------------------
 
 	// ---- Reusing a plan (2026-09-05) -------------------------------------
 
@@ -209,32 +223,68 @@ public class MealPlanService {
 	 * What is in a source window, and what reusing it would do — without writing anything.
 	 *
 	 * <p>The same walk the commit performs, which is the point: a preview computed a second way is a
-	 * preview that can disagree with the thing it previews. {@link #reusePlan} calls this and then
-	 * writes what it said.
+	 * preview that can disagree with the thing it previews. {@link #reusePlan} walks the same
+	 * {@link #reuseWalk} and writes what it found.
 	 */
 	@Transactional(readOnly = true)
 	public ReusePlanPreview previewReuse(ReusePlanRequest request) {
+		return reuseWalk(request).preview();
+	}
+
+	/**
+	 * Writes what {@link #previewReuse} said it would, meal by meal.
+	 *
+	 * <p>Each copy goes through {@link #create}, never an insert, so every rule that governs a meal
+	 * governs a copied one — the head count, the event's own fields, the audit entry, and the
+	 * find-or-create that makes pressing it twice harmless. The occasion is the one thing deliberately
+	 * not carried, for the reason a feast is not offered at all. No volunteer shift is carried either:
+	 * a shift is somebody asking for help with one meal, and nobody has asked for this one yet.
+	 */
+	@Transactional
+	public ReusePlanResult reusePlan(AuthenticatedUser actor, ReusePlanRequest request) {
+		ReuseWalk walk = reuseWalk(request);
+		ReusePlanPreview preview = walk.preview();
+		if (preview.sourceWasEmpty()) {
+			return new ReusePlanResult(0, 0, 0, 0, true);
+		}
+		int copied = 0;
+		for (ReuseCopy copy : walk.copies()) {
+			create(actor, copyOf(copy.source(), copy.dishes(), copy.target()));
+			copied += copy.dishes().size();
+		}
+		ReusePlanPreview.Totals t = preview.totals();
+		return new ReusePlanResult(copied, t.daysWritten(), t.daysLeftAlone(), t.notCopied(), false);
+	}
+
+	/** One meal the reuse would write: which source meal, onto which date, with which of its dishes. */
+	private record ReuseCopy(ServedMeal source, LocalDate target, List<MealDishView> dishes) {
+	}
+
+	/** The preview and the copies it describes, computed once by one walk. */
+	private record ReuseWalk(ReusePlanPreview preview, List<ReuseCopy> copies) {
+	}
+
+	private ReuseWalk reuseWalk(ReusePlanRequest request) {
 		LocalDate sourceEnd = request.sourceStart().plusDays(request.days() - 1L);
-		List<MealPlanView> source = list(request.sourceStart(), sourceEnd, null, null).stream()
+		List<ServedMeal> source = servedMealService.list(request.sourceStart(), sourceEnd).stream()
 				.filter(m -> m.status() != MealStatus.CANCELLED)
 				.toList();
 		if (source.isEmpty()) {
-			return new ReusePlanPreview(true, List.of(), List.of(), List.of(), List.of(), List.of(),
-					new ReusePlanPreview.Totals(0, 0, 0, 0));
+			return new ReuseWalk(new ReusePlanPreview(true, List.of(), List.of(), List.of(), List.of(),
+					List.of(), new ReusePlanPreview.Totals(0, 0, 0, 0)), List.of());
 		}
 
-		// What is on offer, and what is not. A kind is offered when it is not an event and does not
-		// take its occasion from the calendar; an event is offered by name with the count that says
-		// how routine it is.
-		Map<String, MealKindView> kinds = new LinkedHashMap<>();
+		// Kinds by their id, never by name: the meal points at the kind, and a kind renamed since the
+		// source week was cooked is still that kind (D-27).
+		Map<UUID, MealKindView> kinds = new LinkedHashMap<>();
 		List<ReusePlanPreview.KindFound> kindsFound = new ArrayList<>();
 		List<ReusePlanPreview.EventFound> eventsFound = new ArrayList<>();
 		List<ReusePlanPreview.Excluded> excluded = new ArrayList<>();
 
-		Map<String, List<MealPlanView>> byKind = new LinkedHashMap<>();
-		Map<String, List<MealPlanView>> byEvent = new LinkedHashMap<>();
-		for (MealPlanView meal : source) {
-			MealKindView kind = kinds.computeIfAbsent(meal.mealKind(), mealKindService::require);
+		Map<String, List<ServedMeal>> byKind = new LinkedHashMap<>();
+		Map<String, List<ServedMeal>> byEvent = new LinkedHashMap<>();
+		for (ServedMeal meal : source) {
+			MealKindView kind = kinds.computeIfAbsent(meal.mealKindId(), mealKindService::requireById);
 			if (kind.isEvent()) {
 				byEvent.computeIfAbsent(nameOf(meal), k -> new ArrayList<>()).add(meal);
 			} else if (kind.needsOccasion()) {
@@ -246,20 +296,20 @@ public class MealPlanService {
 						"A feast takes its occasion from the calendar on the day it is cooked.",
 						meal.planDate()));
 			} else {
-				byKind.computeIfAbsent(meal.mealKind(), k -> new ArrayList<>()).add(meal);
+				byKind.computeIfAbsent(kind.name(), k -> new ArrayList<>()).add(meal);
 			}
 		}
 		byKind.forEach((name, meals) -> kindsFound.add(new ReusePlanPreview.KindFound(
-				name, (int) meals.stream().map(MealPlanView::planDate).distinct().count(), meals.size())));
+				name, (int) meals.stream().map(ServedMeal::planDate).distinct().count(), meals.size())));
 		byEvent.forEach((name, meals) -> eventsFound.add(new ReusePlanPreview.EventFound(
 				name,
-				(int) meals.stream().map(MealPlanView::planDate).distinct().count(),
-				meals.stream().anyMatch(MealPlanView::isOutside),
-				meals.stream().map(MealPlanView::planDate).max(LocalDate::compareTo).orElse(null))));
+				(int) meals.stream().map(ServedMeal::planDate).distinct().count(),
+				meals.stream().anyMatch(ServedMeal::isOutside),
+				meals.stream().map(ServedMeal::planDate).max(LocalDate::compareTo).orElse(null))));
 
 		List<ReusePlanPreview.HeadCount> headCounts = new ArrayList<>();
 		byKind.forEach((name, meals) -> {
-			MealPlanView largest = meals.stream()
+			ServedMeal largest = meals.stream()
 					.max(Comparator.comparingInt(m -> m.adults() == null ? 0 : m.adults()))
 					.orElse(meals.get(0));
 			headCounts.add(new ReusePlanPreview.HeadCount(
@@ -274,7 +324,8 @@ public class MealPlanService {
 				? Set.of() : new LinkedHashSet<>(request.eventNames());
 
 		List<ReusePlanPreview.TargetDay> days = new ArrayList<>();
-		int meals = 0;
+		List<ReuseCopy> copies = new ArrayList<>();
+		int dishesCopied = 0;
 		int daysWritten = 0;
 		int daysLeftAlone = 0;
 		int notCopied = 0;
@@ -283,14 +334,14 @@ public class MealPlanService {
 			LocalDate from = request.sourceStart().plusDays(offset);
 			LocalDate target = request.targetStart().plusDays(offset);
 
-			List<MealPlanView> thatDay = source.stream()
+			List<ServedMeal> thatDay = source.stream()
 					.filter(m -> m.planDate().equals(from))
-					.filter(m -> wanted(m, kinds, wantedKinds, wantedEvents))
+					.filter(m -> wanted(m, kinds.get(m.mealKindId()), wantedKinds, wantedEvents))
 					.toList();
 			if (thatDay.isEmpty()) {
 				continue;
 			}
-			boolean occupied = list(target, target, null, null).stream()
+			boolean occupied = servedMealService.list(target, target).stream()
 					.anyMatch(m -> m.status() != MealStatus.CANCELLED);
 			if (occupied) {
 				daysLeftAlone++;
@@ -300,21 +351,28 @@ public class MealPlanService {
 
 			List<ReusePlanPreview.PlannedMeal> landing = new ArrayList<>();
 			String fastName = null;
-			for (MealPlanView meal : thatDay) {
-				EkadashiCheck check = ekadashiCheck(target, meal.recipeId());
-				boolean refused = check.isEkadashi() && !check.compatible();
-				if (check.isEkadashi()) {
-					// The fast's own name comes from the calendar rather than from the check, which
-					// only answers whether a recipe suits it.
-					fastName = calendarService.day(target).map(CalendarDayView::ekadashiName).orElse(null);
+			for (ServedMeal meal : thatDay) {
+				List<MealDishView> copyable = new ArrayList<>();
+				for (MealDishView dish : live(meal)) {
+					EkadashiCheck check = ekadashiCheck(target, dish.recipeId());
+					boolean refused = check.isEkadashi() && !check.compatible();
+					if (check.isEkadashi()) {
+						// The fast's own name comes from the calendar rather than from the check, which
+						// only answers whether a recipe suits it.
+						fastName = calendarService.day(target).map(CalendarDayView::ekadashiName).orElse(null);
+					}
+					landing.add(new ReusePlanPreview.PlannedMeal(
+							meal.mealKind(), meal.eventName(), dish.recipeName(), !refused,
+							refused ? refusedBecause(dish, check) : null));
+					if (refused) {
+						notCopied++;
+					} else {
+						dishesCopied++;
+						copyable.add(dish);
+					}
 				}
-				landing.add(new ReusePlanPreview.PlannedMeal(
-						meal.mealKind(), meal.eventName(), meal.recipeName(), !refused,
-						refused ? refusedBecause(meal, check) : null));
-				if (refused) {
-					notCopied++;
-				} else {
-					meals++;
+				if (!copyable.isEmpty()) {
+					copies.add(new ReuseCopy(meal, target, copyable));
 				}
 			}
 			if (landing.stream().anyMatch(ReusePlanPreview.PlannedMeal::copied)) {
@@ -323,250 +381,389 @@ public class MealPlanService {
 			days.add(new ReusePlanPreview.TargetDay(target, from, false, fastName, landing));
 		}
 
-		return new ReusePlanPreview(false, kindsFound, eventsFound, excluded, headCounts, days,
-				new ReusePlanPreview.Totals(meals, daysWritten, daysLeftAlone, notCopied));
-	}
-
-	/**
-	 * Writes what {@link #previewReuse} said it would.
-	 *
-	 * <p>Each meal goes through {@link #create}, never an insert, so every rule that governs a meal
-	 * governs a copied one — the head count, the event's own fields, the audit entry. The occasion is
-	 * the one thing deliberately not carried, for the reason a feast is not offered at all.
-	 */
-	@Transactional
-	public ReusePlanResult reusePlan(AuthenticatedUser actor, ReusePlanRequest request) {
-		ReusePlanPreview preview = previewReuse(request);
-		if (preview.sourceWasEmpty()) {
-			return new ReusePlanResult(0, 0, 0, 0, true);
-		}
-		Map<LocalDate, List<MealPlanView>> sourceByDay = list(
-				request.sourceStart(), request.sourceStart().plusDays(request.days() - 1L), null, null)
-				.stream()
-				.filter(m -> m.status() != MealStatus.CANCELLED)
-				.collect(Collectors.groupingBy(MealPlanView::planDate));
-
-		int copied = 0;
-		for (ReusePlanPreview.TargetDay day : preview.days()) {
-			if (day.alreadyPlanned()) {
-				continue;
-			}
-			List<MealPlanView> from = sourceByDay.getOrDefault(day.sourceDate(), List.of());
-			for (ReusePlanPreview.PlannedMeal planned : day.meals()) {
-				if (!planned.copied()) {
-					continue;
-				}
-				from.stream()
-						.filter(m -> m.mealKind().equals(planned.mealKind())
-								&& Objects.equals(m.eventName(), planned.eventName())
-								&& m.recipeName().equals(planned.recipeName()))
-						.findFirst()
-						.ifPresent(meal -> create(actor, copyOf(meal, day.targetDate())));
-				copied++;
-			}
-		}
-		ReusePlanPreview.Totals t = preview.totals();
-		return new ReusePlanResult(copied, t.daysWritten(), t.daysLeftAlone(), t.notCopied(), false);
+		ReusePlanPreview preview = new ReusePlanPreview(false, kindsFound, eventsFound, excluded, headCounts,
+				days, new ReusePlanPreview.Totals(dishesCopied, daysWritten, daysLeftAlone, notCopied));
+		return new ReuseWalk(preview, copies);
 	}
 
 	/** The name an event is grouped under, or the kind's own name where it has none. */
-	private static String nameOf(MealPlanView meal) {
+	private static String nameOf(ServedMeal meal) {
 		return meal.eventName() == null || meal.eventName().isBlank()
 				? meal.mealKind() : meal.eventName();
 	}
 
 	private static boolean wanted(
-			MealPlanView meal, Map<String, MealKindView> kinds,
-			Set<String> wantedKinds, Set<String> wantedEvents) {
-
-		MealKindView kind = kinds.get(meal.mealKind());
+			ServedMeal meal, MealKindView kind, Set<String> wantedKinds, Set<String> wantedEvents) {
 		if (kind == null || kind.needsOccasion()) {
 			return false;
 		}
-		return kind.isEvent() ? wantedEvents.contains(nameOf(meal)) : wantedKinds.contains(meal.mealKind());
+		return kind.isEvent() ? wantedEvents.contains(nameOf(meal)) : wantedKinds.contains(kind.name());
 	}
 
-	/** Why a meal was left behind, in the words the screen prints. */
-	private static String refusedBecause(MealPlanView meal, EkadashiCheck check) {
+	/** Why a dish was left behind, in the words the screen prints. */
+	private static String refusedBecause(MealDishView dish, EkadashiCheck check) {
 		return check.offendingIngredients().isEmpty()
-				? meal.recipeName() + " does not suit the fast on this day."
-				: meal.recipeName() + " contains "
+				? dish.recipeName() + " does not suit the fast on this day."
+				: dish.recipeName() + " contains "
 						+ String.join(", ", check.offendingIngredients()) + ", which the fast forbids.";
 	}
 
+	/** The dishes of a meal that are still meant to be, or were, cooked. */
+	private static List<MealDishView> live(ServedMeal meal) {
+		return meal.dishes().stream().filter(d -> d.status() != MealStatus.CANCELLED).toList();
+	}
+
+	// ---- Write ----------------------------------------------------------
+
+	/**
+	 * Plans a meal: finds or creates its day and its row, writes its facts, adds its dishes, and saves
+	 * the volunteer shift it asks for — all in this one transaction (D-27).
+	 *
+	 * <p><strong>Find, or create.</strong> A meal is its day, its kind and its event name compared
+	 * without regard to case ({@code meals_one_per_meal}, V136). Planning one that already exists
+	 * reuses its row — its id, its card number and any shift already linked to it — and adds these
+	 * dishes to it. That includes a meal that was cancelled: V136's header explains why the index is
+	 * deliberately not partial, and a cancelled Lunch planned again is the same Lunch rather than a
+	 * second row nobody could tell apart from the first. A meal already recorded is refused, because
+	 * its stock has moved and its dishes are history.
+	 *
+	 * <p><strong>The shift is last, and inside.</strong> {@link ShiftService#saveForMeal} is called
+	 * only once the meal row exists, because the shift takes its date from that row, and it runs in
+	 * this transaction, so a shift that is refused takes the meal and its dishes with it.
+	 */
 	@Transactional
-	public SavedMealPlan create(AuthenticatedUser actor, CreateMealPlanRequest request) {
-		MealKindView kind = mealKindService.require(request.mealKind());
-		RecipeRef recipe = findRecipe(request.recipeId());
-
+	public SavedMeal create(AuthenticatedUser actor, SaveMealRequest request) {
+		MealKindView kind = mealKindService.requireById(request.mealKindId());
+		LocalDate date = request.planDate();
 		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
-		Event event = requireEventFields(kind, request);
-		requireHeadCount(request.adults(), request.children(), request.seniors(), request.planDate(), kind);
-		DayType dayType = deriveDayType(request.planDate());
-		String occasionName = resolveOccasionName(kind, dayType, request.planDate(), request.occasionName());
-		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
-		Located located = place(event, null, null, null, null);
+		Event event = requireEventFields(kind, request.eventName(), request.isOutside(), request.handover(),
+				request.contactName(), request.contactPhone(), request.deliveryAddress(),
+				request.deliverySubLocation(), request.deliveryPlaceId(), request.deliveryLatitude(),
+				request.deliveryLongitude(), request.guestsEatAt(), request.travelMinutes(),
+				request.travelMinutesManual(), readyBy);
+		requireHeadCount(request.adults(), request.children(), request.seniors(), date, kind);
+		DayType dayType = deriveDayType(date);
+		String occasionName = resolveOccasionName(kind, dayType, date, request.occasionName());
 
-		UUID id = UUID.randomUUID();
-		jdbc.update(connection -> {
-			var ps = connection.prepareStatement("""
-					INSERT INTO meal_plans (
-						id, tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield,
-						day_type, occasion_name, status, event_name, is_outside, handover,
-						contact_name, contact_phone, delivery_address, delivery_sub_location,
-						delivery_place_id, guests_eat_at, travel_minutes, travel_minutes_source,
-						delivery_latitude, delivery_longitude, geocoded_at, purpose,
-						adults, children, seniors, crew_required, kitchen_notes, server_notes,
-						ekadashi_ack_by, ekadashi_ack_at, created_by)
-					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-						?, ?, ?, ?, ?, ?, ?, ?, ?)
-					""");
-			ps.setObject(1, id);
-			ps.setObject(2, request.planDate());
-			ps.setString(3, kind.name());
-			ps.setObject(4, readyBy);
-			ps.setObject(5, request.recipeId());
-			ps.setBigDecimal(6, request.targetYield());
-			ps.setString(7, dayType.name());
-			ps.setString(8, occasionName);
-			ps.setString(9, event.name());
-			ps.setBoolean(10, event.outside());
-			ps.setString(11, event.handover() == null ? null : event.handover().name());
-			ps.setString(12, event.contactName());
-			ps.setString(13, event.contactPhone());
-			ps.setString(14, event.deliveryAddress());
-			ps.setString(15, event.subLocation());
-			ps.setString(16, event.placeId());
-			ps.setObject(17, event.guestsEatAt());
-			ps.setObject(18, event.travelMinutes(), java.sql.Types.INTEGER);
-			ps.setString(19, event.travelSource());
-			ps.setBigDecimal(20, located.latitude());
-			ps.setBigDecimal(21, located.longitude());
-			ps.setObject(22, located.at());
-			ps.setString(23, trimToNull(request.purpose()));
-			ps.setObject(24, request.adults(), java.sql.Types.INTEGER);
-			ps.setObject(25, request.children(), java.sql.Types.INTEGER);
-			ps.setObject(26, request.seniors(), java.sql.Types.INTEGER);
-			ps.setObject(27, request.crewRequired(), java.sql.Types.INTEGER);
-			ps.setString(28, trimToNull(request.kitchenNotes()));
-			ps.setString(29, trimToNull(request.serverNotes()));
-			ps.setObject(30, recordAck ? actor.getUserId() : null);
-			ps.setObject(31, recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null);
-			ps.setObject(32, actor.getUserId());
-			return ps;
-		});
+		for (SaveMealRequest.DishDraft dish : request.dishes()) {
+			if (dish.id() != null) {
+				// A dish id belongs to a meal that already exists, and changing that meal is an
+				// update. Accepting one here would let a plan quietly edit a dish of some other meal.
+				throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
+						Map.of("field", "dishes", "dishId", dish.id()));
+			}
+		}
+		List<NewDish> dishes = checkDishes(date, request.dishes(), request.ekadashiAcknowledged());
 
-		auditService.record(actor, AuditAction.MEAL_PLANNED, AuditEntityType.MEAL_PLAN, id,
-				null, snapshot(request.planDate(), kind.name(), readyBy, recipe.name(), dayType), null);
-		return new SavedMealPlan(id, located.warning());
+		UUID dayId = dayFor(date, dayType);
+		MealRow existing = findMeal(dayId, kind.id(), event.name()).orElse(null);
+		if (existing != null && existing.recordedAt() != null) {
+			throw new ApplicationException(ErrorCode.MEAL_ALREADY_RECORDED, Map.of("mealId", existing.id()));
+		}
+		Map<String, Object> before = existing == null ? null : snapshot(existing.id());
+
+		Located located = existing == null
+				? place(event, null, null, null, null)
+				: place(event, existing.deliveryAddress(), existing.deliveryLatitude(),
+						existing.deliveryLongitude(), existing.geocodedAt());
+
+		UUID mealId = existing != null ? existing.id() : insertMeal(dayId, kind.id(), event.name(), readyBy);
+		writeMealFacts(mealId, event, located, occasionName, readyBy, request.purpose(), request.adults(),
+				request.children(), request.seniors(), request.crewRequired(), request.kitchenNotes(),
+				request.serverNotes());
+		for (NewDish dish : dishes) {
+			insertDish(actor, mealId, dish);
+		}
+
+		saveShift(actor, mealId, request.volunteerShift());
+
+		auditService.record(actor, AuditAction.MEAL_PLANNED, AuditEntityType.MEAL, mealId,
+				before, snapshot(mealId), null);
+		return new SavedMeal(mealId, located.warning());
 	}
 
 	/**
-	 * Swaps or edits a dish in place (B4) — the recipe, the servings, the head count, the notes.
+	 * Changes a meal that has not been recorded — its facts, its dishes and its volunteer shift — in
+	 * one transaction (D-27, answer 7: <em>"nothing saved until the meal is saved : Aggreed"</em>).
 	 *
 	 * <p>Allowed right up until the meal is recorded, and refused the moment it is. A cooked dish has
 	 * had its ingredients drawn against a figure, and letting somebody change the figure afterwards
 	 * would leave the stock ledger describing a meal that never happened; a mistake there is corrected
-	 * with an inventory adjustment (E3-S7), not by rewriting the past.
+	 * (T-007), not rewritten.
 	 *
-	 * <p>The two refusals say different things on purpose. A cooked dish, or one belonging to a meal
-	 * whose card has already been typed in, is MEAL_ALREADY_RECORDED — the change is too late.
-	 * A cancelled dish is MEAL_PLAN_NOT_OPEN — the change is beside the point.
+	 * <p>The dishes are the whole list: kept, added, or — a planned dish the list leaves out —
+	 * cancelled. A dish named by an id that is not this meal's is refused as not found; one that is
+	 * this meal's but no longer planned is {@code MEAL_PLAN_NOT_OPEN}, because the change is beside
+	 * the point.
+	 *
+	 * <p>A null {@code volunteerShift} leaves the meal's shift exactly as it is.
 	 */
 	@Transactional
-	public SavedMealPlan update(AuthenticatedUser actor, UUID id, UpdateMealPlanRequest request) {
-		MealPlanRow before = findRow(id).orElseThrow(() -> notFound(id));
-		if (before.status() == MealStatus.COOKED || mealRecorded(before)) {
-			throw new ApplicationException(ErrorCode.MEAL_ALREADY_RECORDED, Map.of("mealPlanId", id));
+	public SavedMeal update(AuthenticatedUser actor, UUID mealId, UpdateMealRequest request) {
+		MealRow row = lockMeal(mealId);
+		ServedMeal meal = servedMealService.require(mealId);
+		if (meal.recorded() || meal.dishes().stream().anyMatch(d -> d.status() == MealStatus.COOKED)) {
+			throw new ApplicationException(ErrorCode.MEAL_ALREADY_RECORDED, Map.of("mealId", mealId));
 		}
-		if (before.status() != MealStatus.PLANNED) {
-			throw new ApplicationException(ErrorCode.MEAL_PLAN_NOT_OPEN, Map.of("mealPlanId", id));
-		}
-		MealKindView kind = mealKindService.require(request.mealKind());
-		RecipeRef recipe = findRecipe(request.recipeId());
+
+		MealKindView kind = mealKindService.requireById(row.mealKindId());
+		LocalDate date = row.planDate();
 		LocalTime readyBy = resolveReadyBy(kind, request.readyBy());
-		Event event = requireEventFields(kind, request);
-		requireHeadCount(request.adults(), request.children(), request.seniors(), request.planDate(), kind);
-		DayType dayType = deriveDayType(request.planDate());
-		String occasionName = resolveOccasionName(kind, dayType, request.planDate(), request.occasionName());
-		boolean recordAck = resolveEkadashiAck(request.planDate(), request.recipeId(), request.ekadashiAcknowledged());
-		Located located = place(event, before.deliveryAddress(),
-				before.deliveryLatitude(), before.deliveryLongitude(), before.geocodedAt());
+		Event event = requireEventFields(kind, request.eventName(), request.isOutside(), request.handover(),
+				request.contactName(), request.contactPhone(), request.deliveryAddress(),
+				request.deliverySubLocation(), request.deliveryPlaceId(), request.deliveryLatitude(),
+				request.deliveryLongitude(), request.guestsEatAt(), request.travelMinutes(),
+				request.travelMinutesManual(), readyBy);
+		requireHeadCount(request.adults(), request.children(), request.seniors(), date, kind);
+		String occasionName = resolveOccasionName(kind, deriveDayType(date), date, request.occasionName());
 
-		jdbc.update("""
-				UPDATE meal_plans
-				SET plan_date = ?, meal_kind = ?, ready_by = ?, recipe_id = ?, target_yield = ?,
-					day_type = ?, occasion_name = ?, event_name = ?, is_outside = ?, handover = ?,
-					contact_name = ?, contact_phone = ?, delivery_address = ?,
-					delivery_sub_location = ?, delivery_place_id = ?, guests_eat_at = ?,
-					travel_minutes = ?, travel_minutes_source = ?,
-					delivery_latitude = ?, delivery_longitude = ?, geocoded_at = ?,
-					purpose = ?, adults = ?, children = ?, seniors = ?, crew_required = ?,
-					kitchen_notes = ?, server_notes = ?,
-					ekadashi_ack_by = ?, ekadashi_ack_at = ?, updated_at = now()
-				WHERE id = ?
-				""",
-				request.planDate(), kind.name(), readyBy, request.recipeId(), request.targetYield(),
-				dayType.name(), occasionName, event.name(), event.outside(),
-				event.handover() == null ? null : event.handover().name(),
-				event.contactName(), event.contactPhone(), event.deliveryAddress(),
-				event.subLocation(), event.placeId(), event.guestsEatAt(),
-				event.travelMinutes(), event.travelSource(),
-				located.latitude(), located.longitude(), located.at(),
-				trimToNull(request.purpose()),
-				request.adults(), request.children(), request.seniors(), request.crewRequired(),
-				trimToNull(request.kitchenNotes()), trimToNull(request.serverNotes()),
-				recordAck ? actor.getUserId() : null,
-				recordAck ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
-				id);
+		if (!sameEvent(event.name(), row.eventName())) {
+			// Renaming an event onto the name of another event that day would make two meals one
+			// identity. The index refuses it; asking first means the refusal names the field.
+			Optional<MealRow> clash = findMeal(row.mealPlanDayId(), row.mealKindId(), event.name());
+			if (clash.isPresent() && !clash.get().id().equals(mealId)) {
+				throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
+						Map.of("field", "eventName", "mealId", mealId));
+			}
+		}
 
-		auditService.record(actor, AuditAction.MEAL_PLAN_UPDATED, AuditEntityType.MEAL_PLAN, id,
-				snapshot(before.planDate(), before.mealKind(), before.readyBy(), recipe.name(), before.dayType()),
-				snapshot(request.planDate(), kind.name(), readyBy, recipe.name(), dayType), null);
-		return new SavedMealPlan(id, located.warning());
+		Map<UUID, MealDishView> current = new LinkedHashMap<>();
+		meal.dishes().forEach(d -> current.put(d.id(), d));
+		List<SaveMealRequest.DishDraft> kept = new ArrayList<>();
+		List<SaveMealRequest.DishDraft> added = new ArrayList<>();
+		for (SaveMealRequest.DishDraft draft : request.dishes()) {
+			if (draft.id() == null) {
+				added.add(draft);
+				continue;
+			}
+			MealDishView dish = current.get(draft.id());
+			if (dish == null) {
+				throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("dishId", draft.id()));
+			}
+			if (dish.status() != MealStatus.PLANNED) {
+				throw new ApplicationException(ErrorCode.MEAL_PLAN_NOT_OPEN, Map.of("dishId", draft.id()));
+			}
+			kept.add(draft);
+		}
+		List<NewDish> keptChecked = checkDishes(date, kept, request.ekadashiAcknowledged());
+		List<NewDish> addedChecked = checkDishes(date, added, request.ekadashiAcknowledged());
+
+		Map<String, Object> before = snapshot(mealId);
+		Located located = place(event, row.deliveryAddress(), row.deliveryLatitude(),
+				row.deliveryLongitude(), row.geocodedAt());
+
+		writeMealFacts(mealId, event, located, occasionName, readyBy, request.purpose(), request.adults(),
+				request.children(), request.seniors(), request.crewRequired(), request.kitchenNotes(),
+				request.serverNotes());
+
+		// Dropped first, so the meal never holds both the old list and the new one mid-statement.
+		Set<UUID> keptIds = kept.stream().map(SaveMealRequest.DishDraft::id).collect(Collectors.toSet());
+		for (MealDishView dish : meal.dishes()) {
+			if (dish.status() == MealStatus.PLANNED && !keptIds.contains(dish.id())) {
+				jdbc.update("""
+						UPDATE meal_dishes SET status = 'CANCELLED', updated_at = now()
+						WHERE id = ? AND status = 'PLANNED'
+						""", dish.id());
+			}
+		}
+		for (int i = 0; i < kept.size(); i++) {
+			NewDish dish = keptChecked.get(i);
+			jdbc.update("""
+					UPDATE meal_dishes
+					SET recipe_id = ?, target_yield = ?, ekadashi_ack_by = ?, ekadashi_ack_at = ?, updated_at = now()
+					WHERE id = ?
+					""", dish.recipeId(), dish.targetYield(),
+					dish.acknowledged() ? actor.getUserId() : null,
+					dish.acknowledged() ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
+					kept.get(i).id());
+		}
+		for (NewDish dish : addedChecked) {
+			insertDish(actor, mealId, dish);
+		}
+
+		saveShift(actor, mealId, request.volunteerShift());
+
+		auditService.record(actor, AuditAction.MEAL_PLAN_UPDATED, AuditEntityType.MEAL, mealId,
+				before, snapshot(mealId), null);
+		return new SavedMeal(mealId, located.warning());
 	}
 
+	/**
+	 * Cancels a meal and, with it, the meal's volunteer shift (D-27, answer 5: <em>"Yes, warn then
+	 * cancel both."</em>). Answers with how many volunteers are being told.
+	 *
+	 * <p>Both in this transaction. {@link ShiftService#cancelForMeal} closes the shift here and sends
+	 * the existing cancellation message to everyone signed up or waitlisted only after this commits,
+	 * so a cancel that fails tells nobody anything. The warning before it — how many are signed up —
+	 * is read off the meal view's {@code volunteerShift}, which is what the planner already holds.
+	 *
+	 * <p>A meal that has been cooked cannot be cancelled: its stock has moved. Cancelling a meal that
+	 * is already cancelled is a quiet no-op, as it always was for a dish, apart from a shift somebody
+	 * left open on it, which is closed.
+	 */
 	@Transactional
-	public void cancel(AuthenticatedUser actor, UUID id) {
-		MealPlanRow row = findRow(id).orElseThrow(() -> notFound(id));
-		if (row.status() == MealStatus.COOKED) {
-			throw new ApplicationException(ErrorCode.CANNOT_CANCEL_COOKED_MEAL, Map.of("mealPlanId", id));
+	public int cancel(AuthenticatedUser actor, UUID mealId, String reason) {
+		lockMeal(mealId);
+		ServedMeal meal = servedMealService.require(mealId);
+		if (meal.recorded() || meal.dishes().stream().anyMatch(d -> d.status() == MealStatus.COOKED)) {
+			throw new ApplicationException(ErrorCode.CANNOT_CANCEL_COOKED_MEAL, Map.of("mealId", mealId));
 		}
-		if (row.status() == MealStatus.CANCELLED) {
-			return;
+		Map<String, Object> before = snapshot(mealId);
+		int dishes = jdbc.update("""
+				UPDATE meal_dishes SET status = 'CANCELLED', updated_at = now()
+				WHERE meal_id = ? AND status = 'PLANNED'
+				""", mealId);
+
+		// Always asked, never pre-checked: the shift service answers 0 for a meal with no live shift, and
+		// it counts the people it will tell under the same row lock it cancels under, so a separate
+		// "is there a shift?" read here would be a second answer that could disagree with the first.
+		String why = reason == null || reason.isBlank() ? DEFAULT_CANCEL_REASON : reason.trim();
+		int told = shiftService.cancelForMeal(mealId, why);
+
+		if (dishes > 0) {
+			auditService.record(actor, AuditAction.MEAL_PLAN_CANCELLED, AuditEntityType.MEAL, mealId,
+					before, snapshot(mealId), trimToNull(reason));
 		}
-		jdbc.update("UPDATE meal_plans SET status = 'CANCELLED', updated_at = now() WHERE id = ?", id);
-		auditService.record(actor, AuditAction.MEAL_PLAN_CANCELLED, AuditEntityType.MEAL_PLAN, id,
-				Map.of("status", "PLANNED"), Map.of("status", "CANCELLED"), null);
+		return told;
+	}
+
+	/** Hands the meal's shift draft to the shift service, inside the caller's transaction. */
+	private void saveShift(AuthenticatedUser actor, UUID mealId, MealShiftDraft draft) {
+		if (draft != null) {
+			shiftService.saveForMeal(actor, mealId, draft);
+		}
 	}
 
 	// ---------------------------------------------------------------------
 
+	/** A dish checked and ready to write: its recipe exists here, and the fast has been answered. */
+	private record NewDish(UUID recipeId, BigDecimal targetYield, boolean acknowledged) {
+	}
+
+	private List<NewDish> checkDishes(
+			LocalDate date, List<SaveMealRequest.DishDraft> drafts, boolean acknowledged) {
+		List<NewDish> out = new ArrayList<>(drafts.size());
+		for (SaveMealRequest.DishDraft draft : drafts) {
+			findRecipe(draft.recipeId());
+			out.add(new NewDish(draft.recipeId(), draft.targetYield(),
+					resolveEkadashiAck(date, draft.recipeId(), acknowledged)));
+		}
+		return out;
+	}
+
 	/**
-	 * Whether the meal this dish belongs to has already had its job card typed in.
+	 * The temple's plan for a date, created the first time anything is planned on it.
 	 *
-	 * <p>Asked with a query rather than through {@link ServedMealService}, which is what actually owns
-	 * this fact: that service reads meals through this one, and injecting it back would close the
-	 * circle. One column read is a cheaper answer than a service both ways round.
+	 * <p>The day type is written when the day is first made and never re-derived: it is a record of
+	 * what was true on the day (V136's column comment), and a festival added to the calendar later
+	 * must not quietly relabel a Tuesday somebody already cooked on. The conflict is on the table's
+	 * own unique constraint, so two planners on the same date resolve to one day.
 	 */
-	private boolean mealRecorded(MealPlanRow row) {
-		// The event's name is part of which meal this is (V89): without it, recording the morning
-		// children's reading would lock the evening Bhajan Prasadam out of being edited, because
-		// both are an Event on that Saturday. Compared the way the unique index folds it, so the
-		// answer here and the row ServedMealService finds are always the same row.
-		Integer recorded = jdbc.queryForObject("""
-				SELECT count(*) FROM meal_services
-				WHERE plan_date = ? AND meal_kind = ? AND recorded_at IS NOT NULL
-				  AND lower(COALESCE(event_name, '')) = lower(COALESCE(?::text, ''))
-				""", Integer.class, row.planDate(), row.mealKind(), row.eventName());
-		return recorded != null && recorded > 0;
+	private UUID dayFor(LocalDate date, DayType dayType) {
+		jdbc.update("""
+				INSERT INTO meal_plan_days (tenant_id, plan_date, day_type)
+				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?)
+				ON CONFLICT (tenant_id, plan_date) DO NOTHING
+				""", date, dayType.name());
+		return jdbc.queryForObject("SELECT id FROM meal_plan_days WHERE plan_date = ?", UUID.class, date);
+	}
+
+	/**
+	 * The meal on a day of this kind with this event name, compared the way the unique index compares
+	 * it, locked for the rest of the transaction.
+	 */
+	private Optional<MealRow> findMeal(UUID dayId, UUID kindId, String eventName) {
+		return jdbc.query(ROW_SELECT + """
+				 WHERE m.meal_plan_day_id = ? AND m.meal_kind_id = ?
+				   AND lower(COALESCE(m.event_name, '')) = lower(COALESCE(?::text, ''))
+				FOR UPDATE OF m
+				""", ROW_MAPPER, dayId, kindId, eventName).stream().findFirst();
+	}
+
+	/**
+	 * A new meal row with only what its NOT NULL columns demand; {@link #writeMealFacts} writes the
+	 * rest. The conflict target names V136's index expression exactly, because an ON CONFLICT that
+	 * inferred a different key would raise rather than find the row it meant: two planners pressing
+	 * save on the same lunch at the same moment get one meal between them.
+	 */
+	private UUID insertMeal(UUID dayId, UUID kindId, String eventName, LocalTime readyBy) {
+		jdbc.update("""
+				INSERT INTO meals (tenant_id, meal_plan_day_id, meal_kind_id, event_name, ready_by)
+				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?)
+				ON CONFLICT (meal_plan_day_id, meal_kind_id, lower(COALESCE(event_name, ''))) DO NOTHING
+				""", dayId, kindId, eventName, readyBy);
+		return findMeal(dayId, kindId, eventName).map(MealRow::id).orElseThrow();
+	}
+
+	private void writeMealFacts(
+			UUID mealId, Event event, Located located, String occasionName, LocalTime readyBy,
+			String purpose, Integer adults, Integer children, Integer seniors, Integer crewRequired,
+			String kitchenNotes, String serverNotes) {
+		jdbc.update("""
+				UPDATE meals
+				SET event_name = ?, occasion_name = ?, ready_by = ?, is_outside = ?, handover = ?,
+					contact_name = ?, contact_phone = ?, delivery_address = ?, delivery_sub_location = ?,
+					delivery_place_id = ?, guests_eat_at = ?, travel_minutes = ?, travel_minutes_source = ?,
+					delivery_latitude = ?, delivery_longitude = ?, geocoded_at = ?,
+					purpose = ?, adults = ?, children = ?, seniors = ?, crew_required = ?,
+					kitchen_notes = ?, server_notes = ?, updated_at = now()
+				WHERE id = ?
+				""",
+				event.name(), occasionName, readyBy, event.outside(),
+				event.handover() == null ? null : event.handover().name(),
+				event.contactName(), event.contactPhone(), event.deliveryAddress(), event.subLocation(),
+				event.placeId(), event.guestsEatAt(), event.travelMinutes(), event.travelSource(),
+				located.latitude(), located.longitude(), located.at(),
+				trimToNull(purpose), adults, children, seniors, crewRequired,
+				trimToNull(kitchenNotes), trimToNull(serverNotes),
+				mealId);
+	}
+
+	private void insertDish(AuthenticatedUser actor, UUID mealId, NewDish dish) {
+		jdbc.update("""
+				INSERT INTO meal_dishes (id, tenant_id, meal_id, recipe_id, target_yield, status,
+					ekadashi_ack_by, ekadashi_ack_at, created_by)
+				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, 'PLANNED', ?, ?, ?)
+				""",
+				UUID.randomUUID(), mealId, dish.recipeId(), dish.targetYield(),
+				dish.acknowledged() ? actor.getUserId() : null,
+				dish.acknowledged() ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
+				actor.getUserId());
+	}
+
+	/** The meal row, locked, or a refusal. Read before anything about it is decided. */
+	private MealRow lockMeal(UUID mealId) {
+		return jdbc.query(ROW_SELECT + " WHERE m.id = ? FOR UPDATE OF m", ROW_MAPPER, mealId)
+				.stream().findFirst()
+				.orElseThrow(() -> new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealId", mealId)));
+	}
+
+	/**
+	 * What the audit trail says a meal was or became — <strong>read back from the rows</strong>, never
+	 * built from the request (wave 4b, T-008: a trail built from what was asked for claimed a temple's
+	 * coordinates had moved in a field nobody edited).
+	 */
+	private Map<String, Object> snapshot(UUID mealId) {
+		ServedMeal meal = servedMealService.require(mealId);
+		Map<String, Object> s = new LinkedHashMap<>();
+		s.put("date", meal.planDate().toString());
+		s.put("mealKind", meal.mealKind());
+		if (meal.eventName() != null) {
+			s.put("eventName", meal.eventName());
+		}
+		s.put("readyBy", String.valueOf(meal.readyBy()));
+		s.put("dayType", meal.dayType().name());
+		s.put("status", meal.status().name());
+		s.put("dishes", meal.dishes().stream()
+				.filter(d -> d.status() != MealStatus.CANCELLED)
+				.map(d -> d.recipeName() + " " + d.targetYield().stripTrailingZeros().toPlainString())
+				.toList());
+		return s;
 	}
 
 	/**
 	 * The time this meal must be ready: what was entered, or the kind's own default. A kind with no
-	 * default — a deity offering, a catering order — has none to fall back on, and is refused rather
-	 * than given a guessed hour.
+	 * default is refused rather than given a guessed hour.
 	 */
 	private LocalTime resolveReadyBy(MealKindView kind, LocalTime entered) {
 		if (entered != null) {
@@ -582,39 +779,12 @@ public class MealPlanService {
 	/**
 	 * What an event needs beyond a recipe, asked in a chain and never all at once (E4-S15 D6).
 	 *
-	 * <p>An event has a <strong>name</strong>. That is the whole point of splitting events out of the
-	 * main meals: it is what makes the Saturday reading a thing the kitchen can see, cost and record
-	 * a year later, rather than a rounding error inside breakfast.
-	 *
-	 * <p>An event that is <strong>going outside</strong> has somebody to contact, name and phone
-	 * both — a contact you cannot ring is not a contact. A <strong>delivered</strong> one also has an
-	 * address and the time the guests eat, because those are what E4-S16 works backwards from.
-	 *
-	 * <p>And an <strong>in-house</strong> event stops at its name. Nothing else is asked and nothing
-	 * else is kept: a Bhajan Prasadam in the temple hall has no client, no venue and no handover, and
-	 * a form asking for one would be asking a question with no answer — which gets either a made-up
-	 * answer or a blocked save. That is why the three old kind flags collapsed into one (D5) rather
-	 * than {@code needsClient} being set true for Event.
-	 *
-	 * <p>Breakfast, Lunch and Dinner reach none of this. A kind that is not an event has every one of
-	 * these fields dropped on the way in, so a caller sending an address on a Lunch stores nothing —
-	 * the alternative, refusing it, would make the three main meals answerable for a shape that has
-	 * nothing to do with them.
+	 * <p>An event has a <strong>name</strong>. An event <strong>going outside</strong> has somebody to
+	 * contact, name and phone both. A <strong>delivered</strong> one also has an address and the time
+	 * the guests eat. An <strong>in-house</strong> event stops at its name. Breakfast, Lunch and
+	 * Dinner reach none of this: a kind that is not an event has every one of these fields dropped on
+	 * the way in, so a caller sending an address on a Lunch stores nothing.
 	 */
-	private Event requireEventFields(MealKindView kind, CreateMealPlanRequest r) {
-		return requireEventFields(kind, r.eventName(), r.isOutside(), r.handover(),
-				r.contactName(), r.contactPhone(), r.deliveryAddress(), r.deliverySubLocation(),
-				r.deliveryPlaceId(), r.deliveryLatitude(), r.deliveryLongitude(),
-				r.guestsEatAt(), r.travelMinutes(), r.travelMinutesManual(), r.readyBy());
-	}
-
-	private Event requireEventFields(MealKindView kind, UpdateMealPlanRequest r) {
-		return requireEventFields(kind, r.eventName(), r.isOutside(), r.handover(),
-				r.contactName(), r.contactPhone(), r.deliveryAddress(), r.deliverySubLocation(),
-				r.deliveryPlaceId(), r.deliveryLatitude(), r.deliveryLongitude(),
-				r.guestsEatAt(), r.travelMinutes(), r.travelMinutesManual(), r.readyBy());
-	}
-
 	private Event requireEventFields(
 			MealKindView kind, String eventName, boolean outside, Handover handover,
 			String contactName, String contactPhone, String deliveryAddress, String subLocation,
@@ -637,9 +807,7 @@ public class MealPlanService {
 			throw new ApplicationException(ErrorCode.EVENT_CONTACT_REQUIRED, Map.of("eventName", name));
 		}
 		if (handover != Handover.DELIVERY) {
-			// Pickup, or an outside plan that predates the question — V88 carried the old catering and
-			// outside-event rows across with no handover, because nobody was ever asked. Neither needs
-			// an address: somebody is coming to collect it, or somebody already did.
+			// Pickup, or an outside plan that predates the question. Neither needs an address.
 			return new Event(name, true, handover, who, phone, null, null, null, null, null, null, null, null);
 		}
 		String address = trimToNull(deliveryAddress);
@@ -657,34 +825,18 @@ public class MealPlanService {
 	}
 
 	/**
-	 * How many people this meal is for. A preparation is never planned without one.
+	 * How many people this meal is for. A main meal is never planned without one.
 	 *
 	 * <p>Every figure the plan is worth is derived from this number: how much of each preparation to
-	 * make, what the day's food costs, what a serving of it costs, how many plates the job card says.
-	 * The composer used to open on 100 adults, so a meal nobody had counted was still costed, scaled
-	 * and rostered against a number the application had invented. The planner picks the number; the
-	 * application does not guess it, and the endpoint is where that is true rather than the screen.
-	 *
-	 * <p>Absent and zero are refused alike. A request that simply omits the three counters is the
-	 * same meal with the same hole in it, and a guard a caller escapes by leaving a field out is not
-	 * a guard. What this does <em>not</em> do is reach backwards: rows already carrying no head count
-	 * stay exactly as they are, and the cost-per-serving report still totals them without dividing by
-	 * them and says how many it left out.
-	 *
-	 * <p>Checked as three counters rather than as the weighted total. Children count 0.6 of a portion
-	 * and seniors 0.8, so a hall of one child weighs 0.6 — a real head count that no arithmetic here
-	 * is entitled to round away to nothing.
+	 * make, what the day's food costs, what a serving of it costs. Absent and zero are refused alike,
+	 * and it is checked as three counters rather than as the weighted total, because a hall of one
+	 * child weighs 0.6 and that is a real head count. An event is exempt (E4-S15 D2): it is quantified
+	 * by how much to make.
 	 */
 	private static void requireHeadCount(
 			Integer adults, Integer children, Integer seniors, LocalDate date, MealKindView kind) {
 
 		if (kind.isEvent()) {
-			// An event is quantified by how much to make, and its head count is context (E4-S15 D2).
-			// Thirty laddus and some chiwda is a real thing a temple cooks, and the temple's own
-			// FHC Sabjis sheet — its crib for bulk distribution — is kept in gross kilograms per dish
-			// with no head count anywhere on it. Refusing an event for want of one would refuse a
-			// practice the temple already has. The exemption is exactly this: it does not loosen for
-			// the three main meals, and it does not let anything invent a number nobody typed.
 			return;
 		}
 		if (zeroOrAbsent(adults) && zeroOrAbsent(children) && zeroOrAbsent(seniors)) {
@@ -697,31 +849,15 @@ public class MealPlanService {
 		return count == null || count == 0;
 	}
 
-	/**
-	 * What kind of day this meal is cooked on — derived, never asked (E4-S7). The calendar decides,
-	 * and a festival outranks a weekend because it is what explains the quantity.
-	 *
-	 * <p>It no longer takes the kind. Food cooked for an outside client used to be stamped CATERING
-	 * whatever the date, which made a fact about the meal masquerade as a fact about the day: a
-	 * temple catering on Janmashtami lost the festival. E4-S15 removed the value, and an event going
-	 * outside now says so on the meal, where it belongs.
-	 */
+	/** What kind of day this meal is cooked on — derived from the calendar, never asked (E4-S7). */
 	private DayType deriveDayType(LocalDate date) {
 		return dayContext(date).suggestedDayType();
 	}
 
 	/**
-	 * Which festival this meal is for.
-	 *
-	 * <p>For every ordinary kind it is derived and nobody is asked: a meal on a festival day carries
-	 * the calendar's name for it, a meal on any other day carries none. A feast — a kind flagged
-	 * {@code needsOccasion} — is the one place a person may choose, because a temple anniversary or a
-	 * local festival the calendar does not carry is still a feast, and the calendar cannot know that.
-	 * What is chosen defaults to the calendar's answer, so the common case is one field already
-	 * filled in.
-	 *
-	 * <p>A feast with nothing to name is refused. That is the flag's whole meaning, and a feast with
-	 * no occasion is a large lunch nobody can look up next year.
+	 * Which festival this meal is for. Derived for every ordinary kind; a feast — a kind flagged
+	 * {@code needsOccasion} — may choose, defaulting to the calendar's answer, and a feast with
+	 * nothing to name is refused.
 	 */
 	private String resolveOccasionName(
 			MealKindView kind, DayType dayType, LocalDate date, String provided) {
@@ -748,31 +884,27 @@ public class MealPlanService {
 	/**
 	 * Everything this temple has undertaken to send out of the building, soonest first (E4-S15 D4).
 	 *
-	 * <p>Future only, cancelled ones dropped, one row per event rather than one per dish. The idea
-	 * behind the *Upcoming catering* table that was designed and never built was right — nobody
-	 * should discover a booking on the morning — and this is that idea keyed off <em>is this going
-	 * outside</em> instead of <em>is this catering</em>, so the school delivery and the community
-	 * programme are on it too.
-	 *
-	 * <p>Today is today <em>at the temple</em>. A list of what is coming up, read in Bengaluru at
-	 * half past six in the morning, must not have dropped this morning's delivery because the server
-	 * is still on yesterday in UTC.
+	 * <p>Future only, cancelled meals dropped, one row per meal. Today is today <em>at the
+	 * temple</em>, so a list read in Bengaluru at half past six in the morning has not dropped this
+	 * morning's delivery because the server is still on yesterday in UTC.
 	 */
 	@Transactional(readOnly = true)
 	public List<OutsideCommitment> outsideCommitments() {
 		return jdbc.query("""
-				SELECT mp.plan_date, mp.event_name, mp.meal_kind, mp.handover, mp.contact_name,
-					   mp.contact_phone, mp.delivery_address, mp.guests_eat_at,
-					   min(mp.ready_by) AS ready_by, count(*) AS preparations
-				FROM meal_plans mp
-				WHERE mp.is_outside
-				  AND mp.status <> 'CANCELLED'
-				  AND mp.plan_date >= ?
-				GROUP BY mp.plan_date, mp.event_name, mp.meal_kind, mp.handover, mp.contact_name,
-						 mp.contact_phone, mp.delivery_address, mp.guests_eat_at
-				ORDER BY mp.plan_date, min(mp.ready_by), mp.event_name
+				SELECT m.id, pd.plan_date, m.event_name, k.name AS meal_kind, m.handover, m.contact_name,
+					   m.contact_phone, m.delivery_address, m.ready_by, m.guests_eat_at,
+					   (SELECT count(*) FROM meal_dishes d
+						WHERE d.meal_id = m.id AND d.status <> 'CANCELLED') AS preparations
+				FROM meals m
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN meal_kinds k ON k.id = m.meal_kind_id
+				WHERE m.is_outside
+				  AND pd.plan_date >= ?
+				  AND EXISTS (SELECT 1 FROM meal_dishes d WHERE d.meal_id = m.id AND d.status <> 'CANCELLED')
+				ORDER BY pd.plan_date, m.ready_by, m.event_name
 				""",
 				(rs, n) -> new OutsideCommitment(
+						rs.getObject("id", UUID.class),
 						rs.getObject("plan_date", LocalDate.class),
 						rs.getString("event_name"),
 						rs.getString("meal_kind"),
@@ -790,42 +922,27 @@ public class MealPlanService {
 	 * The event names this temple has used before, newest first, with what each was last time
 	 * (E4-S15 D9).
 	 *
-	 * <p>Ten at most, because this is a list somebody reads while typing and not a report. Distinct
-	 * by name ignoring case — a temple that typed "Bhajan Prasadam" once and "bhajan prasadam" once
-	 * has used one name twice, and offering both back would teach it to keep doing that. The newest
-	 * spelling wins, along with the newest of everything else on the row, so choosing a suggestion
-	 * carries the previous event's contact forward rather than the first one ever entered.
-	 *
-	 * <p>A cancelled plan is not a name the temple uses. It is a plan somebody called off, and
-	 * suggesting it back would put a cancelled booking's contact into a new one.
-	 *
-	 * <p><strong>Newest is by plan date, and a future date is newer than today.</strong> An event
-	 * already planned for next month is the freshest thing the temple has said about that event, and
-	 * its contact is the one somebody would ring. Ordering by when the row was typed instead would
-	 * put a booking entered in January below one entered yesterday for a party that happened last
-	 * year.
-	 *
-	 * <p>Matched with {@code starts_with} rather than {@code LIKE}: a prefix typed into a search box
-	 * may contain {@code %} or {@code _}, and those are ordinary characters in an event's name.
-	 * Nothing here has to escape anything, and there is no pattern for a caller to smuggle in.
+	 * <p>Ten at most. Distinct by name ignoring case, with the newest spelling and the newest contact.
+	 * A cancelled meal is not a name the temple uses. Newest is by plan date, so an event already
+	 * planned for next month is the freshest thing the temple has said about it. Matched with
+	 * {@code starts_with} rather than {@code LIKE}, so {@code %} and {@code _} are ordinary characters.
 	 */
 	@Transactional(readOnly = true)
 	public List<EventSuggestion> eventNames(String prefix) {
 		String q = prefix == null ? "" : prefix.trim();
 		return jdbc.query("""
-				SELECT DISTINCT ON (lower(mp.event_name))
-					   mp.event_name, mp.is_outside, mp.handover, mp.contact_name,
-					   mp.contact_phone, mp.delivery_address, mp.plan_date, mp.created_at
-				FROM meal_plans mp
-				WHERE mp.event_name IS NOT NULL
-				  AND mp.status <> 'CANCELLED'
-				  AND starts_with(lower(mp.event_name), lower(?))
-				ORDER BY lower(mp.event_name), mp.plan_date DESC, mp.created_at DESC
+				SELECT DISTINCT ON (lower(m.event_name))
+					   m.event_name, m.is_outside, m.handover, m.contact_name,
+					   m.contact_phone, m.delivery_address, pd.plan_date, m.created_at
+				FROM meals m
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				WHERE m.event_name IS NOT NULL
+				  AND EXISTS (SELECT 1 FROM meal_dishes d WHERE d.meal_id = m.id AND d.status <> 'CANCELLED')
+				  AND starts_with(lower(m.event_name), lower(?))
+				ORDER BY lower(m.event_name), pd.plan_date DESC, m.created_at DESC
 				""", SUGGESTION_MAPPER, q).stream()
 				// DISTINCT ON has to sort by the name it is distinct on, so the ordering the caller
 				// actually wants — most recently used first — is applied to the result of that.
-				// Postgres would need a second SELECT wrapped round this one to do it; ten rows do
-				// not earn one.
 				.sorted(Comparator
 						.comparing(Suggestion::planDate, Comparator.reverseOrder())
 						.thenComparing(Suggestion::createdAt, Comparator.reverseOrder())
@@ -836,35 +953,25 @@ public class MealPlanService {
 	}
 
 	/**
-	 * Repeats an event forward for a number of weeks (E4-S15 D8).
+	 * Repeats a meal forward for a number of weeks (E4-S15 D8).
 	 *
-	 * <p><strong>Copies, not a series.</strong> Each one is a plan in its own right: editing the
-	 * third does not touch the first, cancelling the fifth does not offer *this one or all of them?*,
-	 * and there is no rule anywhere that has to be reasoned about later. A true recurrence with
-	 * per-occurrence exceptions was considered and deferred — it is a feature that grows teeth, and
-	 * the problem in front of us is somebody not wanting to type the same Saturday reading fifty-two
-	 * times.
+	 * <p><strong>Copies, not a series.</strong> Each is a meal in its own right: editing the third does
+	 * not touch the first, and there is no rule anywhere that has to be reasoned about later. Every
+	 * copy goes through {@link #create}, so a week whose dishes do not suit an Ekadashi falling there
+	 * is skipped whole and counted, never acknowledged on the planner's behalf.
 	 *
-	 * <p>Every copy goes through {@link #create}, so every rule that governs an event still governs a
-	 * copied one — which matters most for the rule that depends on the date rather than the meal: a
-	 * week whose recipe does not suit an Ekadashi falling there is skipped whole and counted, never
-	 * acknowledged on the planner's behalf. Nobody is looking at that meal to say it is all right.
+	 * <p>The meal is the one named by its id, with every dish it still has — before D-27 this found
+	 * "the event's dishes" by matching the clicked dish's date, kind and event name, which is the
+	 * text matching Rajeev ruled out. No volunteer shift is copied.
 	 */
 	@Transactional
-	public RepeatEventResult repeatForward(AuthenticatedUser actor, UUID id, int weeks) {
+	public RepeatEventResult repeatForward(AuthenticatedUser actor, UUID mealId, int weeks) {
 		if (weeks < 1 || weeks > 52) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
 					Map.of("field", "weeks", "weeks", weeks));
 		}
-		MealPlanView source = get(id);
-		// Every preparation of that event on that day, not just the dish that was clicked. Six copies
-		// of a two-dish event is two dishes on each of six days; anything else is a copy of half a
-		// meal.
-		List<MealPlanView> dishes = list(source.planDate(), source.planDate(), null, null).stream()
-				.filter(m -> m.status() != MealStatus.CANCELLED)
-				.filter(m -> m.mealKind().equalsIgnoreCase(source.mealKind()))
-				.filter(m -> sameEvent(m.eventName(), source.eventName()))
-				.toList();
+		ServedMeal source = servedMealService.require(mealId);
+		List<MealDishView> dishes = live(source);
 
 		int copied = 0;
 		int weeksCopied = 0;
@@ -879,10 +986,11 @@ public class MealPlanService {
 				refusedOnFast++;
 				continue;
 			}
-			for (MealPlanView dish : dishes) {
-				create(actor, copyOf(dish, target));
-				copied++;
+			if (dishes.isEmpty()) {
+				continue;
 			}
+			create(actor, copyOf(source, dishes, target));
+			copied += dishes.size();
 			weeksCopied++;
 		}
 		return new RepeatEventResult(copied, weeksCopied, refusedOnFast);
@@ -893,30 +1001,31 @@ public class MealPlanService {
 	}
 
 	/**
-	 * One planned dish, ready to be planned again on another date.
+	 * One meal with some of its dishes, ready to be planned again on another date.
 	 *
-	 * <p>The occasion is deliberately not carried across: a feast copied onto an ordinary Wednesday
-	 * is not last week's festival, and the derivation on the target date is the only thing that can
-	 * say what it is. Everything else carries, the event's own fields included — a repeated Saturday
-	 * reading is the same reading, for the same people, at the same place.
+	 * <p>The occasion is deliberately not carried: a feast copied onto an ordinary Wednesday is not
+	 * last week's festival. Everything else carries, the event's own fields included — except the
+	 * coordinates: a copy carries the place id and the save resolves the pin from that, because the
+	 * pin's thirty-day licence belongs to the lookup that produced it, not to the copy.
 	 */
-	private static CreateMealPlanRequest copyOf(MealPlanView meal, LocalDate target) {
-		return new CreateMealPlanRequest(
-				target, meal.mealKind(), meal.recipeId(), meal.targetYield(), meal.readyBy(),
+	private static SaveMealRequest copyOf(ServedMeal meal, List<MealDishView> dishes, LocalDate target) {
+		return new SaveMealRequest(
+				target, meal.mealKindId(), meal.readyBy(),
 				meal.eventName(), meal.isOutside(), meal.handover(), meal.contactName(),
 				meal.contactPhone(), meal.deliveryAddress(), meal.deliverySubLocation(),
 				meal.deliveryPlaceId(),
-				// No coordinates on a copy: MealPlanView does not carry them. The place id does, and
-				// the save resolves the pin from that rather than geocoding the address text again.
 				null, null,
-				// The travel figure carries with its source intact. A copy of the same drive to the
-				// same gate takes about as long, and somebody's manual correction must survive the
-				// copy or they would have to make it again every week.
+				// The travel figure carries with its source intact. Somebody's manual correction must
+				// survive the copy or they would have to make it again every week.
 				meal.travelMinutes(), "MANUAL".equals(meal.travelMinutesSource()),
 				meal.guestsEatAt(),
 				meal.purpose(), null,
 				meal.adults(), meal.children(), meal.seniors(), meal.crewRequired(),
-				meal.kitchenNotes(), meal.serverNotes(), false);
+				meal.kitchenNotes(), meal.serverNotes(), false,
+				dishes.stream()
+						.map(d -> new SaveMealRequest.DishDraft(null, d.recipeId(), d.targetYield()))
+						.toList(),
+				null);
 	}
 
 	// ---- Getting there (E4-S16) ------------------------------------------
@@ -924,46 +1033,35 @@ public class MealPlanService {
 	/**
 	 * When to leave the temple for this delivery, and how long the drive is expected to take.
 	 *
-	 * <p>Computed backwards from the time the guests eat, and from the <em>pessimistic</em> end of
-	 * the range: arriving early with the food is an inconvenience, arriving after the guests have sat
-	 * down is the thing this exists to prevent.
-	 *
-	 * <p>Every way this can fail to produce a number is an answer rather than an error. Not a
-	 * delivery, no serving time, no map service, an address nobody could place, no route — each is a
-	 * quiet line on the screen. An estimate is never a reason a plan is refused (E4-S16 D7): a temple
-	 * that wants to send food two hours away may.
-	 *
-	 * <p><strong>Nothing about the drive is stored.</strong> It is recomputed every time it is asked
-	 * for, which is both the licence (D4) and the truth — Friday's traffic is not Tuesday's.
+	 * <p>Computed backwards from the time the guests eat, from the <em>pessimistic</em> end of the
+	 * range. Every way this can fail to produce a number is an answer rather than an error, and
+	 * nothing about the drive is stored.
 	 */
 	@Transactional
-	public TravelEstimate travelEstimate(UUID id) {
-		MealPlanView plan = get(id);
-		if (plan.handover() != Handover.DELIVERY) {
+	public TravelEstimate travelEstimate(UUID mealId) {
+		ServedMeal meal = servedMealService.require(mealId);
+		if (meal.handover() != Handover.DELIVERY) {
 			return TravelEstimate.unavailable("NOT_A_DELIVERY");
 		}
-		if (plan.guestsEatAt() == null) {
+		if (meal.guestsEatAt() == null) {
 			return TravelEstimate.unavailable("NO_SERVING_TIME");
 		}
 		if (!travelTimeProvider.configured()) {
 			return TravelEstimate.unavailable("NO_MAP_SERVICE");
 		}
-		GeocodingProvider.Coordinates destination = deliveryCoordinates(id);
+		GeocodingProvider.Coordinates destination = deliveryCoordinates(mealId);
 		GeocodingProvider.Coordinates origin = templeCoordinates();
 		if (destination == null || origin == null) {
 			return TravelEstimate.unavailable("ADDRESS_NOT_FOUND");
 		}
 
-		Instant sitDown = LocalDateTime.of(plan.planDate(), plan.guestsEatAt())
+		Instant sitDown = LocalDateTime.of(meal.planDate(), meal.guestsEatAt())
 				.atZone(clock.zone()).toInstant();
 		Optional<TravelTimeProvider.TravelTime> drive;
 		try {
-			drive = travelTimeProvider.drive(
-					origin, destination, sitDown.minus(ASSUMED_DEPARTURE_LEAD));
+			drive = travelTimeProvider.drive(origin, destination, sitDown.minus(ASSUMED_DEPARTURE_LEAD));
 		} catch (RuntimeException e) {
-			// The port's contract is that it never raises, and both implementations honour it. This
-			// is the belt to that pair of braces: whatever a future provider does on its worst day,
-			// the answer here is a quiet line on a screen and never a page that will not load.
+			// The port's contract is that it never raises. This is the belt to that pair of braces.
 			log.warn("The routing provider raised ({}); the planner shows no estimate", e.toString());
 			drive = Optional.empty();
 		}
@@ -974,26 +1072,17 @@ public class MealPlanService {
 		int optimistic = minutes(drive.get().optimistic());
 		int pessimistic = minutes(drive.get().pessimistic());
 		return new TravelEstimate(
-				true, plan.guestsEatAt().minusMinutes(pessimistic),
-				optimistic, pessimistic, plan.guestsEatAt(), null);
+				true, meal.guestsEatAt().minusMinutes(pessimistic),
+				optimistic, pessimistic, meal.guestsEatAt(), null);
 	}
 
 	/**
 	 * Refuses a delivery whose van is still on the road when the guests sit down (KMS-400079).
 	 *
 	 * <p>Rajeev, 2026-09-05: <em>"People Sit to eat time MUST be = Ready by time + transit time at a
-	 * minumum. That is impractical and impossible given the loading and unlaoding and setup time."</em>
-	 * Both halves of that are honoured, and they are different rules. This one is the floor and it is
-	 * enforced: ready-by plus the drive must land at or before the serving time. Everything above the
-	 * floor — the loading, the unloading, the setting up — is time nobody here can measure, so the
-	 * composer warns about it and neither of them refuses a plan over it.
-	 *
-	 * <p>The composer checks this too, so a planner is stopped before typing eight preparations. This
-	 * is the check that matters: a screen is not a guard.
-	 *
-	 * <p>It only fires when the temple has supplied all three figures. A delivery with no travel
-	 * allowance yet — the address was typed rather than picked, or the map service was quiet — has
-	 * nothing to check, and inventing a drive in order to refuse a plan would be worse than silence.
+	 * minumum."</em> The floor is enforced; everything above it is time nobody here can measure. It
+	 * only fires when all three figures are supplied, and a serving time at or before the ready-by is
+	 * a meal running past midnight, which arithmetic that does not understand the clock must not refuse.
 	 */
 	private static void requireItCanArriveInTime(
 			LocalTime readyBy, LocalTime guestsEatAt, Integer travelMinutes) {
@@ -1001,9 +1090,6 @@ public class MealPlanService {
 		if (readyBy == null || guestsEatAt == null || travelMinutes == null) {
 			return;
 		}
-		// A serving time at or before the ready-by is a meal running past midnight, or a half-typed
-		// form. Comparing across a wrap would refuse plans on arithmetic that does not understand the
-		// clock, which is a bug wearing a validation's clothes.
 		if (!guestsEatAt.isAfter(readyBy)) {
 			return;
 		}
@@ -1018,16 +1104,8 @@ public class MealPlanService {
 	}
 
 	/**
-	 * The same estimate, for a delivery nobody has saved yet.
-	 *
-	 * <p>What the meal composer asks while somebody is still typing. It takes a place — either the id
-	 * of one they picked, or the coordinates behind it — rather than a plan id, because in a form
-	 * there is no plan to have an id.
-	 *
-	 * <p>Every unavailable answer the saved version can give, this can give too, with one addition:
-	 * an address that was typed rather than picked has no coordinates and no place id, and comes back
-	 * {@code ADDRESS_NOT_FOUND}. That is the honest answer — nobody looked, because there was nothing
-	 * to look up.
+	 * The same estimate, for a delivery nobody has saved yet — what the composer asks while somebody
+	 * is still typing. It takes a place rather than a meal id, because in a form there is no meal.
 	 */
 	public TravelEstimate travelEstimateFor(
 			String placeId, Double latitude, Double longitude, LocalDate planDate, LocalTime eatAt) {
@@ -1065,43 +1143,34 @@ public class MealPlanService {
 	}
 
 	/**
-	 * Google's estimate for this delivery right now, in minutes, stored onto the plan.
+	 * Google's estimate for this delivery right now, in minutes, stored onto the meal.
 	 *
-	 * <p>Called when a job card is printed, and only for a plan whose figure nobody has edited — the
-	 * job card decides that, because it is the one that knows a person's correction must not be
-	 * overwritten on the sheet a driver is about to act on (V93).
-	 *
-	 * <p>Returns null and changes nothing whenever an estimate cannot be had: no map service, an
-	 * address nobody could place, a service having a bad minute. The card then prints whatever figure
-	 * was already there, which is the last one anybody had, and that is a better answer on paper than
-	 * a blank.
+	 * <p>Called when a job card is printed, and only lands on a figure nobody has edited — the
+	 * statement's own predicate says so, so a person's correction cannot be overwritten however this
+	 * is reached. Returns null and changes nothing whenever an estimate cannot be had.
 	 */
 	@Transactional
-	public Integer refreshTravelEstimate(UUID id) {
-		TravelEstimate estimate = travelEstimate(id);
+	public Integer refreshTravelEstimate(UUID mealId) {
+		TravelEstimate estimate = travelEstimate(mealId);
 		if (!estimate.available() || estimate.pessimisticMinutes() == null) {
 			return null;
 		}
-		// The pessimistic end, for the reason the leave-by has always used it: arriving early with
-		// the food is an inconvenience, arriving after the guests have sat down is the failure.
 		int minutes = estimate.pessimisticMinutes();
 		jdbc.update("""
-				UPDATE meal_plans
+				UPDATE meals
 				SET travel_minutes = ?, travel_minutes_source = 'ESTIMATED', updated_at = now()
 				WHERE id = ? AND (travel_minutes_source IS NULL OR travel_minutes_source = 'ESTIMATED')
-				""", minutes, id);
+				""", minutes, mealId);
 		return minutes;
 	}
 
 	/**
 	 * Where this delivery is going, geocoding it if the coordinates are missing or out of licence.
-	 *
-	 * <p>Public because the job card needs it for the map on the delivery sheet, and re-deriving it
-	 * there would be a second answer to a question this class already answers.
+	 * Public because the job card needs it for the map on the delivery sheet.
 	 */
 	@Transactional
-	public GeocodingProvider.Coordinates deliveryCoordinatesFor(UUID id) {
-		return deliveryCoordinates(id);
+	public GeocodingProvider.Coordinates deliveryCoordinatesFor(UUID mealId) {
+		return deliveryCoordinates(mealId);
 	}
 
 	/** Rounded up. Half a minute of slack is worth having and no driver counts seconds. */
@@ -1110,24 +1179,22 @@ public class MealPlanService {
 	}
 
 	/**
-	 * Where this delivery is going, looking the address up again if what we hold has expired.
-	 *
-	 * <p>The thirty-day life is the licence (E4-S16 D4) and it is enforced here as well as on save,
-	 * because a plan made in March and opened in June has coordinates nobody is entitled to reuse —
-	 * and a street may have been renamed in between.
+	 * Where this delivery is going, looking the address up again if what we hold has expired. The
+	 * thirty-day life is the licence (E4-S16 D4), enforced here as well as on save.
 	 */
-	private GeocodingProvider.Coordinates deliveryCoordinates(UUID id) {
-		MealPlanRow row = findRow(id).orElseThrow(() -> notFound(id));
+	private GeocodingProvider.Coordinates deliveryCoordinates(UUID mealId) {
+		MealRow row = jdbc.query(ROW_SELECT + " WHERE m.id = ?", ROW_MAPPER, mealId).stream().findFirst()
+				.orElseThrow(() -> new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealId", mealId)));
 		if (fresh(row.deliveryLatitude(), row.deliveryLongitude(), row.geocodedAt())) {
 			return new GeocodingProvider.Coordinates(
 					row.deliveryLatitude().doubleValue(), row.deliveryLongitude().doubleValue());
 		}
 		Located located = geocode(row.deliveryAddress());
 		jdbc.update("""
-				UPDATE meal_plans
+				UPDATE meals
 				SET delivery_latitude = ?, delivery_longitude = ?, geocoded_at = ?
 				WHERE id = ?
-				""", located.latitude(), located.longitude(), located.at(), id);
+				""", located.latitude(), located.longitude(), located.at(), mealId);
 		if (located.latitude() == null) {
 			return null;
 		}
@@ -1136,23 +1203,12 @@ public class MealPlanService {
 	}
 
 	/**
-	 * Where a delivery address is, on the way into the database.
-	 *
-	 * <p>Looked up only when it has to be: an address that has not changed and was placed inside the
-	 * last thirty days keeps the coordinates it has. Editing the head count on a delivery is not a
-	 * reason to spend a geocoding request, and the daily quota is fifty.
-	 */
-	/**
 	 * Where this event is going, preferring the pin somebody actually chose.
 	 *
 	 * <p><strong>A picked place is never geocoded.</strong> Found by driving the live app on
-	 * 2026-09-05: the composer offered "Mantri Serenity", the planner chose it, the form showed a
-	 * fourteen-minute drive from its coordinates — and then the save discarded them and asked the
-	 * geocoder of the day to find the address text from scratch, which failed, so the meal came back
-	 * warning KMS-400078 and carrying no pin at all. Two answers to one question, a second apart, on
-	 * one screen. (That geocoder was a free service whose coverage of Bengaluru apartment complexes
-	 * was thin; D-19 has since replaced it, and this paragraph is kept because the defect it names
-	 * was never about which map answered.) The coordinates come with the place id and are used as given.
+	 * 2026-09-05: the save discarded a chosen place's coordinates and asked the geocoder to find the
+	 * address text from scratch, which failed. The coordinates come with the place id and are used as
+	 * given; a place id with none beside it asks Places; only then the address text.
 	 */
 	private Located place(
 			Event event, String previousAddress, BigDecimal latitude, BigDecimal longitude,
@@ -1161,9 +1217,6 @@ public class MealPlanService {
 		if (event.isPlaced()) {
 			return new Located(event.latitude(), event.longitude(), OffsetDateTime.now(), null);
 		}
-		// A place id with no coordinates beside it — a repeated event, or a client that sent only the
-		// id. Ask Places rather than the geocoder: the id is exactly the question Places can answer,
-		// and the address text is the question that just failed.
 		if (event.placeId() != null) {
 			Optional<GeocodingProvider.Coordinates> at =
 					placeSuggestionProvider.resolve(event.placeId(), null)
@@ -1177,6 +1230,11 @@ public class MealPlanService {
 		return locate(event.deliveryAddress(), previousAddress, latitude, longitude, geocodedAt);
 	}
 
+	/**
+	 * Looked up only when it has to be: an address that has not changed and was placed inside the
+	 * last thirty days keeps the coordinates it has. Editing the head count on a delivery is not a
+	 * reason to spend a geocoding request.
+	 */
 	private Located locate(
 			String address, String previousAddress, BigDecimal latitude, BigDecimal longitude,
 			OffsetDateTime geocodedAt) {
@@ -1199,15 +1257,13 @@ public class MealPlanService {
 		try {
 			found = geocodingProvider.locate(address);
 		} catch (RuntimeException e) {
-			// Same belt. A map service having a bad day must never cost somebody the meal plan they
-			// have just typed — the save goes through and the estimate is simply absent.
+			// A map service having a bad day must never cost somebody the meal plan they have just
+			// typed — the save goes through and the estimate is simply absent.
 			log.warn("The geocoder raised ({}); the address is stored unplaced", e.toString());
 			return Located.NOWHERE;
 		}
 		if (found.isEmpty()) {
-			// Reported only when somebody actually looked. With no map service configured this is
-			// silence, because the planner has done nothing wrong and there is nothing they could do
-			// about it (E4-S16, UAT-086 step 50).
+			// Reported only when somebody actually looked (E4-S16, UAT-086 step 50).
 			return new Located(null, null, null,
 					geocodingProvider.configured() ? ErrorCode.DELIVERY_ADDRESS_NOT_FOUND : null);
 		}
@@ -1225,25 +1281,14 @@ public class MealPlanService {
 
 	/**
 	 * A degree figure that could have come from a map service rather than from a client with nothing
-	 * to send.
-	 *
-	 * <p>Zero is the one value this refuses, and it refuses it on either axis. It is not a range check
-	 * on India — a temple outside it is a thing this product may one day have — it is the observation
-	 * that 0.000000 is what an empty box serialises to, and that the point where both axes are zero is
-	 * five hundred kilometres off the coast of Ghana. The rows already carrying it were written by
-	 * T-044 and nothing but a fresh lookup can say where those events were really going, so this makes
-	 * them stale rather than fresh and the next read re-geocodes them. A genuine delivery at exactly
-	 * zero degrees would cost one lookup and be found; a false pin costs a driver their afternoon.
+	 * to send. Zero is refused on either axis: 0.000000 is what an empty box serialises to, and the
+	 * point where both are zero is five hundred kilometres off the coast of Ghana (T-044).
 	 */
 	private static boolean isCoordinate(BigDecimal degrees) {
 		return degrees != null && degrees.signum() != 0;
 	}
 
-	/**
-	 * The temple's own coordinates — the origin of every delivery. They cost nothing to have: every
-	 * tenant already carries them, because the Vaishnava calendar cannot compute a tithi without
-	 * knowing where the temple is.
-	 */
+	/** The temple's own coordinates — the origin of every delivery. */
 	private GeocodingProvider.Coordinates templeCoordinates() {
 		return jdbc.query("""
 				SELECT latitude, longitude FROM tenants
@@ -1257,36 +1302,12 @@ public class MealPlanService {
 				}).stream().findFirst().orElse(null);
 	}
 
-
-	private RecipeRef findRecipe(UUID recipeId) {
-		return jdbc.query("SELECT id, name FROM recipes WHERE id = ? AND status = 'ACTIVE'",
-				(rs, n) -> new RecipeRef(rs.getObject("id", UUID.class), rs.getString("name")), recipeId)
-				.stream().findFirst()
-				.orElseThrow(() -> new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("recipeId", recipeId)));
-	}
-
-	private Optional<MealPlanView> findById(UUID id) {
-		return jdbc.query(SELECT + " WHERE mp.id = ?", MAPPER, id).stream().findFirst();
-	}
-
-	private Optional<MealPlanRow> findRow(UUID id) {
-		return jdbc.query("""
-				SELECT id, plan_date, meal_kind, event_name, ready_by, recipe_id, target_yield,
-					   day_type, status, delivery_address, delivery_latitude, delivery_longitude,
-					   geocoded_at
-				FROM meal_plans WHERE id = ?
-				""", ROW_MAPPER, id).stream().findFirst();
-	}
-
-	private Map<String, Object> snapshot(
-			LocalDate date, String mealKind, LocalTime readyBy, String recipe, DayType dayType) {
-		Map<String, Object> s = new LinkedHashMap<>();
-		s.put("date", date.toString());
-		s.put("mealKind", mealKind);
-		s.put("readyBy", String.valueOf(readyBy));
-		s.put("recipe", recipe);
-		s.put("dayType", dayType.name());
-		return s;
+	private void findRecipe(UUID recipeId) {
+		Integer found = jdbc.queryForObject(
+				"SELECT count(*) FROM recipes WHERE id = ? AND status = 'ACTIVE'", Integer.class, recipeId);
+		if (found == null || found == 0) {
+			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("recipeId", recipeId));
+		}
 	}
 
 	private static String trimToNull(String s) {
@@ -1295,13 +1316,6 @@ public class MealPlanService {
 		}
 		String t = s.trim();
 		return t.isEmpty() ? null : t;
-	}
-
-	private ApplicationException notFound(UUID id) {
-		return new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealPlanId", id));
-	}
-
-	private record RecipeRef(UUID id, String name) {
 	}
 
 	/** A suggestion with the two facts that order it and that the caller has no use for. */
@@ -1319,19 +1333,36 @@ public class MealPlanService {
 			rs.getObject("plan_date", LocalDate.class),
 			instant(rs, "created_at"));
 
-	private record MealPlanRow(
-			UUID id, LocalDate planDate, String mealKind, String eventName, LocalTime readyBy,
-			UUID recipeId, BigDecimal targetYield, DayType dayType, MealStatus status,
-			String deliveryAddress, BigDecimal deliveryLatitude, BigDecimal deliveryLongitude,
-			OffsetDateTime geocodedAt) {
+	/** The parts of a meal row the planner decides with: its identity, whether it is recorded, and its pin. */
+	private record MealRow(
+			UUID id, UUID mealPlanDayId, UUID mealKindId, LocalDate planDate, String eventName,
+			Instant recordedAt, String deliveryAddress, BigDecimal deliveryLatitude,
+			BigDecimal deliveryLongitude, OffsetDateTime geocodedAt) {
 	}
+
+	private static final String ROW_SELECT = """
+			SELECT m.id, m.meal_plan_day_id, m.meal_kind_id, pd.plan_date, m.event_name, m.recorded_at,
+				   m.delivery_address, m.delivery_latitude, m.delivery_longitude, m.geocoded_at
+			FROM meals m
+			JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+			""";
+
+	private static final RowMapper<MealRow> ROW_MAPPER = (rs, n) -> new MealRow(
+			rs.getObject("id", UUID.class),
+			rs.getObject("meal_plan_day_id", UUID.class),
+			rs.getObject("meal_kind_id", UUID.class),
+			rs.getObject("plan_date", LocalDate.class),
+			rs.getString("event_name"),
+			instant(rs, "recorded_at"),
+			rs.getString("delivery_address"),
+			rs.getBigDecimal("delivery_latitude"),
+			rs.getBigDecimal("delivery_longitude"),
+			rs.getObject("geocoded_at", OffsetDateTime.class));
 
 	/**
 	 * The event fields as they will actually be stored, after the chain of D6 has been walked.
-	 *
-	 * <p>Everything below the first {@code null} is null: an in-house event keeps no contact, and a
-	 * pickup keeps no address. That is not tidiness — it is what stops the day a pickup is switched
-	 * from a delivery leaving a stale address behind for somebody to drive to.
+	 * Everything below the first {@code null} is null: an in-house event keeps no contact, and a
+	 * pickup keeps no address.
 	 */
 	private record Event(
 			String name, boolean outside, Handover handover, String contactName, String contactPhone,
@@ -1343,26 +1374,8 @@ public class MealPlanService {
 		}
 
 		/**
-		 * A place somebody chose from the list, so there is nothing left to look up.
-		 *
-		 * <p><strong>Two conditions, and both of them were missing (T-044).</strong> This used to be
-		 * {@code latitude != null && longitude != null}, and on that reading every edit of a placed
-		 * delivery event moved it to the Gulf of Guinea: the composer, having no coordinates to reopen
-		 * on, sent {@code {placeId, 0, 0}}, zero is not null, so {@code place()} short-circuited both
-		 * Places and the geocoder and stored the placeholder as though a person had chosen it.
-		 *
-		 * <p>The first condition is the <em>semantics</em>, and it is the real fix: a pick is a place
-		 * id <em>with</em> the pin that came back with it. Coordinates on their own are not evidence
-		 * that anybody chose anything — they could be a geocode from months ago, whose thirty-day
-		 * licence {@link #locate} is there to enforce — and a predicate that never consults the id
-		 * cannot tell the two apart.
-		 *
-		 * <p>The second is a guard against the <em>sentinel</em>, because a client that has no pin to
-		 * send is exactly the thing that sends zero, and one may still be in somebody's browser. It is
-		 * cheap to be wrong in this direction and expensive to be wrong in the other: a pick refused
-		 * here still has its place id, so {@code place()} asks Places for the true coordinates and the
-		 * event ends up correctly pinned, whereas a placeholder accepted here is written to the row a
-		 * driver's job card is printed from.
+		 * A place somebody chose from the list: a place id <em>with</em> the pin that came back with
+		 * it, and neither axis the zero an empty box serialises to (T-044).
 		 */
 		boolean isPlaced() {
 			return placeId != null && isCoordinate(latitude) && isCoordinate(longitude);
@@ -1373,9 +1386,7 @@ public class MealPlanService {
 	 * Where a delivery address is, and whether anybody could say.
 	 *
 	 * @param warning {@code DELIVERY_ADDRESS_NOT_FOUND} where a map service looked and found nothing,
-	 *                and null where there was no map service to look — telling somebody an address
-	 *                could not be found when nobody looked would be a lie, and one they would waste
-	 *                an afternoon on.
+	 *                and null where there was no map service to look.
 	 */
 	private record Located(
 			BigDecimal latitude, BigDecimal longitude, OffsetDateTime at, ErrorCode warning) {
@@ -1383,82 +1394,8 @@ public class MealPlanService {
 		static final Located NOWHERE = new Located(null, null, null, null);
 	}
 
-	private static final String SELECT = """
-			SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, mp.recipe_id, r.name AS recipe_name,
-			       r.base_yield_unit AS target_yield_unit,
-				   mp.target_yield, mp.day_type, mp.occasion_name, mp.status, mp.event_name,
-				   mp.is_outside, mp.handover, mp.contact_name, mp.contact_phone,
-				   mp.delivery_address, mp.delivery_sub_location, mp.delivery_place_id,
-				   mp.delivery_latitude, mp.delivery_longitude,
-				   mp.guests_eat_at, mp.travel_minutes, mp.travel_minutes_source,
-				   mp.purpose, mp.adults, mp.children, mp.seniors,
-				   mp.crew_required, mp.kitchen_notes, mp.server_notes,
-				   mp.actual_servings, mp.consumed_quantity,
-				   mp.not_made,
-				   mp.original_actual_servings, mp.original_consumed_quantity,
-				   mp.cooked_at, mp.ekadashi_ack_at, mp.created_at
-			FROM meal_plans mp
-			JOIN recipes r ON r.id = mp.recipe_id
-			""";
-
 	private static Instant instant(java.sql.ResultSet rs, String col) throws java.sql.SQLException {
 		OffsetDateTime odt = rs.getObject(col, OffsetDateTime.class);
 		return odt == null ? null : odt.toInstant();
 	}
-
-	private static final RowMapper<MealPlanView> MAPPER = (rs, n) -> new MealPlanView(
-			rs.getObject("id", UUID.class),
-			rs.getObject("plan_date", LocalDate.class),
-			rs.getString("meal_kind"),
-			rs.getObject("ready_by", LocalTime.class),
-			rs.getObject("recipe_id", UUID.class),
-			rs.getString("recipe_name"),
-			rs.getBigDecimal("target_yield"),
-			rs.getString("target_yield_unit"),
-			DayType.valueOf(rs.getString("day_type")),
-			rs.getString("occasion_name"),
-			MealStatus.valueOf(rs.getString("status")),
-			rs.getString("event_name"),
-			rs.getBoolean("is_outside"),
-			rs.getString("handover") == null ? null : Handover.valueOf(rs.getString("handover")),
-			rs.getString("contact_name"),
-			rs.getString("contact_phone"),
-			rs.getString("delivery_address"),
-			rs.getString("delivery_sub_location"),
-			rs.getString("delivery_place_id"),
-			rs.getBigDecimal("delivery_latitude"),
-			rs.getBigDecimal("delivery_longitude"),
-			rs.getObject("guests_eat_at", LocalTime.class),
-			(Integer) rs.getObject("travel_minutes"),
-			rs.getString("travel_minutes_source"),
-			rs.getString("purpose"),
-			(Integer) rs.getObject("adults"),
-			(Integer) rs.getObject("children"),
-			(Integer) rs.getObject("seniors"),
-			(Integer) rs.getObject("crew_required"),
-			rs.getString("kitchen_notes"),
-			rs.getString("server_notes"),
-			rs.getBigDecimal("actual_servings"),
-			rs.getBigDecimal("consumed_quantity"),
-			rs.getBoolean("not_made"),
-			rs.getBigDecimal("original_actual_servings"),
-			rs.getBigDecimal("original_consumed_quantity"),
-			instant(rs, "cooked_at"),
-			instant(rs, "ekadashi_ack_at") != null,
-			instant(rs, "created_at"));
-
-	private static final RowMapper<MealPlanRow> ROW_MAPPER = (rs, n) -> new MealPlanRow(
-			rs.getObject("id", UUID.class),
-			rs.getObject("plan_date", LocalDate.class),
-			rs.getString("meal_kind"),
-			rs.getString("event_name"),
-			rs.getObject("ready_by", LocalTime.class),
-			rs.getObject("recipe_id", UUID.class),
-			rs.getBigDecimal("target_yield"),
-			DayType.valueOf(rs.getString("day_type")),
-			MealStatus.valueOf(rs.getString("status")),
-			rs.getString("delivery_address"),
-			rs.getBigDecimal("delivery_latitude"),
-			rs.getBigDecimal("delivery_longitude"),
-			rs.getObject("geocoded_at", OffsetDateTime.class));
 }

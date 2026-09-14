@@ -642,10 +642,12 @@ public class ShoppingListService {
 	private Map<UUID, LocalDate> earliestDemandByIngredient() {
 		Map<UUID, LocalDate> map = new LinkedHashMap<>();
 		jdbc.query("""
-				SELECT ri.ingredient_id, MIN(mp.plan_date) AS earliest
-				FROM meal_plans mp
-				JOIN recipe_ingredients ri ON ri.recipe_id = mp.recipe_id
-				WHERE mp.status = 'PLANNED' AND mp.plan_date >= CURRENT_DATE
+				SELECT ri.ingredient_id, MIN(pd.plan_date) AS earliest
+				FROM meal_dishes d
+				JOIN meals m ON m.id = d.meal_id
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN recipe_ingredients ri ON ri.recipe_id = d.recipe_id
+				WHERE d.status = 'PLANNED' AND pd.plan_date >= CURRENT_DATE
 				GROUP BY ri.ingredient_id
 				""", rs -> {
 			map.put(rs.getObject("ingredient_id", UUID.class), rs.getObject("earliest", LocalDate.class));

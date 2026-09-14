@@ -82,10 +82,12 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 	 * whoever takes the after-reading has to re-take this text from the file first.
 	 */
 	private static final String EARLIEST_DEMAND_SQL = """
-			SELECT ri.ingredient_id, MIN(mp.plan_date) AS earliest
-			FROM meal_plans mp
-			JOIN recipe_ingredients ri ON ri.recipe_id = mp.recipe_id
-			WHERE mp.status = 'PLANNED' AND mp.plan_date >= CURRENT_DATE
+			SELECT ri.ingredient_id, MIN(pd.plan_date) AS earliest
+			FROM meal_dishes d
+			JOIN meals m ON m.id = d.meal_id
+			JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+			JOIN recipe_ingredients ri ON ri.recipe_id = d.recipe_id
+			WHERE d.status = 'PLANNED' AND pd.plan_date >= CURRENT_DATE
 			GROUP BY ri.ingredient_id
 			""";
 
@@ -322,8 +324,8 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 		report.say("  inventory_items        %10s   (staging holds about 116)".formatted(PerfReport.grouped(counts.inventoryItems())));
 		report.say("  recipes                %10s   (staging holds about 26)".formatted(PerfReport.grouped(counts.recipes())));
 		report.say("  recipe_ingredients     %10s   (%d lines per recipe)".formatted(PerfReport.grouped(counts.recipeIngredients()), scale.ingredientsPerRecipe()));
-		report.say("  meal_plans  COOKED     %10s   (%d dishes a day for %.1f years, plus events)".formatted(PerfReport.grouped(counts.mealPlansCooked()), scale.dishesPerDay(), scale.historyYears()));
-		report.say("  meal_plans  PLANNED    %10s   (%d days ahead — the ordering horizon is 14, 30 for a festival)".formatted(PerfReport.grouped(counts.mealPlansPlanned()), scale.forwardDays()));
+		report.say("  meal_dishes COOKED     %10s   (%d dishes a day for %.1f years, plus events)".formatted(PerfReport.grouped(counts.mealPlansCooked()), scale.dishesPerDay(), scale.historyYears()));
+		report.say("  meal_dishes PLANNED    %10s   (%d days ahead — the ordering horizon is 14, 30 for a festival)".formatted(PerfReport.grouped(counts.mealPlansPlanned()), scale.forwardDays()));
 		report.say("  stock_movements        %10s   ← the table that only ever grows".formatted(PerfReport.grouped(counts.stockMovements())));
 		report.say("  vendors                %10s".formatted(PerfReport.grouped(counts.vendors())));
 		report.say("  vendor_supplies        %10s   (one preferred vendor per ingredient)".formatted(PerfReport.grouped(counts.vendorSupplies())));
@@ -374,7 +376,7 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 				+ " set_config calls the tenancy wrapper makes.");
 		report.blank();
 		report.say("  %-22s %12s".formatted("table", "statements"));
-		for (String table : List.of("stock_movements", "meal_plans", "recipe_ingredients",
+		for (String table : List.of("stock_movements", "meal_dishes", "recipe_ingredients",
 				"inventory_items", "purchase_order_lines", "ingredients", "vendor_supplies",
 				"shopping_list_lines", "recipes")) {
 			report.say("  %-22s %12d".formatted(table, StatementRecorder.countTouching(statements, table)));
@@ -424,7 +426,7 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 	}
 
 	private void reportHowOftenOnePageLoadReadsEachTable() {
-		List<String> tables = List.of("stock_movements", "meal_plans", "recipe_ingredients",
+		List<String> tables = List.of("stock_movements", "meal_dishes", "recipe_ingredients",
 				"inventory_items", "purchase_order_lines", "ingredients", "vendor_supplies");
 
 		java.util.Map<String, long[]> before = statsOnceTheyStopMoving(tables);

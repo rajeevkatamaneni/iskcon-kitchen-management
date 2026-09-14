@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.tenancy.TenantContext;
@@ -107,9 +108,7 @@ class ReusePlanIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
-		admin.execute("DELETE FROM meal_services");
-		admin.execute("DELETE FROM meal_plans");
-		admin.execute("DELETE FROM meal_kinds");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM calendar_days");
 		admin.execute("DELETE FROM recipe_ingredients");
 		admin.execute("DELETE FROM ingredients");
@@ -155,6 +154,8 @@ class ReusePlanIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.copied").value(2));
 
 		assertThat(plannedOn(LocalDate.parse("2026-03-14"))).isEqualTo(2);
+		// Two meals, each of one dish, each a row of its own with its own id.
+		assertThat(mealsOn(LocalDate.parse("2026-03-14"))).isEqualTo(2);
 	}
 
 	@Test
@@ -195,7 +196,14 @@ class ReusePlanIT extends AbstractIntegrationTest {
 		mvc.perform(reuse("/reuse", 14)).andExpect(jsonPath("$.copied").value(1));
 		assertThat(kindsOn(TARGET)).containsExactly("Lunch");
 
-		admin.update("DELETE FROM meal_plans WHERE plan_date >= ?", TARGET);
+		admin.update("""
+				DELETE FROM meal_dishes d USING meals m, meal_plan_days pd
+				WHERE d.meal_id = m.id AND pd.id = m.meal_plan_day_id AND pd.plan_date >= ?
+				""", TARGET);
+		admin.update("""
+				DELETE FROM meals m USING meal_plan_days pd
+				WHERE pd.id = m.meal_plan_day_id AND pd.plan_date >= ?
+				""", TARGET);
 		mvc.perform(post("/api/v1/meal-plans/reuse")
 						.contentType(MediaType.APPLICATION_JSON)
 						.header("Authorization", "Bearer valid-token")
@@ -281,35 +289,48 @@ class ReusePlanIT extends AbstractIntegrationTest {
 						""".formatted(SOURCE, days, TARGET));
 	}
 
+	/** One dish of that day's meal of this kind, for a hundred adults. */
 	private void plan(LocalDate date, String kind, UUID recipe) {
-		admin.update("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_yield, day_type, status, adults, children, seniors, created_by)
-				VALUES (?, ?, ?, TIME '12:00', ?, ?, 'REGULAR', 'PLANNED', 100, 0, 0,
-						(SELECT id FROM users WHERE firebase_uid = 'uid-reuse'))
-				""", tenant, date, kind, recipe, BigDecimal.valueOf(100));
+		UUID meal = MealFixture.meal(admin, tenant, date, kind, LocalTime.NOON);
+		MealFixture.headCount(admin, meal, 100, 0, 0);
+		MealFixture.dish(admin, tenant, meal, recipe, BigDecimal.valueOf(100), planner());
 	}
 
 	private void planEvent(LocalDate date, String eventName) {
-		admin.update("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_yield, day_type, status, event_name, is_outside, adults, children,
-						seniors, created_by)
-				VALUES (?, ?, 'Event', TIME '18:00', ?, 30, 'REGULAR', 'PLANNED', ?, false, 30, 0, 0,
-						(SELECT id FROM users WHERE firebase_uid = 'uid-reuse'))
-				""", tenant, date, rice, eventName);
+		UUID meal = MealFixture.meal(admin, tenant, date, "Event", eventName, LocalTime.of(18, 0));
+		MealFixture.headCount(admin, meal, 30, 0, 0);
+		MealFixture.dish(admin, tenant, meal, rice, BigDecimal.valueOf(30), planner());
 	}
 
+	private UUID planner() {
+		return admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'uid-reuse'", UUID.class);
+	}
+
+	/** How many dishes still to be, or already, cooked are on a day. */
 	private int plannedOn(LocalDate date) {
-		return admin.queryForObject(
-				"SELECT count(*) FROM meal_plans WHERE tenant_id = ? AND plan_date = ? AND status <> 'CANCELLED'",
-				Integer.class, tenant, date);
+		return admin.queryForObject("""
+				SELECT count(*) FROM meal_dishes d
+				JOIN meals m ON m.id = d.meal_id
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				WHERE pd.tenant_id = ? AND pd.plan_date = ? AND d.status <> 'CANCELLED'
+				""", Integer.class, tenant, date);
 	}
 
 	private java.util.List<String> kindsOn(LocalDate date) {
 		return admin.queryForList("""
-				SELECT DISTINCT meal_kind FROM meal_plans
-				WHERE tenant_id = ? AND plan_date = ? AND status <> 'CANCELLED' ORDER BY meal_kind
+				SELECT DISTINCT k.name FROM meal_dishes d
+				JOIN meals m ON m.id = d.meal_id
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN meal_kinds k ON k.id = m.meal_kind_id
+				WHERE pd.tenant_id = ? AND pd.plan_date = ? AND d.status <> 'CANCELLED' ORDER BY k.name
 				""", String.class, tenant, date);
+	}
+
+	/** How many meal rows a day holds — a reuse writes meals, not loose dishes (D-27). */
+	private int mealsOn(LocalDate date) {
+		return admin.queryForObject("""
+				SELECT count(*) FROM meals m JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				WHERE pd.tenant_id = ? AND pd.plan_date = ?
+				""", Integer.class, tenant, date);
 	}
 }

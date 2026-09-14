@@ -1,43 +1,55 @@
+import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 /**
- * Asking for volunteers from the planner, and seeing and correcting the shift there afterwards
- * (T-019, rebuilt by T-155).
+ * Asking for volunteers from the meal planner, as D-27 ruled it (Rajeev, 2026-09-13).
  *
- * <p>Everything here is asserted against `MealServices`, because that is where the shortfall is
- * drawn and the affordance sits beside it.
+ * <p>Before D-27 the day's block posted a shift the moment its layer was saved. Now asking for
+ * volunteers is part of planning the meal: *Ask for volunteers* sits in section 4 of the composer the
+ * moment People needed is more than Rostered, the layer's button reads **Done** and saves nothing,
+ * and the shift goes to the server inside *Save this meal* or *Update this meal*, where the meal and
+ * the shift are one transaction. Rajeev: *"we should not be left with an orphan shift."*
  *
- * <p>T-155 replaced T-019's three-field layer with the volunteers' own form, `ShiftFields`, shown
- * in a layer (DESIGN_SYSTEM v1.8 §4). So the layer is identified here by things only that form
- * renders — its `shift-form` id and its reminders box — rather than by a heading any copy could
- * carry. A cut-down copy put back would fail "opens the volunteers' own shift form".
+ * <p>So most of this file drives `MealComposer` with every call that could write a shift mocked, and
+ * asserts the calls that were NOT made as carefully as the one that was. The end of the file drives
+ * `MealServices`, the day: it shows the shift and links to its meal, and cancelling a meal with a
+ * shift warns with the count before it cancels both.
  *
- * <p>The calls are typed like the real ones so the assertions read what was sent rather than
- * casting past an untyped mock — and the meal link is asserted through `Object.keys` and not
- * `objectContaining`, because a missing property and an explicit null read identically to that
- * matcher, and a missing link on a save takes the link off the shift.
+ * <p>Where a request body's shape matters, `Object.keys` is read rather than `objectContaining`: a
+ * missing property and an explicit null read identically to that matcher.
  */
 
-const { authRef, mealServices, mealCrew, listShifts, createShift, updateShift, jobCardLanguages } =
-  vi.hoisted(() => ({
-    authRef: {
-      current: { role: "KITCHEN_MANAGER" } as { role: string } | null,
-    },
-    mealServices: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
-    mealCrew: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
-    listShifts: vi.fn(
-      async (_f: { from?: string; to?: string } = {}, _t?: string) => [] as unknown[]
-    ),
+const { authRef, api } = vi.hoisted(() => ({
+  authRef: { current: { role: "KITCHEN_MANAGER" } as { role: string } | null },
+  api: {
+    // The only two calls allowed to carry a shift.
+    saveMeal: vi.fn(async (_input: Body, _t?: string) => ({ id: "meal-new" })),
+    updateMeal: vi.fn(async (_id: string, _input: Body, _t?: string) => ({ id: "meal-lunch" })),
+    // Calls that would save a shift on its own. Nothing in the planner may make them.
     createShift: vi.fn(async (_input: Record<string, unknown>, _t?: string) => ({ id: "s-new" })),
-    updateShift: vi.fn(
-      async (_id: string, _input: Record<string, unknown>, _t?: string) => undefined
-    ),
+    updateShift: vi.fn(async (_id: string, _input: Record<string, unknown>, _t?: string) => undefined),
+    cancelShift: vi.fn(async (_id: string, _reason: string, _t?: string) => undefined),
+    cancelMeal: vi.fn(async (_id: string, _reason?: string | null, _t?: string) => ({ volunteersTold: 0 })),
+    meals: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
+    mealCrew: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
+    suggestedCrew: vi.fn(async (_kind: string, _t?: string) => ({ crewRequired: null as number | null })),
     jobCardLanguages: vi.fn(async () => ({ languages: ["en"], defaultLanguage: "en" })),
-  }));
+    eventNameSuggestions: vi.fn(async () => [] as unknown[]),
+    placesAvailable: vi.fn(async () => ({ available: false })),
+    travelEstimateFor: vi.fn(async () => ({
+      available: false, leaveBy: null, optimisticMinutes: null, pessimisticMinutes: null,
+      guestsEatAt: null, reason: "NO_MAP_SERVICE",
+    })),
+  },
+}));
 
-// A push spy that must stay untouched: "lands back in the planner exactly where the reader was" is
-// only true if nothing navigated at all, and a router that was never called is how that is proved.
+/** What a meal save or update sends, typed enough to index into. */
+type Body = Record<string, unknown> & {
+  dishes: { id: string | null; recipeId: string; targetYield: number }[];
+  volunteerShift: Record<string, unknown> | null;
+};
+
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: vi.fn(), back: vi.fn(), refresh: vi.fn() }),
@@ -49,13 +61,8 @@ vi.mock("@/lib/auth-context", () => ({
 }));
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return {
-    ...actual,
-    api: { ...actual.api, mealServices, mealCrew, listShifts, createShift, updateShift, jobCardLanguages },
-  };
+  return { ...actual, api: { ...actual.api, ...api } };
 });
-// The component's own query hook, driven straight off the mocked calls, as the other planner tests
-// drive it. Async so React can be imported inside a factory that is hoisted above this file.
 vi.mock("@/lib/use-authed-query", async () => {
   const { useEffect, useState } = await import("react");
   return {
@@ -75,86 +82,108 @@ vi.mock("@/lib/use-authed-query", async () => {
   };
 });
 
+import { MealComposer, type ComposerStatus } from "@/components/planner/MealComposer";
 import { MealServices } from "@/components/planner/MealServices";
 
 const DATE = "2026-09-01";
+const DAY = `/planner/${DATE}`;
 
 const RECIPES = [
-  {
-    id: "r1", name: "Bisi Bele Bath", categoryName: "Khichadi", fastingCompatible: false,
-    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE",
-  },
+  { id: "r1", name: "Bisi Bele Bath", categoryName: "Khichadi", fastingCompatible: false,
+    baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE" },
 ];
 
-function dish(id: string, overrides: Record<string, unknown> = {}) {
-  return {
-    id, planDate: DATE, mealKind: "Lunch", readyBy: "12:00:00",
-    recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 248,
-    dayType: "REGULAR", occasionName: null, status: "PLANNED", eventName: null,
-    contactName: null, contactPhone: null, deliveryAddress: null, purpose: null,
-    adults: 200, children: 40, seniors: 30, kitchenNotes: null,
-    actualServings: null, notMade: false, cookedAt: null, ekadashiAcknowledged: false,
-    createdAt: "2026-08-20T10:00:00Z",
-    ...overrides,
-  };
-}
+const KINDS = [
+  { id: "k1", name: "Lunch", defaultReadyTime: "12:00:00", isEvent: false, needsOccasion: false },
+  { id: "k2", name: "Event", defaultReadyTime: null, isEvent: true, needsOccasion: false },
+];
 
-/** Lunch on 1 September, needing eight pairs of hands. */
-function lunch(overrides: Record<string, unknown> = {}) {
-  return {
-    serviceId: null, planDate: DATE, mealKind: "Lunch", readyBy: "12:00:00",
-    adults: 200, children: 40, seniors: 30, plates: 248,
-    crewRequired: 8,
-    dayType: "REGULAR", occasionName: null, eventName: null,
-    contactName: null, contactPhone: null, deliveryAddress: null, purpose: null,
-    kitchenNotes: null, serverNotes: null, cardNumber: null, cardIssuedAt: null,
-    recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
-    corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
-    dishes: [dish("m1")],
-    ...overrides,
-  };
-}
-
-/** Five of the eight are rostered by default, so the meal is three short. */
-function crewOf(kind = "Lunch", rostered = 5, required: number | null = 8) {
-  return {
-    planDate: DATE, mealKind: kind, readyBy: "12:00:00",
-    crewRequired: required, staffIn: 3, volunteers: rostered - 3, rostered,
-    shortOfCrew: required != null && rostered < required,
-  };
-}
-
-/** A shift as the list endpoint returns it, linked to lunch on the day unless told otherwise. */
+/** A shift as the server sends it on a meal — Lunch's, with two signed up unless told otherwise. */
 function shiftFor(overrides: Record<string, unknown> = {}) {
   return {
     id: "s1", title: "Lunch preparation on Tuesday, 1 September 2026", description: "Bring an apron",
     shiftDate: DATE, startTime: "09:00:00", endTime: "12:00:00", location: "Main kitchen",
     capacity: 5, reminderOffsetsMinutes: [2880], status: "OPEN", cancelReason: null,
     signedUpCount: 2, waitlistCount: 0, createdAt: "2026-08-25T06:00:00Z",
-    mealDate: DATE, mealKind: "Lunch", mealEventName: null,
+    mealId: "meal-lunch", mealKind: "Lunch", mealEventName: null,
     ...overrides,
   };
 }
 
-async function openTheDay(readOnly = false) {
-  const { container } = render(
-    <MealServices
-      date={DATE}
-      sufficiency={new Map()}
-      recipes={RECIPES as never}
-      readOnly={readOnly}
-      onChanged={vi.fn()}
-      onError={vi.fn()}
-    />
-  );
-  await screen.findByText("Lunch");
-  return container;
+/** Lunch on 1 September, by its own id, needing eight pairs of hands. */
+function lunch(overrides: Record<string, unknown> = {}) {
+  return {
+    mealId: "meal-lunch", mealKindId: "k1", planDate: DATE, mealKind: "Lunch", readyBy: "12:00:00",
+    adults: 200, children: 40, seniors: 30, plates: 248, crewRequired: 8,
+    dayType: "REGULAR", occasionName: null, eventName: null, isOutside: false, handover: null,
+    contactName: null, contactPhone: null, deliveryAddress: null, deliverySubLocation: null,
+    deliveryPlaceId: null, deliveryLatitude: null, deliveryLongitude: null, guestsEatAt: null,
+    travelMinutes: null, travelMinutesSource: null, purpose: null, kitchenNotes: null, serverNotes: null,
+    status: "PLANNED", cardNumber: null, cardIssuedAt: null,
+    recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
+    corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
+    dishes: [
+      { id: "d1", mealId: "meal-lunch", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 248,
+        targetYieldUnit: "KG", status: "PLANNED", actualServings: null, consumedQuantity: null,
+        notMade: false, originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
+        ekadashiAcknowledged: false, createdAt: "2026-08-20T10:00:00Z" },
+    ],
+    volunteerShift: null,
+    ...overrides,
+  };
 }
 
-/** The day's text, once whatever was asked for has arrived. */
-async function settled(container: HTMLElement, contains: string): Promise<HTMLElement> {
-  await waitFor(() => expect(container.textContent).toContain(contains));
-  return container;
+/** Who is rostered over the meal. Five by default, so a meal needing eight is three short. */
+function crewOf(rostered = 5, required: number | null = 8, mealId = "meal-lunch") {
+  return {
+    mealId, planDate: DATE, mealKind: "Lunch", readyBy: "12:00:00",
+    crewRequired: required, staffIn: 3, volunteers: rostered - 3, rostered,
+    shortOfCrew: required != null && rostered < required,
+  };
+}
+
+/**
+ * The composer as the compose and edit screens mount it: the commit button outside the form, reaching
+ * it by id, and a link out of the page like the header's Cancel.
+ */
+function Harness(props: Partial<React.ComponentProps<typeof MealComposer>>) {
+  const [status, setStatus] = React.useState<ComposerStatus>({ busy: false, blocked: true, hint: null });
+  return (
+    <>
+      <a href={DAY}>Back to the day</a>
+      <MealComposer
+        date={DATE}
+        recipes={RECIPES as never}
+        mealKinds={KINDS as never}
+        isEkadashi={false}
+        onClose={vi.fn()}
+        onPlanned={vi.fn()}
+        formId="test-meal"
+        onStatus={setStatus}
+        {...props}
+      />
+      {status.hint && <p>{status.hint}</p>}
+      <button type="submit" form="test-meal" disabled={status.busy || status.blocked}>
+        {props.existing ? "Update this meal" : "Save this meal"}
+      </button>
+    </>
+  );
+}
+
+/** A new Lunch, counted and with its preparation picked, so the only open question is its crew. */
+async function planALunch(needed: string) {
+  render(<Harness />);
+  fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "200" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+  fireEvent.change(screen.getByLabelText("People needed"), { target: { value: needed } });
+  // The crew readout is read from the server; wait for it so "Rostered" is the real figure.
+  await screen.findByText(/3 staff · 2 volunteers/);
+}
+
+/** Lunch as it is saved already, opened for editing. */
+async function editLunch(overrides: Record<string, unknown> = {}) {
+  render(<Harness existing={lunch(overrides) as never} />);
+  await screen.findByText(/3 staff · 2 volunteers/);
 }
 
 /** One box of the form inside the layer, by the name `ShiftFields` gives it. */
@@ -164,418 +193,422 @@ function field(name: string): HTMLInputElement {
   return input;
 }
 
-const ASK = { name: /ask for volunteers/i };
+function done() {
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Done" }));
+}
 
-describe("asking for volunteers from the planner", () => {
-  beforeEach(() => {
-    authRef.current = { role: "KITCHEN_MANAGER" };
-    push.mockClear();
-    createShift.mockReset().mockResolvedValue({ id: "s-new" });
-    updateShift.mockReset().mockResolvedValue(undefined);
-    mealServices.mockReset().mockResolvedValue([lunch()]);
-    mealCrew.mockReset().mockResolvedValue([crewOf()]);
-    listShifts.mockReset().mockResolvedValue([]);
-    jobCardLanguages.mockClear();
+const ASK = { name: /ask for volunteers/i };
+const VIEW = { name: /view volunteer shift/i };
+
+function nothingSavedAShift() {
+  expect(api.createShift).not.toHaveBeenCalled();
+  expect(api.updateShift).not.toHaveBeenCalled();
+  expect(api.cancelShift).not.toHaveBeenCalled();
+}
+
+beforeEach(() => {
+  authRef.current = { role: "KITCHEN_MANAGER" };
+  push.mockReset();
+  for (const fn of Object.values(api)) fn.mockClear();
+  api.mealCrew.mockReset().mockResolvedValue([crewOf()]);
+  api.suggestedCrew.mockReset().mockResolvedValue({ crewRequired: null });
+  api.saveMeal.mockReset().mockResolvedValue({ id: "meal-new" });
+  api.updateMeal.mockReset().mockResolvedValue({ id: "meal-lunch" });
+});
+
+describe("Ask for volunteers, in section 4 of the composer", () => {
+  it("appears exactly when People needed is more than Rostered — not at equal, not below", async () => {
+    await planALunch("5");
+    // Five needed, five rostered: covered, so nothing to ask for.
+    expect(screen.queryByRole("button", ASK)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("People needed"), { target: { value: "4" } });
+    expect(screen.queryByRole("button", ASK)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("People needed"), { target: { value: "6" } });
+    expect(screen.getByRole("button", ASK)).toBeInTheDocument();
+
+    // And gone again the moment the meal is covered.
+    fireEvent.change(screen.getByLabelText("People needed"), { target: { value: "5" } });
+    expect(screen.queryByRole("button", ASK)).toBeNull();
   });
 
-  it("opens the volunteers' own shift form over the planner, prefilled from the meal", async () => {
-    const day = await openTheDay();
-    await settled(day, "5 of 8");
+  it("is not offered while nobody has said how many the meal takes", async () => {
+    render(<Harness />);
+    await screen.findByText(/3 staff · 2 volunteers/);
+    expect(screen.getByLabelText("People needed")).toHaveValue(null);
+    expect(screen.queryByRole("button", ASK)).toBeNull();
+  });
+
+  it("opens the volunteers' own form: no meal checkbox, the date read-only, and Done", async () => {
+    await planALunch("8");
     fireEvent.click(screen.getByRole("button", ASK));
 
     const layer = screen.getByRole("dialog");
     const form = within(layer).getByRole("form");
-    // Only `ShiftFields` renders these: the form named so a header button can submit it, and the
-    // reminders box, which the three-field copy this replaced never had.
+    // `ShiftFields` and nothing cut from it: the eight boxes `readShiftForm` reads.
     expect(form.id).toBe("shift-form");
-    expect(within(layer).getByText("Reminder hours before")).toBeTruthy();
-    // All eight of the form's fields, by the names `readShiftForm` reads, and nothing cut.
     const names = Array.from(form.querySelectorAll("input")).map((i) => i.getAttribute("name"));
     expect(names.sort()).toEqual(
       ["capacity", "description", "endTime", "location", "reminderHours", "shiftDate", "startTime", "title"]
     );
+    // No "is this for a meal" checkbox and no meal picker (D-27 screen 3): the shift is for this meal.
+    expect(layer.querySelectorAll('input[type="checkbox"], select')).toHaveLength(0);
+    expect(within(layer).queryByText(/for a meal/i)).toBeNull();
 
-    // Prefilled from the meal: its derived title, its day, three hands short, wanted up to ready-by.
-    expect(field("title").value).toBe("Lunch preparation on Tuesday, 1 September 2026");
+    // The meal's day, read-only — read-only and not disabled, so it is still in the form and reachable.
     expect(field("shiftDate").value).toBe(DATE);
     expect(field("shiftDate").readOnly).toBe(true);
+    expect(field("shiftDate").disabled).toBe(false);
+
+    // The button is Done. Nothing here posts or saves, so nothing here says it does.
+    expect(within(layer).getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(within(layer).queryByRole("button", { name: /post shift|save changes/i })).toBeNull();
+  });
+
+  it("prefills Volunteers requested as People needed minus Rostered, and lets it be changed", async () => {
+    await planALunch("8");
+    fireEvent.click(screen.getByRole("button", ASK));
+
+    const layer = screen.getByRole("dialog");
+    // The label is the ruled one (D-27 answer 1); the box is still `capacity` on the wire.
+    expect(within(layer).getByText("Volunteers requested")).toBeInTheDocument();
+    expect(within(layer).queryByText("Capacity")).toBeNull();
+    // Eight needed, five rostered.
     expect(field("capacity").value).toBe("3");
-    expect(field("endTime").value).toBe("12:00");
-    // And what the planner does not know opens as it does on the volunteers screen.
-    expect(field("startTime").value).toBe("");
-    expect(field("location").value).toBe("");
-    expect(field("reminderHours").value).toBe("24");
-  });
 
-  it("calls a prefilled new shift a new one, not an edit", async () => {
-    await openTheDay();
-    fireEvent.click(screen.getByRole("button", ASK));
+    fireEvent.change(field("capacity"), { target: { value: "4" } });
+    expect(field("capacity").value).toBe("4");
 
-    const layer = screen.getByRole("dialog");
-    // What a screen reader announces for the form. Having values is not the same as existing.
-    expect(within(layer).getByRole("form").getAttribute("aria-label")).toBe("Post a shift");
-    expect(within(layer).queryByRole("form", { name: /edit a shift/i })).toBeNull();
-    expect(within(layer).getByRole("heading", { name: "Post a shift" })).toBeTruthy();
-  });
-
-  it("says the shift runs into the next day for 20:00 to 02:00", async () => {
-    await openTheDay();
-    fireEvent.click(screen.getByRole("button", ASK));
-    const layer = screen.getByRole("dialog");
-
-    fireEvent.change(field("startTime"), { target: { value: "20:00" } });
-    // Later the same evening first, so the line is shown to appear for the crossing and not for any
-    // pair of times at all.
-    fireEvent.change(field("endTime"), { target: { value: "22:00" } });
-    expect(layer.textContent).not.toMatch(/next day/i);
-
-    fireEvent.change(field("endTime"), { target: { value: "02:00" } });
-    expect(within(layer).getByText(/Ends the next day/i)).toBeTruthy();
-  });
-
-  it("posts the shift with the meal link and closes onto the same day", async () => {
-    await openTheDay();
-    fireEvent.click(screen.getByRole("button", ASK));
-    fireEvent.change(field("startTime"), { target: { value: "09:00" } });
-    // The commit button sits in the layer's header, outside the form, and reaches it by id — as it
-    // does on the volunteers screen.
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /post shift/i }));
-
-    await waitFor(() => expect(createShift).toHaveBeenCalled());
-    const input = createShift.mock.calls[0][0];
-    expect(input.title).toBe("Lunch preparation on Tuesday, 1 September 2026");
-    expect(input.shiftDate).toBe(DATE);
-    expect(input.startTime).toBe("09:00");
-    expect(input.endTime).toBe("12:00");
-    expect(input.capacity).toBe(3);
-    expect(input.reminderOffsetsMinutes).toEqual([1440]);
-    const keys = Object.keys(input);
-    expect(keys).toContain("mealDate");
-    expect(keys).toContain("mealKind");
-    expect(keys).toContain("mealEventName");
-    expect(input.mealDate).toBe(DATE);
-    expect(input.mealKind).toBe("Lunch");
-    expect(input.mealEventName).toBeNull();
-    // Nothing navigated, and the day is still the thing on screen with the layer gone.
-    expect(push).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(screen.getByText("Lunch")).toBeTruthy();
-  });
-
-  it("links an event's shift by the event's own name", async () => {
-    mealServices.mockResolvedValue([
-      lunch({ mealKind: "Event", eventName: "Bhagavad Gita Parayanam" }),
-    ]);
-    mealCrew.mockResolvedValue([crewOf("Event")]);
-    render(
-      <MealServices
-        date={DATE}
-        sufficiency={new Map()}
-        recipes={RECIPES as never}
-        readOnly={false}
-        onChanged={vi.fn()}
-        onError={vi.fn()}
-      />
-    );
-    await screen.findByText("Bhagavad Gita Parayanam");
-
-    fireEvent.click(screen.getByRole("button", ASK));
-    fireEvent.change(field("startTime"), { target: { value: "07:00" } });
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /post shift/i }));
-
-    await waitFor(() => expect(createShift).toHaveBeenCalled());
-    const input = createShift.mock.calls[0][0];
-    const keys = Object.keys(input);
-    expect(keys).toContain("mealDate");
-    expect(keys).toContain("mealKind");
-    expect(keys).toContain("mealEventName");
-    expect(input.mealDate).toBe(DATE);
-    expect(input.mealKind).toBe("Event");
-    expect(input.mealEventName).toBe("Bhagavad Gita Parayanam");
-    expect(input.title).toContain("Bhagavad Gita Parayanam preparation on");
-  });
-
-  it("replaces the button with the posted shift, which opens in the same layer to edit", async () => {
-    // The list re-reads after the save; from then on it has the shift that was just posted.
-    let posted = false;
-    listShifts.mockImplementation(async () =>
-      posted ? [shiftFor({ id: "s-new", description: null, location: null, capacity: 3, signedUpCount: 0, reminderOffsetsMinutes: [1440] })] : []
-    );
-    createShift.mockImplementation(async () => {
-      posted = true;
-      return { id: "s-new" };
-    });
-
-    await openTheDay();
-    fireEvent.click(screen.getByRole("button", ASK));
-    fireEvent.change(field("startTime"), { target: { value: "09:00" } });
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /post shift/i }));
-
-    const opener = await screen.findByRole("button", { name: /0 of 3 signed up/ });
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.queryByRole("button", ASK)).toBeNull();
-
-    fireEvent.click(opener);
-    const layer = screen.getByRole("dialog");
-    expect(within(layer).getByRole("form").getAttribute("aria-label")).toBe("Edit a shift");
+    // The rest of what the planner knows: the derived title and the ready-by as the end.
     expect(field("title").value).toBe("Lunch preparation on Tuesday, 1 September 2026");
-    expect(field("capacity").value).toBe("3");
-    expect(push).not.toHaveBeenCalled();
+    expect(field("endTime").value).toBe("12:00");
   });
 
-  it("shows a shift already raised instead of the button, and edits it on the full form", async () => {
-    listShifts.mockResolvedValue([shiftFor()]);
-    const day = await openTheDay();
+  it("sends no request when Done is pressed, and shows View volunteer shift in its place", async () => {
+    await planALunch("8");
+    fireEvent.click(screen.getByRole("button", ASK));
+    fireEvent.change(field("startTime"), { target: { value: "09:00" } });
+    done();
 
-    await settled(day, "2 of 5 signed up");
-    expect(day.textContent).toContain("5 of 8");
-    expect(screen.queryByRole("button", ASK)).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /2 of 5 signed up/ }));
-    const layer = screen.getByRole("dialog");
-    // An existing shift is announced as an edit, and headed as one.
-    expect(within(layer).getByRole("form").getAttribute("aria-label")).toBe("Edit a shift");
-    expect(within(layer).getByRole("heading", { name: "Edit a shift" })).toBeTruthy();
-    // The shift's own values, all of them — not the meal's suggestions.
-    expect(field("startTime").value).toBe("09:00");
-    expect(field("capacity").value).toBe("5");
-    expect(field("location").value).toBe("Main kitchen");
-    expect(field("description").value).toBe("Bring an apron");
-    expect(field("reminderHours").value).toBe("48");
-
-    fireEvent.change(field("capacity"), { target: { value: "7" } });
-    fireEvent.change(field("location"), { target: { value: "Prep area" } });
-    fireEvent.click(within(layer).getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(updateShift).toHaveBeenCalled());
-    const [id, input] = updateShift.mock.calls[0];
-    expect(id).toBe("s1");
-    expect(input.capacity).toBe(7);
-    expect(input.location).toBe("Prep area");
-    expect(input.description).toBe("Bring an apron");
-    expect(input.reminderOffsetsMinutes).toEqual([2880]);
-    expect(input.title).toBe("Lunch preparation on Tuesday, 1 September 2026");
-    // A save without the link would take it off the shift, so a correction carries it too.
-    const keys = Object.keys(input);
-    expect(keys).toContain("mealDate");
-    expect(keys).toContain("mealKind");
-    expect(keys).toContain("mealEventName");
-    expect(input.mealKind).toBe("Lunch");
-    expect(push).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(createShift).not.toHaveBeenCalled();
-  });
+    nothingSavedAShift();
+    expect(api.saveMeal).not.toHaveBeenCalled();
+    expect(api.updateMeal).not.toHaveBeenCalled();
 
-  it("offers the button on a meal that is short of hands", async () => {
-    mealCrew.mockResolvedValue([crewOf("Lunch", 7, 8)]);
-    const day = await openTheDay();
-    await settled(day, "7 of 8");
-    expect(screen.getByRole("button", ASK)).toBeTruthy();
-  });
-
-  it("offers no button on a meal that is fully crewed", async () => {
-    mealCrew.mockResolvedValue([crewOf("Lunch", 8, 8)]);
-    const day = await openTheDay();
-    await settled(day, "8 of 8");
     expect(screen.queryByRole("button", ASK)).toBeNull();
+    expect(screen.getByRole("button", VIEW)).toBeInTheDocument();
+    expect(screen.getByText("Not saved yet. It is saved with this meal.")).toBeInTheDocument();
   });
 
-  it("still shows a shift raised for a meal that has since filled, so it can be opened", async () => {
-    mealCrew.mockResolvedValue([crewOf("Lunch", 8, 8)]);
-    listShifts.mockResolvedValue([shiftFor({ signedUpCount: 5 })]);
-    const day = await openTheDay();
-    await settled(day, "5 of 5 signed up");
-    expect(screen.queryByRole("button", ASK)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /5 of 5 signed up/ }));
-    expect(within(screen.getByRole("dialog")).getByRole("form", { name: "Edit a shift" })).toBeTruthy();
+  it("reopens the draft on View volunteer shift, as it was left", async () => {
+    await planALunch("8");
+    fireEvent.click(screen.getByRole("button", ASK));
+    fireEvent.change(field("startTime"), { target: { value: "09:00" } });
+    fireEvent.change(field("capacity"), { target: { value: "4" } });
+    done();
+
+    fireEvent.click(await screen.findByRole("button", VIEW));
+    expect(field("startTime").value).toBe("09:00");
+    expect(field("capacity").value).toBe("4");
+    // Still a shift being posted: nothing has saved it.
+    expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "Post a shift" })).toBeTruthy();
   });
 
-  it("does not draw a shift raised for another meal against this one", async () => {
-    // Same day, hours that span lunch's ready-by — the clock would have matched it, and the link
-    // does not. This is the whole of D-14 stated as a test.
-    listShifts.mockResolvedValue([
-      shiftFor({ id: "s2", mealKind: "Breakfast", title: "Breakfast preparation", startTime: "06:00:00", endTime: "14:00:00" }),
-    ]);
-    const day = await openTheDay();
-
-    await settled(day, "5 of 8");
-    expect(day.textContent).not.toContain("signed up");
-    expect(screen.getByRole("button", ASK)).toBeTruthy();
-  });
-
-  it("changes nothing when the layer is opened and cancelled", async () => {
-    const day = await openTheDay();
+  it("changes nothing when the layer is cancelled", async () => {
+    await planALunch("8");
     fireEvent.click(screen.getByRole("button", ASK));
     fireEvent.change(field("capacity"), { target: { value: "9" } });
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^cancel$/i }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(createShift).not.toHaveBeenCalled();
-    expect(updateShift).not.toHaveBeenCalled();
-    expect(day.textContent).toContain("5 of 8");
-    expect(screen.getByRole("button", ASK)).toBeTruthy();
-  });
-
-  it("offers nothing on a day that has been and gone", async () => {
-    listShifts.mockResolvedValue([shiftFor()]);
-    const day = await openTheDay(true);
-
-    await settled(day, "2 of 5 signed up");
-    // Readable, and not pressable: a past day's shift is a record.
-    expect(screen.queryByRole("button", { name: /2 of 5 signed up/ })).toBeNull();
-    expect(screen.queryByRole("button", ASK)).toBeNull();
-  });
-
-  it("fixes a new shift's date to the meal's day: read-only, described, and still sent", async () => {
-    await openTheDay();
-    fireEvent.click(screen.getByRole("button", ASK));
-
-    const date = field("shiftDate");
-    // Read-only and not disabled: a disabled box is left out of the form's data and cannot be
-    // focused, so the save would go without a date and a keyboard could not reach it.
-    expect(date.readOnly).toBe(true);
-    expect(date.disabled).toBe(false);
-    expect(date.value).toBe(DATE);
-    // Said, not only drawn: the line under the box is its description.
-    const described = document.getElementById(date.getAttribute("aria-describedby") ?? "");
-    expect(described?.textContent).toMatch(/day of the meal/i);
-
-    // Typing at it changes nothing.
-    fireEvent.change(date, { target: { value: "2026-09-05" } });
-    expect(field("shiftDate").value).toBe(DATE);
-
-    fireEvent.change(field("startTime"), { target: { value: "09:00" } });
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /post shift/i }));
-    await waitFor(() => expect(createShift).toHaveBeenCalled());
-    expect(createShift.mock.calls[0][0].shiftDate).toBe(DATE);
-  });
-
-  it("fixes an existing shift's date to the meal's day too", async () => {
-    listShifts.mockResolvedValue([shiftFor()]);
-    await openTheDay();
-    fireEvent.click(await screen.findByRole("button", { name: /2 of 5 signed up/ }));
-
-    expect(field("shiftDate").readOnly).toBe(true);
-    expect(field("shiftDate").value).toBe(DATE);
-    fireEvent.change(field("shiftDate"), { target: { value: "2026-09-05" } });
-
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /save changes/i }));
-    await waitFor(() => expect(updateShift).toHaveBeenCalled());
-    expect(updateShift.mock.calls[0][1].shiftDate).toBe(DATE);
-  });
-
-  it("warns on the planner, beside the meal, when a save moves a shift people signed up for", async () => {
-    listShifts.mockResolvedValue([shiftFor()]);
-    await openTheDay();
-    fireEvent.click(await screen.findByRole("button", { name: /2 of 5 signed up/ }));
-    fireEvent.change(field("startTime"), { target: { value: "10:00" } });
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(updateShift).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-
-    const notice = (await screen.findByText(/have not been told/i)).closest('[role="status"]') as HTMLElement;
-    // The volunteers screen's words exactly, because it is the same component saying them.
-    expect(notice.textContent?.replace(/\s+/g, " ").trim()).toBe(
-      "That shift moved, and the 2 volunteers already signed up have not been told. " +
-        "Their reminders now fire at the new time. Send them an update."
-    );
-    expect(within(notice).getByRole("link", { name: /send them an update/i }).getAttribute("href")).toBe(
-      "/volunteers/s1"
-    );
-    // In lunch's own block, under its header, where the reader pressed the shift.
-    expect(notice.closest("section")?.textContent).toContain("Ready by");
-    expect(push).not.toHaveBeenCalled();
-  });
-
-  it("does not warn when the moved shift has nobody signed up", async () => {
-    listShifts.mockResolvedValue([shiftFor({ signedUpCount: 0 })]);
-    await openTheDay();
-    fireEvent.click(await screen.findByRole("button", { name: /0 of 5 signed up/ }));
-    fireEvent.change(field("startTime"), { target: { value: "10:00" } });
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(updateShift).toHaveBeenCalled());
-    expect(updateShift.mock.calls[0][1].startTime).toBe("10:00");
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await waitFor(() => expect(listShifts.mock.calls.length).toBeGreaterThan(1));
-    expect(screen.queryByText(/have not been told/i)).toBeNull();
-  });
-
-  it("does not warn when a save leaves the times alone", async () => {
-    listShifts.mockResolvedValue([shiftFor()]);
-    await openTheDay();
-    fireEvent.click(await screen.findByRole("button", { name: /2 of 5 signed up/ }));
-    fireEvent.change(field("capacity"), { target: { value: "7" } });
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => expect(updateShift).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await waitFor(() => expect(listShifts.mock.calls.length).toBeGreaterThan(1));
-    expect(screen.queryByText(/have not been told/i)).toBeNull();
-  });
-
-  it("offers nothing to a reader who cannot raise a shift", async () => {
-    authRef.current = { role: "VOLUNTEER" };
-    listShifts.mockResolvedValue([shiftFor({ id: "s1", mealKind: "Breakfast" })]);
-    const day = await openTheDay();
-
-    await settled(day, "5 of 8");
-    expect(screen.queryByRole("button", ASK)).toBeNull();
+    expect(screen.getByRole("button", ASK)).toBeInTheDocument();
+    expect(screen.queryByRole("button", VIEW)).toBeNull();
+    nothingSavedAShift();
   });
 });
 
-/**
- * T-165: the layer's form is the volunteers' `ShiftFields`, which is a `Form`. Two things are true
- * here that are not true on the volunteers screens: the date is read-only, and the commit button is
- * in the layer's header.
- */
-describe("a blank box in the planner's shift layer (T-165)", () => {
-  beforeEach(() => {
-    authRef.current = { role: "KITCHEN_MANAGER" };
-    push.mockClear();
-    createShift.mockReset().mockResolvedValue({ id: "s-new" });
-    updateShift.mockReset().mockResolvedValue(undefined);
-    mealServices.mockReset().mockResolvedValue([lunch()]);
-    mealCrew.mockReset().mockResolvedValue([crewOf()]);
-    listShifts.mockReset().mockResolvedValue([]);
-  });
-
-  it("names a cleared title and the empty start beside their boxes, never the fixed date, and posts nothing", async () => {
-    await openTheDay();
-    fireEvent.click(screen.getByRole("button", ASK));
-    fireEvent.change(field("title"), { target: { value: "" } });
-    const layer = screen.getByRole("dialog");
-    fireEvent.click(within(layer).getByRole("button", { name: /post shift/i }));
-
-    const title = await within(layer).findByText("Title is required");
-    expect(field("title").getAttribute("aria-describedby")).toContain(title.id);
-    expect(field("startTime").getAttribute("aria-describedby")).toContain(
-      within(layer).getByText("Start is required").id
-    );
-    expect(within(layer).getAllByText(/ is required$/)).toHaveLength(2);
-    expect(within(layer).queryByText(/^Date /)).toBeNull();
-    expect(createShift).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toBeTruthy();
-  });
-
-  it("passes the read-only date by, even when it holds nothing", async () => {
-    await openTheDay();
+describe("the shift is saved only with the meal", () => {
+  it("sends one Save this meal request carrying the drafted shift, and no shift request", async () => {
+    await planALunch("8");
     fireEvent.click(screen.getByRole("button", ASK));
     fireEvent.change(field("startTime"), { target: { value: "09:00" } });
+    done();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    // Nobody can empty this box: it is read-only and React holds its value. It is emptied here
-    // behind React's back, with no event, to put a blank `required` box in front of `Form` that the
-    // browser does not validate. A read-only box is barred from constraint validation, so `Form`
-    // must pass it by rather than name it. This proves `Form` does not over-reach; it would also
-    // pass against a plain `<form>`, which skips the box the same way.
-    const date = field("shiftDate");
-    date.value = "";
-    expect(date.value).toBe("");
-    expect(date.readOnly && date.required).toBe(true);
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /post shift/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save this meal" }));
+    await waitFor(() => expect(api.saveMeal).toHaveBeenCalledTimes(1));
+    nothingSavedAShift();
 
-    await waitFor(() => expect(createShift).toHaveBeenCalled());
-    expect(screen.queryByText(/^Date /)).toBeNull();
+    const input = api.saveMeal.mock.calls[0][0];
+    expect(Object.keys(input)).toContain("volunteerShift");
+    const shift = input.volunteerShift as Record<string, unknown>;
+    // No date and no meal: the server takes both from the meal it saves the shift with.
+    expect(Object.keys(shift).sort()).toEqual(
+      ["capacity", "description", "endTime", "location", "reminderOffsetsMinutes", "startTime", "title"]
+    );
+    expect(shift).toEqual({
+      title: "Lunch preparation on Tuesday, 1 September 2026",
+      description: null,
+      startTime: "09:00",
+      endTime: "12:00",
+      location: null,
+      capacity: 3,
+      reminderOffsetsMinutes: [1440],
+    });
+  });
+
+  it("shows View volunteer shift on a meal that already has one, whatever the numbers say", async () => {
+    api.mealCrew.mockResolvedValue([crewOf(8, 8)]);
+    render(<Harness existing={lunch({ volunteerShift: shiftFor() }) as never} />);
+    await screen.findByText(/3 staff · 5 volunteers · 8 of 8/);
+
+    expect(screen.getByRole("button", VIEW)).toBeInTheDocument();
+    expect(screen.queryByRole("button", ASK)).toBeNull();
+    expect(screen.getByText("2 of 5 signed up")).toBeInTheDocument();
+  });
+
+  it("opens a saved shift on its own values, and sends a change only with Update this meal", async () => {
+    await editLunch({ volunteerShift: shiftFor({ signedUpCount: 0 }) });
+    fireEvent.click(screen.getByRole("button", VIEW));
+
+    const layer = screen.getByRole("dialog");
+    expect(within(layer).getByRole("heading", { name: "Edit a shift" })).toBeTruthy();
+    expect(field("capacity").value).toBe("5");
+    expect(field("location").value).toBe("Main kitchen");
+    expect(field("reminderHours").value).toBe("48");
+
+    fireEvent.change(field("capacity"), { target: { value: "7" } });
+    done();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    nothingSavedAShift();
+    expect(api.updateMeal).not.toHaveBeenCalled();
+    expect(screen.getByText("0 of 7 signed up. Your changes are saved with this meal.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update this meal" }));
+    await waitFor(() => expect(api.updateMeal).toHaveBeenCalledTimes(1));
+    nothingSavedAShift();
+    const [mealId, input] = api.updateMeal.mock.calls[0];
+    expect(mealId).toBe("meal-lunch");
+    expect(input.volunteerShift).toMatchObject({ capacity: 7, description: "Bring an apron", location: "Main kitchen" });
+  });
+
+  it("leaves a saved shift alone on an update that did not touch it, by sending null", async () => {
+    await editLunch({ volunteerShift: shiftFor() });
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "250" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update this meal" }));
+
+    await waitFor(() => expect(api.updateMeal).toHaveBeenCalledTimes(1));
+    const input = api.updateMeal.mock.calls[0][1];
+    expect(Object.keys(input)).toContain("volunteerShift");
+    expect(input.volunteerShift).toBeNull();
+  });
+});
+
+describe("new times on a shift people signed up for", () => {
+  async function changeTheStart(signedUpCount: number) {
+    await editLunch({ volunteerShift: shiftFor({ signedUpCount }) });
+    fireEvent.click(screen.getByRole("button", VIEW));
+    fireEvent.change(field("startTime"), { target: { value: "10:00" } });
+    done();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Update this meal" }));
+  }
+
+  it("warns before Update this meal saves, in the ruled words, and saves once confirmed", async () => {
+    await changeTheStart(3);
+
+    const warning = await screen.findByRole("alertdialog");
+    expect(within(warning).getByText("3 volunteers are signed up. They’ll be told the new times.")).toBeTruthy();
+    // Warned before, not after: nothing has gone to the server yet.
+    expect(api.updateMeal).not.toHaveBeenCalled();
+
+    fireEvent.click(within(warning).getByRole("button", { name: "Update this meal" }));
+    await waitFor(() => expect(api.updateMeal).toHaveBeenCalledTimes(1));
+    expect(api.updateMeal.mock.calls[0][1].volunteerShift).toMatchObject({ startTime: "10:00", endTime: "12:00" });
+    nothingSavedAShift();
+  });
+
+  it("says it properly for one volunteer", async () => {
+    await changeTheStart(1);
+    const warning = await screen.findByRole("alertdialog");
+    expect(within(warning).getByText("1 volunteer is signed up. They’ll be told the new times.")).toBeTruthy();
+  });
+
+  it("saves nothing when the planner goes back", async () => {
+    await changeTheStart(3);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Go back" }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(api.updateMeal).not.toHaveBeenCalled();
+  });
+
+  it("does not warn when the times are the same, signups or not", async () => {
+    await editLunch({ volunteerShift: shiftFor({ signedUpCount: 3 }) });
+    fireEvent.click(screen.getByRole("button", VIEW));
+    fireEvent.change(field("capacity"), { target: { value: "7" } });
+    done();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Update this meal" }));
+
+    await waitFor(() => expect(api.updateMeal).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("does not warn when nobody is signed up", async () => {
+    await changeTheStart(0);
+    await waitFor(() => expect(api.updateMeal).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("never calls it a move, anywhere on the screen", async () => {
+    await changeTheStart(3);
+    await screen.findByRole("alertdialog");
+    // The ruling: "The words are 'times changed', never 'moved'." The whole page, layers included.
+    expect(document.body.textContent).not.toMatch(/\bmoved?\b/i);
+  });
+});
+
+describe("Leave without saving?", () => {
+  it("asks before leaving a meal with a drafted shift, and abandoning it sends nothing — no orphan shift", async () => {
+    await planALunch("8");
+    fireEvent.click(screen.getByRole("button", ASK));
+    fireEvent.change(field("startTime"), { target: { value: "09:00" } });
+    done();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    fireEvent.click(screen.getByRole("link", { name: "Back to the day" }));
+    const ask = await screen.findByRole("alertdialog", { name: "Leave without saving?" });
+    expect(push).not.toHaveBeenCalled();
+
+    fireEvent.click(within(ask).getByRole("button", { name: "Leave without saving" }));
+    expect(push).toHaveBeenCalledWith(DAY);
+    // The whole point: walking away from the meal walked away from the shift with it.
+    nothingSavedAShift();
+    expect(api.saveMeal).not.toHaveBeenCalled();
+    expect(api.updateMeal).not.toHaveBeenCalled();
+  });
+
+  it("stays, with the draft intact, when the planner chooses to", async () => {
+    await planALunch("8");
+    fireEvent.click(screen.getByRole("button", ASK));
+    fireEvent.change(field("startTime"), { target: { value: "09:00" } });
+    done();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    fireEvent.click(screen.getByRole("link", { name: "Back to the day" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stay on this page" }));
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", VIEW)).toBeInTheDocument();
+  });
+
+  it("asks the browser to confirm a reload or a closed tab, but only once something changed", async () => {
+    render(<Harness />);
+    const before = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(before);
+    expect(before.defaultPrevented).toBe(false);
+
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "200" } });
+    const after = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(true);
+  });
+
+  it("lets an untouched meal be left without asking", async () => {
+    render(<Harness />);
+    await screen.findByText(/3 staff · 2 volunteers/);
+    fireEvent.click(screen.getByRole("link", { name: "Back to the day" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+});
+
+describe("the day's meal and its shift", () => {
+  function openTheDay(readOnly = false) {
+    render(
+      <MealServices
+        date={DATE}
+        sufficiency={new Map()}
+        recipes={RECIPES as never}
+        readOnly={readOnly}
+        onChanged={vi.fn()}
+        onError={vi.fn()}
+      />
+    );
+  }
+
+  it("shows the shift beside the crew and links to the meal, with no layer and no Ask of its own", async () => {
+    api.meals.mockResolvedValue([lunch({ volunteerShift: shiftFor() })]);
+    openTheDay();
+
+    const pebble = await screen.findByRole("link", { name: /2 of 5 signed up/ });
+    expect(pebble).toHaveAttribute("href", "/planner/meal/meal-lunch");
+    // Asking, and changing what was asked, are on the meal's own form since D-27.
+    expect(screen.queryByRole("button", ASK)).toBeNull();
+    fireEvent.click(pebble);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    nothingSavedAShift();
+  });
+
+  it("draws a past day's shift as text", async () => {
+    api.meals.mockResolvedValue([lunch({ volunteerShift: shiftFor() })]);
+    openTheDay(true);
+
+    expect(await screen.findByText(/2 of 5 signed up/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /2 of 5 signed up/ })).toBeNull();
+  });
+
+  it("warns with the count before cancelling a meal with a shift, then cancels both", async () => {
+    let cancelled = false;
+    api.meals.mockImplementation(async () =>
+      cancelled ? [] : [lunch({ volunteerShift: shiftFor({ signedUpCount: 3, waitlistCount: 1 }) })]
+    );
+    api.cancelMeal.mockImplementation(async () => {
+      cancelled = true;
+      return { volunteersTold: 4 };
+    });
+    openTheDay();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel this meal" }));
+    const warning = screen.getByRole("alertdialog", { name: "Cancel Lunch?" });
+    expect(warning).toHaveTextContent(
+      "This meal has a volunteer shift. 3 volunteers are signed up and 1 is waiting. " +
+        "Cancelling the meal cancels the shift too, and they will be told."
+    );
+    // Warned first: nothing sent until it is confirmed.
+    expect(api.cancelMeal).not.toHaveBeenCalled();
+
+    fireEvent.click(within(warning).getByRole("button", { name: "Cancel this meal" }));
+    await waitFor(() => expect(api.cancelMeal).toHaveBeenCalledTimes(1));
+    // One call for the meal. The shift goes with it on the server, in the same transaction.
+    expect(api.cancelMeal.mock.calls[0][0]).toBe("meal-lunch");
+    nothingSavedAShift();
+    expect(await screen.findByText("Lunch was cancelled. 4 volunteers were told.")).toBeInTheDocument();
+  });
+
+  it("cancels nothing when the planner keeps the meal", async () => {
+    api.meals.mockResolvedValue([lunch({ volunteerShift: shiftFor() })]);
+    openTheDay();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel this meal" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Keep it" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(api.cancelMeal).not.toHaveBeenCalled();
+  });
+
+  it("asks plainly about a meal with no shift", async () => {
+    api.meals.mockResolvedValue([lunch()]);
+    openTheDay();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel this meal" }));
+    expect(screen.getByRole("alertdialog", { name: "Cancel Lunch?" })).toHaveTextContent(
+      "Its preparations come off the plan."
+    );
+  });
+
+  it("offers no cancel on a meal already recorded, or on a day that has gone", async () => {
+    api.meals.mockResolvedValue([lunch({ recorded: true, status: "COOKED" })]);
+    openTheDay();
+    await screen.findByText("Lunch");
+    expect(screen.queryByRole("button", { name: "Cancel this meal" })).toBeNull();
   });
 });

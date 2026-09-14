@@ -84,10 +84,14 @@ function calendarDay(fields: Record<string, unknown> = {}) {
   };
 }
 
-/** One meal, as `mealServices` returns it: a kind, a time, its plates and its preparations. */
+/** One meal, as `GET /api/v1/meals` returns it: its own id, a kind, a time, its plates and its preparations. */
 function meal(fields: Record<string, unknown> = {}) {
   return {
-    serviceId: null,
+    mealId: "meal-lunch",
+    mealKindId: "k-lunch",
+    status: "PLANNED",
+    volunteerShift: null,
+    corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
     planDate: todayIso(),
     date: todayIso(),
     mealKind: "Lunch",
@@ -114,13 +118,10 @@ function meal(fields: Record<string, unknown> = {}) {
 
 function preparation(id: string, recipeName: string) {
   return {
-    id, planDate: todayIso(), mealKind: "Lunch", readyBy: "12:00:00",
-    recipeId: `r-${id}`, recipeName, targetYield: 133,
-    dayType: "REGULAR", occasionName: null, status: "PLANNED",
-    eventName: null, isOutside: false, handover: null, contactName: null, contactPhone: null,
-    deliveryAddress: null, guestsEatAt: null, purpose: null,
-    adults: 120, children: 20, seniors: 0, crewRequired: null,
-    kitchenNotes: null, actualServings: null, notMade: false, cookedAt: null,
+    id, mealId: "meal-lunch",
+    recipeId: `r-${id}`, recipeName, targetYield: 133, targetYieldUnit: "KG", status: "PLANNED",
+    actualServings: null, consumedQuantity: null, notMade: false,
+    originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
     ekadashiAcknowledged: false, createdAt: "2026-08-20T10:00:00Z",
   };
 }
@@ -312,11 +313,8 @@ describe("a meal is the unit of planning", () => {
     expect(screen.getByText(/133 servings/)).toBeInTheDocument();
     expect(screen.getByText("Bisi Bele Bath")).toBeInTheDocument();
     expect(screen.getByText("Majjige")).toBeInTheDocument();
-    // The whole meal is edited as one, at its own address.
-    expect(screen.getByRole("link", { name: /^edit$/i })).toHaveAttribute(
-      "href",
-      `/planner/${todayIso()}/Lunch`
-    );
+    // The whole meal is edited as one, at its own address — its id since D-27, not its date and kind.
+    expect(screen.getByRole("link", { name: /^edit$/i })).toHaveAttribute("href", "/planner/meal/meal-lunch");
   });
 
   it("counts a week's tile in meals, and names the preparations beneath", () => {
@@ -744,6 +742,7 @@ describe("upcoming outside commitments", () => {
 /** One commitment, as `outside-commitments` returns it. `dishes` keeps the meal grids out of it. */
 function commitment(fields: Record<string, unknown> = {}) {
   return {
+    mealId: "meal-bhajan-prasadam",
     planDate: "2026-09-12",
     eventName: "Bhajan Prasadam at the school",
     mealKind: "Event",

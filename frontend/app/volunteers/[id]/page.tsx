@@ -15,6 +15,7 @@ import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
 import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
 import { dateWithYear, moment, shiftWindow, templeDay, templeZone, todayIso } from "@/lib/format";
+import { mealLabel } from "../shift-form";
 
 /**
  * Why a volunteer is coming off a roster — the four Rajeev named, in the words the coordinator picks
@@ -263,6 +264,8 @@ function ShiftRosterView() {
               <header className="mb-6 mt-3 flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <h1>{shift.title}</h1>
+                  {/* The meal it is for, where it is for one (D-27): the same label as the list. */}
+                  {mealLabel(shift) && <p className="mt-1 text-ink-secondary">{mealLabel(shift)}</p>}
                   <p className="mt-1 text-ink-secondary tabular-nums">
                     {dateWithYear(shift.shiftDate)} · {shiftWindow(shift.startTime, shift.endTime)}{shift.location ? ` · ${shift.location}` : ""}
                   </p>

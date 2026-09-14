@@ -121,20 +121,21 @@ public class DocumentService {
 	 * Print it twice if the head cook wants English and the line cooks do not.
 	 */
 	@Transactional
-	public UUID requestJobCardPdf(UUID mealServiceId, String language) {
+	public UUID requestJobCardPdf(UUID mealId, String language) {
 		String lang = (language == null || language.isBlank())
-				? jobCardService.appendixLanguages(mealServiceId).defaultLanguage() : language;
+				? jobCardService.appendixLanguages(mealId).defaultLanguage() : language;
 
+		// The card points at the meal's own row (D-27, V136's documents.meal_id).
 		int version = jdbc.queryForObject(
-				"SELECT COALESCE(MAX(version), 0) + 1 FROM documents WHERE meal_service_id = ?",
-				Integer.class, mealServiceId);
+				"SELECT COALESCE(MAX(version), 0) + 1 FROM documents WHERE meal_id = ?",
+				Integer.class, mealId);
 		UUID id = UUID.randomUUID();
 		UUID createdBy = requesterHere();
 		jdbc.update("""
-				INSERT INTO documents (id, tenant_id, kind, meal_service_id, version, language, status, created_by)
+				INSERT INTO documents (id, tenant_id, kind, meal_id, version, language, status, created_by)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
 						'JOB_CARD_PDF', ?, ?, ?, 'PENDING', ?)
-				""", id, mealServiceId, version, lang, createdBy);
+				""", id, mealId, version, lang, createdBy);
 
 		enqueue(id);
 		return id;
@@ -250,9 +251,9 @@ public class DocumentService {
 
 	/** Every card printed for a meal, latest version first. */
 	@Transactional(readOnly = true)
-	public List<DocumentView> listForMealService(UUID mealServiceId) {
-		return jdbc.query(SELECT_COLUMNS + " WHERE meal_service_id = ? ORDER BY version DESC",
-				MAPPER, mealServiceId);
+	public List<DocumentView> listForMeal(UUID mealId) {
+		return jdbc.query(SELECT_COLUMNS + " WHERE meal_id = ? ORDER BY version DESC",
+				MAPPER, mealId);
 	}
 
 	/**

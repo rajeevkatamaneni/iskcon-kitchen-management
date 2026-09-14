@@ -24,8 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>The rostered side is asked per meal rather than per day, through {@link WorkforceService}: a
  * person counts towards a meal if their working window covers the time that meal's food must be
  * ready. A volunteer counts the same way — a shift posted 11:00–14:00 still falls to lunch without
- * anybody linking it to one — unless the shift says which meal it was posted for, in which case it
- * counts toward that meal and no other (D-14). The clock was getting this wrong in both directions:
+ * anybody linking it to one — unless the shift is for a meal, in which case it counts toward that
+ * meal and no other (D-14), matched by the meal's id since D-27. The clock was getting this wrong in both directions:
  * a shift 06:00–10:00 to cut vegetables for lunch was landing on breakfast, so lunch was short of
  * hands that were coming and breakfast was credited with hands that were not.
  *
@@ -140,20 +140,21 @@ public class MealCrewService {
 	public Integer suggestedCrew(String mealKind) {
 		// Through the kind service so an unknown kind is refused by name (KMS-400071) rather than
 		// quietly matching no meals and reading as "this temple has never cooked one".
-		String kind = mealKindService.require(mealKind).name();
+		UUID kindId = mealKindService.require(mealKind).id();
+		// Since D-27 the crew figure is on the meal row and the day type on its day, and a meal is
+		// "called off" when every dish of it is — the same test mealsIn() applies below. Matched on the
+		// kind's id, never its name: a kind renamed in Settings keeps its history.
 		List<Integer> recent = jdbc.queryForList("""
-				SELECT crew_required FROM (
-					SELECT plan_date, max(crew_required) AS crew_required
-					FROM meal_plans
-					WHERE meal_kind = ?
-					  AND day_type IN ('REGULAR', 'WEEKEND')
-					  AND status <> 'CANCELLED'
-					  AND crew_required IS NOT NULL
-					GROUP BY plan_date
-				) meal
-				ORDER BY plan_date DESC
+				SELECT m.crew_required
+				FROM meals m
+				JOIN meal_plan_days d ON d.id = m.meal_plan_day_id
+				WHERE m.meal_kind_id = ?
+				  AND d.day_type IN ('REGULAR', 'WEEKEND')
+				  AND m.crew_required IS NOT NULL
+				  AND EXISTS (SELECT 1 FROM meal_dishes md WHERE md.meal_id = m.id AND md.status <> 'CANCELLED')
+				ORDER BY d.plan_date DESC, m.ready_by DESC
 				LIMIT 3
-				""", Integer.class, kind);
+				""", Integer.class, kindId);
 
 		return median(recent);
 	}
@@ -197,9 +198,8 @@ public class MealCrewService {
 	 * <p>What counts as "the same" narrowed with D-14, and it had to. A moment used to be a date and
 	 * a ready-by time, so two different meals due at the same minute collapsed into one question and
 	 * one answer. That was harmless while the answer depended only on the clock; it is wrong now that
-	 * a shift can be posted for one of them and not the other. A moment is the meal's own identity —
-	 * date, kind, event name — and two meals sharing a minute are now two questions with two answers,
-	 * which is what a linked shift needs them to be.
+	 * a shift can be for one of them and not the other. A moment carries the meal's own id (D-27), so
+	 * two meals sharing a minute are two questions with two answers.
 	 */
 	private static List<MealMoment> momentsOf(List<ServedMeal> meals) {
 		Map<MealMoment, Boolean> seen = new LinkedHashMap<>();
@@ -209,13 +209,9 @@ public class MealCrewService {
 		return List.copyOf(seen.keySet());
 	}
 
-	/**
-	 * The meal as the roster is asked about it. The kind and the event name go over raw — the record
-	 * folds them itself, by exactly the rule the meal's own key folds them with, so that a link typed
-	 * "  janmashtami " finds the meal called "Janmashtami" instead of silently finding nothing.
-	 */
+	/** The meal as the roster is asked about it, by its own id (D-27). */
 	private static MealMoment momentOf(ServedMeal meal) {
-		return new MealMoment(meal.planDate(), meal.readyBy(), meal.mealKind(), meal.eventName());
+		return new MealMoment(meal.mealId(), meal.planDate(), meal.readyBy(), meal.mealKind(), meal.eventName());
 	}
 
 	/**
@@ -227,6 +223,7 @@ public class MealCrewService {
 	private static MealCrewView readout(ServedMeal meal, WorkforceCount count) {
 		WorkforceCount roster = count != null ? count : new WorkforceCount(meal.planDate(), 0, 0);
 		return new MealCrewView(
+				meal.mealId(),
 				meal.planDate(),
 				meal.mealKind(),
 				meal.readyBy(),

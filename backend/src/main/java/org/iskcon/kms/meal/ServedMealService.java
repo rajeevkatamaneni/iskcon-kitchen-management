@@ -3,12 +3,14 @@ package org.iskcon.kms.meal;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,17 +30,16 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * A meal as one thing, and the record of what came back from the kitchen (B5, brief §2).
  *
- * <p>The planner writes one row per dish. This service reads those rows back as meals — grouped on
- * what the brief means every time it says "the meal" — and owns the two facts that belong to a whole
- * meal rather than to any dish of it: the number printed on its job card, and the moment somebody in
- * the office typed in what the returned card said.
- *
- * <p><strong>What a meal is identified by.</strong> A date, a kind, and — where the kind is an
- * event — the event's own name (V89, E4-S15 D1). The pair alone was right while every kind was one
- * meal a day, and stopped being right the moment every event started calling itself Event: a morning
- * children's reading and an evening Bhajan Prasadam on one Saturday would otherwise be one recording
- * and one job card, which is the very thing splitting events out of the main meals was for. The
- * three main meals carry no event name and are reached by exactly the pair they always were.
+ * <p><strong>What a meal is identified by: its id (D-27).</strong> For as long as this service
+ * existed before D-27 there was no meal row. It read dish rows back as meals by grouping them on a
+ * date, a kind's name and — once events arrived — the event's name, and it kept the card number and
+ * the recording on a second table keyed on the same three texts. That grouping was right on most
+ * days and wrong on the ones that mattered: a kind renamed in Settings had to be cascaded by hand
+ * through every table that stored the name, two events nobody named were one recording, and a
+ * volunteer shift linked to "lunch" had to match a temple storing "Lunch" by folding case. Rajeev
+ * ruled it out: <em>"identifying things by text is a terrible idea and one that WILL fail
+ * eventually."</em> A meal is a row of its own now ({@code meals}, V136), its dishes point at it, and
+ * every method here that names a meal takes that row's id.
  *
  * <p><strong>Why recording exists at all.</strong> Marking a meal cooked is the moment its
  * ingredients leave stock. Take it away and the store room never depletes and the shopping list
@@ -47,9 +48,8 @@ import org.springframework.transaction.annotation.Transactional;
  * once, for the whole meal.
  *
  * <p><strong>And why the actual figure.</strong> Stock is drawn against what actually went out, not
- * against what was planned. That is the number the data entry is for: over a month the gap between
- * the two tells the temple its head counts are wrong, in which direction and by how much. A dish
- * marked "not made" draws nothing.
+ * against what was planned. Over a month the gap between the two tells the temple its head counts are
+ * wrong, in which direction and by how much. A dish marked "not made" draws nothing.
  */
 @Service
 public class ServedMealService {
@@ -62,81 +62,74 @@ public class ServedMealService {
 	private static final BigDecimal MAX_SERVINGS = BigDecimal.valueOf(100_000);
 
 	private final JdbcTemplate jdbc;
-	private final MealPlanService mealPlanService;
-	private final MealKindService mealKindService;
 	private final InventoryConsumptionService consumptionService;
 	private final AuditService auditService;
 
+	// No MealPlanService here any more, and that is deliberate rather than incidental. This service
+	// used to read dish rows through the planner; the planner now reads meals through this one
+	// (reuse, repeat, travel), so the dependency points one way and there is no circle to break.
 	public ServedMealService(
-			JdbcTemplate jdbc, MealPlanService mealPlanService, MealKindService mealKindService,
-			InventoryConsumptionService consumptionService, AuditService auditService) {
+			JdbcTemplate jdbc, InventoryConsumptionService consumptionService, AuditService auditService) {
 		this.jdbc = jdbc;
-		this.mealPlanService = mealPlanService;
-		this.mealKindService = mealKindService;
 		this.consumptionService = consumptionService;
 		this.auditService = auditService;
 	}
 
 	// ---- Read -----------------------------------------------------------
 
-	/** Every meal in the range, in the order the kitchen works: by date, then by when each is due. */
-	@Transactional(readOnly = true)
-	public List<ServedMeal> list(LocalDate from, LocalDate to) {
-		List<MealPlanView> dishes = mealPlanService.list(from, to, null, null);
-		Map<Key, ServiceRow> services = servicesIn(from, to);
-
-		// LinkedHashMap: list() already returns plan_date, ready_by, meal_kind order, so grouping in
-		// encounter order gives the meals back in that same order without a second sort.
-		Map<Key, List<MealPlanView>> grouped = new LinkedHashMap<>();
-		for (MealPlanView dish : dishes) {
-			grouped.computeIfAbsent(Key.of(dish.planDate(), dish.mealKind(), dish.eventName()),
-					k -> new ArrayList<>()).add(dish);
-		}
-
-		List<ServedMeal> meals = new ArrayList<>();
-		grouped.forEach((key, rows) -> meals.add(assemble(key, rows, services.get(key))));
-		return meals;
-	}
-
 	/**
-	 * One meal, or empty when nothing at all is planned for that date, kind and event.
+	 * Every meal in the range, in the order the kitchen works: by date, then by when each is due.
 	 *
-	 * <p>{@code eventName} is null for Breakfast, Lunch, Dinner and everything else that is not an
-	 * event, and it is null too for an event nobody has named — V88 carried a handful of those across
-	 * and they group together, which is the reading V89's header argues for at length.
+	 * <p>Either end may be null, for "from the beginning" or "to the end". The volunteer shift is not
+	 * attached here — see {@link ServedMeal#volunteerShift()} for who does, and why not this service.
 	 */
 	@Transactional(readOnly = true)
-	public Optional<ServedMeal> find(LocalDate date, String mealKind, String eventName) {
-		String kind = mealKindService.require(mealKind).name();
-		Key wanted = Key.of(date, kind, eventName);
-		return list(date, date).stream()
-				.filter(m -> Key.of(m.planDate(), m.mealKind(), m.eventName()).equals(wanted))
-				.findFirst();
+	public List<ServedMeal> list(LocalDate from, LocalDate to) {
+		StringBuilder where = new StringBuilder(" WHERE 1 = 1");
+		List<Object> args = new ArrayList<>();
+		if (from != null) {
+			where.append(" AND pd.plan_date >= ?");
+			args.add(from);
+		}
+		if (to != null) {
+			where.append(" AND pd.plan_date <= ?");
+			args.add(to);
+		}
+		List<MealRow> meals = jdbc.query(MEAL_SELECT + where + MEAL_ORDER, MEAL_MAPPER, args.toArray());
+		Map<UUID, List<MealDishView>> dishes = dishesIn(
+				DISH_SELECT + " JOIN meals m ON m.id = d.meal_id"
+						+ " JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id" + where + DISH_ORDER,
+				args.toArray());
+		return assembleAll(meals, dishes);
 	}
 
-	/** One meal, or a refusal. The job card and the recording form both start here. */
+	/** One meal by its id, or empty where this temple has no such meal. */
 	@Transactional(readOnly = true)
-	public ServedMeal require(LocalDate date, String mealKind, String eventName) {
-		return find(date, mealKind, eventName).orElseThrow(() -> new ApplicationException(
-				ErrorCode.RESOURCE_NOT_FOUND, Map.of(
-						"planDate", date,
-						"mealKind", String.valueOf(mealKind),
-						"eventName", String.valueOf(eventName))));
-	}
-
-	/** One meal by its own row, which is how a generated job card refers back to it. */
-	@Transactional(readOnly = true)
-	public ServedMeal requireByServiceId(UUID serviceId) {
-		ServiceRow row = jdbc.query(SERVICE_SELECT + " WHERE ms.id = ?", SERVICE_MAPPER, serviceId)
-				.stream().findFirst()
-				.orElseThrow(() -> new ApplicationException(
-						ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealServiceId", serviceId)));
-		return require(row.planDate(), row.mealKind(), row.eventName());
+	public Optional<ServedMeal> find(UUID mealId) {
+		List<MealRow> meals = jdbc.query(MEAL_SELECT + " WHERE m.id = ?", MEAL_MAPPER, mealId);
+		if (meals.isEmpty()) {
+			return Optional.empty();
+		}
+		Map<UUID, List<MealDishView>> dishes = dishesIn(
+				DISH_SELECT + " WHERE d.meal_id = ?" + DISH_ORDER, new Object[] {mealId});
+		return Optional.of(assembleAll(meals, dishes).get(0));
 	}
 
 	/**
-	 * How many plates the kitchen is cooking on a date, per meal kind — <em>Breakfast 100 · Lunch 250
-	 * · Dinner 180</em> (brief §1d). Per kind and never a total, because a plate at breakfast and a
+	 * One meal, or a refusal. The job card, the recording form and the correction all start here.
+	 *
+	 * <p>An id belonging to another temple reads as absent — row-level security hides the row — which
+	 * is the same refusal as an id that never existed, and deliberately so.
+	 */
+	@Transactional(readOnly = true)
+	public ServedMeal require(UUID mealId) {
+		return find(mealId).orElseThrow(() -> new ApplicationException(
+				ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealId", String.valueOf(mealId))));
+	}
+
+	/**
+	 * How many plates the kitchen is cooking on a date, per meal — <em>Breakfast 100 · Lunch 250 ·
+	 * Dinner 180</em> (brief §1d). Per meal and never a total, because a plate at breakfast and a
 	 * plate at dinner are not the same plate, and adding them is how the tile came to report 750 for
 	 * a lunch of three dishes.
 	 */
@@ -145,14 +138,12 @@ public class ServedMealService {
 		Map<String, Integer> plates = new LinkedHashMap<>();
 		for (ServedMeal meal : list(date, date)) {
 			// A cancelled meal is not work the kitchen has to do, so it is not plates either.
-			if (meal.dishes().stream().allMatch(d -> d.status() == MealStatus.CANCELLED)) {
+			if (meal.status() == MealStatus.CANCELLED) {
 				continue;
 			}
 			// An event is named by its name and not by its kind. Every event of every temple is
 			// called Event, so keying this on the kind would have two events on one Saturday
-			// overwrite each other and the tile would report one of them — the same class of bug as
-			// the 750-plate lunch, and silent in the same way. The name is also the only label a
-			// reader can act on: "Event 30" says nothing, "Children's Gita Reading 30" does.
+			// overwrite each other and the tile would report one of them.
 			plates.put(label(meal), meal.plates());
 		}
 		return plates;
@@ -167,9 +158,6 @@ public class ServedMealService {
 	/**
 	 * How many meals in the range went out and were never written down — the count behind the nudge,
 	 * <em>"3 meals from earlier this week not yet recorded"</em>.
-	 *
-	 * <p>A nudge and not an alarm, but not decoration either: every unrecorded meal is stock the
-	 * store room still believes it has.
 	 */
 	@Transactional(readOnly = true)
 	public int unrecordedCount(LocalDate from, LocalDate to) {
@@ -185,17 +173,19 @@ public class ServedMealService {
 	 * this makes it all-or-nothing per meal: if the fourth dish is short of ghee, the first three are
 	 * rolled back too and the meal stays open, rather than leaving a half-recorded lunch nobody can
 	 * finish or repeat.
+	 *
+	 * <p>The meal row is locked first. Two people in the office typing in the same card at once would
+	 * otherwise both read "not recorded" and both draw the stock.
 	 */
 	@Transactional
-	public ServedMeal record(AuthenticatedUser actor, RecordMealRequest request) {
-		String kind = mealKindService.require(request.mealKind()).name();
-		ServedMeal meal = require(request.planDate(), kind, request.eventName());
+	public ServedMeal record(AuthenticatedUser actor, UUID mealId, RecordMealRequest request) {
+		lock(mealId);
+		ServedMeal meal = require(mealId);
 
 		if (meal.recorded()) {
-			throw new ApplicationException(ErrorCode.MEAL_ALREADY_RECORDED,
-					Map.of("planDate", request.planDate(), "mealKind", kind));
+			throw new ApplicationException(ErrorCode.MEAL_ALREADY_RECORDED, Map.of("mealId", mealId));
 		}
-		List<MealPlanView> open = meal.dishes().stream()
+		List<MealDishView> open = meal.dishes().stream()
 				.filter(d -> d.status() == MealStatus.PLANNED).toList();
 		if (open.isEmpty()) {
 			// Nothing left to record is one of two different situations, and they get different
@@ -204,28 +194,29 @@ public class ServedMealService {
 			boolean anyCooked = meal.dishes().stream().anyMatch(d -> d.status() == MealStatus.COOKED);
 			throw new ApplicationException(
 					anyCooked ? ErrorCode.MEAL_ALREADY_RECORDED : ErrorCode.MEAL_NOT_RECORDABLE,
-					Map.of("planDate", request.planDate(), "mealKind", kind));
+					Map.of("mealId", mealId));
 		}
 
 		Map<UUID, RecordMealRequest.DishRecord> given = new LinkedHashMap<>();
 		for (RecordMealRequest.DishRecord dish : request.dishes()) {
-			given.put(dish.mealPlanId(), dish);
+			given.put(dish.dishId(), dish);
 		}
 		for (UUID id : given.keySet()) {
 			if (open.stream().noneMatch(d -> d.id().equals(id))) {
-				throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealPlanId", id));
+				throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("dishId", id));
 			}
 		}
 
-		for (MealPlanView dish : open) {
+		for (MealDishView dish : open) {
 			RecordMealRequest.DishRecord entry = given.get(dish.id());
 			if (entry == null) {
 				// Silence is not an answer. Deciding on the office's behalf whether an unmentioned dish
 				// was cooked is exactly the guess this form exists to avoid.
 				throw new ApplicationException(ErrorCode.SERVINGS_NOT_VALID,
-						Map.of("mealPlanId", dish.id(), "recipe", dish.recipeName()));
+						Map.of("dishId", dish.id(), "recipe", dish.recipeName()));
 			}
 			BigDecimal served = servedFigure(dish, entry.notMade(), entry.actualServings());
+			BigDecimal consumed = consumedFigure(dish, entry.notMade(), entry.consumedQuantity(), served);
 
 			if (!entry.notMade()) {
 				// Against the actual figure, not the planned one — the whole point of collecting it.
@@ -237,14 +228,14 @@ public class ServedMealService {
 			// say that in. CANCELLED with not_made recorded beside it says the true thing: it was
 			// called off at the stove rather than in the plan, and it drew nothing.
 			jdbc.update("""
-					UPDATE meal_plans
+					UPDATE meal_dishes
 					SET status = ?, actual_servings = ?, consumed_quantity = ?, not_made = ?,
 						cooked_at = ?, updated_at = now()
 					WHERE id = ?
 					""",
 					entry.notMade() ? "CANCELLED" : "COOKED",
 					served,
-					consumedFigure(dish, entry.notMade(), entry.consumedQuantity(), served),
+					consumed,
 					entry.notMade(),
 					entry.notMade() ? null : OffsetDateTime.now(java.time.ZoneOffset.UTC),
 					dish.id());
@@ -253,23 +244,18 @@ public class ServedMealService {
 					Map.of("status", "PLANNED", "plannedServings", String.valueOf(dish.targetYield())),
 					Map.of("status", entry.notMade() ? "CANCELLED" : "COOKED",
 							"cooked", String.valueOf(served),
-							"consumed", String.valueOf(
-									consumedFigure(dish, entry.notMade(), entry.consumedQuantity(), served)),
+							"consumed", String.valueOf(consumed),
 							"notMade", String.valueOf(entry.notMade())),
 					null);
 		}
 
-		// The name as the plans spell it, not as the request happened to type it: the two agree
-		// case-insensitively or the meal would not have been found, and the row should carry the
-		// planner's own words.
-		UUID serviceId = ensureService(request.planDate(), kind, meal.eventName());
 		jdbc.update("""
-				UPDATE meal_services
+				UPDATE meals
 				SET recorded_at = now(), recorded_by = ?, recording_note = ?, updated_at = now()
 				WHERE id = ?
-				""", actor.getUserId(), trimToNull(request.note()), serviceId);
+				""", actor.getUserId(), trimToNull(request.note()), mealId);
 
-		return require(request.planDate(), kind, request.eventName());
+		return require(mealId);
 	}
 
 	/**
@@ -278,40 +264,24 @@ public class ServedMealService {
 	 * <p><strong>Not a reopening.</strong> Rajeev settled the shape on 2026-09-07: the recording is
 	 * not undone and re-entered, it is <em>answered</em>. Each dish keeps the figure it was first
 	 * given (V106), each ledger draw keeps its place and gains a reverse entry beside it, and the
-	 * meal is marked with who corrected it, when and why. So a screen can say <em>"640 cooked,
-	 * corrected from 400 by Anand on 8 September"</em> rather than quietly showing a different number
-	 * than it showed yesterday — and the audit trail falls out of that shape rather than being bolted
-	 * onto it.
-	 *
-	 * <p><strong>Three things stood between the compensating primitive and this, and all three are
-	 * here.</strong> {@code StockMovementService.compensate} has reversed a single movement since
-	 * E3-S2, but cooking one dish writes one movement per (ingredient, batch) draw, so "the meal's
-	 * stock" is a <em>set</em> — and nothing could enumerate it, because the ledger's history filtered
-	 * by ingredient and type and nothing else. That read capability is now
-	 * {@code StockMovementService.history(…, referenceId, …)}, the set reversal is
-	 * {@code compensateAllFor}, and this method is the third piece: the meal record and the ledger
-	 * moving together.
+	 * meal is marked with who corrected it, when and why.
 	 *
 	 * <p><strong>Together, or the feature is a lie.</strong> One {@code @Transactional} over both
 	 * halves. {@code InventoryConsumptionService} joins this transaction, so a dish that cannot be
 	 * re-drawn — the shelf is short at the corrected figure — rolls back the mark, every earlier
-	 * dish's reversal, and the row updates with it. A meal reading "corrected to 640" over a store
-	 * room drawn against 400 would be worse than the defect this fixes, because it would look right.
+	 * dish's reversal, and the row updates with it.
 	 *
 	 * <p><strong>The meal is marked first and the stock moved after, deliberately</strong> — the same
 	 * ordering, for the same reason, as {@code DonationVoidService.voidDonation}. The other way round
 	 * makes the atomicity claim untestable: a stock failure would simply happen before anything had
 	 * been written, and a green test would prove nothing about the rollback.
 	 *
-	 * <p><strong>A dish whose figures did not move is left entirely alone.</strong> The form restates
-	 * the whole meal — a dish left out is refused rather than assumed unchanged, exactly as when
-	 * recording — but restating a figure is not changing it. Reversing and re-drawing an unchanged
-	 * dish would write two ledger rows that net to nothing, on a table whose only consumer is a sum,
-	 * and would stamp {@code original_actual_servings} on a dish nobody corrected, so the planner
-	 * would offer "640 cooked, corrected from 640" on every untouched preparation of the meal.
+	 * <p><strong>A dish whose figures did not move is left entirely alone.</strong> Restating a figure
+	 * is not changing it. Reversing and re-drawing an unchanged dish would write two ledger rows that
+	 * net to nothing and stamp {@code original_actual_servings} on a dish nobody corrected.
 	 */
 	@Transactional
-	public ServedMeal correct(AuthenticatedUser actor, UUID serviceId, CorrectMealRequest request) {
+	public ServedMeal correct(AuthenticatedUser actor, UUID mealId, CorrectMealRequest request) {
 		String note = trimToNull(request.note());
 		if (note == null) {
 			// Bean validation refuses this at the controller. Here as well, because the column's own
@@ -323,141 +293,101 @@ public class ServedMealService {
 		// FOR UPDATE, because the check below and the write after it must not straddle another
 		// admin's correction. Without the lock two tabs both read "not corrected" and both reverse
 		// the same movements — and the second reversal is the one nobody would ever go looking for.
-		//
-		// Read through a mapper that asks the driver for the types it wants, rather than through
-		// queryForMap: a DATE column arrives from a generic read as java.sql.Date, and casting that
-		// to LocalDate is a ClassCastException at run time that nothing at compile time objects to.
-		CorrectionTarget service = jdbc.query("""
-				SELECT id, plan_date, meal_kind, event_name, recorded_at, corrected_at
-				FROM meal_services WHERE id = ? FOR UPDATE
+		CorrectionTarget target = jdbc.query("""
+				SELECT recorded_at, corrected_at FROM meals WHERE id = ? FOR UPDATE
 				""", (rs, n) -> new CorrectionTarget(
-						rs.getObject("plan_date", LocalDate.class),
-						rs.getString("meal_kind"),
-						rs.getString("event_name"),
-						instant(rs, "recorded_at"),
-						instant(rs, "corrected_at")),
-				serviceId).stream().findFirst()
+						instant(rs, "recorded_at"), instant(rs, "corrected_at")),
+				mealId).stream().findFirst()
 				.orElseThrow(() -> new ApplicationException(
-						ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealServiceId", serviceId)));
+						ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealId", mealId)));
 
-		if (service.recordedAt() == null) {
-			// A meal_services row exists as soon as a job card is printed, so this is reachable: a
-			// carded meal that never came back has nothing to correct. RESOURCE_NOT_FOUND rather than
-			// MEAL_NOT_RECORDABLE, which says a cancelled meal never went to the kitchen and would be
-			// a different and untrue explanation. What is missing is the recording, and the detail
-			// says so for the log.
+		if (target.recordedAt() == null) {
+			// A meal that was planned but never came back has nothing to correct. RESOURCE_NOT_FOUND
+			// rather than MEAL_NOT_RECORDABLE, which says a cancelled meal never went to the kitchen
+			// and would be a different and untrue explanation. What is missing is the recording.
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND,
-					Map.of("mealServiceId", serviceId, "missing", "recording"));
+					Map.of("mealId", mealId, "missing", "recording"));
 		}
-		if (service.correctedAt() != null) {
-			throw new ApplicationException(
-					ErrorCode.MEAL_ALREADY_CORRECTED, Map.of("mealServiceId", serviceId));
+		if (target.correctedAt() != null) {
+			throw new ApplicationException(ErrorCode.MEAL_ALREADY_CORRECTED, Map.of("mealId", mealId));
 		}
 
-		ServedMeal meal = require(service.planDate(), service.mealKind(), service.eventName());
+		ServedMeal meal = require(mealId);
 
 		// What the recording spoke about, and only that. A dish COOKED went into a pot; a dish
 		// CANCELLED with not_made against it was called off at the stove and was part of the same
-		// form. A dish cancelled in the *plan* never reached the recording at all, so it is not the
-		// office's to correct here and naming it is refused below.
-		List<MealPlanView> recorded = meal.dishes().stream()
+		// form. A dish cancelled in the *plan* never reached the recording at all.
+		List<MealDishView> recorded = meal.dishes().stream()
 				.filter(d -> d.status() == MealStatus.COOKED || d.notMade())
 				.toList();
 
 		Map<UUID, CorrectMealRequest.DishCorrection> given = new LinkedHashMap<>();
 		for (CorrectMealRequest.DishCorrection dish : request.dishes()) {
-			given.put(dish.mealPlanId(), dish);
+			given.put(dish.dishId(), dish);
 		}
 		for (UUID id : given.keySet()) {
 			if (recorded.stream().noneMatch(d -> d.id().equals(id))) {
-				throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealPlanId", id));
+				throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("dishId", id));
 			}
 		}
 
-		// Every figure is checked before anything is written. The transaction would undo a late
-		// refusal anyway; doing it in one pass first means the refusal names the dish the office
-		// mistyped rather than whichever dish happened to be reached before the ledger was touched.
+		// Every figure is checked before anything is written, so the refusal names the dish the
+		// office mistyped rather than whichever dish happened to be reached first.
 		Map<UUID, Figures> wanted = new LinkedHashMap<>();
-		for (MealPlanView dish : recorded) {
+		for (MealDishView dish : recorded) {
 			CorrectMealRequest.DishCorrection entry = given.get(dish.id());
 			if (entry == null) {
-				// Silence is not an answer here either. A dish nobody mentioned is a dish nobody said
-				// anything about, and deciding on the office's behalf that it was right all along is
-				// the same guess the recording form refuses to make.
 				throw new ApplicationException(ErrorCode.SERVINGS_NOT_VALID,
-						Map.of("mealPlanId", dish.id(), "recipe", dish.recipeName()));
+						Map.of("dishId", dish.id(), "recipe", dish.recipeName()));
 			}
 			BigDecimal served = servedFigure(dish, entry.notMade(), entry.actualServings());
 			wanted.put(dish.id(), new Figures(entry.notMade(), served,
 					consumedFigure(dish, entry.notMade(), entry.consumedQuantity(), served)));
 		}
 
-		List<MealPlanView> changed = recorded.stream()
+		List<MealDishView> changed = recorded.stream()
 				.filter(dish -> moved(dish, wanted.get(dish.id())))
 				.toList();
 		if (changed.isEmpty()) {
 			// A correction that corrects nothing would still badge the meal as corrected and put a
 			// name and an hour against a change nobody made. Refused rather than recorded.
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
-					Map.of("field", "dishes", "mealServiceId", serviceId));
+					Map.of("field", "dishes", "mealId", mealId));
 		}
 
 		jdbc.update("""
-				UPDATE meal_services
+				UPDATE meals
 				SET corrected_at = now(), corrected_by = ?, correction_note = ?, updated_at = now()
 				WHERE id = ?
-				""", actor.getUserId(), note, serviceId);
+				""", actor.getUserId(), note, mealId);
 
-		// Two passes over the changed dishes, and the split between them is the whole of T-083. Doing
-		// one dish end to end reads correctly — give the 400 back, then draw the 640 — and stops being
-		// correct the moment a second dish of the same meal shares an ingredient with the first. A lunch
+		// Two passes over the changed dishes, and the split between them is the whole of T-083. A lunch
 		// whose khichadi goes 400 → 640 while its pulao goes 640 → 400 moves no rice at all on net, and
 		// dish at a time the khichadi's re-draw is asked for while the pulao's old 640 is still standing:
-		// FefoAllocator.loadPositiveBatches sums stock_movements, so it sees the one reversal that has
-		// happened and none of the ones that are about to, and refuses a temple that is holding the rice
-		// with INSUFFICIENT_STOCK. Reverse the plan's sort order and the identical correction succeeds,
-		// which is the tell: whether the office is believed depended on mp.ready_by.
-		//
-		// So every changed dish gives back what it drew before any dish draws again. Through the whole of
-		// the second pass the shelf stands where it stood before the meal was cooked at all, which is the
-		// only level at which "is there enough?" has an answer that does not depend on the order of the
-		// rows. It costs nothing: both passes are inside the one transaction that was already here, so
-		// the moment where the shelf is briefly full again is no more observable than it was before.
+		// FefoAllocator sums stock_movements, sees the one reversal that has happened and none of the
+		// ones about to, and refuses a temple that is holding the rice. So every changed dish gives back
+		// what it drew before any dish draws again.
 		Map<UUID, Integer> reversals = new LinkedHashMap<>();
-		for (MealPlanView dish : changed) {
+		for (MealDishView dish : changed) {
 			reversals.put(dish.id(), markAndReverse(actor, dish, wanted.get(dish.id()), note));
 		}
-		for (MealPlanView dish : changed) {
+		for (MealDishView dish : changed) {
 			redrawAndRecord(actor, dish, wanted.get(dish.id()), note, reversals.get(dish.id()));
 		}
 
-		return require(meal.planDate(), meal.mealKind(), meal.eventName());
+		return require(mealId);
 	}
 
 	/**
 	 * Pass one for one dish: moves the row to its corrected figures and gives back everything it drew,
-	 * answering with how many movements that took.
-	 *
-	 * <p>The row is written before the ledger for the reason given on {@link #correct}: the rollback
-	 * has to have something to undo. The reversal then runs before <em>any</em> dish's re-draw, and
-	 * that order is not cosmetic — a dish going from 400 servings to 640 has to give the 400 back
-	 * first, or the re-draw meets a shelf that still believes the first 400 are gone and a temple with
-	 * just enough rice is refused for a shortfall that does not exist. Stated for one dish that
-	 * sentence has been true since T-007; what {@link #correct} adds is that it is now true across the
-	 * dishes of a meal too, which is the case where the shortfall was not merely imaginary but
-	 * order-dependent.
-	 *
-	 * <p>The count comes back rather than being filed here because it belongs to the audit entry, and
-	 * the audit entry cannot be written until the dish has been re-drawn — {@link #redrawAndRecord}
-	 * carries it the rest of the way.
+	 * answering with how many movements that took. The row is written before the ledger so the
+	 * rollback has something to undo.
 	 */
 	private int markAndReverse(
-			AuthenticatedUser actor, MealPlanView dish, Figures figures, String note) {
+			AuthenticatedUser actor, MealDishView dish, Figures figures, String note) {
 
 		// A dish that never went into a pot has no hour it was cooked at. One corrected *into* having
-		// been cooked keeps whatever hour it already had, and takes now() only when it had none —
-		// nobody knows when it actually happened, and the alternative is to leave a cooked dish
-		// claiming it was never cooked.
+		// been cooked keeps whatever hour it already had, and takes now() only when it had none.
 		OffsetDateTime cookedAt = figures.notMade()
 				? null
 				: dish.cookedAt() == null
@@ -465,10 +395,9 @@ public class ServedMealService {
 						: OffsetDateTime.ofInstant(dish.cookedAt(), java.time.ZoneOffset.UTC);
 
 		// original_* is read out of the row's own current values rather than from the view in hand,
-		// so what is preserved is what the database actually holds at whatever scale it kept — the
-		// same rule the audit snapshot follows, and for the same reason.
+		// so what is preserved is what the database actually holds at whatever scale it kept.
 		jdbc.update("""
-				UPDATE meal_plans
+				UPDATE meal_dishes
 				SET original_actual_servings   = actual_servings,
 					original_consumed_quantity = consumed_quantity,
 					status = ?, actual_servings = ?, consumed_quantity = ?, not_made = ?,
@@ -482,26 +411,17 @@ public class ServedMealService {
 				cookedAt,
 				dish.id());
 
-		// Everything this dish drew goes back, including the draws of a figure that was itself
-		// already corrected by hand from the inventory screen — compensateAllFor skips those rather
-		// than refusing, because for them the shelf is already where it should be.
+		// Everything this dish drew goes back, including the draws of a figure already corrected by
+		// hand from the inventory screen — compensateAllFor skips those rather than refusing.
 		return consumptionService.reverse(actor, dish.id(), "Meal corrected: " + note);
 	}
 
 	/**
 	 * Pass two for one dish: draws the corrected figure, and files what the correction actually did.
-	 *
-	 * <p>Runs only once every changed dish of the meal has been reversed, so the shelf this asks is the
-	 * one the meal was cooked against rather than a half-unwound one. A dish corrected to "not made"
-	 * draws nothing and still files its entry: it was corrected, and an audit trail that recorded only
-	 * the dishes that took stock would be silent about exactly the correction somebody would go
-	 * looking for.
-	 *
-	 * <p>{@code reversed} is passed in from pass one because that is where it happened. Recomputing it
-	 * here would be answering a different question — by now the dish has draws against it again.
+	 * A dish corrected to "not made" draws nothing and still files its entry: it was corrected.
 	 */
 	private void redrawAndRecord(
-			AuthenticatedUser actor, MealPlanView dish, Figures figures, String note, int reversed) {
+			AuthenticatedUser actor, MealDishView dish, Figures figures, String note, int reversed) {
 
 		if (!figures.notMade()) {
 			consumptionService.consume(actor, new ConsumeRequest(
@@ -522,20 +442,14 @@ public class ServedMealService {
 	 *
 	 * <p>Wave 4b found an audit entry claiming a temple's coordinates had moved from "12.971600" to
 	 * "12.9716" in a field nobody had edited, because the after-state was built from what was asked
-	 * for rather than from what was stored. The same mistake here would have every correction report
-	 * a figure at the scale the office typed rather than the scale {@code NUMERIC(12, 3)} kept, and
-	 * an entry that is believed and wrong is worse than no entry at all.
-	 *
-	 * <p>{@code stockMovementsReversed} travels with it because the count is a fact about what
-	 * happened rather than what was asked for: a dish some of whose draws had already been corrected
-	 * by hand reverses fewer movements than it made, and the trail should say so.
+	 * for rather than from what was stored. An entry that is believed and wrong is worse than none.
 	 */
-	private Map<String, Object> correctedSnapshot(UUID mealPlanId, int reversed) {
+	private Map<String, Object> correctedSnapshot(UUID dishId, int reversed) {
 		Map<String, Object> stored = jdbc.queryForMap("""
 				SELECT status, actual_servings, consumed_quantity, not_made,
 					   original_actual_servings, original_consumed_quantity
-				FROM meal_plans WHERE id = ?
-				""", mealPlanId);
+				FROM meal_dishes WHERE id = ?
+				""", dishId);
 
 		Map<String, Object> after = new LinkedHashMap<>();
 		after.put("status", stored.get("status"));
@@ -553,17 +467,11 @@ public class ServedMealService {
 	}
 
 	/**
-	 * Whether a correction actually moves this dish.
-	 *
-	 * <p>{@code compareTo} and not {@code equals}: {@code BigDecimal.equals} compares scale as well as
-	 * value, so a form resending 400 against a column holding {@code 400.000} would read as a change
-	 * and write a pair of ledger rows netting to nothing on every untouched dish of every corrected
-	 * meal.
-	 *
-	 * <p>Null is a value here and not a gap. A dish whose consumed figure was never given and still is
-	 * not has not moved; one that gains a figure, or loses one, has.
+	 * Whether a correction actually moves this dish. {@code compareTo} and not {@code equals}, because
+	 * a form resending 400 against a column holding {@code 400.000} is not a change. Null is a value
+	 * here: a figure gained or lost is a change, a figure absent both times is not.
 	 */
-	private static boolean moved(MealPlanView dish, Figures wanted) {
+	private static boolean moved(MealDishView dish, Figures wanted) {
 		if (dish.notMade() != wanted.notMade()) {
 			return true;
 		}
@@ -584,10 +492,8 @@ public class ServedMealService {
 	private record Figures(boolean notMade, BigDecimal served, BigDecimal consumed) {
 	}
 
-	/** The locked meal row, in the types the rest of this service works in. */
-	private record CorrectionTarget(
-			LocalDate planDate, String mealKind, String eventName,
-			java.time.Instant recordedAt, java.time.Instant correctedAt) {
+	/** The locked meal row's two facts the correction is guarded by. */
+	private record CorrectionTarget(java.time.Instant recordedAt, java.time.Instant correctedAt) {
 	}
 
 	/**
@@ -595,78 +501,43 @@ public class ServedMealService {
 	 *
 	 * <p>Issued once and kept. A reprint after a dish was swapped is the same meal and carries the
 	 * same number — the number exists so that a signed sheet in a folder can be traced back to this
-	 * record six months later, which a number that changed between prints could not do.
-	 */
-	@Transactional
-	public String issueCardNumber(LocalDate date, String mealKind, String eventName) {
-		String kind = mealKindService.require(mealKind).name();
-		// A meal with no dishes has no card; this refuses before a number is spent.
-		ServedMeal meal = require(date, kind, eventName);
-		UUID serviceId = ensureService(date, kind, meal.eventName());
-
-		String existing = jdbc.queryForObject(
-				"SELECT card_number FROM meal_services WHERE id = ?", String.class, serviceId);
-		if (existing != null) {
-			return existing;
-		}
-		String number = nextCardNumber(kind, date);
-		jdbc.update("""
-				UPDATE meal_services SET card_number = ?, card_issued_at = now(), updated_at = now()
-				WHERE id = ?
-				""", number, serviceId);
-		return number;
-	}
-
-	/**
-	 * The row for one meal, named the way a screen names it — a date and whatever the caller typed for
-	 * the kind — created if this is the first time anything has been printed or recorded for it.
-	 * Refuses if nothing is planned for that meal at all.
-	 */
-	@Transactional
-	public UUID serviceFor(LocalDate date, String mealKind, String eventName) {
-		ServedMeal meal = require(date, mealKindService.require(mealKind).name(), eventName);
-		return ensureService(meal.planDate(), meal.mealKind(), meal.eventName());
-	}
-
-	/**
-	 * The meal's own row, created on demand. Nothing is written until a card is printed or recorded.
+	 * record six months later.
 	 *
-	 * <p>The conflict target and the lookup both name {@code lower(COALESCE(event_name, ''))} because
-	 * that is the expression V89's unique index is built on, and the three have to agree exactly: an
-	 * upsert that inferred a different key would raise rather than find the row it meant, and a
-	 * lookup that compared differently would return two rows for one meal.
+	 * <p>The write only lands on a meal that still has no number, and the number is read back from
+	 * the row afterwards. Two prints at the same moment therefore agree on one number; the loser's
+	 * increment of the counter is a gap, which the counter already tolerates.
 	 */
 	@Transactional
-	public UUID ensureService(LocalDate date, String mealKind, String eventName) {
-		String name = trimToNull(eventName);
+	public String issueCardNumber(UUID mealId) {
+		ServedMeal meal = require(mealId);
+		if (meal.cardNumber() != null) {
+			return meal.cardNumber();
+		}
+		String number = nextCardNumber(meal.mealKind(), meal.planDate());
 		jdbc.update("""
-				INSERT INTO meal_services (tenant_id, plan_date, meal_kind, event_name)
-				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?)
-				ON CONFLICT (tenant_id, plan_date, meal_kind, lower(COALESCE(event_name, '')))
-				DO NOTHING
-				""", date, mealKind, name);
-		return jdbc.queryForObject("""
-				SELECT id FROM meal_services
-				WHERE plan_date = ? AND meal_kind = ?
-				  AND lower(COALESCE(event_name, '')) = lower(COALESCE(?::text, ''))
-				""", UUID.class, date, mealKind, name);
+				UPDATE meals SET card_number = ?, card_issued_at = now(), updated_at = now()
+				WHERE id = ? AND card_number IS NULL
+				""", number, mealId);
+		return jdbc.queryForObject("SELECT card_number FROM meals WHERE id = ?", String.class, mealId);
 	}
 
 	// ---------------------------------------------------------------------
+
+	/** Takes the meal row's lock for the rest of the transaction, or refuses a meal that is not there. */
+	private void lock(UUID mealId) {
+		List<UUID> found = jdbc.queryForList("SELECT id FROM meals WHERE id = ? FOR UPDATE", UUID.class, mealId);
+		if (found.isEmpty()) {
+			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealId", mealId));
+		}
+	}
 
 	/**
 	 * The next card number for this temple: {@code LC-2026-0142}.
 	 *
 	 * <p>The counter is per temple and not per kind, so the number alone identifies one sheet however
-	 * the prefix is derived. The prefix is a reading aid — a person holding a folder of paper wants to
-	 * see at a glance that this was a lunch — so it takes the initial of each word of the kind's name,
-	 * and a single-word kind gets its initial plus C for card: Lunch becomes LC, Breakfast BC, Deity
-	 * Offering DO, Event EV. A kind the application has never seen gets the same treatment,
-	 * and a name with no letters in it at all falls back to MC. Two kinds sharing a prefix is harmless
-	 * precisely because the prefix is not the identity.
-	 *
-	 * <p>Like the PO counter it is gap-tolerant: the atomic increment row-locks per tenant so two
-	 * simultaneous prints never share a number, and a print that rolls back simply leaves a gap.
+	 * the prefix is derived. The prefix is a reading aid — Lunch becomes LC, Breakfast BC, Deity
+	 * Offering DO, Event EV — and two kinds sharing a prefix is harmless because the prefix is not the
+	 * identity. Like the PO counter it is gap-tolerant.
 	 */
 	private String nextCardNumber(String mealKind, LocalDate date) {
 		Integer seq = jdbc.queryForObject("""
@@ -699,36 +570,30 @@ public class ServedMealService {
 	}
 
 	/**
-	 * What this dish actually went out at, or a refusal naming the dish rather than the form.
-	 *
-	 * <p>Takes the two figures rather than the request that carried them, so that recording and
-	 * correcting are held to exactly the same rule. They were one method over one DTO until T-007
-	 * added the second door; a figure the first door turns away must not be admissible through the
-	 * second, and the cheapest way to guarantee that is for there to be only one rule.
+	 * What this dish actually went out at, or a refusal naming the dish rather than the form. Takes
+	 * the two figures rather than the request that carried them, so recording and correcting are held
+	 * to exactly the same rule.
 	 */
-	private BigDecimal servedFigure(MealPlanView dish, boolean notMade, BigDecimal actualServings) {
+	private BigDecimal servedFigure(MealDishView dish, boolean notMade, BigDecimal actualServings) {
 		if (notMade) {
 			return BigDecimal.ZERO;
 		}
 		BigDecimal served = actualServings;
 		if (served == null || served.signum() <= 0 || served.compareTo(MAX_SERVINGS) > 0) {
 			throw new ApplicationException(ErrorCode.SERVINGS_NOT_VALID,
-					Map.of("mealPlanId", dish.id(), "recipe", dish.recipeName(),
+					Map.of("dishId", dish.id(), "recipe", dish.recipeName(),
 							"servings", String.valueOf(served)));
 		}
 		return served;
 	}
 
 	/**
-	 * How much of what was cooked actually went out, or a refusal naming the dish.
-	 *
-	 * <p>Null is kept as null: a card that did not say what came back is not a card saying nothing
-	 * came back. What is refused is a figure larger than what was cooked — a dish cannot serve more
-	 * than it made, and a typed extra zero is exactly the mistake that would otherwise be recorded
-	 * as a fact and then read back as a plan that is running short.
+	 * How much of what was cooked actually went out, or a refusal naming the dish. Null is kept as
+	 * null; a figure larger than what was cooked is refused, because a dish cannot serve more than it
+	 * made and a typed extra zero is exactly the mistake that would otherwise be recorded as a fact.
 	 */
 	private BigDecimal consumedFigure(
-			MealPlanView dish, boolean notMade, BigDecimal consumedQuantity, BigDecimal cooked) {
+			MealDishView dish, boolean notMade, BigDecimal consumedQuantity, BigDecimal cooked) {
 		if (notMade) {
 			return BigDecimal.ZERO;
 		}
@@ -738,118 +603,77 @@ public class ServedMealService {
 		}
 		if (consumed.signum() < 0 || consumed.compareTo(cooked) > 0) {
 			throw new ApplicationException(ErrorCode.SERVINGS_NOT_VALID,
-					Map.of("mealPlanId", dish.id(), "recipe", dish.recipeName(),
+					Map.of("dishId", dish.id(), "recipe", dish.recipeName(),
 							"servings", String.valueOf(consumed)));
 		}
 		return consumed;
 	}
 
-	/**
-	 * Builds one meal from its dish rows.
-	 *
-	 * <p>The dishes of a meal normally agree about everything but the recipe, because the composer
-	 * writes them in one pass. They can disagree if a dish was added later against a changed head
-	 * count, so where they do, the largest wins — the kitchen has to cook for whoever turns up, and a
-	 * card that under-states the hall is worse than one that over-states it. Never the sum: three
-	 * dishes at 250 servings each is 250 plates.
-	 */
-	private ServedMeal assemble(Key key, List<MealPlanView> rows, ServiceRow service) {
-		MealPlanView largest = rows.stream()
-				.max(Comparator.comparingInt(ServedMealService::platesOf))
-				.orElseThrow();
-
-		MealPlanView first = rows.get(0);
-		return new ServedMeal(
-				service == null ? null : service.id(),
-				key.date(),
-				key.mealKind(),
-				first.readyBy(),
-				largest.adults(),
-				largest.children(),
-				largest.seniors(),
-				platesOf(largest),
-				crewOf(rows),
-				first.dayType(),
-				firstNonBlank(rows, MealPlanView::occasionName),
-				firstNonBlank(rows, MealPlanView::eventName),
-				firstNonBlank(rows, MealPlanView::contactName),
-				firstNonBlank(rows, MealPlanView::contactPhone),
-				firstNonBlank(rows, MealPlanView::deliveryAddress),
-				firstNonBlank(rows, MealPlanView::purpose),
-				// The composer writes the same note onto every dish of a meal, so one of them is the
-				// note. Joining them would print it three times on the card.
-				firstNonBlank(rows, MealPlanView::kitchenNotes),
-				firstNonBlank(rows, MealPlanView::serverNotes),
-				service == null ? null : service.cardNumber(),
-				service == null ? null : service.cardIssuedAt(),
-				service != null && service.recordedAt() != null,
-				service == null ? null : service.recordedAt(),
-				service == null ? null : service.recordedByName(),
-				service == null ? null : service.recordingNote(),
-				service != null && service.correctedAt() != null,
-				service == null ? null : service.correctedAt(),
-				service == null ? null : service.correctedByName(),
-				service == null ? null : service.correctionNote(),
-				rows);
-	}
-
-	/**
-	 * How many people this meal takes to execute (item 24).
-	 *
-	 * <p>The largest of what its dish rows say, for the same reason the head count takes the largest:
-	 * the composer writes one figure onto every dish of a meal, so they normally agree, and where a
-	 * dish added later disagrees the kitchen still has to staff the bigger job. Null when no dish
-	 * carries a figure at all — nobody has said yet, and a made-up number would be worse.
-	 */
-	private static Integer crewOf(List<MealPlanView> rows) {
-		return rows.stream()
-				.map(MealPlanView::crewRequired)
-				.filter(java.util.Objects::nonNull)
-				.max(Integer::compareTo)
-				.orElse(null);
-	}
-
-	/**
-	 * What one dish row scales to: the head count if the planner gave one, otherwise the dish's own
-	 * servings figure, which is all a meal planned before V51 has.
-	 */
-	private static int platesOf(MealPlanView dish) {
-		if (dish.adults() == null && dish.children() == null && dish.seniors() == null) {
-			return dish.targetYield() == null ? 0 : dish.targetYield().intValue();
+	private List<ServedMeal> assembleAll(List<MealRow> meals, Map<UUID, List<MealDishView>> dishes) {
+		List<ServedMeal> out = new ArrayList<>(meals.size());
+		for (MealRow meal : meals) {
+			out.add(assemble(meal, dishes.getOrDefault(meal.id(), List.of())));
 		}
-		BigDecimal total = BigDecimal.valueOf(dish.adults() == null ? 0 : dish.adults())
-				.add(CHILD_PORTION.multiply(BigDecimal.valueOf(dish.children() == null ? 0 : dish.children())))
-				.add(SENIOR_PORTION.multiply(BigDecimal.valueOf(dish.seniors() == null ? 0 : dish.seniors())));
+		return out;
+	}
+
+	/**
+	 * One meal from its row and its dishes. The head count, the notes and every other whole-meal fact
+	 * come from the one row; before D-27 they were copied onto every dish and read back from "the
+	 * largest" or "the first non-blank", which is a rule nobody should have to write twice.
+	 */
+	private static ServedMeal assemble(MealRow m, List<MealDishView> dishes) {
+		return new ServedMeal(
+				m.id(), m.mealKindId(), m.planDate(), m.mealKind(), m.readyBy(),
+				m.adults(), m.children(), m.seniors(), platesOf(m, dishes), m.crewRequired(),
+				m.dayType(), m.occasionName(), m.eventName(), m.isOutside(), m.handover(),
+				m.contactName(), m.contactPhone(), m.deliveryAddress(), m.deliverySubLocation(),
+				m.deliveryPlaceId(), m.deliveryLatitude(), m.deliveryLongitude(), m.guestsEatAt(),
+				m.travelMinutes(), m.travelMinutesSource(), m.purpose(), m.kitchenNotes(), m.serverNotes(),
+				statusOf(dishes),
+				m.cardNumber(), m.cardIssuedAt(),
+				m.recordedAt() != null, m.recordedAt(), m.recordedByName(), m.recordingNote(),
+				m.correctedAt() != null, m.correctedAt(), m.correctedByName(), m.correctionNote(),
+				Collections.unmodifiableList(dishes),
+				null);
+	}
+
+	/** The meal's state as its dishes say it; see {@link ServedMeal#status()}. */
+	private static MealStatus statusOf(List<MealDishView> dishes) {
+		if (dishes.stream().anyMatch(d -> d.status() == MealStatus.COOKED)) {
+			return MealStatus.COOKED;
+		}
+		if (dishes.stream().anyMatch(d -> d.status() == MealStatus.PLANNED)) {
+			return MealStatus.PLANNED;
+		}
+		return MealStatus.CANCELLED;
+	}
+
+	/**
+	 * What one meal scales to: the head count if the planner gave one, otherwise the largest dish's
+	 * own figure, which is all a meal planned without a head count has. Never the sum of the dishes.
+	 */
+	private static int platesOf(MealRow meal, List<MealDishView> dishes) {
+		if (meal.adults() == null && meal.children() == null && meal.seniors() == null) {
+			return dishes.stream()
+					.map(MealDishView::targetYield)
+					.filter(java.util.Objects::nonNull)
+					.max(Comparator.naturalOrder())
+					.map(BigDecimal::intValue)
+					.orElse(0);
+		}
+		BigDecimal total = BigDecimal.valueOf(meal.adults() == null ? 0 : meal.adults())
+				.add(CHILD_PORTION.multiply(BigDecimal.valueOf(meal.children() == null ? 0 : meal.children())))
+				.add(SENIOR_PORTION.multiply(BigDecimal.valueOf(meal.seniors() == null ? 0 : meal.seniors())));
 		return total.setScale(0, RoundingMode.HALF_UP).intValue();
 	}
 
-	private static String firstNonBlank(
-			List<MealPlanView> rows, java.util.function.Function<MealPlanView, String> field) {
-		for (MealPlanView row : rows) {
-			String value = field.apply(row);
-			if (value != null && !value.isBlank()) {
-				return value;
-			}
+	private Map<UUID, List<MealDishView>> dishesIn(String sql, Object[] args) {
+		Map<UUID, List<MealDishView>> byMeal = new LinkedHashMap<>();
+		for (MealDishView dish : jdbc.query(sql, DISH_MAPPER, args)) {
+			byMeal.computeIfAbsent(dish.mealId(), k -> new ArrayList<>()).add(dish);
 		}
-		return null;
-	}
-
-	private Map<Key, ServiceRow> servicesIn(LocalDate from, LocalDate to) {
-		StringBuilder sql = new StringBuilder(SERVICE_SELECT + " WHERE 1 = 1");
-		List<Object> args = new ArrayList<>();
-		if (from != null) {
-			sql.append(" AND ms.plan_date >= ?");
-			args.add(from);
-		}
-		if (to != null) {
-			sql.append(" AND ms.plan_date <= ?");
-			args.add(to);
-		}
-		Map<Key, ServiceRow> byKey = new LinkedHashMap<>();
-		for (ServiceRow row : jdbc.query(sql.toString(), SERVICE_MAPPER, args.toArray())) {
-			byKey.put(Key.of(row.planDate(), row.mealKind(), row.eventName()), row);
-		}
-		return byKey;
+		return byMeal;
 	}
 
 	private static String trimToNull(String s) {
@@ -860,54 +684,101 @@ public class ServedMealService {
 		return t.isEmpty() ? null : t;
 	}
 
-	/**
-	 * What the brief means by "the meal": a date, a kind, and the event's own name where there is one
-	 * (V89).
-	 *
-	 * <p>The name is trimmed and folded to lower case, exactly as V89's unique index folds it, so
-	 * "Bhajan Prasadam" and "bhajan prasadam" are one event here and one row there. An absent name
-	 * and a blank one are the same thing and both become {@code ""} — a meal is never keyed on null,
-	 * so a map lookup cannot quietly miss.
-	 */
-	private record Key(LocalDate date, String mealKind, String eventName) {
-
-		static Key of(LocalDate date, String mealKind, String eventName) {
-			String name = eventName == null || eventName.isBlank()
-					? "" : eventName.trim().toLowerCase(Locale.ROOT);
-			return new Key(date, mealKind, name);
+	/** Every dish of the given meals, for callers that hold meal ids rather than a date range. */
+	@Transactional(readOnly = true)
+	public Map<UUID, List<MealDishView>> dishesOf(Collection<UUID> mealIds) {
+		if (mealIds.isEmpty()) {
+			return Map.of();
 		}
+		String placeholders = String.join(",", Collections.nCopies(mealIds.size(), "?"));
+		return dishesIn(DISH_SELECT + " WHERE d.meal_id IN (" + placeholders + ")" + DISH_ORDER,
+				mealIds.toArray());
 	}
 
-	private record ServiceRow(
-			UUID id, LocalDate planDate, String mealKind, String eventName, String cardNumber,
-			java.time.Instant cardIssuedAt, java.time.Instant recordedAt, String recordedByName,
-			String recordingNote, java.time.Instant correctedAt, String correctedByName,
-			String correctionNote) {
+	private record MealRow(
+			UUID id, UUID mealKindId, LocalDate planDate, String mealKind, DayType dayType,
+			LocalTime readyBy, Integer adults, Integer children, Integer seniors, Integer crewRequired,
+			String occasionName, String eventName, boolean isOutside, Handover handover,
+			String contactName, String contactPhone, String deliveryAddress, String deliverySubLocation,
+			String deliveryPlaceId, BigDecimal deliveryLatitude, BigDecimal deliveryLongitude,
+			LocalTime guestsEatAt, Integer travelMinutes, String travelMinutesSource, String purpose,
+			String kitchenNotes, String serverNotes, String cardNumber, java.time.Instant cardIssuedAt,
+			java.time.Instant recordedAt, String recordedByName, String recordingNote,
+			java.time.Instant correctedAt, String correctedByName, String correctionNote) {
 	}
 
 	/**
+	 * The meal, its day and its kind's current name.
+	 *
 	 * <p>Two LEFT JOINs onto {@code users} and not one: the person who recorded a meal and the person
 	 * who corrected it are different people on purpose — recording is everyday kitchen work on
-	 * {@code MANAGE_MEAL_PLANS}, correcting is the Temple Admin's alone (D-4) — so the two names have
-	 * to be resolved independently. Both are LEFT, because {@code recorded_by} is
-	 * {@code ON DELETE SET NULL} and {@code corrected_by} likewise: the fact must outlive the name,
-	 * and an inner join would make a corrected meal vanish from the planner the day its corrector
-	 * left the temple.
+	 * {@code MANAGE_MEAL_PLANS}, correcting is the Temple Admin's alone (D-4). Both are LEFT, because
+	 * both columns are {@code ON DELETE SET NULL}: the fact must outlive the name.
+	 *
+	 * <p>No tenant predicate, because there must not be one: row-level security on all three tables
+	 * answers that from the verified token.
 	 */
-	private static final String SERVICE_SELECT = """
-			SELECT ms.id, ms.plan_date, ms.meal_kind, ms.event_name, ms.card_number, ms.card_issued_at,
-				   ms.recorded_at, ms.recording_note, u.full_name AS recorded_by_name,
-				   ms.corrected_at, ms.correction_note, c.full_name AS corrected_by_name
-			FROM meal_services ms
-			LEFT JOIN users u ON u.id = ms.recorded_by
-			LEFT JOIN users c ON c.id = ms.corrected_by
+	private static final String MEAL_SELECT = """
+			SELECT m.id, m.meal_kind_id, pd.plan_date, k.name AS meal_kind, pd.day_type, m.ready_by,
+				   m.adults, m.children, m.seniors, m.crew_required, m.occasion_name, m.event_name,
+				   m.is_outside, m.handover, m.contact_name, m.contact_phone, m.delivery_address,
+				   m.delivery_sub_location, m.delivery_place_id, m.delivery_latitude, m.delivery_longitude,
+				   m.guests_eat_at, m.travel_minutes, m.travel_minutes_source, m.purpose,
+				   m.kitchen_notes, m.server_notes, m.card_number, m.card_issued_at,
+				   m.recorded_at, m.recording_note, u.full_name AS recorded_by_name,
+				   m.corrected_at, m.correction_note, c.full_name AS corrected_by_name
+			FROM meals m
+			JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+			JOIN meal_kinds k ON k.id = m.meal_kind_id
+			LEFT JOIN users u ON u.id = m.recorded_by
+			LEFT JOIN users c ON c.id = m.corrected_by
 			""";
 
-	private static final RowMapper<ServiceRow> SERVICE_MAPPER = (rs, n) -> new ServiceRow(
+	/** The order the kitchen works in: the day, then when each meal is due, then the kinds' own order. */
+	private static final String MEAL_ORDER =
+			" ORDER BY pd.plan_date, m.ready_by, k.sort_order, lower(COALESCE(m.event_name, '')), m.id";
+
+	private static final String DISH_SELECT = """
+			SELECT d.id, d.meal_id, d.recipe_id, r.name AS recipe_name,
+				   r.base_yield_unit AS target_yield_unit, d.target_yield, d.status,
+				   d.actual_servings, d.consumed_quantity, d.not_made,
+				   d.original_actual_servings, d.original_consumed_quantity,
+				   d.cooked_at, d.ekadashi_ack_at, d.created_at
+			FROM meal_dishes d
+			JOIN recipes r ON r.id = d.recipe_id
+			""";
+
+	/** The order the planner added them in; the id breaks a tie inside one statement's now(). */
+	private static final String DISH_ORDER = " ORDER BY d.created_at, d.id";
+
+	private static final RowMapper<MealRow> MEAL_MAPPER = (rs, n) -> new MealRow(
 			rs.getObject("id", UUID.class),
+			rs.getObject("meal_kind_id", UUID.class),
 			rs.getObject("plan_date", LocalDate.class),
 			rs.getString("meal_kind"),
+			DayType.valueOf(rs.getString("day_type")),
+			rs.getObject("ready_by", LocalTime.class),
+			(Integer) rs.getObject("adults"),
+			(Integer) rs.getObject("children"),
+			(Integer) rs.getObject("seniors"),
+			(Integer) rs.getObject("crew_required"),
+			rs.getString("occasion_name"),
 			rs.getString("event_name"),
+			rs.getBoolean("is_outside"),
+			rs.getString("handover") == null ? null : Handover.valueOf(rs.getString("handover")),
+			rs.getString("contact_name"),
+			rs.getString("contact_phone"),
+			rs.getString("delivery_address"),
+			rs.getString("delivery_sub_location"),
+			rs.getString("delivery_place_id"),
+			rs.getBigDecimal("delivery_latitude"),
+			rs.getBigDecimal("delivery_longitude"),
+			rs.getObject("guests_eat_at", LocalTime.class),
+			(Integer) rs.getObject("travel_minutes"),
+			rs.getString("travel_minutes_source"),
+			rs.getString("purpose"),
+			rs.getString("kitchen_notes"),
+			rs.getString("server_notes"),
 			rs.getString("card_number"),
 			instant(rs, "card_issued_at"),
 			instant(rs, "recorded_at"),
@@ -916,6 +787,23 @@ public class ServedMealService {
 			instant(rs, "corrected_at"),
 			rs.getString("corrected_by_name"),
 			rs.getString("correction_note"));
+
+	private static final RowMapper<MealDishView> DISH_MAPPER = (rs, n) -> new MealDishView(
+			rs.getObject("id", UUID.class),
+			rs.getObject("meal_id", UUID.class),
+			rs.getObject("recipe_id", UUID.class),
+			rs.getString("recipe_name"),
+			rs.getBigDecimal("target_yield"),
+			rs.getString("target_yield_unit"),
+			MealStatus.valueOf(rs.getString("status")),
+			rs.getBigDecimal("actual_servings"),
+			rs.getBigDecimal("consumed_quantity"),
+			rs.getBoolean("not_made"),
+			rs.getBigDecimal("original_actual_servings"),
+			rs.getBigDecimal("original_consumed_quantity"),
+			instant(rs, "cooked_at"),
+			instant(rs, "ekadashi_ack_at") != null,
+			instant(rs, "created_at"));
 
 	private static java.time.Instant instant(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
 		OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);

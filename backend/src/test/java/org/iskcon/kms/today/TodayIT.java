@@ -10,6 +10,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.meal.MealRequests;
+import org.iskcon.kms.meal.MealFixture;
 import org.iskcon.kms.meal.MealKindService;
 import org.iskcon.kms.occasion.OccasionService;
 import org.iskcon.kms.tenancy.TenantContext;
@@ -108,7 +110,7 @@ class TodayIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM staff_leave");
 		admin.execute("DELETE FROM staff_profiles");
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM shift_signups");
 		admin.execute("DELETE FROM shifts");
 		admin.execute("DELETE FROM donations");
@@ -137,6 +139,11 @@ class TodayIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.date").value(today.toString()))
 				.andExpect(jsonPath("$.meals.length()").value(2))
 				.andExpect(jsonPath("$.meals[0].mealKind").value("Lunch"))
+				// The meal's own id (D-27), so Today opens that meal rather than a day and a kind's name.
+				.andExpect(jsonPath("$.meals[0].mealId").value(admin.queryForObject("""
+						SELECT m.id FROM meals m JOIN meal_kinds k ON k.id = m.meal_kind_id
+						WHERE m.tenant_id = ? AND k.name = 'Lunch'
+						""", UUID.class, tenant).toString()))
 				.andExpect(jsonPath("$.meals[0].readyBy").value("12:00:00"))
 				.andExpect(jsonPath("$.meals[0].recorded").value(false))
 				.andExpect(jsonPath("$.meals[0].dishes.length()").value(1))
@@ -333,11 +340,11 @@ class TodayIT extends AbstractIntegrationTest {
 	}
 
 	private void planMealOn(LocalDate date, String kind, int servings) throws Exception {
-		mvc.perform(post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
+		mvc.perform(post("/api/v1/meals").header("Authorization", "Bearer valid-token")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("""
+						.content(MealRequests.save("""
 								{"planDate":"%s","mealKind":"%s","recipeId":"%s","targetYield":%d,"adults":%d}
-								""".formatted(date, kind, khichdi, servings, servings)))
+								""".formatted(date, kind, khichdi, servings, servings), admin, tenant)))
 				.andExpect(status().isCreated());
 	}
 

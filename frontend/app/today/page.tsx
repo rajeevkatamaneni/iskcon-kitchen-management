@@ -284,7 +284,7 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
         <div className="grid">
           {meals.map((meal) => (
             <Link
-              key={`${meal.mealKind}-${meal.readyBy}`}
+              key={meal.mealId}
               href={`/planner?date=${date}`}
               // Named for what it is, so a screen reader announces "Lunch at 12:00" rather than
               // reading the whole block of dishes before saying where the link goes.
@@ -418,7 +418,7 @@ function WorkforceNote({ workforce }: { workforce: TodayWorkforce }) {
   return (
     <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
       {counted.map((meal, i) => (
-        <span key={`${meal.mealKind}-${meal.readyBy}`} className="flex items-center gap-1.5">
+        <span key={meal.mealId} className="flex items-center gap-1.5">
           {i > 0 && <span aria-hidden="true">·</span>}
           <span className={meal.shortOfCrew ? "font-semibold text-warning" : undefined}>
             {meal.mealKind} {meal.rostered} of {meal.crewRequired}

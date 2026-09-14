@@ -459,13 +459,14 @@ describe("the three figures, the level they are judged against, and who claimed 
     expect(await screen.findByText("Not set")).toBeInTheDocument();
   });
 
-  it("shows the meals that committed the stock, each linking to its planner day", async () => {
+  it("shows the meals that committed the stock, each linking to its meal in the planner", async () => {
     getItemMock.mockImplementation(async () =>
       detail({
         item: itemView({ onHand: 50, committed: 30, available: 20 }),
         committed: [
           {
-            mealPlanId: "mp-1",
+            dishId: "dish-1",
+            mealId: "meal-1",
             planDate: "2026-09-11",
             mealKind: "Lunch",
             eventName: null,
@@ -474,7 +475,8 @@ describe("the three figures, the level they are judged against, and who claimed 
             unit: "KG",
           },
           {
-            mealPlanId: "mp-2",
+            dishId: "dish-2",
+            mealId: "meal-2",
             planDate: "2026-09-13",
             mealKind: "Event",
             eventName: "Saturday reading",
@@ -491,15 +493,16 @@ describe("the three figures, the level they are judged against, and who claimed 
     expect(screen.getByText("Khichadi")).toBeInTheDocument();
     expect(screen.getByText("18 Kg")).toBeInTheDocument();
 
-    // The link is the whole point: "we cannot spare that" is always answered by an edit to the day.
-    // Matched on the href rather than on the month's name, which is a formatting question and
-    // belongs to `dateWithYear`'s own tests.
-    const days = screen
+    // The link is the whole point: "we cannot spare that" is always answered by an edit to the meal.
+    // By the meal's own id since D-27, not by its day — a day can hold two events. Matched on the
+    // href rather than on the month's name, which is a formatting question and belongs to
+    // `dateWithYear`'s own tests.
+    const meals = screen
       .getAllByRole("link")
       .map((a) => a.getAttribute("href"))
-      // A day, not the sidebar's "Reuse a plan" — /planner/ has more under it than dates.
-      .filter((href) => /^\/planner\/\d{4}-\d{2}-\d{2}$/.test(href ?? ""));
-    expect(days).toEqual(["/planner/2026-09-11", "/planner/2026-09-13"]);
+      // A meal, not the sidebar's "Reuse a plan" — /planner/ has more under it than meals.
+      .filter((href) => /^\/planner\/meal\//.test(href ?? ""));
+    expect(meals).toEqual(["/planner/meal/meal-1", "/planner/meal/meal-2"]);
 
     // An event is shown by the name people recognise, not by the word "Event".
     expect(screen.getByText("Saturday reading")).toBeInTheDocument();

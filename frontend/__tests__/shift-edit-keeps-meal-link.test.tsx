@@ -1,18 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ShiftInput, ShiftView } from "@/lib/api";
+import type { ShiftView, UpdateShiftInput } from "@/lib/api";
 
 /**
- * T-158. Saving a shift on `/volunteers/[id]/edit` must not take its meal link off.
+ * T-158, carried onto D-27. Saving a shift on `/volunteers/[id]/edit` must not take its meal link off.
  *
- * <p>`PUT /api/v1/shifts/{id}` replaces the whole shift, the D-14 link included, and an update that
- * leaves the three link fields out unlinks it — that is deliberate on the server and pinned by
- * `ShiftMealLinkIT.anEditCanUnlinkAShift`. The edit screen has no box for the link, so it used to
- * send the eight form fields and nothing else: a shift raised from the planner, once retitled here,
- * stopped counting toward its meal and vanished from the planner.
+ * <p>Before D-27 the link was three copied fields — the meal's date, kind and event name — and an
+ * update that left them out unlinked the shift. Since D-27 it is one `mealId`, and the server refuses
+ * an edit that drops or changes it (KMS-400153). The edit screen has no box for the link, so it must
+ * send back exactly what it read.
  *
- * <p>Every "keeps the link" test reads `Object.keys` before the values, because the defect was a key
- * that was never sent and `objectContaining({ mealDate: undefined })` passes against a missing key.
+ * <p>Every "keeps the link" test reads `Object.keys` before the value, because the defect this file
+ * exists for was a key that was never sent, and `objectContaining({ mealId: undefined })` passes
+ * against a missing key.
+ *
+ * <p>What the edit screen shows for a meal shift — the date and meal read-only, the times-changed
+ * warning — is in `shift-edit-meal-shift.test.tsx` (T-199). This file is kept to the link.
  */
 
 const { queryRef, updateShiftMock, pushMock } = vi.hoisted(() => ({
@@ -43,9 +46,7 @@ vi.mock("@/lib/api", async (orig) => {
 
 import EditShiftPage from "@/app/volunteers/[id]/edit/page";
 
-const LINK_KEYS = ["mealDate", "mealKind", "mealEventName"] as const;
-
-/** A shift as `GET /shifts/{id}` returns it: the server always sends all three link fields. */
+/** A shift as `GET /shifts/{id}` returns it: the server always sends the link, null or not. */
 function shift(o: Partial<ShiftView> = {}): ShiftView {
   return {
     id: "s1",
@@ -62,7 +63,7 @@ function shift(o: Partial<ShiftView> = {}): ShiftView {
     signedUpCount: 2,
     waitlistCount: 0,
     createdAt: "2026-08-01T00:00:00Z",
-    mealDate: "2026-12-06",
+    mealId: "meal-lunch-6-dec",
     mealKind: "Lunch",
     mealEventName: null,
     ...o,
@@ -74,22 +75,22 @@ function field(name: string): HTMLInputElement {
   return form.querySelector(`input[name="${name}"]`) as HTMLInputElement;
 }
 
-async function saved(): Promise<ShiftInput> {
+async function saved(): Promise<UpdateShiftInput> {
   // The header's own button, which reaches the form through `form=` (T-165).
   fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
   await waitFor(() => expect(updateShiftMock).toHaveBeenCalledTimes(1));
   const [id, input] = updateShiftMock.mock.calls[0];
   expect(id).toBe("s1");
-  return input as ShiftInput;
+  return input as UpdateShiftInput;
 }
 
-describe("editing a shift on the volunteers screen keeps its meal link (T-158)", () => {
+describe("editing a shift on the volunteers screen keeps its meal link (T-158, D-27)", () => {
   beforeEach(() => {
     updateShiftMock.mockReset().mockResolvedValue(undefined);
     pushMock.mockReset();
   });
 
-  it("keeps a meal link through a change of title and capacity", async () => {
+  it("keeps a meal link through a change of title and volunteers requested", async () => {
     queryRef.current = { data: shift(), error: null, loading: false };
     render(<EditShiftPage />);
 
@@ -97,20 +98,17 @@ describe("editing a shift on the volunteers screen keeps its meal link (T-158)",
     fireEvent.change(field("capacity"), { target: { value: "8" } });
     const input = await saved();
 
-    // The keys first: a link that was never sent is the defect, and only this can see it.
-    const keys = Object.keys(input);
-    for (const key of LINK_KEYS) expect(keys).toContain(key);
-    expect(input.mealDate).toBe("2026-12-06");
-    expect(input.mealKind).toBe("Lunch");
-    expect(input.mealEventName).toBeNull();
+    // The key first: a link that was never sent is the defect, and only this can see it.
+    expect(Object.keys(input)).toContain("mealId");
+    expect(input.mealId).toBe("meal-lunch-6-dec");
     // And the edit itself still went through.
     expect(input.title).toBe("Cutting vegetables for lunch");
     expect(input.capacity).toBe(8);
   });
 
-  it("keeps an event's link, event name included", async () => {
+  it("keeps an event's link, which is the same one id as any other meal's", async () => {
     queryRef.current = {
-      data: shift({ title: "Janmashtami lunch prep", mealEventName: "Janmashtami" }),
+      data: shift({ title: "Janmashtami lunch prep", mealId: "meal-janmashtami", mealEventName: "Janmashtami" }),
       error: null,
       loading: false,
     };
@@ -119,37 +117,18 @@ describe("editing a shift on the volunteers screen keeps its meal link (T-158)",
     fireEvent.change(field("location"), { target: { value: "Festival tent" } });
     const input = await saved();
 
-    const keys = Object.keys(input);
-    for (const key of LINK_KEYS) expect(keys).toContain(key);
-    expect(input.mealDate).toBe("2026-12-06");
-    expect(input.mealKind).toBe("Lunch");
-    expect(input.mealEventName).toBe("Janmashtami");
+    expect(Object.keys(input)).toContain("mealId");
+    expect(input.mealId).toBe("meal-janmashtami");
     expect(input.location).toBe("Festival tent");
+    // The kind and the event's name are read through the id and are not the link, so they are not
+    // sent: the server would ignore them, and sending them would suggest they could move the shift.
+    expect(Object.keys(input)).not.toContain("mealKind");
+    expect(Object.keys(input)).not.toContain("mealEventName");
   });
 
-  it("keeps the shift on its original meal when the date is moved, as the planner layer does", async () => {
-    // A matter of taste recorded for Rajeev: the link stays with the meal it was made for. T-155's
-    // layer does the same, so the two screens agree.
-    queryRef.current = { data: shift(), error: null, loading: false };
-    render(<EditShiftPage />);
-
-    fireEvent.change(field("shiftDate"), { target: { value: "2026-12-05" } });
-    const input = await saved();
-
-    expect(input.shiftDate).toBe("2026-12-05");
-    const keys = Object.keys(input);
-    for (const key of LINK_KEYS) expect(keys).toContain(key);
-    expect(input.mealDate).toBe("2026-12-06");
-    expect(input.mealKind).toBe("Lunch");
-    expect(input.mealEventName).toBeNull();
-  });
-
-  it("leaves an unlinked shift unlinked, sending the three fields as null", async () => {
-    // Nulls rather than absent keys: the server treats the two identically (every field of the
-    // request record is null either way), and all three null is the one shape its all-or-nothing
-    // check accepts as "no link". Sending them explicitly makes the save say what it means.
+  it("leaves a shift not for a meal as one, sending its link as null rather than leaving it out", async () => {
     queryRef.current = {
-      data: shift({ title: "Saturday morning seva", mealDate: null, mealKind: null, mealEventName: null }),
+      data: shift({ title: "Saturday morning seva", mealId: null, mealKind: null, mealEventName: null }),
       error: null,
       loading: false,
     };
@@ -158,27 +137,7 @@ describe("editing a shift on the volunteers screen keeps its meal link (T-158)",
     fireEvent.change(field("title"), { target: { value: "Saturday cleaning seva" } });
     const input = await saved();
 
-    const keys = Object.keys(input);
-    for (const key of LINK_KEYS) expect(keys).toContain(key);
-    expect(input.mealDate).toBeNull();
-    expect(input.mealKind).toBeNull();
-    expect(input.mealEventName).toBeNull();
-  });
-
-  it("treats a shift whose view carries no link fields at all as unlinked, not as half a link", async () => {
-    // `ShiftView` declares the three optional, so a caller can hold one without them. Undefined must
-    // come out as null on all three, never as a mix the server would refuse with KMS-400125.
-    const bare = shift({ title: "Saturday morning seva" });
-    delete bare.mealDate;
-    delete bare.mealKind;
-    delete bare.mealEventName;
-    queryRef.current = { data: bare, error: null, loading: false };
-    render(<EditShiftPage />);
-
-    const input = await saved();
-
-    expect(input.mealDate).toBeNull();
-    expect(input.mealKind).toBeNull();
-    expect(input.mealEventName).toBeNull();
+    expect(Object.keys(input)).toContain("mealId");
+    expect(input.mealId).toBeNull();
   });
 });

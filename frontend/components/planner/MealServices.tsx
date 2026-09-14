@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useState } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
@@ -12,16 +13,15 @@ import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { BusyPot } from "@/components/Loading";
 import { RecipePeek } from "@/components/RecipePeek";
-import { ShiftLayer } from "@/components/planner/ShiftLayer";
-import { MovedNotice } from "@/app/volunteers/moved-notice";
+import { ConfirmLayer } from "@/app/planner/confirm-layer";
 import {
   api,
   toApiError,
   type ApiError,
   type MealCrewView,
-  type MealPlanView,
-  type MealServiceView,
+  type MealDishView,
   type MealSufficiency,
+  type MealView,
   type RecipeSummary,
   type ShiftView,
 } from "@/lib/api";
@@ -77,21 +77,14 @@ export function MealServices({
   const [nonce, setNonce] = useState(0);
   // Which recipe is being read over the planner, if any.
   const [peek, setPeek] = useState<{ recipeId: string; name: string } | null>(null);
-  // Which meal is having a shift raised or corrected over the planner, if any. One layer for the
-  // whole day, for the reason the recipe layer gives: only one is ever open.
-  const [raising, setRaising] = useState<{ meal: MealServiceView; shift: ShiftView | null } | null>(
-    null
-  );
-  // The shift a save in that layer just moved under the volunteers signed up to it, if any. Held
-  // here rather than in the layer, because the layer has closed by the time the warning is needed;
-  // the meal the shift belongs to shows it. Replaced by the next save, moved or not.
-  const [movedShiftId, setMovedShiftId] = useState<string | null>(null);
+  /** The meal just cancelled, said out loud here because its own block has gone from the day. */
+  const [cancelled, setCancelled] = useState<string | null>(null);
   const { data, loading } = useAuthedQuery(
     useCallback(
       (t?: string) => {
         void nonce;
         void refreshKey;
-        return api.mealServices(date, date, t);
+        return api.meals(date, date, t);
       },
       [date, nonce, refreshKey]
     )
@@ -100,7 +93,8 @@ export function MealServices({
   /**
    * How many hands each of the day's meals has against how many it needs (item 24). Read once for
    * the whole day rather than per block, and read from the same endpoint Today's workforce line
-   * uses, so the two screens cannot disagree about the same lunch.
+   * uses, so the two screens cannot disagree about the same lunch. Matched to its meal by the meal's
+   * id (D-27): matching on the kind's name drew one event's crew against every event that day.
    */
   const { data: crew } = useAuthedQuery(
     useCallback(
@@ -113,34 +107,9 @@ export function MealServices({
     )
   );
 
-  /**
-   * The seva shifts raised for this day's meals (T-019), so a meal short of hands can show what has
-   * already been asked for rather than only that it is short.
-   *
-   * <p>Read once for the day and handed down, like the crew count above it and for the same reason.
-   * Cancelled shifts are left out — `listShifts` excludes them unless asked — because a cancelled
-   * shift is not cover and drawing it beside a shortfall would say it was.
-   *
-   * <p>Swallowed on refusal, exactly as the crew count is. `MANAGE_VOLUNTEER_SHIFTS` is not every
-   * planner's, and a cook reading the day must see the day rather than an error about a list they
-   * were never going to be shown.
-   *
-   * <p>The range is the day itself, which is the day every shift raised from here is posted for —
-   * the layer takes its date from the meal. A shift posted from the volunteers screen for the
-   * evening before, and linked to tomorrow's breakfast, is real and would not be found by this
-   * query; that is a gap in the read and not in the link, and it is worth saying out loud rather
-   * than discovering as a shift that vanished.
-   */
-  const { data: shifts } = useAuthedQuery(
-    useCallback(
-      (t?: string) => {
-        void nonce;
-        void refreshKey;
-        return api.listShifts({ from: date, to: date }, t).catch(() => [] as ShiftView[]);
-      },
-      [date, nonce, refreshKey]
-    )
-  );
+  // No list of shifts is read any more. Each meal arrives with its own live shift (D-27), found by the
+  // meal's id on the server, where the day used to fetch every shift and match them to meals by a
+  // copied date, kind and event name.
 
   function changed() {
     setNonce((n) => n + 1);
@@ -157,34 +126,43 @@ export function MealServices({
         (!meal.recorded && meal.dishes.some((dish) => dish.status === "PLANNED"))
     );
 
+  const cancelledNotice = cancelled && (
+    <InlineNotice tone="success" autoDismiss title={cancelled} />
+  );
+
   if (loading && meals.length === 0) {
     return null;
   }
 
   if (meals.length === 0) {
     return (
-      <EmptyState title="Nothing planned for this day">
-        {readOnly
-          ? "No meals were planned for this day."
-          : "Add the day’s meals below."}
-      </EmptyState>
+      <div className="grid gap-4">
+        {cancelledNotice}
+        <EmptyState title="Nothing planned for this day">
+          {readOnly
+            ? "No meals were planned for this day."
+            : "Add the day’s meals below."}
+        </EmptyState>
+      </div>
     );
   }
 
   return (
     <div className="grid gap-4">
+      {cancelledNotice}
       {meals.map((meal) => (
         <MealBlock
-          key={meal.mealKind}
+          key={meal.mealId}
           meal={meal}
-          crew={(crew ?? []).find((c) => c.mealKind === meal.mealKind) ?? null}
-          shifts={(shifts ?? []).filter((s) => isFor(s, meal))}
-          onRaiseShift={(shift) => setRaising({ meal, shift })}
-          movedShiftId={movedShiftId}
+          crew={(crew ?? []).find((c) => c.mealId === meal.mealId) ?? null}
           sufficiency={sufficiency}
           recipes={recipes}
           readOnly={readOnly}
           onChanged={changed}
+          onCancelled={(sentence) => {
+            setCancelled(sentence);
+            changed();
+          }}
           onError={onError}
           onReadRecipe={(recipeId, name) => setPeek({ recipeId, name })}
         />
@@ -194,60 +172,8 @@ export function MealServices({
       {peek && (
         <RecipePeek recipeId={peek.recipeId} name={peek.name} onClose={() => setPeek(null)} />
       )}
-
-      {/* Raising a shift for a meal, over the day rather than away from it. Saving closes the layer
-          and bumps the day's own nonce, so the crew pebble and the shift beside it both re-read;
-          nothing about the address changes, which is what "lands back where you were" means here. */}
-      {raising && (
-        <ShiftLayer
-          date={raising.meal.planDate}
-          mealKind={raising.meal.mealKind}
-          mealEventName={raising.meal.eventName}
-          readyBy={raising.meal.readyBy}
-          suggestedCapacity={shortBy(
-            raising.meal,
-            (crew ?? []).find((c) => c.mealKind === raising.meal.mealKind) ?? null
-          )}
-          shift={raising.shift}
-          onClose={() => setRaising(null)}
-          onSaved={(movedId) => {
-            setRaising(null);
-            setMovedShiftId(movedId);
-            changed();
-          }}
-        />
-      )}
     </div>
   );
-}
-
-/**
- * Whether a shift was raised for this meal (D-14) — by the link it carries, never by its hours.
- *
- * <p>All three parts of the link are compared, because a day can hold two meals of the same kind:
- * an event is told apart from another event by its own name, and a main meal has no name at all.
- * A shift with no link belongs to no meal in particular and is not drawn against one, which is the
- * whole difference this task exists to make — before it, "who is on at noon" was the only question
- * anyone could ask, and it answered with everybody the clock caught.
- */
-function isFor(shift: ShiftView, meal: MealServiceView): boolean {
-  return (
-    Boolean(shift) &&
-    shift.mealDate === meal.planDate &&
-    shift.mealKind === meal.mealKind &&
-    (shift.mealEventName ?? null) === (meal.eventName ?? null)
-  );
-}
-
-/**
- * How many hands the meal is short, floored at one — what the "how many volunteers" box opens on.
- *
- * <p>One, and not zero, where nothing is missing: somebody who presses this on a covered meal wants
- * volunteers anyway, and a form that opens on a number it refuses is a form that argues with the
- * press that opened it.
- */
-function shortBy(meal: MealServiceView, crew: MealCrewView | null): number {
-  return Math.max(1, (meal.crewRequired ?? 0) - (crew?.rostered ?? 0));
 }
 
 /**
@@ -293,29 +219,23 @@ function shortBadge(sufficiency: MealSufficiency) {
 function MealBlock({
   meal,
   crew,
-  shifts,
-  onRaiseShift,
-  movedShiftId,
   sufficiency,
   recipes,
   readOnly,
   onChanged,
+  onCancelled,
   onError,
   onReadRecipe,
 }: {
-  meal: MealServiceView;
+  meal: MealView;
   /** Who is rostered over this meal's ready-by, or null where nothing has been counted. */
   crew: MealCrewView | null;
-  /** The open shifts raised for this meal, by its link and not by the clock. Usually none or one. */
-  shifts: ShiftView[];
-  /** Raise a shift for this meal, or open the one already raised. Null asks for a new one. */
-  onRaiseShift: (shift: ShiftView | null) => void;
-  /** A shift the planner's layer just moved under a roster. Warned about here if it is this meal's. */
-  movedShiftId: string | null;
   sufficiency: Map<string, MealSufficiency>;
   recipes: RecipeSummary[];
   readOnly: boolean;
   onChanged: () => void;
+  /** The meal was cancelled. Handed the sentence to say, because this block is about to go. */
+  onCancelled: (sentence: string) => void;
   onError: (e: ApiError) => void;
   /** Opens one preparation's recipe over the planner. */
   onReadRecipe: (recipeId: string, name: string) => void;
@@ -326,6 +246,9 @@ function MealBlock({
   const [preparingPdf, setPreparingPdf] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [justCorrected, setJustCorrected] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<ApiError | null>(null);
 
   /**
    * Correcting a recorded meal is the Temple Admin's alone (D-4), unlike recording it, which admin,
@@ -340,32 +263,41 @@ function MealBlock({
    */
   const isAdmin = appUser?.role === "TEMPLE_ADMIN";
 
-  /**
-   * Whether to offer this reader a shift at all (T-019). The same three roles `/volunteers/new`
-   * guards itself with, and the same caveat as the line above: `MANAGE_VOLUNTEER_SHIFTS` is the
-   * real rule, the API enforces it on every request, and this only decides whether somebody is
-   * shown a button that would refuse them. Widen the grant and this line widens with it.
-   */
-  const canRaiseShift =
-    appUser?.role === "TEMPLE_ADMIN" ||
-    appUser?.role === "KITCHEN_MANAGER" ||
-    appUser?.role === "KITCHEN_STAFF";
+  /** What the meal calls itself: an event by its own name, everything else by its kind. */
+  const name = meal.eventName || meal.mealKind;
+
+  /** The meal's one live volunteer shift, if it has one (D-27). */
+  const shift = meal.volunteerShift;
 
   /**
-   * Whether to offer "Ask for volunteers" on this meal (T-155): a reader who may raise a shift, on a
-   * day that can still be changed, for a meal that is short of hands and has no shift raised for it.
-   *
-   * <p>"Short" is the crew pebble's own test, called rather than restated, so the offer and the
-   * number beside it cannot disagree. Before T-155 this checked only that a crew size had been set,
-   * and staging showed the offer beside a meal reading "6 of 6" — asking for volunteers nobody
-   * needs. A meal with a shift already raised shows that shift instead, full or not, so it can
-   * still be opened.
+   * Whether this meal can be cancelled from here: a day that can still be changed, a meal nobody has
+   * recorded, and something on it still to cook. The server refuses a cooked or recorded meal too
+   * (KMS-400045); this keeps the button off a meal it would refuse.
    */
-  const offerShift = canRaiseShift && !readOnly && shifts.length === 0 && shortOfCrew(meal.crewRequired, crew);
+  const canCancel = !readOnly && !meal.recorded && meal.status === "PLANNED";
 
-  // Found among this meal's own shifts, as re-read after the save, which is where the count comes
-  // from — the same way the volunteers list finds the shift it warns about.
-  const movedShift = movedShiftId ? shifts.find((s) => s.id === movedShiftId) ?? null : null;
+  /**
+   * Cancels the meal and its volunteer shift in one go (D-27 answer 5). Nothing is sent until the
+   * warning has been read, and the server tells signed-up and waiting volunteers after it commits.
+   */
+  async function cancelMeal() {
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      const result = await api.cancelMeal(meal.mealId, null, await getToken());
+      setCancelling(false);
+      const told = result.volunteersTold;
+      onCancelled(
+        told > 0
+          ? `${name} was cancelled. ${told} ${told === 1 ? "volunteer was" : "volunteers were"} told.`
+          : `${name} was cancelled.`
+      );
+    } catch (e) {
+      setCancelError(toApiError(e, "We couldn’t cancel that meal."));
+    } finally {
+      setCancelBusy(false);
+    }
+  }
 
   // The card is two halves with two readers (build brief Q3). The worksheet is always English and
   // goes back to the office; the recipes are optional, and print in a language chosen here for the
@@ -381,8 +313,8 @@ function MealBlock({
   const [language, setLanguage] = useState<string | null>(null);
   const { data: offered } = useAuthedQuery(
     useCallback(
-      (t?: string) => api.jobCardLanguages(meal.planDate, meal.mealKind, meal.eventName, t),
-      [meal.planDate, meal.mealKind]
+      (t?: string) => api.jobCardLanguages(meal.mealId, t),
+      [meal.mealId]
     )
   );
   const recipeLanguage = language ?? offered?.defaultLanguage ?? "en";
@@ -411,7 +343,7 @@ function MealBlock({
       const token = await getToken();
       await generateAndDownload({
         request: () =>
-          api.requestJobCard(meal.planDate, meal.mealKind, meal.eventName, printLanguage, token),
+          api.requestJobCard(meal.mealId, printLanguage, token),
         status: (documentId) => api.getJobCardDocument(documentId, token),
         download: (documentId) => api.downloadJobCardDocument(documentId, token),
         filename: `${meal.cardNumber ?? "job-card"}.pdf`,
@@ -453,26 +385,15 @@ function MealBlock({
                 down yet is part of what the meal is, and it reads with the name and the hour. */}
             {meal.recorded ? <Badge tone="success">Recorded</Badge> : <Badge>Not yet recorded</Badge>}
             <CrewPebble crew={crew} required={meal.crewRequired} name={meal.eventName || meal.mealKind} />
-            {/* What has been asked for, and the way to ask — both beside the number that says it is
-                needed, because that number is the only reason either exists. A second place on the
-                screen to talk about crew would be a second place to look for this one. */}
-            {shifts.map((shift) => (
+            {/* What has been asked for, beside the number that says it is needed. Asking, and changing
+                what was asked, happen on the meal's own form (section 4) since D-27, because a shift
+                is saved only with its meal — a layer here that saved a shift by itself would be the
+                orphan shift Rajeev ruled out. So the day shows the shift and links to the meal. */}
+            {shift && (
               <ShiftPebble
-                key={shift.id}
                 shift={shift}
-                onOpen={readOnly || !canRaiseShift ? null : () => onRaiseShift(shift)}
+                href={readOnly || meal.recorded ? null : `/planner/meal/${meal.mealId}`}
               />
-            ))}
-            {offerShift && (
-              <Button
-                size="sm"
-                variant="ghost"
-                icon="hand-stop"
-                aria-haspopup="dialog"
-                onClick={() => onRaiseShift(null)}
-              >
-                Ask for volunteers
-              </Button>
             )}
           </div>
 
@@ -532,38 +453,57 @@ function MealBlock({
                 dishes keep the figures they were first given. A meal already corrected offers
                 nothing here, because a correction can only be made once (KMS-400137); the sentence
                 under the dishes says what it now reads and who changed it. */}
-            {meal.recorded && !meal.corrected && isAdmin && meal.serviceId && !correcting && (
+            {meal.recorded && !meal.corrected && isAdmin && !correcting && (
               <Button size="sm" variant="secondary" onClick={() => setCorrecting(true)}>
                 Correct the figures
               </Button>
             )}
             {!readOnly && !meal.recorded && (
-              <ButtonLink
-                href={`/planner/${meal.planDate}/${encodeURIComponent(meal.mealKind)}`}
-                size="sm"
-                variant="secondary"
-              >
+              // By the meal's own id (D-27). It was `/planner/<date>/<kind>`, which could not tell
+              // two events on one day apart and broke when a kind was renamed.
+              <ButtonLink href={`/planner/meal/${meal.mealId}`} size="sm" variant="secondary">
                 Edit
               </ButtonLink>
+            )}
+            {canCancel && (
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setCancelError(null);
+                  setCancelling(true);
+                }}
+              >
+                Cancel this meal
+              </Button>
             )}
           </span>
         </div>
       </header>
 
-      {/* The warning the volunteers edit screen gives, in the same words, after the planner's layer
-          moved a shift people signed up for (T-155). Directly under this meal's header, because that
-          is where the reader just pressed the shift, where the layer closes back to, and it names
-          the meal the moved shift belongs to without having to say so. */}
-      {movedShift && (
-        <div className="mt-4">
-          <MovedNotice shift={movedShift} />
-        </div>
+      {/* Asked before anything is sent, and with the count when the meal has a volunteer shift (D-27
+          answer 5: "warn then cancel both"). The people on that shift are the ones this press
+          reaches, so the question names how many. */}
+      {cancelling && (
+        <ConfirmLayer
+          title={`Cancel ${name}?`}
+          confirmLabel="Cancel this meal"
+          dismissLabel="Keep it"
+          danger
+          busy={cancelBusy}
+          onDismiss={() => setCancelling(false)}
+          onConfirm={cancelMeal}
+        >
+          <p>{shift ? cancelWarning(shift) : "Its preparations come off the plan."}</p>
+          {cancelError && <ErrorNotice error={cancelError} />}
+        </ConfirmLayer>
       )}
 
       {/* Only an event repeats, and only one that is still to be cooked. There is nothing to say
           about repeating a Lunch: the temple cooks one every day of the year already. */}
       {!readOnly && !meal.recorded && meal.eventName && open.length > 0 && (
-        <RepeatForward meal={meal} planId={open[0].id} onChanged={onChanged} onError={onError} />
+        <RepeatForward meal={meal} onChanged={onChanged} onError={onError} />
       )}
 
       <div className="mt-4 grid">
@@ -626,7 +566,7 @@ function MealBlock({
                     Beside the figure rather than in a footnote, because a number that changed and a
                     number that never did look identical, and the only reader who can tell them
                     apart is the one who remembers yesterday's screen. `originalActualServings` is
-                    non-null only on a dish a correction actually moved — restating an unchanged
+                    non-null only on a dish a correction actually changed — restating an unchanged
                     figure is not correcting it — so an untouched preparation of a corrected meal
                     stays quiet rather than offering "640 cooked, corrected from 640". */}
                 {dish.originalActualServings != null && (
@@ -678,13 +618,12 @@ function MealBlock({
               {meal.correctionNote ? ` — ${meal.correctionNote}` : ""}
             </p>
           )}
-          {correcting && meal.serviceId && (
+          {correcting && (
             <CorrectMeal
               meal={meal}
-              serviceId={meal.serviceId}
               dishes={meal.dishes.filter((d) => d.status === "COOKED" || d.notMade)}
-              unit={(mealPlanId) =>
-                yieldUnit(meal.dishes.find((d) => d.id === mealPlanId)?.recipeId ?? "")
+              unit={(dishId) =>
+                yieldUnit(meal.dishes.find((d) => d.id === dishId)?.recipeId ?? "")
               }
               onCancel={() => setCorrecting(false)}
               onSaved={() => {
@@ -700,8 +639,8 @@ function MealBlock({
           <RecordMeal
             meal={meal}
             dishes={open}
-            unit={(mealPlanId) =>
-              yieldUnit(meal.dishes.find((d) => d.id === mealPlanId)?.recipeId ?? "")
+            unit={(dishId) =>
+              yieldUnit(meal.dishes.find((d) => d.id === dishId)?.recipeId ?? "")
             }
             onCancel={() => setRecording(false)}
             onSaved={() => {
@@ -773,7 +712,7 @@ function MealBlock({
  * server refused a recording made from the fourth day down on the catching-up screen, the answer
  * appeared off-screen with nothing at the point of action, no scroll and no focus move. Four
  * presses of *Record this meal* looked, to the person pressing, exactly like nothing happening at
- * all, and that is what let the missing `eventName` below survive on staging (T-043).
+ * all, and that is what let a missing event name survive on staging (T-043).
  *
  * <p>It is not <em>also</em> passed to `onError`. The page banner has no way to clear itself, so a
  * refusal followed by a successful retry would leave a red notice contradicting the green one. The
@@ -787,10 +726,10 @@ function RecordMeal({
   onCancel,
   onSaved,
 }: {
-  meal: MealServiceView;
-  dishes: MealPlanView[];
+  meal: MealView;
+  dishes: MealDishView[];
   /** What a preparation is measured in, so every figure on the form carries its unit. */
-  unit: (mealPlanId: string) => string;
+  unit: (dishId: string) => string;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -801,7 +740,7 @@ function RecordMeal({
   const [refusal, setRefusal] = useState<ApiError | null>(null);
   const [entries, setEntries] = useState(() =>
     dishes.map((dish) => ({
-      mealPlanId: dish.id,
+      dishId: dish.id,
       recipeName: dish.recipeName,
       planned: Number(dish.targetYield),
       // Both start at the plan, because the plan is what the kitchen was told to do and most days
@@ -813,7 +752,7 @@ function RecordMeal({
   );
 
   function set(id: string, patch: Partial<(typeof entries)[number]>) {
-    setEntries((list) => list.map((e) => (e.mealPlanId === id ? { ...e, ...patch } : e)));
+    setEntries((list) => list.map((e) => (e.dishId === id ? { ...e, ...patch } : e)));
   }
 
   async function save() {
@@ -822,21 +761,13 @@ function RecordMeal({
     setRefusal(null);
     try {
       await api.recordMeal(
+        meal.mealId,
         {
-          planDate: meal.planDate,
-          mealKind: meal.mealKind,
-          // Which event is being written down, and null for the three main meals (V89, E4-S15 D1).
-          // Every event of every temple carries the kind "Event", so the date and the kind alone do
-          // not say which preparation this is: a Saturday with a morning reading and an evening
-          // bhajan is two meals, two cards and two recordings. Without it the server resolved
-          // nothing and refused every event recording with a 404 — from this screen, the day's
-          // screen and the catching-up screen alike, since all three record through this one form.
-          // The job card on the header above has always sent it; the recording had no field to
-          // send it in, so nothing on either side could notice.
-          eventName: meal.eventName,
+          // By the meal's own id (D-27): no date, kind or event name for a caller to leave out,
+          // which is how every event recording once failed silently (T-043).
           note: note.trim() || null,
           dishes: entries.map((e) => ({
-            mealPlanId: e.mealPlanId,
+            dishId: e.dishId,
             actualServings: e.notMade ? null : e.cooked,
             consumedQuantity: e.notMade ? null : e.consumed,
             notMade: e.notMade,
@@ -876,7 +807,7 @@ function RecordMeal({
       </div>
 
       {entries.map((entry) => (
-        <div key={entry.mealPlanId} className="flex flex-wrap items-center gap-4">
+        <div key={entry.dishId} className="flex flex-wrap items-center gap-4">
           <span className="min-w-[12rem] flex-1 text-ink">{entry.recipeName}</span>
 
           {/*
@@ -887,7 +818,7 @@ function RecordMeal({
             the inputs it describes, it agrees with them (E11-S3 D5).
           */}
           <span className="w-24 text-right tabular-nums text-ink-secondary">
-            {entry.planned.toLocaleString("en-IN")} {unitLabelFor(entry.planned, unit(entry.mealPlanId))}
+            {entry.planned.toLocaleString("en-IN")} {unitLabelFor(entry.planned, unit(entry.dishId))}
           </span>
 
           <label className="flex items-center gap-2">
@@ -903,7 +834,7 @@ function RecordMeal({
                 const cooked = Number(e.target.value);
                 // Nothing can be eaten that was never made, so the figure below follows this one
                 // down rather than being left describing an impossible meal.
-                set(entry.mealPlanId, {
+                set(entry.dishId, {
                   cooked,
                   consumed: Math.min(entry.consumed, cooked),
                 });
@@ -922,7 +853,7 @@ function RecordMeal({
               aria-label={`How much ${entry.recipeName} was eaten`}
               value={entry.notMade ? "" : entry.consumed}
               disabled={entry.notMade}
-              onChange={(e) => set(entry.mealPlanId, { consumed: Number(e.target.value) })}
+              onChange={(e) => set(entry.dishId, { consumed: Number(e.target.value) })}
               className="min-h-touch w-28 rounded-control border border-hairline px-3 text-right tabular-nums disabled:opacity-50"
             />
           </label>
@@ -932,7 +863,7 @@ function RecordMeal({
               type="checkbox"
               checked={entry.notMade}
               aria-label={`${entry.recipeName} was not made`}
-              onChange={(e) => set(entry.mealPlanId, { notMade: e.target.checked })}
+              onChange={(e) => set(entry.dishId, { notMade: e.target.checked })}
               className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
             />
             Not made
@@ -943,7 +874,7 @@ function RecordMeal({
       {entries.some((e) => !e.notMade && e.consumed < e.cooked) && (
         <p className="text-sm text-ink-secondary">
           {leftovers(entries)
-            .map((l) => `${l.name}: ${cooksQuantity(l.left, unit(l.mealPlanId))} left over`)
+            .map((l) => `${l.name}: ${cooksQuantity(l.left, unit(l.dishId))} left over`)
             .join(" · ")}
         </p>
       )}
@@ -1000,13 +931,13 @@ function RecordMeal({
  *
  * <p><strong>Every dish is sent, including the ones that did not change.</strong> The server refuses
  * a dish left out rather than assuming it was right — the same rule as recording, and the same
- * reason: silence is not an answer. It then works out for itself which figures actually moved and
+ * reason: silence is not an answer. It then works out for itself which figures actually changed and
  * touches the stock only for those, so restating an unchanged dish costs nothing and omitting one
  * would be a guess.
  *
  * <p><strong>The note is required and the server, the endpoint and the column all say so.</strong>
  * Unlike the recording note beside it, which is optional. Recording says what happened; correcting
- * says why what we said was wrong, and a figure that moved for no stated reason is unreadable a
+ * says why what we said was wrong, and a figure that changed for no stated reason is unreadable a
  * month later — which is exactly when somebody asks.
  *
  * <p>A refusal is shown in this form and not handed upwards, for the reason
@@ -1015,19 +946,15 @@ function RecordMeal({
  */
 function CorrectMeal({
   meal,
-  serviceId,
   dishes,
   unit,
   onCancel,
   onSaved,
 }: {
-  meal: MealServiceView;
-  /** The meal's own row. Non-null exactly once the meal has been recorded, which is the only time
-   *  this form can be reached — so the identity is never ambiguous, unlike when recording. */
-  serviceId: string;
+  meal: MealView;
   /** The dishes the recording spoke about: cooked ones, and ones called off at the stove. */
-  dishes: MealPlanView[];
-  unit: (mealPlanId: string) => string;
+  dishes: MealDishView[];
+  unit: (dishId: string) => string;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -1037,7 +964,7 @@ function CorrectMeal({
   const [refusal, setRefusal] = useState<ApiError | null>(null);
   const [entries, setEntries] = useState(() =>
     dishes.map((dish) => ({
-      mealPlanId: dish.id,
+      dishId: dish.id,
       recipeName: dish.recipeName,
       /** What is on file now — the readout the boxes are being corrected away from. */
       recorded: dish.actualServings,
@@ -1053,7 +980,7 @@ function CorrectMeal({
   const written = note.trim();
 
   function set(id: string, patch: Partial<(typeof entries)[number]>) {
-    setEntries((list) => list.map((e) => (e.mealPlanId === id ? { ...e, ...patch } : e)));
+    setEntries((list) => list.map((e) => (e.dishId === id ? { ...e, ...patch } : e)));
   }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -1066,11 +993,11 @@ function CorrectMeal({
     setRefusal(null);
     try {
       await api.correctRecordedMeal(
-        serviceId,
+        meal.mealId,
         {
           note: written,
           dishes: entries.map((e) => ({
-            mealPlanId: e.mealPlanId,
+            dishId: e.dishId,
             actualServings: e.notMade ? null : e.cooked,
             // Null travels as null. `CorrectMealInput` declares both figures
             // required-and-nullable rather than optional for exactly this: on a correction, "I am
@@ -1111,7 +1038,7 @@ function CorrectMeal({
       </div>
 
       {entries.map((entry) => (
-        <div key={entry.mealPlanId} className="flex flex-wrap items-center gap-4">
+        <div key={entry.dishId} className="flex flex-wrap items-center gap-4">
           <span className="min-w-[12rem] flex-1 text-ink">{entry.recipeName}</span>
 
           {/* The stored unit and the plain figure, matching the boxes beside it rather than the
@@ -1121,7 +1048,7 @@ function CorrectMeal({
           <span className="w-24 text-right tabular-nums text-ink-secondary">
             {entry.recorded == null
               ? "—"
-              : `${entry.recorded.toLocaleString("en-IN")} ${unitLabelFor(entry.recorded, unit(entry.mealPlanId))}`}
+              : `${entry.recorded.toLocaleString("en-IN")} ${unitLabelFor(entry.recorded, unit(entry.dishId))}`}
           </span>
 
           <label className="flex items-center gap-2">
@@ -1138,7 +1065,7 @@ function CorrectMeal({
                 // Nothing can be eaten that was never made, so the figure beside it follows this
                 // one down rather than being left describing an impossible meal. Null stays null:
                 // a card that did not say what came back still has not said.
-                set(entry.mealPlanId, {
+                set(entry.dishId, {
                   cooked,
                   consumed: entry.consumed == null ? null : Math.min(entry.consumed, cooked),
                 });
@@ -1158,7 +1085,7 @@ function CorrectMeal({
               value={entry.notMade || entry.consumed == null ? "" : entry.consumed}
               disabled={entry.notMade}
               onChange={(e) =>
-                set(entry.mealPlanId, {
+                set(entry.dishId, {
                   consumed: e.target.value === "" ? null : Number(e.target.value),
                 })
               }
@@ -1171,7 +1098,7 @@ function CorrectMeal({
               type="checkbox"
               checked={entry.notMade}
               aria-label={`${entry.recipeName} was not made after all`}
-              onChange={(e) => set(entry.mealPlanId, { notMade: e.target.checked })}
+              onChange={(e) => set(entry.dishId, { notMade: e.target.checked })}
               className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
             />
             Not made
@@ -1297,22 +1224,19 @@ function shortOfCrew(required: number | null, crew: MealCrewView | null): boolea
 }
 
 /**
- * A shift already raised for this meal, and its sign-ups — "2 of 5 signed up" (T-019).
- *
- * <p>Kept, not replaced, by T-155. Rajeev asked that once a shift is posted from the planner, <em>"the
- * 'Ask for volunteers' button will be replaed by Hyper link text OR a button that lets the user to
- * view and edit the Volenteer shift"</em>. This already was that button, and it carries the one figure a planner wants from
- * the shift without opening it. It opens the shift in the planner's layer, on the volunteers' own
- * full form.
+ * The meal's volunteer shift, and its sign-ups — "2 of 5 signed up" (T-019, D-27).
  *
  * <p>It sits beside the crew pebble because it is the answer to it: the pebble says a meal is three
  * hands short, and this says five were asked for and two have come forward. Read together they are
  * a sentence; apart they are two numbers about the same lunch in two places.
  *
- * <p>A button where the day can still be changed and plain text where it cannot. A past day's shift
- * is a record, and a record that looks pressable is a promise the screen cannot keep.
+ * <p>A link to the meal where the meal can still be changed, and plain text where it cannot. Since
+ * D-27 a shift is viewed and changed from its meal's form — *View volunteer shift*, in section 4 — and
+ * saved with the meal, so the pebble goes there rather than opening anything over the day. A past or
+ * recorded meal's shift is a record, and a record that looks pressable is a promise the screen cannot
+ * keep.
  */
-function ShiftPebble({ shift, onOpen }: { shift: ShiftView; onOpen: (() => void) | null }) {
+function ShiftPebble({ shift, href }: { shift: ShiftView; href: string | null }) {
   const full = shift.signedUpCount >= shift.capacity;
   const body = (
     <>
@@ -1326,7 +1250,7 @@ function ShiftPebble({ shift, onOpen }: { shift: ShiftView; onOpen: (() => void)
     full ? "bg-success-bg text-success" : "bg-sunken text-ink",
   ].join(" ");
 
-  if (!onOpen) {
+  if (!href) {
     return (
       <span title={shift.title} className={skin}>
         {body}
@@ -1334,31 +1258,40 @@ function ShiftPebble({ shift, onOpen }: { shift: ShiftView; onOpen: (() => void)
     );
   }
   return (
-    <button
-      type="button"
-      title={shift.title}
-      // It opens a layer rather than going anywhere, and a screen reader should say so before the
-      // press rather than after.
-      aria-haspopup="dialog"
-      onClick={onOpen}
-      className={`${skin} hover:bg-raised`}
-    >
+    <Link href={href} title={shift.title} className={`${skin} hover:bg-raised`}>
       {body}
-    </button>
+    </Link>
   );
+}
+
+/**
+ * What cancelling a meal with a volunteer shift reaches, before it is pressed (D-27 answer 5).
+ *
+ * <p>The count is signed-up and waiting volunteers alike, because both are sent the shift cancellation
+ * message. A shift nobody has answered yet is still said, so nobody is surprised that it went too.
+ */
+function cancelWarning(shift: ShiftView): string {
+  const { signedUpCount: signed, waitlistCount: waiting } = shift;
+  if (signed + waiting === 0) {
+    return "This meal has a volunteer shift, and nobody has signed up yet. Cancelling the meal cancels the shift too.";
+  }
+  const who = `${signed} ${signed === 1 ? "volunteer is" : "volunteers are"} signed up${
+    waiting > 0 ? ` and ${waiting} ${waiting === 1 ? "is" : "are"} waiting` : ""
+  }`;
+  return `This meal has a volunteer shift. ${who}. Cancelling the meal cancels the shift too, and they will be told.`;
 }
 
 /** "200 adults, 40 children, 30 seniors" — the count the servings were worked out from. */
 /** What each preparation had left, for the line under the figures. */
 function leftovers(
-  entries: { mealPlanId: string; recipeName: string; cooked: number; consumed: number; notMade: boolean }[]
+  entries: { dishId: string; recipeName: string; cooked: number; consumed: number; notMade: boolean }[]
 ) {
   return entries
     .filter((e) => !e.notMade && e.consumed < e.cooked)
-    .map((e) => ({ mealPlanId: e.mealPlanId, name: e.recipeName, left: e.cooked - e.consumed }));
+    .map((e) => ({ dishId: e.dishId, name: e.recipeName, left: e.cooked - e.consumed }));
 }
 
-function headCount(meal: MealServiceView): string {
+function headCount(meal: MealView): string {
   const parts: string[] = [];
   if (meal.adults) parts.push(`${meal.adults} adults`);
   if (meal.children) parts.push(`${meal.children} children`);
@@ -1383,16 +1316,13 @@ function headCount(meal: MealServiceView): string {
  * temple with no map service configured is the normal case, not a fault, and a map service must
  * never stand between a cook and a meal plan.
  */
-function TravelLine({ meal }: { meal: MealServiceView }) {
-  // The whole-meal facts live on every one of its rows, so the first preparation answers for the
-  // meal. The estimate is asked for by plan id because that is what the endpoint takes.
-  const delivery = meal.dishes.find(
-    (dish) => dish.handover === "DELIVERY" && dish.status !== "CANCELLED"
-  );
+function TravelLine({ meal }: { meal: MealView }) {
+  // The handover is the meal's own fact since D-27, and the estimate is asked for by the meal's id.
+  const delivery = meal.handover === "DELIVERY" && meal.status !== "CANCELLED";
   const { data, error } = useAuthedQuery(
     useCallback(
-      (t?: string) => (delivery ? api.travelEstimate(delivery.id, t) : Promise.resolve(null)),
-      [delivery?.id]
+      (t?: string) => (delivery ? api.travelEstimate(meal.mealId, t) : Promise.resolve(null)),
+      [delivery, meal.mealId]
     )
   );
 
@@ -1454,13 +1384,11 @@ function unavailableLine(reason: string | null): string {
  */
 function RepeatForward({
   meal,
-  planId,
   onChanged,
   onError,
 }: {
-  meal: MealServiceView;
-  /** Any still-open preparation of the meal: the endpoint copies the whole event from one of them. */
-  planId: string;
+  /** The event to copy forward, whole, by its own id (D-27). */
+  meal: MealView;
   onChanged: () => void;
   onError: (e: ApiError) => void;
 }) {
@@ -1474,7 +1402,7 @@ function RepeatForward({
     setBusy(true);
     setOutcome(null);
     try {
-      const result = await api.repeatEvent(planId, weeks, await getToken());
+      const result = await api.repeatEvent(meal.mealId, weeks, await getToken());
       // What it declined to do, said out loud. A planner who asked for six weeks and got four has
       // to know which two are missing, or they will find out on the day.
       const parts = [

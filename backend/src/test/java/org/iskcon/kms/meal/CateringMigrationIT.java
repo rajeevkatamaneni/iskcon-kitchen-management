@@ -44,6 +44,16 @@ class CateringMigrationIT extends AbstractIntegrationTest {
 	/** The last version before events arrived. Everything the fold reads exists here. */
 	private static final String BEFORE_EVENTS = "86";
 
+	/**
+	 * Where the second run stops, and it has to stop somewhere now (T-195). V135 deletes every meal
+	 * plan and V136 folds meal_plans and meal_services into meals and meal_dishes (D-27), so a run to
+	 * the end would read back an empty, renamed table and fail on its column names, having proved
+	 * nothing about V88 or V89. Pinned to the last schema those two were written for, the fold is
+	 * still checked against the rows it actually carried; what happens to them afterwards is
+	 * MealRebuildMigrationIT's job.
+	 */
+	private static final String LAST_VERSION_WITH_MEAL_PLANS = "134";
+
 	private static final String DATABASE = "kms_catering_fold_check";
 
 	@Test
@@ -63,6 +73,7 @@ class CateringMigrationIT extends AbstractIntegrationTest {
 		Flyway.configure()
 				.dataSource(url(), MIGRATION_ROLE, MIGRATION_PASSWORD)
 				.locations("classpath:db/migration")
+				.target(LAST_VERSION_WITH_MEAL_PLANS)
 				.load()
 				.migrate();
 

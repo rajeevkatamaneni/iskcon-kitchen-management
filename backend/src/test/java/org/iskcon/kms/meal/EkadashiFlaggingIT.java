@@ -90,8 +90,7 @@ class EkadashiFlaggingIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
-		admin.execute("DELETE FROM meal_plans");
-		admin.execute("DELETE FROM meal_kinds");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM calendar_overrides");
 		admin.execute("DELETE FROM calendar_days");
 		admin.execute("DELETE FROM calendar_precompute_state");
@@ -133,8 +132,9 @@ class EkadashiFlaggingIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.code").value("KMS-400048"));
 
 		UUID id = created(plan(EKADASHI, khichdi, true));
-		mvc.perform(get("/api/v1/meal-plans/{id}", id).header("Authorization", "Bearer valid-token"))
-				.andExpect(jsonPath("$.ekadashiAcknowledged").value(true));
+		// The acknowledgement is recorded on the dish it was given for, inside the meal (D-27).
+		mvc.perform(get("/api/v1/meals/{id}", id).header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.dishes[0].ekadashiAcknowledged").value(true));
 	}
 
 	@Test
@@ -203,10 +203,11 @@ class EkadashiFlaggingIT extends AbstractIntegrationTest {
 	}
 
 	private MockHttpServletRequestBuilder plan(String date, UUID recipeId, boolean ack) {
-		return post("/api/v1/meal-plans").header("Authorization", "Bearer valid-token")
+		return post("/api/v1/meals").header("Authorization", "Bearer valid-token")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"planDate\":\"" + date + "\",\"mealKind\":\"Lunch\",\"recipeId\":\"" + recipeId
-						+ "\",\"targetYield\":100,\"adults\":100,\"dayType\":\"REGULAR\",\"ekadashiAcknowledged\":" + ack + "}");
+				.content(MealRequests.save("{\"planDate\":\"" + date + "\",\"mealKind\":\"Lunch\",\"recipeId\":\""
+						+ recipeId + "\",\"targetYield\":100,\"adults\":100,\"ekadashiAcknowledged\":" + ack + "}",
+						admin, tenant));
 	}
 
 	private UUID created(MockHttpServletRequestBuilder req) throws Exception {

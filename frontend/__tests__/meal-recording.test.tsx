@@ -3,20 +3,19 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 // Typed like the real calls, so the assertions read what was sent rather than casting past an
 // untyped mock.
-const { mealServices, recordMeal, updateMealPlan, requestJobCard, jobCardLanguages } = vi.hoisted(
+const { meals, recordMeal, requestJobCard, jobCardLanguages } = vi.hoisted(
   () => ({
-    mealServices: vi.fn(async (_from: string, _to: string, _token?: string) => [] as unknown[]),
-    recordMeal: vi.fn(async (_input: Record<string, unknown>, _token?: string) => ({})),
-    updateMealPlan: vi.fn(
-      async (_id: string, _input: Record<string, unknown>, _token?: string) => undefined
+    meals: vi.fn(async (_from: string, _to: string, _token?: string) => [] as unknown[]),
+    recordMeal: vi.fn(
+      async (_mealId: string, _input: Record<string, unknown>, _token?: string) => ({})
     ),
-    requestJobCard: vi.fn(async () => ({
+    requestJobCard: vi.fn(async (_mealId: string, _language?: string, _token?: string) => ({
       documentId: "d1",
       cardNumber: "LC-2026-0142",
       status: "PENDING",
     })),
     // The temple works in Kannada and its recipes are translated into it, so the picker opens there.
-    jobCardLanguages: vi.fn(async (_date: string, _kind: string, _token?: string) => ({
+    jobCardLanguages: vi.fn(async (_mealId: string, _token?: string) => ({
       languages: ["en", "kn"],
       defaultLanguage: "kn",
     })),
@@ -30,9 +29,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
     ...actual,
     api: {
       ...actual.api,
-      mealServices,
+      meals,
       recordMeal,
-      updateMealPlan,
       requestJobCard,
       jobCardLanguages,
     },
@@ -72,38 +70,32 @@ const RECIPES = [
     baseYieldQty: 100, baseYieldUnit: "KG", perHeadQty: 1, perHeadUnit: "KG", status: "ACTIVE" },
 ];
 
+/** One preparation, as `GET /api/v1/meals` carries it since D-27: only what belongs to the dish. */
 function dish(id: string, recipeId: string, recipeName: string, servings: number) {
   return {
     id,
-    planDate: "2026-08-21",
-    mealKind: "Lunch",
-    readyBy: "12:00:00",
+    mealId: "meal-lunch",
     recipeId,
     recipeName,
     targetYield: servings,
-    dayType: "REGULAR",
-    occasionName: null,
+    targetYieldUnit: "KG",
     status: "PLANNED",
-    eventName: null,
-    contactName: null,
-    contactPhone: null,
-    deliveryAddress: null,
-    purpose: null,
-    adults: 200,
-    children: 40,
-    seniors: 30,
-    kitchenNotes: null,
     actualServings: null,
+    consumedQuantity: null,
     notMade: false,
+    originalActualServings: null,
+    originalConsumedQuantity: null,
     cookedAt: null,
     ekadashiAcknowledged: false,
     createdAt: "2026-08-20T10:00:00Z",
   };
 }
 
+/** The meal, by its own id, with every whole-meal fact on it once. */
 function lunch(overrides: Record<string, unknown> = {}) {
   return {
-    serviceId: null,
+    mealId: "meal-lunch",
+    mealKindId: "k-lunch",
     planDate: "2026-08-21",
     mealKind: "Lunch",
     readyBy: "12:00:00",
@@ -111,31 +103,49 @@ function lunch(overrides: Record<string, unknown> = {}) {
     children: 40,
     seniors: 30,
     plates: 248,
+    crewRequired: null,
     dayType: "REGULAR",
     occasionName: null,
     eventName: null,
+    isOutside: false,
+    handover: null,
     contactName: null,
     contactPhone: null,
     deliveryAddress: null,
+    deliverySubLocation: null,
+    deliveryPlaceId: null,
+    deliveryLatitude: null,
+    deliveryLongitude: null,
+    guestsEatAt: null,
+    travelMinutes: null,
+    travelMinutesSource: null,
     purpose: null,
     kitchenNotes: null,
+    serverNotes: null,
+    status: "PLANNED",
     cardNumber: null,
     cardIssuedAt: null,
     recorded: false,
     recordedAt: null,
     recordedByName: null,
     recordingNote: null,
+    corrected: false,
+    correctedAt: null,
+    correctedByName: null,
+    correctionNote: null,
     dishes: [dish("m1", "r1", "Bisi Bele Bath", 248), dish("m2", "r2", "Kesari Bath", 300)],
+    volunteerShift: null,
     ...overrides,
   };
 }
 
 /**
- * The Saturday reading, as the planner hands it to the recording form: kind "Event", and the only
- * thing that says which of the day's events this is sitting in `eventName`.
+ * The Saturday reading, as the planner hands it to the recording form: kind "Event", its own name,
+ * and — since D-27 — its own id, which is the only thing the recording is sent against.
  */
 function event(name = "Bhagavad Gita Parayanam", overrides: Record<string, unknown> = {}) {
   return lunch({
+    mealId: "meal-reading",
     mealKind: "Event",
     eventName: name,
     // An event is planned by how much to make, not by how many people (E4-S15 D2).
@@ -143,7 +153,7 @@ function event(name = "Bhagavad Gita Parayanam", overrides: Record<string, unkno
     children: 0,
     seniors: 0,
     plates: 0,
-    dishes: [{ ...dish("m1", "r1", "Bisi Bele Bath", 248), mealKind: "Event", eventName: name }],
+    dishes: [{ ...dish("m1", "r1", "Bisi Bele Bath", 248), mealId: "meal-reading" }],
     ...overrides,
   });
 }
@@ -154,8 +164,8 @@ function event(name = "Bhagavad Gita Parayanam", overrides: Record<string, unkno
  * <p>`heading` is what the meal calls itself on screen — its kind for the three main meals, and its
  * own name for an event, which is the whole point of splitting events out.
  */
-async function open(meals: unknown[], heading = "Lunch", onError = vi.fn()) {
-  mealServices.mockResolvedValue(meals);
+async function open(onTheDay: unknown[], heading = "Lunch", onError = vi.fn()) {
+  meals.mockResolvedValue(onTheDay);
   render(
     <MealServices
       date="2026-08-21"
@@ -178,7 +188,6 @@ function openTheRecordingForm() {
 describe("the day's meals", () => {
   beforeEach(() => {
     recordMeal.mockClear();
-    updateMealPlan.mockClear();
     requestJobCard.mockClear();
     jobCardLanguages.mockClear();
   });
@@ -215,50 +224,45 @@ describe("the day's meals", () => {
     fireEvent.click(screen.getByRole("button", { name: /record this meal/i }));
     await vi.waitFor(() => expect(recordMeal).toHaveBeenCalledTimes(1));
 
-    expect(recordMeal.mock.calls[0][0]).toMatchObject({
-      planDate: "2026-08-21",
-      mealKind: "Lunch",
+    const [mealId, input] = recordMeal.mock.calls[0];
+    expect(mealId).toBe("meal-lunch");
+    expect(input).toMatchObject({
       dishes: [
-        { mealPlanId: "m1", actualServings: 220, consumedQuantity: 190, notMade: false },
-        { mealPlanId: "m2", actualServings: null, consumedQuantity: null, notMade: true },
+        { dishId: "m1", actualServings: 220, consumedQuantity: 190, notMade: false },
+        { dishId: "m2", actualServings: null, consumedQuantity: null, notMade: true },
       ],
     });
   });
 
-  it("names the event it is recording, so the server can tell which meal is being written down", async () => {
-    // The regression this exists for, and it was live on staging (T-043). The server has always
-    // resolved a recording with (date, kind, event name), because every event of every temple
-    // carries the kind "Event" — a Saturday with a morning reading and an evening bhajan is two
-    // preparations, two cards and two recordings. The browser sent four fields and no name, so the
-    // server resolved nothing and answered 404 to every event recording ever attempted, from all
-    // three screens that record through this form. Ordinary Lunch went on working, which is why
-    // nobody saw it: a main meal has no event name and is correctly identified without one.
+  it("records an event against that event's own id, so the server cannot take it for another", async () => {
+    // The regression this descends from, and it was live on staging (T-043). The server used to
+    // resolve a recording by (date, kind, event name), because every event carries the kind "Event"
+    // — a Saturday with a morning reading and an evening bhajan is two meals. The browser left the
+    // name out, the server resolved nothing, and every event recording was refused from all three
+    // screens that record through this form. Since D-27 the meal is its id, in the path.
     await open([event()], "Bhagavad Gita Parayanam");
 
     openTheRecordingForm();
     fireEvent.click(screen.getByRole("button", { name: /record this meal/i }));
 
     await vi.waitFor(() => expect(recordMeal).toHaveBeenCalledTimes(1));
-    expect(recordMeal.mock.calls[0][0]).toMatchObject({
-      planDate: "2026-08-21",
-      mealKind: "Event",
-      eventName: "Bhagavad Gita Parayanam",
-    });
+    expect(recordMeal.mock.calls[0][0]).toBe("meal-reading");
   });
 
-  it("says null for an everyday meal, out loud rather than by leaving the field out", async () => {
-    // The other half of the same contract. `eventName` is required and nullable on the request
-    // type on purpose: optional would let the omission above happen again and still compile, so
-    // every caller has to say which case it is in. `toHaveProperty` rather than `toMatchObject`
-    // because only the former tells an absent field from one that is genuinely null — and an
-    // absent field is exactly what the defect was.
+  it("sends no date, kind or event name in the body — the meal's id is the whole identity", async () => {
+    // Keys, not `toMatchObject`: that matcher passes whether a field is absent or present, and the
+    // point is that the three parts the identity used to be split into are no longer sent at all.
     await open([lunch()]);
 
     openTheRecordingForm();
     fireEvent.click(screen.getByRole("button", { name: /record this meal/i }));
 
     await vi.waitFor(() => expect(recordMeal).toHaveBeenCalledTimes(1));
-    expect(recordMeal.mock.calls[0][0]).toHaveProperty("eventName", null);
+    const input = recordMeal.mock.calls[0][1];
+    expect(Object.keys(input).sort()).toEqual(["dishes", "note"]);
+    const first = (input as { dishes: Record<string, unknown>[] }).dishes[0];
+    expect(Object.keys(first)).toContain("dishId");
+    expect(Object.keys(first)).not.toContain("mealPlanId");
   });
 
   it("shows the server's refusal inside the form that was submitted, beside the button pressed", async () => {
@@ -369,34 +373,30 @@ describe("the day's meals", () => {
     fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
 
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
-    // The event name is the third argument and part of the card's key since V89 — null for a
-    // main meal, which is what a Lunch is.
-    expect(requestJobCard.mock.calls[0].slice(0, 4)).toEqual(["2026-08-21", "Lunch", null, "en"]);
+    // The meal's id, then the language (D-27). The card used to be keyed on the date, the kind and
+    // the event's name.
+    expect(requestJobCard.mock.calls[0].slice(0, 2)).toEqual(["meal-lunch", "en"]);
+    expect(jobCardLanguages).toHaveBeenCalledWith("meal-lunch", "t");
   });
 
-  it("names the event when it asks for that event's card, so two on one day are two cards", async () => {
-    // The regression this exists for. V89 re-keyed a job card on (date, kind, event name), because
-    // every event carries the kind "Event" and a Saturday with a morning reading and an evening
-    // bhajan would otherwise share one card. The endpoint took the new parameter and the browser
-    // went on not sending it, so Download job card silently did nothing for every event and only
-    // the server log said why. Neither component was wrong on its own; the seam between them was
-    // untested, which is exactly the kind of gap that has no owner.
+  it("asks for an event's card by that event's own id, so two on one day are two cards", async () => {
+    // The regression this descends from. V89 re-keyed a job card on (date, kind, event name),
+    // because every event carries the kind "Event"; the browser went on not sending the name, so
+    // Download job card silently did nothing for every event. Since D-27 there is nothing to leave
+    // out: the card is asked for by the meal's id.
     await open([
       lunch({
+        mealId: "meal-school-reading",
         mealKind: "Event",
         eventName: "School Bhagavad-gita Reading Prasadam",
-        dishes: [{ ...dish("m1", "r1", "Bisi Bele Bath", 248), mealKind: "Event" }],
+        dishes: [{ ...dish("m1", "r1", "Bisi Bele Bath", 248), mealId: "meal-school-reading" }],
       }),
     ], "School Bhagavad-gita Reading Prasadam");
 
     fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
 
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
-    expect(requestJobCard.mock.calls[0].slice(0, 3)).toEqual([
-      "2026-08-21",
-      "Event",
-      "School Bhagavad-gita Reading Prasadam",
-    ]);
+    expect(requestJobCard.mock.calls[0][0]).toBe("meal-school-reading");
   });
 
   it("asks for the worksheet on its own, because that is what most prints are", async () => {
@@ -410,7 +410,7 @@ describe("the day's meals", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
-    expect(requestJobCard.mock.calls[0].slice(0, 4)).toEqual(["2026-08-21", "Lunch", null, "none"]);
+    expect(requestJobCard.mock.calls[0].slice(0, 2)).toEqual(["meal-lunch", "none"]);
   });
 
   it("asks for the recipes, in a language, once somebody ticks the box", async () => {
@@ -422,7 +422,7 @@ describe("the day's meals", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
-    expect(requestJobCard.mock.calls[0].slice(0, 4)).toEqual(["2026-08-21", "Lunch", null, "kn"]);
+    expect(requestJobCard.mock.calls[0].slice(0, 2)).toEqual(["meal-lunch", "kn"]);
   });
 
   it("offers the job card once, as a card to download", async () => {

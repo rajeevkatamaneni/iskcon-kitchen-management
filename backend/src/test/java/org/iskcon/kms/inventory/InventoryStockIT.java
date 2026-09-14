@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.meal.MealFixture;
 import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,7 +70,7 @@ class InventoryStockIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM audit_events");
@@ -210,7 +211,7 @@ class InventoryStockIT extends AbstractIntegrationTest {
 		// Derived, not stored, and this is how you tell: calling the plan off moves `available` back
 		// to 50 without a single movement being written. A stored figure could not do that, and a
 		// stored figure is exactly what would drift away from the ledger.
-		admin.update("UPDATE meal_plans SET status = 'CANCELLED' WHERE id = ?", plan);
+		admin.update("UPDATE meal_dishes SET status = 'CANCELLED' WHERE id = ?", plan);
 		int movements = admin.queryForObject(
 				"SELECT count(*) FROM stock_movements WHERE ingredient_id = ?", Integer.class, toorDal);
 		org.assertj.core.api.Assertions.assertThat(movements).isEqualTo(1);
@@ -353,7 +354,7 @@ class InventoryStockIT extends AbstractIntegrationTest {
 		LocalDate eventDay = LocalDate.now(IST).plusDays(4);
 		planMeal(recipe, lunchDay, "Lunch", "360", "PLANNED");
 		UUID event = planMeal(recipe, eventDay, "Event", "240", "PLANNED");
-		admin.update("UPDATE meal_plans SET event_name = 'Saturday reading' WHERE id = ?", event);
+		MealFixture.set(admin, MealFixture.mealOf(admin, event), "event_name", "Saturday reading");
 
 		mvc.perform(authed(get("/api/v1/inventory/items/{id}", itemId)))
 				.andExpect(status().isOk())
@@ -422,15 +423,11 @@ class InventoryStockIT extends AbstractIntegrationTest {
 		return planMeal(templeA, recipe, date, kind, yield, status, actorA);
 	}
 
+	/** One dish of that day's meal of this kind. Answers with the dish's id, which is what a claim names. */
 	private UUID planMeal(UUID tenant, UUID recipe, LocalDate date, String kind, String yield,
 			String status, UUID createdBy) {
-		return admin.queryForObject("""
-				INSERT INTO meal_plans (
-					tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield,
-					day_type, status, created_by)
-				VALUES (?, ?, ?, TIME '12:00', ?, ?::numeric, 'REGULAR', ?, ?)
-				RETURNING id
-				""", UUID.class, tenant, date, kind, recipe, yield, status, createdBy);
+		UUID meal = MealFixture.meal(admin, tenant, date, kind, java.time.LocalTime.NOON);
+		return MealFixture.dish(admin, tenant, meal, recipe, new java.math.BigDecimal(yield), status, createdBy);
 	}
 
 	// ---------------------------------------------------------------------

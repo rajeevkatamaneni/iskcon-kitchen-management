@@ -9,8 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.meal.MealFixture;
 import org.iskcon.kms.meal.MealKindService;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.iskcon.kms.testsupport.StubTokenVerifier;
@@ -134,9 +137,7 @@ class JobCardIT extends AbstractIntegrationTest {
 		TenantContext.clear();
 		admin.execute("DELETE FROM documents");
 		admin.execute("DELETE FROM document_label_translations");
-		admin.execute("DELETE FROM meal_services");
-		admin.execute("DELETE FROM meal_card_sequence");
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
 		admin.execute("DELETE FROM equipment_items");
@@ -366,7 +367,7 @@ class JobCardIT extends AbstractIntegrationTest {
 		// card is not the place to print a blank where a decision has not been taken.
 		assertThat(print(null)).doesNotContain("Planned crew");
 
-		admin.update("UPDATE meal_plans SET crew_required = 8 WHERE plan_date = DATE '2025-03-17'");
+		admin.update("UPDATE meals SET crew_required = 8 WHERE tenant_id = ?", tenant);
 		String html = print(null);
 		assertThat(html).contains("Planned crew · 8 people");
 		assertThat(html.indexOf("Planned crew")).isLessThan(html.indexOf("<h3>Staff"));
@@ -540,14 +541,14 @@ class JobCardIT extends AbstractIntegrationTest {
 		plan("Lunch", 100, 100, 0, 0);
 
 		mvc.perform(get("/api/v1/job-cards/print")
-						.param("date", "2025-03-17").param("mealKind", "Lunch")
+						.param("mealId", mealIdFor("Lunch").toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk())
 				.andExpect(content().contentTypeCompatibleWith("text/html"));
 
 		signIn("uid-vol-a");
 		mvc.perform(get("/api/v1/job-cards/print")
-						.param("date", "2025-03-17").param("mealKind", "Lunch")
+						.param("mealId", mealIdFor("Lunch").toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isForbidden());
 	}
@@ -558,7 +559,7 @@ class JobCardIT extends AbstractIntegrationTest {
 		plan("Lunch", 100, 100, 0, 0);
 
 		String body = mvc.perform(post("/api/v1/job-cards")
-						.param("date", "2025-03-17").param("mealKind", "Lunch")
+						.param("mealId", mealIdFor("Lunch").toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isAccepted())
 				.andExpect(jsonPath("$.cardNumber").value("LC-2025-0001"))
@@ -586,13 +587,13 @@ class JobCardIT extends AbstractIntegrationTest {
 		// A reprint after a dish was swapped is a different sheet, so it is a new version — but the
 		// same card number, because it is still the same meal.
 		mvc.perform(post("/api/v1/job-cards")
-						.param("date", "2025-03-17").param("mealKind", "Lunch")
+						.param("mealId", mealIdFor("Lunch").toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isAccepted())
 				.andExpect(jsonPath("$.cardNumber").value("LC-2025-0001"));
 
 		mvc.perform(get("/api/v1/job-cards/documents")
-						.param("date", "2025-03-17").param("mealKind", "Lunch")
+						.param("mealId", mealIdFor("Lunch").toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.length()").value(2))
 				.andExpect(jsonPath("$[0].version").value(2));
@@ -601,8 +602,10 @@ class JobCardIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a meal nobody planned has no card, and no number is spent on it")
 	void nothingPlannedMeansNoCard() throws Exception {
+		// A meal id nothing answers to — the one way to ask for a card for a meal nobody planned, now that
+		// a card is asked for by the meal's own id (D-27).
 		mvc.perform(get("/api/v1/job-cards/print")
-						.param("date", "2025-03-17").param("mealKind", "Dinner")
+						.param("mealId", UUID.randomUUID().toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isNotFound());
 
@@ -662,7 +665,7 @@ class JobCardIT extends AbstractIntegrationTest {
 		assertThat(print(null)).contains("v1 · printed");
 
 		// A late change to the meal, and the next sheet says so.
-		admin.update("UPDATE meal_plans SET kitchen_notes = 'Less chilli' WHERE plan_date = DATE '2025-03-17'");
+		admin.update("UPDATE meals SET kitchen_notes = 'Less chilli' WHERE tenant_id = ?", tenant);
 		assertThat(print(null)).contains("v2 · printed");
 
 		// The appendix is a choice made at the printer, not a change to the meal.
@@ -698,7 +701,7 @@ class JobCardIT extends AbstractIntegrationTest {
 		// number can only come from the renderer's own footer — which means the document leaves its
 		// footer out and hands the words over instead.
 		JobCardService.RenderedCard card = asTenant(() ->
-				jobCardService.renderForPdf(serviceIdFor("Lunch"), null));
+				jobCardService.renderForPdf(mealIdFor("Lunch"), null));
 		assertThat(card.html()).doesNotContain("footer class=\"running\"");
 		assertThat(card.footer().left()).startsWith("v1 · printed");
 		assertThat(card.footer().right()).isEqualTo("LC-2025-0001");
@@ -726,13 +729,17 @@ class JobCardIT extends AbstractIntegrationTest {
 		plan(kind, khichdi, servings, adults, children, seniors);
 	}
 
+	/** One dish of the day's meal of this kind, found or created, with the meal's head count. */
 	private void plan(String kind, UUID recipe, int servings, int adults, int children, int seniors) {
-		admin.update("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_yield, day_type, status, adults, children, seniors, created_by)
-				VALUES (?, DATE '2025-03-17', ?, TIME '12:00', ?, ?, 'REGULAR', 'PLANNED', ?, ?, ?,
-						(SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'))
-				""", tenant, kind, recipe, BigDecimal.valueOf(servings), adults, children, seniors);
+		UUID meal = MealFixture.meal(admin, tenant, DAY, kind, LocalTime.NOON);
+		MealFixture.headCount(admin, meal, adults, children, seniors);
+		MealFixture.dish(admin, tenant, meal, recipe, BigDecimal.valueOf(servings), staff());
+	}
+
+	private static final LocalDate DAY = LocalDate.of(2025, 3, 17);
+
+	private UUID staff() {
+		return admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'", UUID.class);
 	}
 
 	/**
@@ -743,18 +750,18 @@ class JobCardIT extends AbstractIntegrationTest {
 	 * row once it exists.
 	 */
 	private void planEvent(String eventName, int servings) {
+		UUID meal = MealFixture.meal(admin, tenant, DAY, "Event", eventName, LocalTime.of(11, 0));
+		MealFixture.headCount(admin, meal, servings, 0, 0);
 		admin.update("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_yield, day_type, status, adults, children, seniors,
-						event_name, is_outside, handover, contact_name, contact_phone,
-						delivery_address, delivery_sub_location, guests_eat_at,
-						travel_minutes, travel_minutes_source, created_by)
-				VALUES (?, DATE '2025-03-17', 'Event', TIME '11:00', ?, ?, 'REGULAR', 'PLANNED',
-						?, 0, 0, ?, true, 'DELIVERY', 'Mrs Latha Rao', '+919000000001',
-						'Mantri Serenity, Kanakapura Main Rd, Bengaluru 560062', 'Clubhouse',
-						TIME '13:00', 45, 'MANUAL',
-						(SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'))
-				""", tenant, khichdi, BigDecimal.valueOf(servings), servings, eventName);
+				UPDATE meals
+				SET is_outside = true, handover = 'DELIVERY', contact_name = 'Mrs Latha Rao',
+					contact_phone = '+919000000001',
+					delivery_address = 'Mantri Serenity, Kanakapura Main Rd, Bengaluru 560062',
+					delivery_sub_location = 'Clubhouse', guests_eat_at = TIME '13:00',
+					travel_minutes = 45, travel_minutes_source = 'MANUAL'
+				WHERE id = ?
+				""", meal);
+		MealFixture.dish(admin, tenant, meal, khichdi, BigDecimal.valueOf(servings), staff());
 	}
 
 	/**
@@ -788,31 +795,32 @@ class JobCardIT extends AbstractIntegrationTest {
 		}
 	}
 
-	/**
-	 * The {@code meal_services} row for a meal, which only exists once something has been printed or
-	 * recorded against it — so every caller here prints first.
-	 */
-	private UUID serviceIdFor(String mealKind) {
+	/** The day's meal of this kind, by its own row (D-27) — it exists from the moment it is planned. */
+	private UUID mealIdFor(String mealKind) {
+		return mealIdFor(mealKind, null);
+	}
+
+	private UUID mealIdFor(String mealKind, String eventName) {
 		return admin.queryForObject("""
-				SELECT id FROM meal_services
-				WHERE tenant_id = ? AND plan_date = DATE '2025-03-17' AND meal_kind = ?
-				""", UUID.class, tenant, mealKind);
+				SELECT m.id FROM meals m
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN meal_kinds k ON k.id = m.meal_kind_id
+				WHERE m.tenant_id = ? AND pd.plan_date = DATE '2025-03-17' AND k.name = ?
+				  AND lower(COALESCE(m.event_name, '')) = lower(COALESCE(CAST(? AS text), ''))
+				""", UUID.class, tenant, mealKind, eventName);
 	}
 
 	private String print(String language, String mealKind) throws Exception {
 		return print(language, mealKind, null);
 	}
 
-	/** An event is addressed by its own name as well as its kind — V89 gives it its own card. */
+	/** An event is its own meal, with its own card — found here by its name, printed by its id. */
 	private String print(String language, String mealKind, String eventName) throws Exception {
 		var request = get("/api/v1/job-cards/print")
-				.param("date", "2025-03-17").param("mealKind", mealKind)
+				.param("mealId", mealIdFor(mealKind, eventName).toString())
 				.header("Authorization", "Bearer valid-token");
 		if (language != null) {
 			request = request.param("language", language);
-		}
-		if (eventName != null) {
-			request = request.param("eventName", eventName);
 		}
 		return mvc.perform(request).andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();
@@ -824,7 +832,7 @@ class JobCardIT extends AbstractIntegrationTest {
 
 	private org.springframework.test.web.servlet.ResultActions languages() throws Exception {
 		return mvc.perform(get("/api/v1/job-cards/languages")
-				.param("date", "2025-03-17").param("mealKind", "Lunch")
+				.param("mealId", mealIdFor("Lunch").toString())
 				.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk());
 	}
@@ -861,7 +869,7 @@ class JobCardIT extends AbstractIntegrationTest {
 
 	private String cardNumber(String mealKind) throws Exception {
 		String body = mvc.perform(post("/api/v1/job-cards")
-						.param("date", "2025-03-17").param("mealKind", mealKind)
+						.param("mealId", mealIdFor(mealKind).toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isAccepted())
 				.andReturn().getResponse().getContentAsString();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { FieldRow } from "@/components/ds/FieldRow";
 import { Form } from "@/components/ds/Form";
@@ -17,17 +17,22 @@ import {
   api,
   toApiError,
   type ApiError,
-  type CreateMealPlanInput,
   type EventNameSuggestion,
   type Handover,
   type MealCrewView,
   type MealKindView,
-  type MealServiceView,
+  type MealShiftDraft,
+  type MealView,
   type MenuHistoryView,
   type RecipeSummary,
+  type SaveMealInput,
+  type ShiftView,
   type TravelEstimate,
+  type UpdateMealInput,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { ShiftLayer, timesChanged, timesChangedWarning } from "@/components/planner/ShiftLayer";
+import { ConfirmLayer, useLeaveGuard } from "@/app/planner/confirm-layer";
 import { longDate, unitLabel } from "@/lib/format";
 import { ekadashiLabel } from "@/lib/vaishnava-day";
 import { FIELD_LABEL } from "@/components/Field";
@@ -69,16 +74,16 @@ interface Draft {
   /** Set once the planner types a number of their own; the head count stops driving it. */
   overridden: boolean;
   /**
-   * The `meal_plans` row this draft already is, when a meal is being edited. Absent on a
-   * preparation added during this edit — that one is created rather than updated, and a row that
-   * disappears from the list is cancelled rather than deleted, so its history survives.
+   * The dish this draft already is, when a meal is being edited. Absent on a preparation added during
+   * this edit — the server creates that one — and a planned dish left out of the list is cancelled
+   * rather than deleted, so its history survives.
    */
-  planId?: string;
+  dishId?: string;
 }
 
 /**
- * Everything the meal itself is, as the create and update endpoints take it — everything, that is,
- * except the three facts that belong to one preparation rather than to the meal.
+ * Everything the meal itself is, as the save and the update both take it — everything, that is,
+ * except the day and the kind (which an update cannot change), its dishes and its volunteer shift.
  *
  * <p><strong>Named rather than inferred, and that is the point (T-044).</strong> `mealFacts()` used
  * to have no return type, and its result is *spread* into the request: spread properties are exempt
@@ -90,7 +95,10 @@ interface Draft {
  * was not. With the annotation the next omission is a compile error at the one place that can fix it,
  * which is what a comment saying "remember to send the pin" was never going to be.
  */
-type MealFacts = Omit<CreateMealPlanInput, "recipeId" | "targetYield" | "ekadashiAcknowledged">;
+type MealFacts = Omit<
+  SaveMealInput,
+  "planDate" | "mealKindId" | "ekadashiAcknowledged" | "dishes" | "volunteerShift"
+>;
 
 /**
  * Where a picked delivery address actually is: the place id and the pin that came back with it.
@@ -136,7 +144,7 @@ export function MealComposer({
    */
   ekadashiName?: string | null;
   /** The meal being corrected. Absent when a new one is being planned. */
-  existing?: MealServiceView;
+  existing?: MealView;
   /**
    * The id the screen's own commit button targets with `form=`.
    *
@@ -190,14 +198,12 @@ export function MealComposer({
    * Prasadam in the temple hall has no client, and a form that asked for one would be asking a
    * question with no answer, which gets either a made-up answer or a blocked save.
    *
-   * <p>The meal being corrected carries the whole-meal facts on every one of its rows, so the three
-   * that {@link MealServiceView} does not hoist — going outside, the handover and the serving time —
-   * are read off its first preparation rather than invented here.
+   * <p>A meal being corrected opens on its own facts, which since D-27 live once on the meal rather
+   * than on each of its preparation rows.
    */
-  const openDish = openRow(existing);
   const [eventName, setEventName] = useState(existing?.eventName ?? "");
-  const [isOutside, setIsOutside] = useState(Boolean(openDish?.isOutside));
-  const [handover, setHandover] = useState<Handover | "">(openDish?.handover ?? "");
+  const [isOutside, setIsOutside] = useState(Boolean(existing?.isOutside));
+  const [handover, setHandover] = useState<Handover | "">(existing?.handover ?? "");
   const [contactName, setContactName] = useState(existing?.contactName ?? "");
   const [contactPhone, setContactPhone] = useState(existing?.contactPhone ?? "");
   const [deliveryAddress, setDeliveryAddress] = useState(existing?.deliveryAddress ?? "");
@@ -209,7 +215,7 @@ export function MealComposer({
    * <p>A meal being corrected reopens on the pin it was saved with (T-044). It used to reopen on
    * `latitude: 0, longitude: 0`, because the view did not return the coordinates and a placeholder
    * was all this had; the server reads a pin as a place somebody chose and stores it without looking,
-   * so saving an edit moved the event to 0°N 0°E and the job card worked a driver's departure time
+   * so saving an edit re-pinned the event to 0°N 0°E and the job card worked a driver's departure time
    * back from a drive into the Atlantic. The coordinates are on the view now.
    *
    * <p>Where they are null — an address typed rather than picked, or one of the older plans that kept
@@ -218,16 +224,16 @@ export function MealComposer({
    * once they are past their thirty days. None of those are things a zero would have let it do.
    */
   const [placed, setPlaced] = useState<PickedPlace | null>(
-    openDish?.deliveryPlaceId
+    existing?.deliveryPlaceId
       ? {
-          placeId: openDish.deliveryPlaceId,
-          latitude: openDish.deliveryLatitude,
-          longitude: openDish.deliveryLongitude,
+          placeId: existing.deliveryPlaceId,
+          latitude: existing.deliveryLatitude,
+          longitude: existing.deliveryLongitude,
         }
       : null
   );
-  const [subLocation, setSubLocation] = useState(openDish?.deliverySubLocation ?? "");
-  const [guestsEatAt, setGuestsEatAt] = useState(openDish?.guestsEatAt?.slice(0, 5) ?? "");
+  const [subLocation, setSubLocation] = useState(existing?.deliverySubLocation ?? "");
+  const [guestsEatAt, setGuestsEatAt] = useState(existing?.guestsEatAt?.slice(0, 5) ?? "");
 
   /**
    * How long to allow for the drive, and whether a person set it.
@@ -239,10 +245,10 @@ export function MealComposer({
    * is about to act on.
    */
   const [travelMinutes, setTravelMinutes] = useState<string>(
-    openDish?.travelMinutes == null ? "" : String(openDish.travelMinutes)
+    existing?.travelMinutes == null ? "" : String(existing.travelMinutes)
   );
   const [travelManual, setTravelManual] = useState(
-    openDish?.travelMinutesSource === "MANUAL"
+    existing?.travelMinutesSource === "MANUAL"
   );
   /** What Google currently says, kept beside the box so the "i" can be honest in both states. */
   const [estimate, setEstimate] = useState<TravelEstimate | null>(null);
@@ -272,7 +278,35 @@ export function MealComposer({
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [confirmGrain, setConfirmGrain] = useState<{ recipeName: string; ingredients: string[] } | null>(null);
+  const [confirmGrain, setConfirmGrain] = useState<{ names: string[]; ingredients: string[] } | null>(null);
+
+  /**
+   * The volunteer shift drafted in the layer and not yet saved (D-27 answers 2 and 7).
+   *
+   * <p>Held here, in the form's own state, and nowhere else: *Done* in the layer hands it back and
+   * saves nothing, and *Save this meal* or *Update this meal* sends it as `volunteerShift`, where the
+   * server saves the meal and the shift in one transaction. Abandon the meal and the draft goes with
+   * it — which is the whole of Rajeev's rule: *"we should not be left with an orphan shift."*
+   *
+   * <p>Null means nothing has been drafted in this visit. On an update that is also what is sent, and
+   * the server reads null as "leave the meal's shift exactly as it is".
+   */
+  const [shiftDraft, setShiftDraft] = useState<MealShiftDraft | null>(null);
+  const [shiftOpen, setShiftOpen] = useState(false);
+  /** The times-changed warning is showing, waiting for *Update this meal* or *Go back*. */
+  const [confirmTimes, setConfirmTimes] = useState(false);
+  /**
+   * Somebody has changed something on this form. Set by the form's own change events and by the few
+   * controls that are buttons rather than boxes, never by what the form fills in for itself — a
+   * suggested crew size or the calendar's occasion is not a change anybody made.
+   */
+  const [dirty, setDirty] = useState(false);
+  const leaveGuard = useLeaveGuard(dirty && !busy);
+  const closeShift = useCallback(() => setShiftOpen(false), []);
+  const dismissTimes = useCallback(() => setConfirmTimes(false), []);
+
+  /** The meal's saved shift, if it has one. A draft of changes to it is in `shiftDraft`. */
+  const liveShift: ShiftView | null = existing?.volunteerShift ?? null;
   /**
    * The one thing a saved plan can come back saying (E4-S16, KMS-400078): the map service could not
    * place the delivery address. <strong>It is not a refusal.</strong> The meal is saved and whole,
@@ -287,6 +321,15 @@ export function MealComposer({
 
   // --- what the form asks the server for, rather than the planner ------------
 
+  /**
+   * Which crew row is this meal's. By its id once it has one (D-27) — never by the kind's name, which
+   * two events on one day share. A meal not yet saved has no row of its own: one of the main meals is
+   * matched by its kind, because saving it lands on that day's meal of that kind if there is one, and
+   * an event stays uncounted until it is saved.
+   */
+  const existingId = existing?.mealId ?? null;
+  const matchByKind = !existing && !kind?.isEvent;
+
   /** Who is actually rostered over this meal's ready-by, for the readout in step 4. */
   const [crew, setCrew] = useState<MealCrewView | null>(null);
   useEffect(() => {
@@ -295,7 +338,11 @@ export function MealComposer({
       .current()
       .then((t) => api.mealCrew(date, date, t))
       .then((rows) => {
-        if (live) setCrew(rows.find((r) => r.mealKind === kindName) ?? null);
+        if (live) {
+          setCrew(
+            rows.find((r) => (existingId ? r.mealId === existingId : matchByKind && r.mealKind === kindName)) ?? null
+          );
+        }
       })
       .catch(() => {
         if (live) setCrew(null);
@@ -303,7 +350,7 @@ export function MealComposer({
     return () => {
       live = false;
     };
-  }, [date, kindName]);
+  }, [date, kindName, existingId, matchByKind]);
 
   /** The median of the last three ordinary meals of this kind (Q11), or null where there are none. */
   useEffect(() => {
@@ -524,6 +571,7 @@ export function MealComposer({
   // --- the form itself -------------------------------------------------------
 
   function chooseKind(name: string) {
+    setDirty(true);
     setKindName(name);
     const next = mealKinds.find((k) => k.name === name);
     setReadyBy(next?.defaultReadyTime?.slice(0, 5) ?? "");
@@ -617,6 +665,7 @@ export function MealComposer({
 
   /** A head count everyone follows, except the preparations someone has deliberately set. */
   function setCount(which: "adults" | "children" | "seniors", value: number) {
+    setDirty(true);
     const v = Math.max(0, value);
     const next = {
       adults: which === "adults" ? v : adults,
@@ -705,6 +754,7 @@ export function MealComposer({
    */
   function useLastMenu() {
     if (!history) return;
+    setDirty(true);
     setPicked((list) => {
       const already = new Set(list.map((d) => d.recipeId));
       const added = history.preparations
@@ -756,6 +806,8 @@ export function MealComposer({
 
   function firstBlocker(): string | null {
     if (picked.length === 0) return "Pick at least one preparation";
+    // A new meal is saved against its kind's id. Only reachable while the kinds are still loading.
+    if (!editing && !kind) return "Pick what kind of meal this is";
     if (needsTime) return "Pick the time it must be ready";
 
     // The event chain, in the order it is asked (D6). Each answer is what reveals the next
@@ -815,8 +867,6 @@ export function MealComposer({
     const outside = isEventKind && isOutside;
     const delivering = outside && handover === "DELIVERY";
     return {
-      planDate: date,
-      mealKind: kindName,
       readyBy: readyBy || null,
       eventName: isEventKind ? eventName.trim() || null : null,
       isOutside: outside,
@@ -847,77 +897,93 @@ export function MealComposer({
     };
   }
 
-  async function save(acknowledge = false) {
+  /**
+   * How many hands the meal is short: People needed against Rostered. What *Ask for volunteers* is
+   * offered on (strictly more than none short — at equal the meal is covered) and what the layer's
+   * *Volunteers requested* opens on (D-27 answer 1). A meal with no crew row yet counts nobody as
+   * rostered, which is what the crew pebble on the day has always drawn.
+   */
+  const shortBy = crewRequired == null ? 0 : crewRequired - (crew?.rostered ?? 0);
+
+  /**
+   * Whether this save changes the times of a shift people have signed up for — the one save that stops
+   * and says so first (D-27 answer 6). Their places are kept and the server tells them after it saves.
+   */
+  const warnTimes =
+    liveShift !== null && shiftDraft !== null && liveShift.signedUpCount > 0 && timesChanged(liveShift, shiftDraft);
+
+  /**
+   * Saves the meal as one request (D-27): its facts, every dish, and the volunteer shift if one was
+   * drafted, which the server commits together or not at all.
+   *
+   * <p>It used to be a loop of one request per preparation — cancel the dropped ones, update the kept
+   * ones, create the new ones — which could stop half way and leave a meal holding some of its
+   * preparations. One request cannot, and it is the only shape a shift that must not outlive an
+   * abandoned meal can be saved in.
+   *
+   * @param acknowledge the planner has confirmed grain preparations on a fasting day
+   * @param timesAcknowledged the planner has read that signed-up volunteers will be told new times
+   */
+  async function save(acknowledge = false, timesAcknowledged = false) {
+    if (warnTimes && !timesAcknowledged) {
+      setConfirmTimes(true);
+      return;
+    }
+    setConfirmTimes(false);
     setBusy(true);
     setError(null);
     const token = await tokenRef.current();
-    const facts = mealFacts();
-    const done: string[] = [];
+
+    const body: UpdateMealInput = {
+      ...mealFacts(),
+      ekadashiAcknowledged: acknowledge,
+      dishes: picked.map((d) => ({ id: d.dishId ?? null, recipeId: d.recipeId, targetYield: d.target ?? 0 })),
+      volunteerShift: shiftDraft,
+    };
 
     try {
-      // Preparations dropped during an edit go first, so a meal never briefly holds both the old
-      // list and the new one if something later in the run fails.
       if (existing) {
-        const kept = new Set(picked.map((d) => d.planId).filter(Boolean));
-        for (const dish of existing.dishes) {
-          if (dish.status === "PLANNED" && !kept.has(dish.id)) {
-            await api.cancelMealPlan(dish.id, token);
-          }
-        }
-      }
-
-      for (const draft of picked) {
-        try {
-          const saved = draft.planId
-            ? await api.updateMealPlan(
-                draft.planId,
-                {
-                  ...facts,
-                  recipeId: draft.recipeId,
-                  targetYield: draft.target ?? 0,
-                  ekadashiAcknowledged: acknowledge,
-                },
-                token
-              )
-            : await api.createMealPlan(
-                {
-                  ...facts,
-                  recipeId: draft.recipeId,
-                  targetYield: draft.target ?? 0,
-                  ekadashiAcknowledged: acknowledge,
-                },
-                token
-              );
-          done.push(draft.recipeId);
-        } catch (e) {
-          const err = toApiError(e, editing ? "We couldn’t save that meal." : "We couldn’t plan that meal.");
-          // A grain preparation on a fasting day: name it and let the planner decide, rather than
-          // refusing a whole meal because one preparation is questionable.
-          if (err.code === "KMS-400048" && !acknowledge) {
-            const check = await api.ekadashiCheck(date, draft.recipeId, token).catch(() => null);
-            setConfirmGrain({
-              recipeName: byId.get(draft.recipeId)?.name ?? "That preparation",
-              ingredients: check?.offendingIngredients ?? [],
-            });
-            if (!editing) setPicked((list) => list.filter((d) => !done.includes(d.recipeId)));
-            if (done.length > 0) onPlanned();
-            return;
-          }
-          throw e;
-        }
+        await api.updateMeal(existing.mealId, body, token);
+      } else if (kind) {
+        await api.saveMeal({ planDate: date, mealKindId: kind.id, ...body }, token);
+      } else {
+        return;
       }
       onPlanned();
+      // Saved, so there is nothing left to lose by leaving.
+      setDirty(false);
       // OLD BEHAVIOUR, removed 2026-09-05: a warning held the form open rather than closing over the
-      // top of it. Rajeev: "under normal circumstances, IF it is saved, it gets auto closed. Not the
-      // case here. That is what lead me to belive it failed." He was right — a form that stays open
-      // is how this app says a save did not happen, so saying it a second way meant something else
-      // was indistinguishable from failure. A saved meal closes the form, and the day it lands on
-      // already carries the travel line for anything the map service could not place.
+      // top of it. Rajeev: "under normal circumstances, IF it is saved, it gets auto closed." A form
+      // that stays open is how this app says a save did not happen. A saved meal closes the form, and
+      // the day it lands on already carries the travel line for anything the map could not place.
       onClose();
     } catch (e) {
-      if (!editing) setPicked((list) => list.filter((d) => !done.includes(d.recipeId)));
-      if (done.length > 0) onPlanned();
-      setError(toApiError(e, editing ? "We couldn’t save that meal." : "We couldn’t plan that meal."));
+      const err = toApiError(e, editing ? "We couldn’t save that meal." : "We couldn’t plan that meal.");
+      // A grain preparation on a fasting day. The whole save is refused now rather than one dish of
+      // it, so each picked preparation is asked about, and every one that offends is named — letting
+      // the planner decide rather than refusing a whole meal over a preparation they meant to cook.
+      if (err.code === "KMS-400048" && !acknowledge) {
+        const checks = await Promise.all(
+          picked.map((d) =>
+            api
+              .ekadashiCheck(date, d.recipeId, token)
+              .then((check) => ({ recipeId: d.recipeId, check }))
+              .catch(() => null)
+          )
+        );
+        const offending = checks.filter(
+          (c): c is NonNullable<typeof c> => c !== null && !c.check.compatible
+        );
+        setConfirmGrain({
+          names:
+            offending.length > 0
+              ? offending.map((c) => byId.get(c.recipeId)?.name ?? "A preparation")
+              : ["A preparation"],
+          ingredients: Array.from(new Set(offending.flatMap((c) => c.check.offendingIngredients))),
+        });
+        return;
+      }
+      setError(err);
     } finally {
       setBusy(false);
     }
@@ -950,10 +1016,12 @@ export function MealComposer({
       {confirmGrain && (
         <InlineNotice
           tone="warning"
-          title={`${confirmGrain.recipeName} has grains or beans, and this is a fasting day`}
+          title={`${confirmGrain.names.join(", ")} ${
+            confirmGrain.names.length === 1 ? "has" : "have"
+          } grains or beans, and this is a fasting day`}
           action={
             <span className="flex gap-3">
-              <Button type="button" size="sm" disabled={busy} onClick={() => { setConfirmGrain(null); save(true); }}>
+              <Button type="button" size="sm" disabled={busy} onClick={() => { setConfirmGrain(null); save(true, true); }}>
                 Plan it anyway
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmGrain(null)}>
@@ -1015,7 +1083,7 @@ export function MealComposer({
             margin — including the first, measured from the bottom of the meal-kind chips.
 
             It took two corrections to get there, both worth recording. It was 20 + 12 + 24 while a
-            hint line sat under each control; when the guidance moved into the labels' "i" on
+            hint line sat under each control; when the guidance went into the labels' "i" on
             2026-09-04 the line went but `FieldRow`'s third track did not, leaving 4px of `gap-y-1`
             above a track nothing was drawn in, and the margins were briefly `mt-10` to absorb it.
             `FieldRow` now declares two tracks, so the 4 is gone and the arithmetic is honest. */}
@@ -1432,6 +1500,7 @@ export function MealComposer({
             value={crewRequired}
             onChange={(v) => {
               crewTouched.current = true;
+              setDirty(true);
               setCrewRequired(v === null ? null : Math.max(0, v));
             }}
           />
@@ -1443,6 +1512,41 @@ export function MealComposer({
             tone={crewRequired != null && crew != null && crew.rostered < crewRequired ? "warning" : "neutral"}
           />
         </FieldRow>
+
+        {/* Asking for volunteers, beside the two numbers that say whether any are needed (D-27, the
+            first of the screens that change). *Ask for volunteers* appears the moment People needed
+            is more than Rostered, and not at equal: a covered meal is not short. Once a shift has
+            been drafted here, or the meal already has one, *View volunteer shift* takes its place
+            whatever the numbers say, so a shift can always be opened. Both open the same layer, and
+            neither saves anything — the meal's own Save or Update does. */}
+        {shiftDraft || liveShift ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              icon="hand-stop"
+              aria-haspopup="dialog"
+              onClick={() => setShiftOpen(true)}
+            >
+              View volunteer shift
+            </Button>
+            <span className="text-sm text-ink-secondary">{shiftLine(liveShift, shiftDraft)}</span>
+          </div>
+        ) : shortBy > 0 ? (
+          <div>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              icon="hand-stop"
+              aria-haspopup="dialog"
+              onClick={() => setShiftOpen(true)}
+            >
+              Ask for volunteers
+            </Button>
+          </div>
+        ) : null}
       </section>
 
       {/* Notes */}
@@ -1480,18 +1584,60 @@ export function MealComposer({
   );
 
   return (
-    <Form
-      id={formId}
-      aria-label={editing ? `Edit ${kindName}` : "Plan a meal"}
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!blocked && !busy) save(false);
-      }}
-    >
-      {body}
-    </Form>
-  );
+    <>
+      <Form
+        id={formId}
+        aria-label={editing ? `Edit ${kindName}` : "Plan a meal"}
+        // Any box typed in, ticked or chosen is a change somebody made. React's change event bubbles to
+        // the form from every control inside it, so one listener covers them all; the controls that are
+        // buttons mark the form themselves.
+        onChange={() => setDirty(true)}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!blocked && !busy) save(false);
+        }}
+      >
+        {body}
+      </Form>
 
+      {/* Beside the form, never inside it. The layer holds the volunteers' own `<form>`, and a form
+          inside a form is invalid HTML whose submit would also reach this one and save the meal. */}
+      {shiftOpen && (
+        <ShiftLayer
+          date={date}
+          mealKind={kindName}
+          mealEventName={isEventKind ? eventName.trim() || null : null}
+          readyBy={readyBy}
+          suggestedCapacity={Math.max(1, shortBy)}
+          values={shiftDraft ? { ...shiftDraft, shiftDate: date } : liveShift}
+          saved={liveShift !== null}
+          onClose={closeShift}
+          onDone={(draft) => {
+            setShiftDraft(draft);
+            setDirty(true);
+            setShiftOpen(false);
+          }}
+        />
+      )}
+
+      {/* D-27 answer 6: warn before the save, keep their places, tell them after it. The sentence is
+          the ruled one, word for word, about times and never about a shift being shifted. */}
+      {confirmTimes && liveShift && (
+        <ConfirmLayer
+          title="The volunteer shift has new times"
+          confirmLabel="Update this meal"
+          dismissLabel="Go back"
+          busy={busy}
+          onDismiss={dismissTimes}
+          onConfirm={() => save(false, true)}
+        >
+          <p>{timesChangedWarning(liveShift.signedUpCount)}</p>
+        </ConfirmLayer>
+      )}
+
+      {leaveGuard}
+    </>
+  );
 }
 
 /**
@@ -1502,19 +1648,7 @@ export function MealComposer({
  * happened. A servings figure that does not match the meal's own head count was set by hand, so it
  * is marked as such and a later change to the count leaves it alone.
  */
-/**
- * A row of the meal that is still to be cooked, for the whole-meal facts the meal's own view does
- * not hoist — whether it is going outside, the handover, and the hour the guests eat.
- *
- * <p>Deliberately not simply the first row. A cancelled one carries the facts as they were when it
- * was cancelled, so a meal that was a delivery and was corrected to an in-house event would open on
- * the delivery it no longer is.
- */
-function openRow(meal: MealServiceView | undefined) {
-  return meal?.dishes.find((dish) => dish.status === "PLANNED") ?? meal?.dishes[0];
-}
-
-function openDrafts(meal: MealServiceView | undefined): Draft[] {
+function openDrafts(meal: MealView | undefined): Draft[] {
   if (!meal) return [];
   const drafts: Draft[] = [];
   const seen = new Set<string>();
@@ -1528,10 +1662,23 @@ function openDrafts(meal: MealServiceView | undefined): Draft[] {
       // decide would need the recipe list, which this function does not have — and would risk
       // silently rewriting a figure somebody chose. The head count stops driving it either way.
       overridden: true,
-      planId: dish.id,
+      dishId: dish.id,
     });
   }
   return drafts;
+}
+
+/**
+ * The line beside *View volunteer shift*: how the saved shift stands, and whether anything drafted here
+ * is still waiting for the meal's own save.
+ *
+ * <p>Said because *Done* saves nothing, and a planner who pressed it and then looked at a list of
+ * shifts elsewhere would otherwise not find theirs there and not know why.
+ */
+function shiftLine(saved: ShiftView | null, draft: MealShiftDraft | null): string {
+  if (!saved) return "Not saved yet. It is saved with this meal.";
+  const signedUp = `${saved.signedUpCount} of ${draft?.capacity ?? saved.capacity} signed up`;
+  return draft ? `${signedUp}. Your changes are saved with this meal.` : signedUp;
 }
 
 /**

@@ -83,10 +83,7 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
-		admin.execute("DELETE FROM meal_services");
-		admin.execute("DELETE FROM meal_card_sequence");
-		admin.execute("DELETE FROM meal_plans");
-		admin.execute("DELETE FROM meal_kinds");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM audit_events");
@@ -127,7 +124,7 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 				""".formatted(THIS_YEAR, khichdi)))
 				.andExpect(status().isCreated());
 
-		mvc.perform(authed(get("/api/v1/meal-plans").param("from", THIS_YEAR).param("to", THIS_YEAR)))
+		mvc.perform(authed(get("/api/v1/meals").param("from", THIS_YEAR).param("to", THIS_YEAR)))
 				.andExpect(jsonPath("$[0].occasionName").value("Temple anniversary"));
 	}
 
@@ -152,7 +149,11 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.missingCount").value(1))
 				.andExpect(jsonPath("$.preparations.length()").value(2))
 				.andExpect(jsonPath("$.preparations[0].recipeName").value("Khichdi"))
-				.andExpect(jsonPath("$.preparations[1].recipeName").value("Payasam"));
+				.andExpect(jsonPath("$.preparations[1].recipeName").value("Payasam"))
+				// The meal that was cooked, by its own id (D-27): the three dishes above are its dishes
+				// and nobody else's.
+				.andExpect(jsonPath("$.mealId").value(admin.queryForObject(
+						"SELECT DISTINCT meal_id FROM meal_dishes", UUID.class).toString()));
 	}
 
 	@Test
@@ -209,8 +210,10 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 				""".formatted(LAST_YEAR, halwa)))
 				.andExpect(status().isCreated());
 		admin.update("""
-				UPDATE meal_plans SET day_type = 'FESTIVAL', occasion_name = 'Janmashtami'
-				WHERE plan_date = ?::date AND meal_kind = 'Dinner'
+				UPDATE meals m SET occasion_name = 'Janmashtami'
+				FROM meal_plan_days pd, meal_kinds k
+				WHERE pd.id = m.meal_plan_day_id AND k.id = m.meal_kind_id
+				  AND pd.plan_date = ?::date AND k.name = 'Dinner'
 				""", LAST_YEAR);
 
 		// Dinner is later in the day and would win on the clock. It loses on the only measure that
@@ -226,7 +229,7 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 	void cancelledPreparationsAreLeftOut() throws Exception {
 		feast(LAST_YEAR, khichdi);
 		feast(LAST_YEAR, payasam);
-		admin.update("UPDATE meal_plans SET status = 'CANCELLED' WHERE recipe_id = ?", payasam);
+		admin.update("UPDATE meal_dishes SET status = 'CANCELLED' WHERE recipe_id = ?", payasam);
 
 		mvc.perform(authed(get("/api/v1/meal-plans/menu-history")
 						.param("occasionName", "Janmashtami").param("before", THIS_YEAR)))
@@ -252,7 +255,8 @@ class MenuHistoryIT extends AbstractIntegrationTest {
 	}
 
 	private MockHttpServletRequestBuilder createRequest(String json) {
-		return authed(post("/api/v1/meal-plans")).contentType(MediaType.APPLICATION_JSON).content(json);
+		return authed(post("/api/v1/meals")).contentType(MediaType.APPLICATION_JSON)
+				.content(MealRequests.save(json, admin, tenant));
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder builder) {

@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.meal.MealFixture;
 import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -76,7 +77,7 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM platform_audit_events");
 		admin.execute("DELETE FROM recipe_ingredients");
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		// Anything that moved through the stock ledger is tracked now, so the item rows exist

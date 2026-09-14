@@ -19,6 +19,13 @@ import java.util.List;
  * refused by the database with {@code KMS-500001}, "something went wrong at our end, try again in a
  * moment", which blamed us for a reasonable request and gave advice that could never work.
  * {@code org.iskcon.kms.shift.ShiftWindow} is the one place that rule is written in Java.
+ *
+ * <p><strong>No meal fields, since D-27.</strong> Post a shift makes only shifts that are not for a
+ * meal (Rajeev, answer 3: a shift for a meal is raised only from that meal in the planner). The D-14
+ * fields {@code mealDate}, {@code mealKind} and {@code mealEventName} are gone rather than refused: a
+ * stale client that still sends them has them ignored and gets a shift not for a meal, which is what
+ * this screen now makes. {@code KMS-400125}, which refused half of that old link, is no longer thrown
+ * and stays in {@code ErrorCode} because codes are never reused.
  */
 public record CreateShiftRequest(
 		@NotBlank(message = "Give the shift a title.")
@@ -31,24 +38,7 @@ public record CreateShiftRequest(
 		@Size(max = 300, message = "That location is too long.") String location,
 		@Positive(message = "A shift needs room for at least one volunteer.") int capacity,
 		List<@Positive(message = "A reminder goes out at least one minute before the shift.") Integer>
-				reminderOffsetsMinutes,
-		/**
-		 * The meal this shift is posted for (D-14), or nothing at all where it is not posted for one.
-		 *
-		 * <p>{@code mealDate} and {@code mealKind} move together — half a link is a link to nothing,
-		 * and is refused with KMS-400125 rather than saved as something that would count toward no
-		 * meal while looking deliberate on the screen. {@code mealEventName} is given only where the
-		 * meal is a named event, and only alongside the other two.
-		 *
-		 * <p>Not a meal id, because there is no meal to have one: a meal is a date, a kind and an
-		 * event name inferred from the dish rows that share them, and a shift is posted weeks before
-		 * any of those rows exist. Nor validated against a planned meal, for the same reason — a
-		 * temple finds the hands first and decides the menu later, and a link refused because the
-		 * lunch has not been planned yet would make the field unusable in the order it is used.
-		 */
-		LocalDate mealDate,
-		@Size(max = 100, message = "That name is too long.") String mealKind,
-		@Size(max = 200, message = "That event name is too long.") String mealEventName) {
+				reminderOffsetsMinutes) {
 
 	/**
 	 * A shift has to have some length, and 20:00 to 20:00 does not say what length (T-146).

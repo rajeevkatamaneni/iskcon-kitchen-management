@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.meal.MealFixture;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
@@ -97,7 +98,7 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
-		admin.execute("DELETE FROM meal_plans");
+		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM recipe_ingredients");
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
@@ -347,12 +348,14 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 	 */
 	private void plan(
 			LocalDate date, String mealKind, UUID recipeId, String yield, String status, Integer adults) {
-		admin.update("""
-				INSERT INTO meal_plans (tenant_id, plan_date, meal_kind, ready_by, recipe_id,
-						target_yield, day_type, status, adults, created_by)
-				VALUES (?, ?, ?, TIME '12:00', ?, ?::numeric, 'REGULAR', ?, ?,
-						(SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'))
-				""", tenant, date, mealKind, recipeId, yield, status, adults);
+		// The head count is the meal's (D-27): dishes of one meal on one day share it, and a dish added
+		// with a head count sets it for the meal it joins.
+		UUID meal = MealFixture.meal(admin, tenant, date, mealKind, java.time.LocalTime.NOON);
+		if (adults != null) {
+			MealFixture.headCount(admin, meal, adults, null, null);
+		}
+		MealFixture.dish(admin, tenant, meal, recipeId, new java.math.BigDecimal(yield), status,
+				admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'", UUID.class));
 	}
 
 	private UUID recipe(String name, UUID category, int baseYield) {

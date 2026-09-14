@@ -118,6 +118,15 @@ public final class ShiftWindow {
 	 * <p>An en dash, matching every other range in this application, and no seconds (INT-8): a shift
 	 * runs 08:00–12:00, not 08:00:00–12:00:00.
 	 */
+	/**
+	 * One time of day as every shift message prints it, {@code HH:mm} (D-27, answer 6). The same
+	 * formatter {@link #describe} uses, exposed so the "times changed" notice cannot print a time
+	 * differently from the reminder that follows it.
+	 */
+	public static String clock(LocalTime time) {
+		return CLOCK.format(time);
+	}
+
 	public static String describe(LocalTime startTime, LocalTime endTime) {
 		String window = CLOCK.format(startTime) + "–" + CLOCK.format(endTime);
 		return crossesMidnight(startTime, endTime) ? window + " (next day)" : window;

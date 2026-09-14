@@ -108,8 +108,8 @@ class TempleScaleFixtureControlIT extends AbstractIntegrationTest {
 		line("inventory_items", counts.inventoryItems(), SMALL.inventoryItems());
 		line("recipes", counts.recipes(), SMALL.recipes());
 		line("recipe_ingredients", counts.recipeIngredients(), SMALL.expectedRecipeIngredients());
-		line("meal_plans COOKED", counts.mealPlansCooked(), SMALL.expectedCookedPlans());
-		line("meal_plans PLANNED", counts.mealPlansPlanned(), SMALL.expectedPlannedPlans());
+		line("meal_dishes COOKED", counts.mealPlansCooked(), SMALL.expectedCookedPlans());
+		line("meal_dishes PLANNED", counts.mealPlansPlanned(), SMALL.expectedPlannedPlans());
 		line("stock_movements", counts.stockMovements(), SMALL.expectedStockMovements());
 		line("vendors", counts.vendors(), SMALL.vendors());
 		line("vendor_supplies", counts.vendorSupplies(), SMALL.expectedVendorSupplies());

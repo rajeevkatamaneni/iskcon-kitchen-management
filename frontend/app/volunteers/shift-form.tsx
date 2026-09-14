@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { HintedField } from "@/components/ds/InfoHint";
 import type { ShiftInput, ShiftView } from "@/lib/api";
-import { crossesMidnight } from "@/lib/format";
+import { crossesMidnight, dayRange } from "@/lib/format";
 import { Form } from "@/components/ds/Form";
 
 /**
@@ -17,6 +18,12 @@ import { Form } from "@/components/ds/Form";
  * T-155), which opens this same form over the day rather than a cut-down copy of it. DESIGN_SYSTEM
  * v1.8 §4 asks for exactly that, and the copy it replaced had already drifted — it never learned to
  * say "Ends the next day".
+ *
+ * <p>The order of the boxes is ruled (D-27, Rajeev 2026-09-13): Title, Date, Volunteers requested,
+ * Start time, End time, Location, Reminder hours before, Description. There is no "is this for a meal"
+ * box on any screen that renders this form. A shift for a meal is asked for from that meal in the
+ * planner and saved with it (answer 3), so Post a shift makes only plain shifts, and the planner's
+ * layer does not need to ask which meal it is for.
  */
 
 /** Named so a header button outside the form can submit it. */
@@ -39,6 +46,7 @@ export function ShiftFields({
   shift,
   editing,
   fixedDate,
+  meal,
   onSubmit,
 }: {
   /**
@@ -60,6 +68,17 @@ export function ShiftFields({
    * and read only"). The volunteers screens leave it out and keep an editable date.
    */
   fixedDate?: string;
+  /**
+   * The meal a shift being corrected on the Volunteer shifts page is for, when it is for one. Its date
+   * and its meal are then shown as words with a link to the meal, and there is no date box at all
+   * (D-27 answer 4: "the date and the meal are shown read-only with a link to the meal").
+   *
+   * <p>Not `fixedDate`, which the planner's layer uses, and on purpose: in the layer the reader is
+   * already looking at the meal, so a read-only box that stays in the form is enough. Here the meal is
+   * somewhere else, so the screen names it and offers the way there, and — since a meal shift's date
+   * is always its meal's — the caller sends back the date it read rather than one read off a box.
+   */
+  meal?: MealOfShift;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
   // The two times are held in state for one reason: the form has to say, while somebody is typing,
@@ -105,14 +124,16 @@ export function ShiftFields({
         <span className="pl-field-inset font-medium text-ink">Title</span>
         <input name="title" required defaultValue={shift?.title ?? ""} className={FIELD} />
       </label>
-      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+      <DateSlot asLabel={!meal}>
         <span className="pl-field-inset font-medium text-ink">Date</span>
         {/* Fixed, it is `readOnly` and never `disabled`: a disabled input is left out of the form's
             data, so the save would go without a date, and a disabled box cannot be focused, so a
             keyboard or screen-reader user could not even reach it to hear what it holds. Read-only
             stays in the tab order and is announced as read-only; the recessed fill and the line
             under it are how a sighted reader tells, and that line is also its description. */}
-        {fixedDate ? (
+        {meal ? (
+          <MealDate meal={meal} />
+        ) : fixedDate ? (
           <>
             <input
               name="shiftDate"
@@ -130,15 +151,17 @@ export function ShiftFields({
         ) : (
           <input name="shiftDate" type="date" required defaultValue={shift?.shiftDate ?? ""} className={FIELD} />
         )}
-      </label>
-      {/* No line under this one. "How many volunteers are needed" is the word *Capacity* said
-          again, and a shift has no other capacity to be confused with. */}
+      </DateSlot>
+      {/* "Volunteers requested", not "Capacity" (D-27 answer 1, Rajeev 2026-09-13: "rename it to
+          something nicer than capacity. How about, Volenteers Requested"). The words only: the
+          field is still `capacity` on the wire and in the column. One label for every screen that
+          renders this form — the planner's layer and the volunteers screens alike. */}
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Capacity</span>
+        <span className="pl-field-inset font-medium text-ink">Volunteers requested</span>
         <input name="capacity" type="number" min="1" required defaultValue={shift?.capacity ?? 1} className={FIELD} />
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Start</span>
+        <span className="pl-field-inset font-medium text-ink">Start time</span>
         <input
           name="startTime"
           type="time"
@@ -149,7 +172,7 @@ export function ShiftFields({
         />
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">End</span>
+        <span className="pl-field-inset font-medium text-ink">End time</span>
         <input
           name="endTime"
           type="time"
@@ -211,25 +234,84 @@ export function readShiftForm(f: FormData): ShiftInput {
   };
 }
 
-/** Did the save move when people have to turn up? Only that is worth interrupting them for. */
-export function moved(before: ShiftView, after: ShiftInput): boolean {
-  return (
-    before.shiftDate !== after.shiftDate ||
-    hhmm(before.startTime) !== after.startTime.slice(0, 5) ||
-    hhmm(before.endTime) !== after.endTime.slice(0, 5)
-  );
+/**
+ * Should the list warn, after the save, that volunteers were not told? When the save gave the shift a
+ * different date and somebody is already signed up to it.
+ *
+ * <p>The date only, since D-27. New times on the same day are told to the signed-up volunteers by the
+ * server (answer 6), and the edit screen warns about that before the save. A new date is told to nobody:
+ * the server sends nothing then, even if the times changed too, so this — and not the times warning — is
+ * what the screen says in that case. Only a shift not for a meal can reach it; a meal shift's date is its
+ * meal's and cannot change (answer 4).
+ */
+export function dateChangedUnderRoster(
+  before: Pick<ShiftView, "shiftDate" | "signedUpCount">,
+  after: Pick<ShiftInput, "shiftDate">
+): boolean {
+  return before.shiftDate !== after.shiftDate && before.signedUpCount > 0;
+}
+
+/** What the Volunteer shifts screens know about the meal a shift is for (D-27). */
+export type MealOfShift = { mealId: string; name: string; date: string };
+
+/**
+ * The meal a shift is for, as the edit screen needs it, or null for a shift not for a meal. An event
+ * is named by its own name rather than as another "Event".
+ */
+export function mealOfShift(
+  shift: Pick<ShiftView, "mealId" | "mealKind" | "mealEventName" | "shiftDate">
+): MealOfShift | null {
+  if (!shift.mealId) return null;
+  return { mealId: shift.mealId, name: shift.mealEventName || shift.mealKind || "", date: shift.shiftDate };
 }
 
 /**
- * Should the person saving be warned that volunteers were not told? When the save moved the shift
- * and somebody is already signed up to it: their reminders move with the shift and nobody tells them.
+ * "For Lunch, 15 September" — how a meal shift is labelled wherever the Volunteer shifts screens list
+ * or show one (D-27 answers 3 and 4), and null for a shift not for a meal, which carries no label.
  *
- * <p>One rule for every place a shift is corrected — the edit screen and the planner's layer — so
- * the two cannot come to warn about different things (T-155; Rajeev 2026-09-12: "They need to know
- * what their actions are resulting in. Cant be silent about it.").
+ * <p>The date is `dayRange` of one day, the application's one way of saying a day with its month
+ * spelled out, so the year appears only where that formatter already adds it: on a day outside the
+ * temple's current year. A meal shift's `shiftDate` is always its meal's date, so it is the meal's day.
  */
-export function movedUnderRoster(before: ShiftView, after: ShiftInput): boolean {
-  return moved(before, after) && before.signedUpCount > 0;
+export function mealLabel(
+  shift: Pick<ShiftView, "mealId" | "mealKind" | "mealEventName" | "shiftDate">
+): string | null {
+  const meal = mealOfShift(shift);
+  if (!meal) return null;
+  return `For ${meal.name}, ${dayRange(meal.date, meal.date, false)}`;
+}
+
+/**
+ * The Date slot. A `<label>` where it holds a box, and a plain block where it holds only words: a
+ * label with no control in it labels nothing, and the form's own refusal sentences look for the box a
+ * label wraps.
+ */
+function DateSlot({ asLabel, children }: { asLabel: boolean; children: React.ReactNode }) {
+  const className = "flex flex-col gap-1 text-sm text-ink-secondary";
+  return asLabel ? <label className={className}>{children}</label> : <div className={className}>{children}</div>;
+}
+
+/**
+ * A meal shift's date and meal, read-only, with the way to the meal (D-27 answer 4). Words and a link,
+ * never a box: the date of a meal shift is its meal's, and the one place to change which day or which
+ * meal is the planner. There is no control here to turn it into a shift not for a meal either — if it
+ * is no longer for this meal, it is cancelled and a new shift posted.
+ */
+function MealDate({ meal }: { meal: MealOfShift }) {
+  return (
+    <>
+      <span className="flex min-h-touch items-center rounded-control bg-sunken px-3 text-ink-secondary">
+        {dayRange(meal.date, meal.date, false)}
+      </span>
+      <span className="pl-field-inset text-ink-muted">
+        <i aria-hidden="true" className="ti ti-lock" /> For {meal.name}. The date and the meal cannot be
+        changed here.{" "}
+        <Link href={`/planner/meal/${meal.mealId}`} className="text-accent-text underline">
+          Open this meal
+        </Link>
+      </span>
+    </>
+  );
 }
 
 /** The API sends `HH:mm:ss`; a time input wants `HH:mm`. */

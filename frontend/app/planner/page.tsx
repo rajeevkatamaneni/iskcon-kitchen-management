@@ -19,7 +19,7 @@ import {
   api,
   type ApiError,
   type CalendarDayView,
-  type MealServiceView,
+  type MealView,
   type MealSufficiency,
   type OutsideCommitment,
   type RecipeSummary,
@@ -108,7 +108,7 @@ function PlannerView() {
   // Meals, not preparations. The same call the day itself reads, so no two views of the planner can
   // disagree about how many lunches a Thursday holds.
   const mealsQ = useAuthedQuery(
-    useCallback((t?: string) => { void nonce; return api.mealServices(from, to, t); }, [from, to, nonce])
+    useCallback((t?: string) => { void nonce; return api.meals(from, to, t); }, [from, to, nonce])
   );
   const suffQ = useAuthedQuery(
     useCallback((t?: string) => { void nonce; return api.mealSufficiency(from, to, t); }, [from, to, nonce])
@@ -123,7 +123,7 @@ function PlannerView() {
 
   const calendar = useMemo(() => index(calQ.data ?? [], (d) => d.date), [calQ.data]);
   const meals = useMemo(() => group(livePlans(mealsQ.data ?? []), (m) => m.planDate), [mealsQ.data]);
-  const sufficiency = useMemo(() => index(suffQ.data ?? [], (s) => s.mealPlanId), [suffQ.data]);
+  const sufficiency = useMemo(() => index(suffQ.data ?? [], (s) => s.dishId), [suffQ.data]);
   const workforce = useMemo(() => index(workforceQ.data ?? [], (w) => w.date), [workforceQ.data]);
 
   const today = todayIso();
@@ -255,7 +255,7 @@ function OutsideCommitments() {
           </thead>
           <tbody>
             {commitments.map((c) => (
-              <tr key={`${c.planDate}-${c.mealKind}-${c.eventName ?? ""}`} className={TR}>
+              <tr key={c.mealId} className={TR}>
                 <td className={TD_DATE}>
                   {longDate(c.planDate)}
                   <span className="block text-xs tabular-nums text-ink-muted">
@@ -461,7 +461,7 @@ function WeekGrid({
   from: string;
   today: string;
   calendar: Map<string, CalendarDayView>;
-  meals: Map<string, MealServiceView[]>;
+  meals: Map<string, MealView[]>;
   workforce: Map<string, WorkforceCount>;
   onPick: (date: string) => void;
 }) {
@@ -536,7 +536,7 @@ function WeekGrid({
                 planned.map((m) => {
                   const dishes = livePreparations(m);
                   return (
-                    <span key={m.mealKind} className="grid gap-px border-l-2 border-accent pl-2">
+                    <span key={m.mealId} className="grid gap-px border-l-2 border-accent pl-2">
                       <span className="text-xs tabular-nums text-ink">
                         {hhmm(m.readyBy)} {m.mealKind}
                       </span>
@@ -582,7 +582,7 @@ function PlannerMonth({
   anchor: string;
   today: string;
   calendar: Map<string, CalendarDayView>;
-  meals: Map<string, MealServiceView[]>;
+  meals: Map<string, MealView[]>;
   onPick: (date: string) => void;
 }) {
   const month = Number(anchor.slice(5, 7));
@@ -634,7 +634,7 @@ function PlannerMonth({
                 {/* One line per meal kind, and no preparation names — a month cell has no room for
                     them, and the day is one press away for anybody who wants them. */}
                 {planned.slice(0, 3).map((m) => (
-                  <MonthCellLine key={m.mealKind} lines={1} className="text-ink-secondary">
+                  <MonthCellLine key={m.mealId} lines={1} className="text-ink-secondary">
                     {hhmm(m.readyBy)} {m.eventName ?? m.mealKind}
                   </MonthCellLine>
                 ))}
@@ -656,12 +656,12 @@ function PlannerMonth({
  * The meals worth drawing: a meal every one of whose preparations was cancelled and never cooked is
  * a meal that did not happen, and the grids say nothing about it rather than leaving a ghost row.
  */
-function livePlans(meals: MealServiceView[]): MealServiceView[] {
+function livePlans(meals: MealView[]): MealView[] {
   return meals.filter((meal) => !meal.dishes.every((d) => d.status === "CANCELLED" && !d.notMade));
 }
 
 /** The preparations still part of a meal — a cancelled one counts only if it was cooked anyway. */
-function livePreparations(meal: MealServiceView) {
+function livePreparations(meal: MealView) {
   return meal.dishes.filter((d) => d.status !== "CANCELLED" || d.notMade);
 }
 

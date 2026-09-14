@@ -12,11 +12,12 @@ import java.util.UUID;
  * is what a storekeeper scans a column for; this says <em>which meals spoke for it</em>, which is what
  * somebody asks the moment the total surprises them. Both exist deliberately.
  *
- * @param mealPlanId the plan row this claim comes from. Not rendered — it is the React key, and the
- *                   only stable identity a dish has when a day holds two of the same recipe.
- * @param planDate   the day the meal is planned for, and the day the detail page links to. The
- *                   planner addresses a day as {@code /planner/<ISO date>}, so this is the whole of
- *                   the link.
+ * @param dishId     the dish this claim comes from (was {@code mealPlanId}: the same id, before D-27
+ *                   renamed the table). Not rendered — it is the React key, and the only stable
+ *                   identity a claim has when a day holds two of the same recipe.
+ * @param mealId     the meal that dish belongs to (D-27), so the detail page can open that meal by
+ *                   its id rather than a day and a kind's name.
+ * @param planDate   the day the meal is planned for.
  * @param mealKind   Breakfast, Lunch, Dinner, or a temple's own kind. What the day calls this slot.
  * @param eventName  what an event is called (E4-S15), or null on an ordinary meal. Where it is set
  *                   it is the better label: a reader recognises "Saturday reading" and does not
@@ -30,7 +31,8 @@ import java.util.UUID;
  *                   happens where a person reads it.
  */
 public record CommittedMeal(
-		UUID mealPlanId,
+		UUID dishId,
+		UUID mealId,
 		LocalDate planDate,
 		String mealKind,
 		String eventName,

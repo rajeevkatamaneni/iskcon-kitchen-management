@@ -61,7 +61,9 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
     },
     meals: [
       {
+        mealId: "meal-lunch",
         mealKind: "Lunch",
+        eventName: null,
         readyBy: "12:00:00",
         plates: 820,
         recorded: false,
@@ -89,7 +91,9 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
         ],
       },
       {
+        mealId: "meal-dinner",
         mealKind: "Dinner",
+        eventName: null,
         readyBy: "19:30:00",
         plates: 420,
         recorded: true,
@@ -521,13 +525,13 @@ describe("today", () => {
           staffIn: 4,
           volunteers: 3,
           meals: [
-            { planDate: "2026-08-14", mealKind: "Breakfast", readyBy: "07:30:00", crewRequired: 4,
+            { mealId: "meal-breakfast", planDate: "2026-08-14", mealKind: "Breakfast", readyBy: "07:30:00", crewRequired: 4,
               staffIn: 4, volunteers: 0, rostered: 4, shortOfCrew: false },
-            { planDate: "2026-08-14", mealKind: "Lunch", readyBy: "12:00:00", crewRequired: 8,
+            { mealId: "meal-lunch", planDate: "2026-08-14", mealKind: "Lunch", readyBy: "12:00:00", crewRequired: 8,
               staffIn: 3, volunteers: 2, rostered: 5, shortOfCrew: true },
             // Nobody has said what the evening takes, so it is left out rather than drawn as short
             // of nothing.
-            { planDate: "2026-08-14", mealKind: "Dinner", readyBy: "19:30:00", crewRequired: null,
+            { mealId: "meal-dinner", planDate: "2026-08-14", mealKind: "Dinner", readyBy: "19:30:00", crewRequired: null,
               staffIn: 2, volunteers: 1, rostered: 3, shortOfCrew: false },
           ],
         },

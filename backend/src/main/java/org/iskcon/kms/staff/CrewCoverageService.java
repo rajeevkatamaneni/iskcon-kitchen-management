@@ -107,6 +107,7 @@ public class CrewCoverageService {
 				worst != null ? worst.mealKind() : null,
 				worst != null ? worst.readyBy() : null,
 				worst != null ? worst.crewRequired() : null,
-				worst != null ? worst.rostered() : null);
+				worst != null ? worst.rostered() : null,
+				worst != null ? worst.mealId() : null);
 	}
 }

@@ -2,6 +2,7 @@ package org.iskcon.kms.meal;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.UUID;
 
 /**
  * Whether there are enough hands for one meal (item 24) — the readout that reads
@@ -17,6 +18,8 @@ import java.time.LocalTime;
  * which: it is satisfied when staff + volunteers reaches the planned number, and splitting that into
  * two requirements would invent a constraint the temple does not have.
  *
+ * @param mealId       the meal's own id (D-27), so a reader can open the meal or match a shift to it
+ *                     without guessing from its date and kind.
  * @param crewRequired how many people the planner said it takes, or null where nobody has said. Null
  *                     is not zero and must not be drawn as a shortfall — a meal is planned weeks
  *                     before anybody is rostered.
@@ -24,6 +27,7 @@ import java.time.LocalTime;
  *                     screen and nothing more: it never blocks saving, and it never blocks leave.
  */
 public record MealCrewView(
+		UUID mealId,
 		LocalDate planDate,
 		String mealKind,
 		LocalTime readyBy,

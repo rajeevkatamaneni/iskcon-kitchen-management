@@ -325,7 +325,7 @@ public class RecipeService {
 	 * <p>Two different things get called "delete", and conflating them is how a temple loses its
 	 * history. A recipe somebody typed twice, or misspelled, or was trying the form out with, is
 	 * genuinely rubbish and should leave without a trace. A recipe that has fed the hall is part of
-	 * the record of what was served, and {@code meal_plans.recipe_id} is {@code ON DELETE RESTRICT}
+	 * the record of what was served, and {@code meal_dishes.recipe_id} is {@code ON DELETE RESTRICT}
 	 * precisely so that record cannot be quietly hollowed out.
 	 *
 	 * <p>So the system decides which one this is, rather than asking. Never planned, never cooked:
@@ -341,7 +341,7 @@ public class RecipeService {
 		RecipeView before = get(id);
 
 		Integer planned = jdbc.queryForObject(
-				"SELECT count(*) FROM meal_plans WHERE recipe_id = ?", Integer.class, id);
+				"SELECT count(*) FROM meal_dishes WHERE recipe_id = ?", Integer.class, id);
 		if (planned != null && planned > 0) {
 			throw new ApplicationException(ErrorCode.RECIPE_IN_USE,
 					Map.of("recipeId", id, "mealPlans", planned));

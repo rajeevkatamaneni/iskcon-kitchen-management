@@ -104,7 +104,7 @@ final class TempleScaleFixture {
 			// because kms_app holds the privileges V1 granted it, and where it is not, the statement
 			// warns rather than fails, which is why it is deliberately not wrapped in a check.
 			try (Statement statement = connection.createStatement()) {
-				statement.execute("ANALYZE stock_movements, meal_plans, recipe_ingredients, ingredients,"
+				statement.execute("ANALYZE stock_movements, meal_dishes, meals, meal_plan_days, recipe_ingredients, ingredients,"
 						+ " inventory_items, purchase_order_lines, purchase_orders, vendor_supplies");
 			}
 			connection.commit();
@@ -138,8 +138,8 @@ final class TempleScaleFixture {
 		check(mismatches, "inventory_items", counts.inventoryItems(), scale.inventoryItems());
 		check(mismatches, "recipes", counts.recipes(), scale.recipes());
 		check(mismatches, "recipe_ingredients", counts.recipeIngredients(), scale.expectedRecipeIngredients());
-		check(mismatches, "meal_plans (COOKED)", counts.mealPlansCooked(), scale.expectedCookedPlans());
-		check(mismatches, "meal_plans (PLANNED)", counts.mealPlansPlanned(), scale.expectedPlannedPlans());
+		check(mismatches, "meal_dishes (COOKED)", counts.mealPlansCooked(), scale.expectedCookedPlans());
+		check(mismatches, "meal_dishes (PLANNED)", counts.mealPlansPlanned(), scale.expectedPlannedPlans());
 		check(mismatches, "stock_movements", counts.stockMovements(), scale.expectedStockMovements());
 		check(mismatches, "vendors", counts.vendors(), scale.vendors());
 		check(mismatches, "vendor_supplies", counts.vendorSupplies(), scale.expectedVendorSupplies());
@@ -359,6 +359,7 @@ final class TempleScaleFixture {
 
 	private void plan(Connection connection, UUID tenantId, UUID actorUserId, TempleScale scale)
 			throws SQLException {
+		mealKinds(connection, tenantId);
 		dailyMeals(connection, tenantId, actorUserId, scale, scale.historyDays(), true);
 		dailyMeals(connection, tenantId, actorUserId, scale, scale.forwardDays(), false);
 		events(connection, tenantId, actorUserId, scale, scale.expectedEventsPast(), true);
@@ -366,36 +367,82 @@ final class TempleScaleFixture {
 	}
 
 	/**
+	 * The kinds a meal points at (D-27). A meal row names its kind by id, so they have to exist before
+	 * a single meal can; the seeded names and times, and nothing else.
+	 */
+	private void mealKinds(Connection connection, UUID tenantId) throws SQLException {
+		try (PreparedStatement ps = connection.prepareStatement("""
+				INSERT INTO meal_kinds (tenant_id, name, sort_order, default_ready_time, is_event, needs_occasion)
+				SELECT ?::uuid, v.name, v.sort_order, v.ready, v.is_event, false
+				FROM (VALUES ('Breakfast', 10, TIME '08:00', false), ('Lunch', 20, TIME '12:00', false),
+				             ('Dinner', 30, TIME '19:30', false), ('Event', 50, NULL::time, true))
+				     AS v(name, sort_order, ready, is_event)
+				ON CONFLICT (tenant_id, lower(name)) DO NOTHING
+				""")) {
+			ps.setString(1, tenantId.toString());
+			ps.executeUpdate();
+		}
+	}
+
+	/**
 	 * Three meals a day, several dishes in each. Past days are COOKED and future days are PLANNED,
 	 * which is the distinction {@code earliestDemandByIngredient()} filters on — so the historical
 	 * rows are not padding, they are the rows the query has to decline.
+	 *
+	 * <p>Since D-27 a dish belongs to a meal and a meal to a day, so this writes the days, then one
+	 * meal of each main kind on each of them, then the dishes into those meals. The dish rows are the
+	 * same in number and recipe as the single table used to hold, which keeps the harness measuring
+	 * the same work: {@code dishesPerDay} dishes a day, spread across Breakfast, Lunch and Dinner.
 	 */
 	private void dailyMeals(Connection connection, UUID tenantId, UUID actorUserId, TempleScale scale,
 			int days, boolean past) throws SQLException {
 		if (days <= 0) {
 			return;
 		}
+		String sign = past ? "-" : "+";
+		try (PreparedStatement ps = connection.prepareStatement("""
+				INSERT INTO meal_plan_days (tenant_id, plan_date, day_type)
+				SELECT ?::uuid, CURRENT_DATE %s d.n,
+				       CASE WHEN extract(isodow FROM (CURRENT_DATE %s d.n)) >= 6 THEN 'WEEKEND' ELSE 'REGULAR' END
+				FROM generate_series(1, ?) AS d(n)
+				ON CONFLICT (tenant_id, plan_date) DO NOTHING
+				""".formatted(sign, sign))) {
+			ps.setString(1, tenantId.toString());
+			ps.setInt(2, days);
+			ps.executeUpdate();
+		}
+		try (PreparedStatement ps = connection.prepareStatement("""
+				INSERT INTO meals (tenant_id, meal_plan_day_id, meal_kind_id, ready_by)
+				SELECT ?::uuid, pd.id, k.id, k.default_ready_time
+				FROM generate_series(1, ?) AS d(n)
+				JOIN meal_plan_days pd ON pd.plan_date = CURRENT_DATE %s d.n
+				JOIN meal_kinds k ON k.name IN ('Breakfast', 'Lunch', 'Dinner')
+				ON CONFLICT DO NOTHING
+				""".formatted(sign))) {
+			ps.setString(1, tenantId.toString());
+			ps.setInt(2, days);
+			ps.executeUpdate();
+		}
 		String sql = """
 				WITH numbered_recipes AS (
 				    SELECT id, (row_number() OVER (ORDER BY name)) - 1 AS rn, count(*) OVER () AS total
 				    FROM recipes
 				)
-				INSERT INTO meal_plans
-				    (tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield, day_type, status, created_by)
+				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by)
 				SELECT ?::uuid,
-				       CURRENT_DATE %s d.n,
-				       (ARRAY['Breakfast', 'Lunch', 'Dinner'])[1 + (s.k %% 3)],
-				       (ARRAY[TIME '08:00', TIME '12:00', TIME '19:30'])[1 + (s.k %% 3)],
+				       m.id,
 				       r.id,
 				       120 + (s.k %% 4) * 60,
-				       CASE WHEN extract(isodow FROM (CURRENT_DATE %s d.n)) >= 6 THEN 'WEEKEND' ELSE 'REGULAR' END,
 				       '%s',
 				       ?::uuid
 				FROM generate_series(1, ?) AS d(n)
 				CROSS JOIN generate_series(0, ? - 1) AS s(k)
+				JOIN meal_plan_days pd ON pd.plan_date = CURRENT_DATE %s d.n
+				JOIN meal_kinds k ON k.name = (ARRAY['Breakfast', 'Lunch', 'Dinner'])[1 + (s.k %% 3)]
+				JOIN meals m ON m.meal_plan_day_id = pd.id AND m.meal_kind_id = k.id AND m.event_name IS NULL
 				JOIN numbered_recipes r ON r.rn = ((d.n::bigint * 5 + s.k) %% r.total)
 				"""
-				.formatted(past ? "-" : "+", past ? "-" : "+", past ? "COOKED" : "PLANNED");
+				.formatted(past ? "COOKED" : "PLANNED", sign);
 		try (PreparedStatement ps = connection.prepareStatement(sql)) {
 			ps.setString(1, tenantId.toString());
 			ps.setString(2, actorUserId.toString());
@@ -411,39 +458,60 @@ final class TempleScaleFixture {
 	 * Janmastami"). They cook a larger quantity, which is why they are worth generating separately
 	 * rather than as another regular meal: a festival's claim is what pulls the ordering horizon out
 	 * to thirty days.
+	 *
+	 * <p>Each is a meal of its own with one dish (D-27). The day type used to be written FESTIVAL on
+	 * the event's dish row; it is a fact about the day now, and a day that already holds the daily
+	 * meals keeps the type it was given, which nothing the harness measures reads.
 	 */
 	private void events(Connection connection, UUID tenantId, UUID actorUserId, TempleScale scale,
 			int count, boolean past) throws SQLException {
 		if (count <= 0) {
 			return;
 		}
+		String sign = past ? "-" : "+";
+		try (PreparedStatement ps = connection.prepareStatement("""
+				INSERT INTO meal_plan_days (tenant_id, plan_date, day_type)
+				SELECT ?::uuid, CURRENT_DATE %s (g.n * ?), 'FESTIVAL'
+				FROM generate_series(1, ?) AS g(n)
+				ON CONFLICT (tenant_id, plan_date) DO NOTHING
+				""".formatted(sign))) {
+			ps.setString(1, tenantId.toString());
+			ps.setInt(2, scale.eventEveryDays());
+			ps.setInt(3, count);
+			ps.executeUpdate();
+		}
+		try (PreparedStatement ps = connection.prepareStatement("""
+				INSERT INTO meals (tenant_id, meal_plan_day_id, meal_kind_id, event_name, ready_by)
+				SELECT ?::uuid, pd.id, k.id, 'Perf Event ' || lpad(g.n::text, 4, '0'), TIME '11:30'
+				FROM generate_series(1, ?) AS g(n)
+				JOIN meal_plan_days pd ON pd.plan_date = CURRENT_DATE %s (g.n * ?)
+				JOIN meal_kinds k ON k.name = 'Event'
+				ON CONFLICT DO NOTHING
+				""".formatted(sign))) {
+			ps.setString(1, tenantId.toString());
+			ps.setInt(2, count);
+			ps.setInt(3, scale.eventEveryDays());
+			ps.executeUpdate();
+		}
 		String sql = """
 				WITH numbered_recipes AS (
 				    SELECT id, (row_number() OVER (ORDER BY name)) - 1 AS rn, count(*) OVER () AS total
 				    FROM recipes
 				)
-				INSERT INTO meal_plans
-				    (tenant_id, plan_date, meal_kind, ready_by, recipe_id, target_yield, day_type, status,
-				     event_name, created_by)
-				SELECT ?::uuid,
-				       CURRENT_DATE %s (g.n * ?),
-				       'Event',
-				       TIME '11:30',
-				       r.id,
-				       400,
-				       'FESTIVAL',
-				       '%s',
-				       'Perf Event ' || lpad(g.n::text, 4, '0'),
-				       ?::uuid
+				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by)
+				SELECT ?::uuid, m.id, r.id, 400, '%s', ?::uuid
 				FROM generate_series(1, ?) AS g(n)
+				JOIN meal_plan_days pd ON pd.plan_date = CURRENT_DATE %s (g.n * ?)
+				JOIN meals m ON m.meal_plan_day_id = pd.id
+				            AND m.event_name = 'Perf Event ' || lpad(g.n::text, 4, '0')
 				JOIN numbered_recipes r ON r.rn = (g.n %% r.total)
 				"""
-				.formatted(past ? "-" : "+", past ? "COOKED" : "PLANNED");
+				.formatted(past ? "COOKED" : "PLANNED", sign);
 		try (PreparedStatement ps = connection.prepareStatement(sql)) {
 			ps.setString(1, tenantId.toString());
-			ps.setInt(2, scale.eventEveryDays());
-			ps.setString(3, actorUserId.toString());
-			ps.setInt(4, count);
+			ps.setString(2, actorUserId.toString());
+			ps.setInt(3, count);
+			ps.setInt(4, scale.eventEveryDays());
 			ps.executeUpdate();
 		}
 	}
@@ -581,8 +649,8 @@ final class TempleScaleFixture {
 				scalar(connection, "SELECT count(*) FROM inventory_items"),
 				scalar(connection, "SELECT count(*) FROM recipes"),
 				scalar(connection, "SELECT count(*) FROM recipe_ingredients"),
-				scalar(connection, "SELECT count(*) FROM meal_plans WHERE status = 'COOKED'"),
-				scalar(connection, "SELECT count(*) FROM meal_plans WHERE status = 'PLANNED'"),
+				scalar(connection, "SELECT count(*) FROM meal_dishes WHERE status = 'COOKED'"),
+				scalar(connection, "SELECT count(*) FROM meal_dishes WHERE status = 'PLANNED'"),
 				scalar(connection, "SELECT count(*) FROM stock_movements"),
 				scalar(connection, "SELECT count(*) FROM vendors"),
 				scalar(connection, "SELECT count(*) FROM vendor_supplies"),

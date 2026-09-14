@@ -85,6 +85,20 @@ class TenantLoopMigrationIT extends AbstractIntegrationTest {
 						+ " AND needs_occasion AND default_ready_time IS NULL"))
 				.as("the temple should have been given a feast to plan, and it should always ask its hour")
 				.isEqualTo(1);
+
+		// V135 to V137 (D-27, T-195) loop over every temple too: the reset deletes and balances stock,
+		// and the reseed plans a week only for a temple with recipes of its own. This temple has none —
+		// the same as production — so both loop bodies are planned here and the reseed must have written
+		// nothing. A reseed that ignored its own condition would plan meals with no dishes, or fail.
+		assertThat(countOf("SELECT count(*) FROM meals"))
+				.as("a temple with no recipes of its own must not be given a week of meals")
+				.isZero();
+		assertThat(countOf("SELECT count(*) FROM meal_plan_days"))
+				.as("nor a plan for any day")
+				.isZero();
+		assertThat(countOf("SELECT count(*) FROM shifts"))
+				.as("nor the reseed's volunteer shifts")
+				.isZero();
 	}
 
 	// ---------------------------------------------------------------------

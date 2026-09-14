@@ -5,14 +5,18 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
 import type { ShiftView } from "@/lib/api";
 
 /**
- * "That shift moved, and the 2 volunteers already signed up have not been told." — said wherever a
- * save has just moved a shift people had claimed (`movedUnderRoster`).
+ * "That shift moved, and the 2 volunteers already signed up have not been told." — said on the
+ * Volunteer shifts list after a **shift not for a meal had its date changed** while volunteers were
+ * signed up (`dateChangedUnderRoster`).
  *
- * <p>Saving reschedules everyone's reminders and sends nobody a word, on purpose: the admin writes
- * that message himself, from the roster page this links to. So the one thing the screen owes him is
- * to say so. It is shown on the volunteers list after the edit screen saves, and on the meal planner
- * after its layer saves (T-155). One component, so the two places cannot drift into saying it two
- * ways. A warning, so it stays until the reader leaves: it does not clear itself.
+ * <p>Narrowed by D-27. Answer 6 replaced this notice for one case only: new times on the same day, where
+ * the server now sends each signed-up volunteer the approved `shift_broadcast` ("The times changed to
+ * …") and the edit screen warns before saving instead. A new date is not that case. The server sends
+ * nothing when a shift's date changes, with or without new times, so the reminders move and nobody is
+ * told — and the one thing the screen owes the admin is to say so, and point at the roster page where he
+ * writes that message himself. The planner no longer shows this (its shift is saved with the meal, and
+ * warned about there), and a meal shift cannot change its date at all (answer 4). A warning, so it stays
+ * until the reader leaves: it does not clear itself.
  *
  * <p>The count is the shift as re-read after the save, which is what the list has always used.
  */

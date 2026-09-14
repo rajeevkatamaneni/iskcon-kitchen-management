@@ -149,7 +149,7 @@ class CoordinatePrecisionIT {
 	void geocodedCoordinatesAreCutToSixDecimals() {
 		// The Geocoding API is the milder case and it was checked rather than assumed: it renders
 		// seven decimals, so it never produced the seventeen-digit string Places did. Seven is still
-		// one more than tenants.latitude and meal_plans.delivery_latitude hold — both NUMERIC(9,6) —
+		// one more than tenants.latitude and meals.delivery_latitude hold — both NUMERIC(9,6) —
 		// and both providers answer with the same Coordinates record, so leaving one of them uncut
 		// would mean the number a caller shows and the number the row keeps differ by which service
 		// happened to answer.
@@ -224,7 +224,7 @@ class CoordinatePrecisionIT {
 	@DisplayName("a coordinate read back from a NUMERIC(9,6) column is unchanged by the rounding")
 	void aCoordinateFromAColumnIsUntouched() {
 		// The claim the ledger asked to be tested rather than assumed. tenants.latitude (V1) and
-		// meal_plans.delivery_latitude (V88) are both NUMERIC(9,6), so every Coordinates built from
+		// meals.delivery_latitude (V88) are both NUMERIC(9,6), so every Coordinates built from
 		// one of those columns is already at six decimals and the new constructor is a no-op for it.
 		// No database is needed to show it: the question is what BigDecimal("12.971600").doubleValue()
 		// survives, and that is arithmetic.

@@ -105,8 +105,11 @@ public record TodayView(
 	 * @param recorded whether the returned job card has been typed in. Today says this out loud
 	 *                 rather than badging it — "not yet recorded" is a fact about the store room,
 	 *                 since a meal nobody records is stock that never left (§2).
+	 * @param mealId   the meal's own id (D-27), so a meal on Today opens that meal in the planner and
+	 *                 lines up with its crew readout by id rather than by kind and event name.
 	 */
 	public record Meal(
+			UUID mealId,
 			String mealKind,
 
 			/**

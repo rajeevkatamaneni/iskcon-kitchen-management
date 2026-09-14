@@ -5,15 +5,18 @@ import { fireEvent, render, screen } from "@testing-library/react";
 // Typed like the real call, so the assertions below can read what was sent rather than casting
 // their way past an untyped mock — which is how this file passed locally and failed in CI.
 const {
-  createMealPlan, updateMealPlan, cancelMealPlan,
+  saveMeal, updateMeal, ekadashiCheck,
   suggestedCrew, mealCrew, menuHistory, mealDayContext, listOccasions, listRecipes,
   eventNameSuggestions,
   placesAvailable, placeSuggestions, resolvePlace, travelEstimateFor,
 } = vi.hoisted(() => ({
-  createMealPlan: vi.fn(async (_input: Record<string, unknown>, _token?: string) =>
-    ({ id: "m1" } as { id?: string; warning?: Record<string, unknown> })),
-  updateMealPlan: vi.fn(async (_id: string, _input: Record<string, unknown>, _token?: string) => undefined),
-  cancelMealPlan: vi.fn(async (_id: string, _token?: string) => undefined),
+  // One request for the whole meal since D-27: its facts, every dish, and any volunteer shift.
+  saveMeal: vi.fn(async (_input: MealBody, _token?: string) =>
+    ({ id: "meal-new" } as { id: string; warning?: Record<string, unknown> })),
+  updateMeal: vi.fn(async (_id: string, _input: MealBody, _token?: string) =>
+    ({ id: "meal-lunch" } as { id: string; warning?: Record<string, unknown> })),
+  ekadashiCheck: vi.fn(async (_date: string, _recipeId: string, _token?: string) =>
+    ({ isEkadashi: true, compatible: true, offendingIngredients: [] as string[] })),
   // What the last three ordinary meals of this kind took (Q11). Null by default: most of these
   // tests are about a temple that has never recorded one, where the field opens empty.
   suggestedCrew: vi.fn(async (_kind: string, _token?: string) => ({ crewRequired: null as number | null })),
@@ -62,13 +65,20 @@ const {
 }));
 
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ getToken: async () => "t" }) }));
+// The composer asks before a changed meal is left (D-27), and leaving goes through the router.
+const push = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, replace: vi.fn(), back: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+  useParams: () => ({}),
+}));
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
     api: {
       ...actual.api,
-      createMealPlan, updateMealPlan, cancelMealPlan,
+      saveMeal, updateMeal, ekadashiCheck,
       suggestedCrew, mealCrew, menuHistory, mealDayContext, listOccasions, listRecipes,
       eventNameSuggestions,
       placesAvailable, placeSuggestions, resolvePlace, travelEstimateFor,
@@ -77,6 +87,12 @@ vi.mock("@/lib/api", async (importOriginal) => {
 });
 
 import { MealComposer, type ComposerStatus } from "@/components/planner/MealComposer";
+
+/** What the meal save and update send, read loosely enough to assert on and typed enough to index. */
+type MealBody = Record<string, unknown> & {
+  dishes: { id: string | null; recipeId: string; targetYield: number }[];
+  volunteerShift: Record<string, unknown> | null;
+};
 
 const RECIPES = [
   { id: "r1", name: "Bisi Bele Bath", categoryName: "Khichadi", fastingCompatible: false,
@@ -147,7 +163,7 @@ function open(props: Partial<React.ComponentProps<typeof MealComposer>> = {}) {
 }
 
 describe("planning a meal", () => {
-  beforeEach(() => createMealPlan.mockClear());
+  beforeEach(() => saveMeal.mockClear());
 
   it("works the head count out the way a temple does", () => {
     open();
@@ -179,7 +195,7 @@ describe("planning a meal", () => {
     expect(screen.getByLabelText("How much Kesari Bath to make")).toHaveValue(300);
   });
 
-  it("saves one meal per preparation, each with its own servings", async () => {
+  it("saves the meal as one request, every preparation inside it with its own amount", async () => {
     open();
     // Said out loud, because nothing is assumed any more: the 100 that scales Bisi Bele Bath is a
     // number the planner typed.
@@ -192,11 +208,23 @@ describe("planning a meal", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
-    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(2));
+    // One request (D-27), where it used to be one per preparation — a run that could stop half way
+    // and leave the meal holding some of its dishes.
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
 
-    const [first, second] = createMealPlan.mock.calls.map(([input]) => input);
-    expect(first).toMatchObject({ recipeId: "r1", targetYield: 100, mealKind: "Lunch", readyBy: "12:00" });
-    expect(second).toMatchObject({ recipeId: "r2", targetYield: 150, kitchenNotes: "Cook the kesari thin." });
+    const input = saveMeal.mock.calls[0][0];
+    expect(input).toMatchObject({
+      planDate: "2026-08-16", mealKindId: "k1", readyBy: "12:00", kitchenNotes: "Cook the kesari thin.",
+    });
+    expect(input.dishes).toEqual([
+      { id: null, recipeId: "r1", targetYield: 100 },
+      { id: null, recipeId: "r2", targetYield: 150 },
+    ]);
+    // By the kind's id, never its name, and the shift said out loud as none rather than left out.
+    const keys = Object.keys(input);
+    expect(keys).not.toContain("mealKind");
+    expect(keys).toContain("volunteerShift");
+    expect(input.volunteerShift).toBeNull();
   });
 
   it("will not save until something is being cooked", () => {
@@ -231,8 +259,8 @@ describe("planning a meal", () => {
  */
 describe("an event, and what it is asked", () => {
   beforeEach(() => {
-    createMealPlan.mockClear();
-    createMealPlan.mockResolvedValue({ id: "m1" });
+    saveMeal.mockClear();
+    saveMeal.mockResolvedValue({ id: "m1" });
     eventNameSuggestions.mockClear();
     eventNameSuggestions.mockResolvedValue([]);
   });
@@ -294,9 +322,9 @@ describe("an event, and what it is asked", () => {
     fireEvent.change(screen.getByLabelText(/contact phone/i, { selector: "input" }), { target: { value: "+91 98862 30011" } });
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
-    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
-    expect(createMealPlan.mock.calls[0][0]).toMatchObject({
-      mealKind: "Event",
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+    expect(saveMeal.mock.calls[0][0]).toMatchObject({
+      mealKindId: "k2",
       eventName: "Vidyaranyapura School Gita Reading",
       isOutside: true,
       handover: "PICKUP",
@@ -328,8 +356,8 @@ describe("an event, and what it is asked", () => {
     fireEvent.change(screen.getByLabelText(/when do the guests eat/i, { selector: "input" }), { target: { value: "13:00" } });
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
-    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
-    expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+    expect(saveMeal.mock.calls[0][0]).toMatchObject({
       handover: "DELIVERY",
       deliveryAddress: "Hare Krishna Hill, Rajajinagar 560010",
       guestsEatAt: "13:00",
@@ -404,8 +432,8 @@ describe("an event, and what it is asked", () => {
       });
 
       fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
-      await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
-      expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+      expect(saveMeal.mock.calls[0][0]).toMatchObject({
         deliveryAddress: "Mantri Serenity, Kanakapura Main Rd, Bengaluru, Karnataka 560062, India",
         deliverySubLocation: "Clubhouse",
         deliveryPlaceId: "place-1",
@@ -426,8 +454,8 @@ describe("an event, and what it is asked", () => {
       expect(screen.getByText(/leave the temple by 12:22 to be there before 13:00/i)).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
-      await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
-      expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+      expect(saveMeal.mock.calls[0][0]).toMatchObject({
         travelMinutes: 38,
         travelMinutesManual: false,
       });
@@ -444,10 +472,10 @@ describe("an event, and what it is asked", () => {
       expect(screen.getByText(/leave the temple by 12:05/i)).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
-      await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
       // The flag is the whole point: it is what stops the job card refreshing their figure out from
       // under them on the sheet a driver is about to act on.
-      expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+      expect(saveMeal.mock.calls[0][0]).toMatchObject({
         travelMinutes: 55,
         travelMinutesManual: true,
       });
@@ -476,7 +504,7 @@ describe("an event, and what it is asked", () => {
       expect(screen.getByText(/account for loading time/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
       fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
-      await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
     });
 
     it("says nothing once there is half an hour to load in", async () => {
@@ -502,8 +530,8 @@ describe("an event, and what it is asked", () => {
       expect(screen.queryByText("Mantri Serenity")).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
-      await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
-      expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+      expect(saveMeal.mock.calls[0][0]).toMatchObject({
         deliveryAddress: "Mantri Ser",
         deliveryPlaceId: null,
       });
@@ -598,8 +626,8 @@ describe("an event, and what it is asked", () => {
     fireEvent.change(screen.getByLabelText(/when do the guests eat/i, { selector: "input" }), { target: { value: "13:00" } });
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
-    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
-    expect(createMealPlan.mock.calls[0][0]).toMatchObject({
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+    expect(saveMeal.mock.calls[0][0]).toMatchObject({
       contactPhone: "+91 90000 00000",
       deliveryAddress: "Hare Krishna Hill, Rajajinagar 560010",
     });
@@ -649,7 +677,7 @@ describe("an event, and what it is asked", () => {
    */
   it("closes on a save that succeeded, even when the address could not be placed", async () => {
     const onClose = vi.fn();
-    createMealPlan.mockResolvedValue({
+    saveMeal.mockResolvedValue({
       id: "m1",
       warning: {
         code: "KMS-400078",
@@ -672,7 +700,7 @@ describe("an event, and what it is asked", () => {
     fireEvent.change(screen.getByLabelText(/when do the guests eat/i, { selector: "input" }), { target: { value: "13:00" } });
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
-    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(screen.queryByText("KMS-400078")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -688,7 +716,7 @@ describe("an event, and what it is asked", () => {
  * cooking. A meal nobody had counted was costed against a number the application had made up.
  */
 describe("the head count is asked for, never assumed", () => {
-  beforeEach(() => createMealPlan.mockClear());
+  beforeEach(() => saveMeal.mockClear());
 
   it("opens a new meal with every counter at nought", () => {
     open();
@@ -738,7 +766,7 @@ describe("the head count is asked for, never assumed", () => {
     expect(screen.getByText(/say how many people are expected/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
-    expect(createMealPlan).not.toHaveBeenCalled();
+    expect(saveMeal).not.toHaveBeenCalled();
 
     // One number at the top, and the whole meal is saveable.
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "150" } });
@@ -764,19 +792,18 @@ describe("the head count is asked for, never assumed", () => {
     expect(screen.queryByText(/say how many people are expected/i)).not.toBeInTheDocument();
   });
 
-  it("sends the count the planner typed with every preparation of the meal", async () => {
+  it("sends the count the planner typed with the meal, and scales its preparations by it", async () => {
     open();
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "200" } });
     fireEvent.change(screen.getByLabelText("Seniors"), { target: { value: "10" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
-    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
     // Seniors weigh 0.8, so 200 + 8 = 208 KG of it. The counters go across as themselves — the
     // weighting is the server's arithmetic as much as the screen's.
-    expect(createMealPlan.mock.calls[0][0]).toMatchObject({
-      adults: 200, children: 0, seniors: 10, targetYield: 208,
-    });
+    expect(saveMeal.mock.calls[0][0]).toMatchObject({ adults: 200, children: 0, seniors: 10 });
+    expect(saveMeal.mock.calls[0][0].dishes[0].targetYield).toBe(208);
   });
 });
 
@@ -817,7 +844,7 @@ describe("item 23 — the row of fields keeps its shape", () => {
 
 describe("who will run it", () => {
   beforeEach(() => {
-    createMealPlan.mockClear();
+    saveMeal.mockClear();
     suggestedCrew.mockClear();
     suggestedCrew.mockResolvedValue({ crewRequired: null });
     mealCrew.mockResolvedValue([]);
@@ -856,7 +883,7 @@ describe("who will run it", () => {
     expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
   });
 
-  it("sends the number with every preparation of the meal", async () => {
+  it("sends the number with the meal", async () => {
     suggestedCrew.mockResolvedValue({ crewRequired: 6 });
     open();
     await vi.waitFor(() => expect(screen.getByLabelText("People needed")).toHaveValue(6));
@@ -866,8 +893,8 @@ describe("who will run it", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
-    await vi.waitFor(() => expect(createMealPlan).toHaveBeenCalledTimes(1));
-    expect(createMealPlan.mock.calls[0][0]).toMatchObject({ crewRequired: 7 });
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+    expect(saveMeal.mock.calls[0][0]).toMatchObject({ crewRequired: 7 });
   });
 });
 
@@ -875,7 +902,7 @@ describe("who will run it", () => {
 
 describe("a festival feast", () => {
   beforeEach(() => {
-    createMealPlan.mockClear();
+    saveMeal.mockClear();
     menuHistory.mockClear();
     mealDayContext.mockClear();
     mealDayContext.mockResolvedValue({
@@ -968,35 +995,32 @@ describe("a festival feast", () => {
 // --- item 16: a meal is editable as one --------------------------------------
 
 describe("editing a meal as one thing", () => {
+  /** A meal by its own id (D-27), its facts on it once and its one planned preparation beneath. */
   const MEAL = {
-    serviceId: null,
-    planDate: "2026-08-16",
-    mealKind: "Lunch",
-    readyBy: "12:00:00",
-    adults: 100, children: 0, seniors: 0,
-    plates: 100,
-    crewRequired: 6,
-    dayType: "REGULAR",
-    occasionName: null,
-    eventName: null, contactName: null, contactPhone: null, deliveryAddress: null, purpose: null,
-    kitchenNotes: null,
-    cardNumber: null, cardIssuedAt: null,
+    mealId: "meal-lunch", mealKindId: "k1",
+    planDate: "2026-08-16", mealKind: "Lunch", readyBy: "12:00:00",
+    adults: 100, children: 0, seniors: 0, plates: 100, crewRequired: 6,
+    dayType: "REGULAR", occasionName: null,
+    eventName: null, isOutside: false, handover: null, contactName: null, contactPhone: null,
+    deliveryAddress: null, deliverySubLocation: null, deliveryPlaceId: null,
+    deliveryLatitude: null, deliveryLongitude: null, guestsEatAt: null,
+    travelMinutes: null, travelMinutesSource: null,
+    purpose: null, kitchenNotes: null, serverNotes: null,
+    status: "PLANNED", cardNumber: null, cardIssuedAt: null,
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
+    corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
     dishes: [
-      { id: "p1", planDate: "2026-08-16", mealKind: "Lunch", readyBy: "12:00:00",
-        recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 100, dayType: "REGULAR",
-        occasionName: null, status: "PLANNED", eventName: null, isOutside: false, handover: null,
-        contactName: null, contactPhone: null, deliveryAddress: null, guestsEatAt: null,
-        purpose: null, adults: 100, children: 0, seniors: 0, crewRequired: 6, kitchenNotes: null,
-        actualServings: null, notMade: false, cookedAt: null, ekadashiAcknowledged: false,
-        createdAt: "2026-08-15T10:00:00Z" },
+      { id: "p1", mealId: "meal-lunch", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 100,
+        targetYieldUnit: "KG", status: "PLANNED", actualServings: null, consumedQuantity: null,
+        notMade: false, originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
+        ekadashiAcknowledged: false, createdAt: "2026-08-15T10:00:00Z" },
     ],
+    volunteerShift: null,
   };
 
   beforeEach(() => {
-    createMealPlan.mockClear();
-    updateMealPlan.mockClear();
-    cancelMealPlan.mockClear();
+    saveMeal.mockClear();
+    updateMeal.mockClear();
     suggestedCrew.mockResolvedValue({ crewRequired: null });
     mealCrew.mockResolvedValue([]);
   });
@@ -1019,33 +1043,46 @@ describe("editing a meal as one thing", () => {
   it("does not offer to move the meal to another kind", () => {
     openEdit();
     // A meal is its date and its kind. Changing the kind would not correct this meal; it would move
-    // its preparations into a different one.
+    // its preparations into a different one — and the update has no field to do it with (D-27).
     expect(screen.queryByRole("button", { name: "Event" })).not.toBeInTheDocument();
   });
 
-  it("updates what stayed, adds what was added, and cancels what was taken off", async () => {
+  it("updates the whole meal in one request: a kept dish by its id, an added one with none", async () => {
     openEdit();
     fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "150" } });
     fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
 
-    await vi.waitFor(() => expect(updateMealPlan).toHaveBeenCalledTimes(1));
-    // The row that was already there keeps its identity and its history.
-    expect(updateMealPlan.mock.calls[0][0]).toBe("p1");
-    expect(updateMealPlan.mock.calls[0][1]).toMatchObject({ adults: 150, crewRequired: 6 });
-    expect(createMealPlan).toHaveBeenCalledTimes(1);
-    expect(createMealPlan.mock.calls[0][0]).toMatchObject({ recipeId: "r2" });
-    expect(cancelMealPlan).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(updateMeal).toHaveBeenCalledTimes(1));
+    const [mealId, input] = updateMeal.mock.calls[0];
+    expect(mealId).toBe("meal-lunch");
+    expect(input).toMatchObject({ adults: 150, crewRequired: 6 });
+    // The dish that was already there keeps its identity and its history; the added one has none yet.
+    expect(input.dishes).toEqual([
+      { id: "p1", recipeId: "r1", targetYield: 100 },
+      { id: null, recipeId: "r2", targetYield: 150 },
+    ]);
+    expect(saveMeal).not.toHaveBeenCalled();
+    // An update cannot move a meal, so it carries neither a day nor a kind. And an update that touched
+    // no shift says so with null, which the server reads as "leave the shift as it is".
+    const keys = Object.keys(input);
+    expect(keys).not.toContain("planDate");
+    expect(keys).not.toContain("mealKindId");
+    expect(keys).toContain("volunteerShift");
+    expect(input.volunteerShift).toBeNull();
   });
 
-  it("cancels a preparation taken off the meal rather than deleting it", async () => {
+  it("leaves a preparation taken off the meal out of the list, which is how the server cancels it", async () => {
     openEdit();
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
     fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
 
-    await vi.waitFor(() => expect(cancelMealPlan).toHaveBeenCalledTimes(1));
-    expect(cancelMealPlan.mock.calls[0][0]).toBe("p1");
+    await vi.waitFor(() => expect(updateMeal).toHaveBeenCalledTimes(1));
+    // Cancelled rather than deleted, on the server: a planned dish missing from the whole list.
+    const dishes = updateMeal.mock.calls[0][1].dishes;
+    expect(dishes.map((d) => d.id)).not.toContain("p1");
+    expect(dishes).toEqual([{ id: null, recipeId: "r2", targetYield: 100 }]);
   });
 });
 
@@ -1068,41 +1105,37 @@ describe("correcting a delivery event that was picked from the map", () => {
   const PIN = { latitude: 12.85623, longitude: 77.54811 };
   const ADDRESS = "Mantri Serenity, Kanakapura Main Rd, Bengaluru, Karnataka 560062, India";
 
-  const DELIVERY_DISH = {
-    id: "p1", planDate: "2026-08-16", mealKind: "Event", readyBy: "11:00:00",
-    recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 200, targetYieldUnit: "KG",
-    dayType: "REGULAR", occasionName: null, status: "PLANNED",
+  /** A placed delivery event. Its delivery facts are the meal's own since D-27, not a dish row's. */
+  const MEAL = {
+    mealId: "meal-mantri", mealKindId: "k2",
+    planDate: "2026-08-16", mealKind: "Event", readyBy: "11:00:00",
+    adults: 200, children: 0, seniors: 0, plates: 200, crewRequired: null,
+    dayType: "REGULAR", occasionName: null,
     eventName: "Mantri Serenity programme", isOutside: true, handover: "DELIVERY",
     contactName: "Mrs Latha Rao", contactPhone: "+91 98862 30011",
     deliveryAddress: ADDRESS, deliverySubLocation: "Clubhouse", deliveryPlaceId: "place-1",
     deliveryLatitude: PIN.latitude, deliveryLongitude: PIN.longitude,
     guestsEatAt: "13:00:00", travelMinutes: 38, travelMinutesSource: "ESTIMATED",
-    purpose: null, adults: 200, children: 0, seniors: 0, crewRequired: null,
-    kitchenNotes: null, serverNotes: null,
-    actualServings: null, consumedQuantity: null, notMade: false, cookedAt: null,
-    ekadashiAcknowledged: false, createdAt: "2026-08-15T10:00:00Z",
-  };
-
-  const MEAL = {
-    serviceId: null, planDate: "2026-08-16", mealKind: "Event", readyBy: "11:00:00",
-    adults: 200, children: 0, seniors: 0, plates: 200, crewRequired: null,
-    dayType: "REGULAR", occasionName: null,
-    eventName: "Mantri Serenity programme",
-    contactName: "Mrs Latha Rao", contactPhone: "+91 98862 30011",
-    deliveryAddress: ADDRESS, purpose: null, kitchenNotes: null,
-    cardNumber: null, cardIssuedAt: null,
+    purpose: null, kitchenNotes: null, serverNotes: null,
+    status: "PLANNED", cardNumber: null, cardIssuedAt: null,
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
-    dishes: [DELIVERY_DISH],
+    corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
+    dishes: [
+      { id: "p1", mealId: "meal-mantri", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 200,
+        targetYieldUnit: "KG", status: "PLANNED", actualServings: null, consumedQuantity: null,
+        notMade: false, originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
+        ekadashiAcknowledged: false, createdAt: "2026-08-15T10:00:00Z" },
+    ],
+    volunteerShift: null,
   };
 
-  function openEdit(dish: Record<string, unknown> = {}) {
-    render(<Harness existing={{ ...MEAL, dishes: [{ ...DELIVERY_DISH, ...dish }] } as never} />);
+  function openEdit(meal: Record<string, unknown> = {}) {
+    render(<Harness existing={{ ...MEAL, ...meal } as never} />);
   }
 
   beforeEach(() => {
-    createMealPlan.mockClear();
-    updateMealPlan.mockClear();
-    cancelMealPlan.mockClear();
+    saveMeal.mockClear();
+    updateMeal.mockClear();
     travelEstimateFor.mockClear();
     suggestedCrew.mockResolvedValue({ crewRequired: null });
     mealCrew.mockResolvedValue([]);
@@ -1113,10 +1146,10 @@ describe("correcting a delivery event that was picked from the map", () => {
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "250" } });
     fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
 
-    await vi.waitFor(() => expect(updateMealPlan).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(updateMeal).toHaveBeenCalledTimes(1));
     // Correcting the head count is not a reason to move the event, and this is the assertion that
     // says so. It read `{ deliveryLatitude: 0, deliveryLongitude: 0 }` for two days.
-    expect(updateMealPlan.mock.calls[0][1]).toMatchObject({
+    expect(updateMeal.mock.calls[0][1]).toMatchObject({
       adults: 250,
       deliveryAddress: ADDRESS,
       deliveryPlaceId: "place-1",
@@ -1144,8 +1177,8 @@ describe("correcting a delivery event that was picked from the map", () => {
     openEdit({ deliveryLatitude: null, deliveryLongitude: null });
     fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
 
-    await vi.waitFor(() => expect(updateMealPlan).toHaveBeenCalledTimes(1));
-    expect(updateMealPlan.mock.calls[0][1]).toMatchObject({
+    await vi.waitFor(() => expect(updateMeal).toHaveBeenCalledTimes(1));
+    expect(updateMeal.mock.calls[0][1]).toMatchObject({
       deliveryPlaceId: "place-1",
       deliveryLatitude: null,
       deliveryLongitude: null,
@@ -1159,10 +1192,10 @@ describe("correcting a delivery event that was picked from the map", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
 
-    await vi.waitFor(() => expect(updateMealPlan).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(updateMeal).toHaveBeenCalledTimes(1));
     // A coordinate left behind from the previous pick would route the van to the wrong gate, which
     // is worse than having no estimate at all.
-    expect(updateMealPlan.mock.calls[0][1]).toMatchObject({
+    expect(updateMeal.mock.calls[0][1]).toMatchObject({
       deliveryAddress: "Somewhere else entirely",
       deliveryPlaceId: null,
       deliveryLatitude: null,
@@ -1181,7 +1214,7 @@ describe("correcting a delivery event that was picked from the map", () => {
  */
 describe("planning a meal on a fasting day", () => {
   beforeEach(() => {
-    createMealPlan.mockClear();
+    saveMeal.mockClear();
     listRecipes.mockClear();
     listRecipes.mockResolvedValue(FASTING_ONLY);
     suggestedCrew.mockResolvedValue({ crewRequired: null });
@@ -1230,6 +1263,7 @@ describe("planning a meal on a fasting day", () => {
         isEkadashi
         ekadashiName="Pavitraropana Ekadasi"
         existing={{
+          mealId: "meal-lunch", mealKindId: "k1", volunteerShift: null, status: "PLANNED",
           planDate: "2026-08-16", mealKind: "Lunch", readyBy: "12:00:00", dayType: "REGULAR",
           occasionName: null, eventName: null, contactName: null, contactPhone: null,
           deliveryAddress: null, purpose: null,
@@ -1283,8 +1317,8 @@ describe("planning a meal on a fasting day", () => {
  */
 describe("a figure out of range names its box (T-165)", () => {
   beforeEach(() => {
-    createMealPlan.mockClear();
-    createMealPlan.mockResolvedValue({ id: "m1" });
+    saveMeal.mockClear();
+    saveMeal.mockResolvedValue({ id: "m1" });
     placesAvailable.mockResolvedValue({ available: false });
   });
 
@@ -1319,6 +1353,6 @@ describe("a figure out of range names its box (T-165)", () => {
     const said = await screen.findByText("Estimated travel time must be at least 1");
     expect(travel.getAttribute("aria-describedby")).toContain(said.id);
     expect(screen.getAllByText(/ must be at least /)).toHaveLength(1);
-    expect(createMealPlan).not.toHaveBeenCalled();
+    expect(saveMeal).not.toHaveBeenCalled();
   });
 });

@@ -1002,6 +1002,23 @@ public enum ErrorCode {
 			"This leave has already begun, so it can't be withdrawn.",
 			"Ask whoever approves leave to change it."),
 
+	// D-27 (T-197): a meal has at most one volunteer shift that is not cancelled, enforced by a
+	// partial unique index on shifts.meal_id. The planner saves a meal's shift as an upsert, so this
+	// is reached only when two people save the same meal's shift at once and the index refuses the
+	// second — which must not reach the reader as a failure at our end.
+	MEAL_ALREADY_HAS_SHIFT(400152, 409,
+			"This meal already has a volunteer shift.",
+			"Open the meal in the planner and change the shift it already has."),
+
+	// D-27 answers 3 and 4 (T-197): a shift for a meal is never moved to another day or meal, and is
+	// never turned into a shift not for a meal. Its date comes from its meal. Editing one from the
+	// Volunteer shifts page may change its title, times, place, volunteers requested, reminder and
+	// description; a request that changes its date or its meal is refused with this.
+	MEAL_SHIFT_KEEPS_ITS_MEAL(400153, 409,
+			"A shift for a meal keeps that meal's date and meal.",
+			"If it is no longer for this meal, cancel it and ask for volunteers from the right meal "
+					+ "in the planner."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

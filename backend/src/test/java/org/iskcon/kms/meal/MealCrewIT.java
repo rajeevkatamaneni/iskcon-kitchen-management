@@ -90,12 +90,14 @@ class MealCrewIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		TenantContext.clear();
-		admin.execute("DELETE FROM meal_services");
-		admin.execute("DELETE FROM meal_card_sequence");
-		admin.execute("DELETE FROM meal_plans");
-		admin.execute("DELETE FROM meal_kinds");
+		// Shifts before meals: shifts.meal_id is RESTRICT (V136).
 		admin.execute("DELETE FROM shift_signups");
 		admin.execute("DELETE FROM shifts");
+		admin.execute("DELETE FROM meal_card_sequence");
+		admin.execute("DELETE FROM meal_dishes");
+		admin.execute("DELETE FROM meals");
+		admin.execute("DELETE FROM meal_plan_days");
+		admin.execute("DELETE FROM meal_kinds");
 		admin.execute("DELETE FROM staff_leave");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
@@ -114,9 +116,9 @@ class MealCrewIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a person counts for a meal only if their working window covers its ready-by time")
 	void theCountHasAMealGrain() throws Exception {
-		plan("Breakfast", 200, null);
-		plan("Lunch", 400, null);
-		plan("Dinner", 200, null);
+		UUID breakfast = plan("Breakfast", 200, null);
+		UUID lunch = plan("Lunch", 400, null);
+		UUID dinner = plan("Dinner", 200, null);
 
 		// Both cooks are in all day by the day-grain reckoning, and that is exactly the figure that
 		// cannot answer the question.
@@ -127,6 +129,11 @@ class MealCrewIT extends AbstractIntegrationTest {
 		mvc.perform(authed(get("/api/v1/meal-crew").param("from", DATE).param("to", DATE)))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(3))
+				// Each readout names its meal by id (D-27), so the planner and Today can open the meal
+				// rather than find it again by its date and kind.
+				.andExpect(jsonPath("$[0].mealId").value(breakfast.toString()))
+				.andExpect(jsonPath("$[1].mealId").value(lunch.toString()))
+				.andExpect(jsonPath("$[2].mealId").value(dinner.toString()))
 				// 07:30 — the morning cook, and only her.
 				.andExpect(jsonPath("$[0].mealKind").value("Breakfast"))
 				.andExpect(jsonPath("$[0].staffIn").value(1))
@@ -184,15 +191,18 @@ class MealCrewIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a crew short of hands still saves — a meal is planned weeks before anybody is rostered")
+	@DisplayName("a crew short of hands is read as short and nothing more — a meal is planned weeks before anybody is rostered")
 	void beingShortNeverBlocksSaving() throws Exception {
-		// Twelve people for a lunch with one cook rostered. Accepted without comment: the roster for
-		// September is not written in August, and a planner refused here would stop using the field.
-		mvc.perform(createRequest("""
-				{"planDate":"%s","mealKind":"Lunch","recipeId":"%s","targetYield":400,"adults":400,
-				 "crewRequired":12}
-				""".formatted(DATE, khichdi)))
-				.andExpect(status().isCreated());
+		// Twelve people for a lunch with one cook rostered. The roster for September is not written in
+		// August, and a planner refused here would stop using the field. Since D-27 the meal is saved
+		// by the planner's own endpoint, whose refusals are MealPlanIT's to prove; what this class owns
+		// is that the crew readout reports the gap as a warning and refuses nothing on reading it.
+		plan("Lunch", 400, 12);
+		mvc.perform(authed(get("/api/v1/meal-crew").param("from", DATE).param("to", DATE)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].crewRequired").value(12))
+				.andExpect(jsonPath("$[0].rostered").value(1))
+				.andExpect(jsonPath("$[0].shortOfCrew").value(true));
 	}
 
 	@Test
@@ -231,7 +241,8 @@ class MealCrewIT extends AbstractIntegrationTest {
 		// Stored FESTIVAL rather than chosen: written straight onto the row, which is the state a
 		// festival day's meal is actually in.
 		planOn("2026-08-10", "Lunch", 40);
-		admin.update("UPDATE meal_plans SET day_type = 'FESTIVAL' WHERE plan_date = '2026-08-10'");
+		// Since D-27 the day type is a fact about the day, on meal_plan_days.
+		admin.update("UPDATE meal_plan_days SET day_type = 'FESTIVAL' WHERE plan_date = '2026-08-10'");
 
 		mvc.perform(authed(get("/api/v1/meal-crew/suggested").param("mealKind", "Lunch")))
 				.andExpect(jsonPath("$.crewRequired").value(6));
@@ -276,10 +287,7 @@ class MealCrewIT extends AbstractIntegrationTest {
 	void todayReadsPerMeal() throws Exception {
 		// Today is whatever today is, so the meals go on today's date rather than the fixed one.
 		String today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).toString();
-		mvc.perform(createRequest("""
-				{"planDate":"%s","mealKind":"Dinner","recipeId":"%s","targetYield":200,"adults":200,
-				 "crewRequired":5}
-				""".formatted(today, khichdi))).andExpect(status().isCreated());
+		meal(today, "Dinner", null, null, 5);
 
 		mvc.perform(authed(get("/api/v1/today")))
 				.andExpect(status().isOk())
@@ -294,23 +302,40 @@ class MealCrewIT extends AbstractIntegrationTest {
 
 	// ---- helpers ----------------------------------------------------------
 
-	private void plan(String kind, int servings, Integer crew) throws Exception {
-		planOn(DATE, kind, servings, crew);
+	private UUID plan(String kind, int servings, Integer crew) {
+		return meal(DATE, kind, null, null, crew);
 	}
 
-	private void planOn(String date, String kind, Integer crew) throws Exception {
-		planOn(date, kind, 200, crew);
+	private void planOn(String date, String kind, Integer crew) {
+		meal(date, kind, null, null, crew);
 	}
 
-	private void planOn(String date, String kind, int servings, Integer crew) throws Exception {
-		mvc.perform(createRequest("""
-				{"planDate":"%s","mealKind":"%s","recipeId":"%s","targetYield":%d,"adults":%d,"crewRequired":%s}
-				""".formatted(date, kind, khichdi, servings, servings, crew == null ? "null" : crew)))
-				.andExpect(status().isCreated());
-	}
-
-	private MockHttpServletRequestBuilder createRequest(String json) {
-		return authed(post("/api/v1/meal-plans")).contentType(MediaType.APPLICATION_JSON).content(json);
+	/**
+	 * A meal written straight into the D-27 tables: its day, the meal row with its kind by id, and
+	 * one dish. SQL rather than the planner's API so this class tests the crew count and nothing about
+	 * how a meal is saved, which is MealPlanIT's question. The ready-by is the kind's default unless
+	 * given, which is what the planner does too.
+	 */
+	private UUID meal(String date, String kind, String eventName, String readyBy, Integer crew) {
+		UUID day = admin.queryForObject("""
+				INSERT INTO meal_plan_days (tenant_id, plan_date, day_type) VALUES (?, ?::date, 'REGULAR')
+				ON CONFLICT (tenant_id, plan_date) DO UPDATE SET updated_at = now()
+				RETURNING id
+				""", UUID.class, tenant, date);
+		UUID kindId = admin.queryForObject(
+				"SELECT id FROM meal_kinds WHERE tenant_id = ? AND lower(name) = lower(?)", UUID.class, tenant, kind);
+		UUID meal = admin.queryForObject("""
+				INSERT INTO meals (tenant_id, meal_plan_day_id, meal_kind_id, event_name, ready_by, adults,
+						crew_required)
+				VALUES (?, ?, ?, ?, COALESCE(?::time, (SELECT default_ready_time FROM meal_kinds WHERE id = ?)),
+						200, ?)
+				RETURNING id
+				""", UUID.class, tenant, day, kindId, eventName, readyBy, kindId, crew);
+		admin.update("""
+				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by)
+				VALUES (?, ?, ?, 200, 'PLANNED', (SELECT id FROM users WHERE firebase_uid = 'uid-admin'))
+				""", tenant, meal, khichdi);
+		return meal;
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder builder) {

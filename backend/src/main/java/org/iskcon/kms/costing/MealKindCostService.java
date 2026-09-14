@@ -30,15 +30,15 @@ import org.springframework.transaction.annotation.Transactional;
  * the temple actually cooked in the period, so a temple that adds "Annadana" sees Annadana, and a
  * kind nobody cooked in the period does not appear as a row of dashes.
  *
- * <p><strong>What a "meal" is.</strong> A date and a kind, the pair every other screen means by it
- * (V64). One {@code meal_plans} row is one dish, so a lunch of three dishes is one meal costing the
- * sum of its three baskets — counted once in {@code meals}, and fed to one head count rather than
- * three.
+ * <p><strong>What a "meal" is.</strong> A row of its own, since D-27. One dish row is one dish, so a
+ * lunch of three dishes is one meal costing the sum of its three baskets — counted once in
+ * {@code meals}, and fed to one head count rather than three. Before D-27 a meal here was the pair
+ * (date, kind), which counted two events on one Saturday as one meal.
  *
  * <p><strong>The servings denominator.</strong> A head count exists only where the planner recorded
- * adults, children or seniors; it is derived the way {@code ServedMealService} derives it, largest
- * dish row wins, a child at six tenths of a portion and a senior at eight. Where no dish of a meal
- * carries any of the three, that meal <em>has no head count at all</em>, and this report will not
+ * adults, children or seniors; it is derived the way {@code ServedMealService} derives it, a child at
+ * six tenths of a portion and a senior at eight, from the meal's own row. Where the meal carries none
+ * of the three, that meal <em>has no head count at all</em>, and this report will not
  * invent one. In particular it does not fall back to {@code target_yield}: since V69 that column
  * holds an amount of food — litres of rasam, kilos of podi, idlis — and dividing a cost by litres
  * would put a number under a column headed "cost per serving" that is not one.
@@ -79,18 +79,14 @@ public class MealKindCostService {
 					Map.of("from", from, "to", to));
 		}
 
-		// Dishes into meals: the pair (date, kind) is the meal, and its basket is the sum of its
-		// dishes'. The head count is a whole-meal fact written onto each dish row, so it is read back
-		// as the largest of them — a dish added later against a changed count must not shrink the meal.
+		// Dishes into meals: the meal's own row is the meal (D-27), and its basket is the sum of its
+		// dishes'. The head count lives on that row once, so every dish of a meal reports the same one.
 		Map<Meal, MealTotals> meals = new LinkedHashMap<>();
 		for (DishRow dish : dishesIn(from, to)) {
-			MealTotals totals = meals.computeIfAbsent(new Meal(dish.planDate(), dish.mealKind()),
+			MealTotals totals = meals.computeIfAbsent(new Meal(dish.mealId(), dish.mealKind()),
 					k -> new MealTotals());
 			totals.basket.addAll(costing.scaledBasket(dish.recipeId(), dish.targetYield()));
-			Integer headCount = headCountOf(dish);
-			if (headCount != null && (totals.servings == null || headCount > totals.servings)) {
-				totals.servings = headCount;
-			}
+			totals.servings = headCountOf(dish);
 		}
 
 		// Meals into kinds.
@@ -163,15 +159,20 @@ public class MealKindCostService {
 	 * different report with a different name.
 	 */
 	private List<DishRow> dishesIn(LocalDate from, LocalDate to) {
+		// The kind is grouped by its name as the temple spells it today, read through the meal's kind
+		// id, so a kind renamed mid-period is one row under its new name rather than two.
 		return jdbc.query("""
-				SELECT mp.plan_date, mp.meal_kind, mp.recipe_id, mp.target_yield,
-					   mp.adults, mp.children, mp.seniors
-				FROM meal_plans mp
-				JOIN recipes r ON r.id = mp.recipe_id
-				WHERE mp.status <> 'CANCELLED' AND mp.plan_date BETWEEN ? AND ?
-				ORDER BY mp.plan_date, mp.ready_by, mp.created_at
+				SELECT d.meal_id, k.name AS meal_kind, d.recipe_id, d.target_yield,
+					   m.adults, m.children, m.seniors
+				FROM meal_dishes d
+				JOIN meals m ON m.id = d.meal_id
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN meal_kinds k ON k.id = m.meal_kind_id
+				JOIN recipes r ON r.id = d.recipe_id
+				WHERE d.status <> 'CANCELLED' AND pd.plan_date BETWEEN ? AND ?
+				ORDER BY pd.plan_date, m.ready_by, d.created_at, d.id
 				""", (rs, n) -> new DishRow(
-				rs.getObject("plan_date", LocalDate.class),
+				rs.getObject("meal_id", UUID.class),
 				rs.getString("meal_kind"),
 				rs.getObject("recipe_id", UUID.class),
 				rs.getBigDecimal("target_yield"),
@@ -180,12 +181,12 @@ public class MealKindCostService {
 				(Integer) rs.getObject("seniors")), from, to);
 	}
 
-	/** The pair every screen means by "the meal". */
-	private record Meal(LocalDate planDate, String mealKind) {
+	/** One meal, by its own id (D-27), with the name of its kind to group it under. */
+	private record Meal(UUID mealId, String mealKind) {
 	}
 
 	private record DishRow(
-			LocalDate planDate, String mealKind, UUID recipeId, BigDecimal targetYield,
+			UUID mealId, String mealKind, UUID recipeId, BigDecimal targetYield,
 			Integer adults, Integer children, Integer seniors) {
 	}
 

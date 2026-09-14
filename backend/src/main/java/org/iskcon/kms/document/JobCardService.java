@@ -26,7 +26,7 @@ import org.iskcon.kms.geo.StaticMapProvider;
 import org.iskcon.kms.meal.EkadashiPolicy;
 import org.iskcon.kms.meal.Handover;
 import org.iskcon.kms.meal.MealPlanService;
-import org.iskcon.kms.meal.MealPlanView;
+import org.iskcon.kms.meal.MealDishView;
 import org.iskcon.kms.meal.MealStatus;
 import org.iskcon.kms.meal.ServedMeal;
 import org.iskcon.kms.meal.ServedMealService;
@@ -155,8 +155,8 @@ public class JobCardService {
 	 * renderer.
 	 */
 	@Transactional
-	public String render(UUID mealServiceId, String language) {
-		return JobCardTemplate.render(build(mealServiceId, language, true));
+	public String render(UUID mealId, String language) {
+		return JobCardTemplate.render(build(mealId, language, true));
 	}
 
 	/** The card and the running footer its renderer has to draw, for the PDF path. */
@@ -172,8 +172,8 @@ public class JobCardService {
 	 * the PDF cannot drift apart.
 	 */
 	@Transactional
-	public RenderedCard renderForPdf(UUID mealServiceId, String language) {
-		JobCardTemplate.CardModel model = build(mealServiceId, language, false);
+	public RenderedCard renderForPdf(UUID mealId, String language) {
+		JobCardTemplate.CardModel model = build(mealId, language, false);
 		return new RenderedCard(
 				JobCardTemplate.render(model),
 				new PdfRenderer.Footer(
@@ -220,23 +220,11 @@ public class JobCardService {
 	 * <p>The default is the temple's own language, which is now always on the list.
 	 */
 	@Transactional(readOnly = true)
-	public AppendixLanguages appendixLanguages(UUID mealServiceId) {
-		return appendixLanguages(servedMealService.requireByServiceId(mealServiceId));
-	}
-
-	/**
-	 * The same list, for a meal named the way a screen names it.
-	 *
-	 * <p>Deliberately not routed through {@code serviceFor}: that creates the meal's own row on
-	 * demand, and asking what languages are on offer is a read. The planner asks this for every meal
-	 * of the day as it loads, and a page view must not leave rows behind it.
-	 *
-	 * <p>{@code eventName} names which event, where the kind is one (V89). Null for the three main
-	 * meals, which are still reached by a date and a kind alone.
-	 */
-	@Transactional(readOnly = true)
-	public AppendixLanguages appendixLanguages(LocalDate date, String mealKind, String eventName) {
-		return appendixLanguages(servedMealService.require(date, mealKind, eventName));
+	public AppendixLanguages appendixLanguages(UUID mealId) {
+		// Through require, so a meal that is not this temple's is refused rather than offered a list.
+		// The meal's own id is what the planner holds (D-27); there used to be a second overload taking
+		// a date, a kind's name and an event name, which is the identification Rajeev ruled out.
+		return appendixLanguages(servedMealService.require(mealId));
 	}
 
 	private AppendixLanguages appendixLanguages(ServedMeal meal) {
@@ -256,19 +244,20 @@ public class JobCardService {
 	 * of every temple is called Event, so the word carries no information a reader does not already
 	 * have from the name.
 	 */
-	private static String kindLabelFor(ServedMeal meal, List<MealPlanView> live) {
-		boolean outside = live.stream().anyMatch(MealPlanView::isOutside);
-		return outside ? "Outside " + meal.mealKind() : meal.mealKind();
+	private static String kindLabelFor(ServedMeal meal) {
+		// Going outside is a fact about the meal now (D-27), held once on its row, rather than something
+		// read off whichever dish row happened to carry it.
+		return meal.isOutside() ? "Outside " + meal.mealKind() : meal.mealKind();
 	}
 
 	// ---------------------------------------------------------------------
 
-	JobCardTemplate.CardModel build(UUID mealServiceId, String language, boolean footerInDocument) {
-		ServedMeal meal = servedMealService.requireByServiceId(mealServiceId);
+	JobCardTemplate.CardModel build(UUID mealId, String language, boolean footerInDocument) {
+		ServedMeal meal = servedMealService.require(mealId);
 
 		// A preparation that was called off is not work; printing it would put a pot on the card that
 		// nobody is meant to fill, and a ruled box beside it that nobody is meant to write in.
-		List<MealPlanView> live = meal.dishes().stream()
+		List<MealDishView> live = meal.dishes().stream()
 				.filter(dish -> dish.status() != MealStatus.CANCELLED).toList();
 
 		boolean wantsAppendix = !WORKSHEET_ONLY.equalsIgnoreCase(trimmed(language));
@@ -283,7 +272,7 @@ public class JobCardService {
 						JobCardTemplate.Labels.englishList(), appendixLanguage)
 				: JobCardTemplate.Labels.englishList();
 
-		List<UUID> recipeIds = live.stream().map(MealPlanView::recipeId).distinct().toList();
+		List<UUID> recipeIds = live.stream().map(MealDishView::recipeId).distinct().toList();
 		// Produced now if it does not exist yet, not looked up among what was translated in advance.
 		Map<UUID, TranslatedRecipe> translated = translating
 				? translateAll(recipeIds, appendixLanguage) : Map.of();
@@ -292,7 +281,7 @@ public class JobCardService {
 
 		List<JobCardTemplate.Preparation> preparations = new ArrayList<>();
 		List<JobCardTemplate.RecipePage> recipes = new ArrayList<>();
-		for (MealPlanView dish : live) {
+		for (MealDishView dish : live) {
 			TranslatedRecipe local = translated.get(dish.recipeId());
 			preparations.add(new JobCardTemplate.Preparation(
 					dish.recipeName(), local == null ? null : local.name(), planned(dish)));
@@ -302,10 +291,10 @@ public class JobCardService {
 		}
 
 		String cardNumber = meal.cardNumber() == null
-				? servedMealService.issueCardNumber(meal.planDate(), meal.mealKind(), meal.eventName())
+				? servedMealService.issueCardNumber(meal.mealId())
 				: meal.cardNumber();
 
-		JobCardTemplate.Delivery delivery = delivery(meal, live);
+		JobCardTemplate.Delivery delivery = delivery(meal);
 
 		JobCardTemplate.CardModel model = new JobCardTemplate.CardModel(
 				templeName(),
@@ -313,7 +302,7 @@ public class JobCardService {
 				// Filled in below, once there is a model to fingerprint. Zero would print on a card
 				// that failed between here and there, and a v0 sheet is a sheet nobody can trust.
 				0,
-				kindLabelFor(meal, live),
+				kindLabelFor(meal),
 				// The event's own name, beside its kind rather than instead of it. Rajeev asked for
 				// "Outside Event : Bhagavad Gita Parayanam" on 2026-09-05 — the kind says what shape
 				// of thing this is, the name says which one, and a folder of Saturdays needs both.
@@ -359,14 +348,14 @@ public class JobCardService {
 	 */
 	private JobCardTemplate.CardModel withVersion(ServedMeal meal, JobCardTemplate.CardModel model) {
 		String fingerprint = fingerprint(model);
-		UUID serviceId = meal.serviceId();
-		if (serviceId == null) {
-			// No row to remember against — the card is being previewed for a meal that has never been
-			// carded. It prints as v1 and nothing is stored.
-			return version(model, 1);
-		}
+		// Every meal has a row of its own (D-27), so there is always somewhere to remember the version
+		// against. The case this used to handle — a meal previewed before anything had created its
+		// meal_services row, printed as v1 and remembered nowhere — went with that table. Locked, so two
+		// prints of a changed meal at the same moment move the version once rather than both to the
+		// same number.
+		UUID mealId = meal.mealId();
 		Map<String, Object> row = jdbc.queryForMap(
-				"SELECT card_version, card_fingerprint FROM meal_services WHERE id = ?", serviceId);
+				"SELECT card_version, card_fingerprint FROM meals WHERE id = ? FOR UPDATE", mealId);
 		int current = row.get("card_version") == null ? 0 : (Integer) row.get("card_version");
 		String stored = (String) row.get("card_fingerprint");
 
@@ -378,9 +367,9 @@ public class JobCardService {
 		}
 		int next = current + 1;
 		jdbc.update("""
-				UPDATE meal_services SET card_version = ?, card_fingerprint = ?, updated_at = now()
+				UPDATE meals SET card_version = ?, card_fingerprint = ?, updated_at = now()
 				WHERE id = ?
-				""", next, fingerprint, serviceId);
+				""", next, fingerprint, mealId);
 		return version(model, next);
 	}
 
@@ -455,26 +444,26 @@ public class JobCardService {
 	/**
 	 * Everything on the sheet the driver takes, or null when nothing is leaving by van.
 	 *
-	 * <p>The travel figure printed here is the temple's own — {@code meal_plans.travel_minutes},
+	 * <p>The travel figure printed here is the temple's own — {@code meals.travel_minutes},
 	 * prefilled from Google and editable by anybody who knows the road. Where nobody has touched it,
 	 * printing the card is a good moment to refresh it, because a card printed on Friday for a
 	 * Saturday delivery should carry Saturday's traffic. Where somebody has, their figure stands:
 	 * a recalculation that silently overruled the one person who knew better, on the sheet the driver
 	 * is about to act on, is the worst possible moment to be clever.
 	 */
-	private JobCardTemplate.Delivery delivery(ServedMeal meal, List<MealPlanView> live) {
-		MealPlanView going = live.stream()
-				.filter(dish -> dish.isOutside() && dish.handover() == Handover.DELIVERY)
-				.findFirst().orElse(null);
-		if (going == null) {
+	private JobCardTemplate.Delivery delivery(ServedMeal meal) {
+		// Whether the food leaves by van, and every fact about the drive, are the meal's own (D-27).
+		// Before D-27 they were read off the first dish row that carried them, which is a rule nobody
+		// should have to write a second time.
+		if (!meal.isOutside() || meal.handover() != Handover.DELIVERY) {
 			return null;
 		}
 
-		Integer minutes = going.travelMinutes();
-		boolean manual = "MANUAL".equals(going.travelMinutesSource());
+		Integer minutes = meal.travelMinutes();
+		boolean manual = "MANUAL".equals(meal.travelMinutesSource());
 		String note = null;
 		if (!manual) {
-			Integer refreshed = mealPlanService.refreshTravelEstimate(going.id());
+			Integer refreshed = mealPlanService.refreshTravelEstimate(meal.mealId());
 			if (refreshed != null) {
 				minutes = refreshed;
 			}
@@ -485,28 +474,28 @@ public class JobCardService {
 			note = "Set by hand at the temple, not by the map service.";
 		}
 
-		LocalTime eatAt = going.guestsEatAt();
+		LocalTime eatAt = meal.guestsEatAt();
 		String leaveBy = eatAt != null && minutes != null
 				? CLOCK.format(eatAt.minusMinutes(minutes)) : null;
 
 		return new JobCardTemplate.Delivery(
 				meal.contactName(),
 				meal.contactPhone(),
-				going.deliveryAddress(),
-				going.deliverySubLocation(),
+				meal.deliveryAddress(),
+				meal.deliverySubLocation(),
 				minutes == null ? null : minutes + (minutes == 1 ? " minute" : " minutes"),
 				note,
 				leaveBy,
 				eatAt == null ? null : CLOCK.format(eatAt),
-				mapFor(going));
+				mapFor(meal.mealId()));
 	}
 
 	/** The map, already base64 — the renderer has no network, so a URL would be a broken box. */
-	private String mapFor(MealPlanView going) {
+	private String mapFor(UUID mealId) {
 		if (!staticMapProvider.configured()) {
 			return null;
 		}
-		GeocodingProvider.Coordinates at = mealPlanService.deliveryCoordinatesFor(going.id());
+		GeocodingProvider.Coordinates at = mealPlanService.deliveryCoordinatesFor(mealId);
 		if (at == null) {
 			return null;
 		}
@@ -521,7 +510,7 @@ public class JobCardService {
 	 * chosen language where a translation of the current version exists.
 	 */
 	private JobCardTemplate.RecipePage recipePage(
-			MealPlanView dish, CalendarDayView day, String language, TranslatedRecipe translated,
+			MealDishView dish, CalendarDayView day, String language, TranslatedRecipe translated,
 			boolean translating) {
 		ScaledRecipeView scaled = recipeService.scale(dish.recipeId(), dish.targetYield());
 		RecipeView recipe = recipeService.get(dish.recipeId());
@@ -574,7 +563,7 @@ public class JobCardService {
 	 * overridden. D-18 deleted that block on 2026-09-08, so no recipe can carry an override and the
 	 * line could never have printed again.
 	 */
-	private List<String> warnings(CalendarDayView day, List<MealPlanView> live) {
+	private List<String> warnings(CalendarDayView day, List<MealDishView> live) {
 		List<String> warnings = new ArrayList<>();
 		if (day != null && day.isEkadashi()) {
 			String name = day.ekadashiName() == null || day.ekadashiName().isBlank()
@@ -758,7 +747,7 @@ public class JobCardService {
 	 * a silent substitution. Only the unasked-for default is narrowed to what the meal can actually
 	 * deliver.
 	 */
-	private String resolveAppendixLanguage(String requested, List<MealPlanView> live) {
+	private String resolveAppendixLanguage(String requested, List<MealDishView> live) {
 		String asked = trimmed(requested);
 		return asked != null ? asked : templeLanguage();
 	}
@@ -790,7 +779,7 @@ public class JobCardService {
 	private static List<UUID> recipeIds(ServedMeal meal) {
 		return meal.dishes().stream()
 				.filter(dish -> dish.status() != MealStatus.CANCELLED)
-				.map(MealPlanView::recipeId)
+				.map(MealDishView::recipeId)
 				.distinct()
 				.toList();
 	}
@@ -876,7 +865,7 @@ public class JobCardService {
 	 * <p>Falls back to the bare number where the unit is missing or unrecognised, because a figure
 	 * with no unit still beats an empty cell in a pot's worth of instructions.
 	 */
-	private static String planned(MealPlanView dish) {
+	private static String planned(MealDishView dish) {
 		String rendered = Quantities.cooks(dish.targetYield(), dish.targetYieldUnit());
 		return rendered == null || rendered.isBlank() || "—".equals(rendered)
 				? plain(dish.targetYield()) : rendered;

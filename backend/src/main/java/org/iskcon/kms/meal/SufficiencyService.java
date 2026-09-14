@@ -136,8 +136,8 @@ public class SufficiencyService {
 				status = shortfalls.isEmpty() ? SufficiencyStatus.SUFFICIENT : SufficiencyStatus.SHORT;
 			}
 			LocalDate orderBy = orderByFor(meal, shortfalls, recordedLeadTimes);
-			out.add(new MealSufficiency(meal.id(), meal.planDate(), meal.mealKind(), meal.readyBy(),
-					meal.recipeName(), status, shortfalls, orderBy,
+			out.add(new MealSufficiency(meal.id(), meal.mealId(), meal.planDate(), meal.mealKind(),
+					meal.eventName(), meal.readyBy(), meal.recipeName(), status, shortfalls, orderBy,
 					orderBy == null ? null : OrderUrgency.on(today, orderBy)));
 		}
 		return out;
@@ -276,7 +276,7 @@ public class SufficiencyService {
 							ref.unit().name()));
 				}
 			}
-			out.put(claim.mealPlanId(), shortfalls);
+			out.put(claim.dishId(), shortfalls);
 		}
 		return out;
 	}
@@ -321,24 +321,37 @@ public class SufficiencyService {
 	 *
 	 * <p>{@code status = 'PLANNED'} here is the same exclusion the walk makes: a recorded meal's
 	 * stock has already moved through the ledger and the planner badges it from its own status.
+	 *
+	 * <p>One row per dish, as the badge is, carrying the id of the meal it belongs to (D-27). The day,
+	 * the ready-by and the kind's current name are read through the meal row, and the order is the
+	 * walk's own — {@code CommittedStockService.plannedDishes} sorts the same way — so the report reads
+	 * top to bottom in the order the store is drawn down.
 	 */
 	private List<MealRow> loadPlannedMeals(LocalDate from, LocalDate to) {
 		return jdbc.query("""
-				SELECT mp.id, mp.plan_date, mp.meal_kind, mp.ready_by, r.name AS recipe_name
-				FROM meal_plans mp
-				JOIN recipes r ON r.id = mp.recipe_id
-				WHERE mp.status = 'PLANNED' AND mp.plan_date BETWEEN ? AND ?
-				ORDER BY mp.plan_date, mp.ready_by, mp.created_at
+				SELECT d.id, d.meal_id, pd.plan_date, k.name AS meal_kind, m.event_name, m.ready_by,
+					   r.name AS recipe_name
+				FROM meal_dishes d
+				JOIN meals m ON m.id = d.meal_id
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN meal_kinds k ON k.id = m.meal_kind_id
+				JOIN recipes r ON r.id = d.recipe_id
+				WHERE d.status = 'PLANNED' AND pd.plan_date BETWEEN ? AND ?
+				ORDER BY pd.plan_date, m.ready_by, d.created_at, d.id
 				""", (rs, n) -> new MealRow(
 				rs.getObject("id", UUID.class),
+				rs.getObject("meal_id", UUID.class),
 				rs.getObject("plan_date", LocalDate.class),
 				rs.getString("meal_kind"),
+				rs.getString("event_name"),
 				rs.getObject("ready_by", java.time.LocalTime.class),
 				rs.getString("recipe_name")), from, to);
 	}
 
+	/** One planned dish as the report needs it; {@code id} is the dish's, {@code mealId} its meal's. */
 	private record MealRow(
-			UUID id, LocalDate planDate, String mealKind, java.time.LocalTime readyBy, String recipeName) {
+			UUID id, UUID mealId, LocalDate planDate, String mealKind, String eventName,
+			java.time.LocalTime readyBy, String recipeName) {
 	}
 
 	private record IngRef(String name, Unit unit) {

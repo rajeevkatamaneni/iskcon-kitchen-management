@@ -310,10 +310,12 @@ function ItemView() {
                       </thead>
                       <tbody>
                         {committed.map((c: CommittedMeal) => (
-                          <tr key={c.mealPlanId} className={TR}>
+                          <tr key={c.dishId} className={TR}>
                             <td className={TD_DATE}>
+                              {/* To the meal itself, by its id (D-27), rather than to its day: a
+                                  day can hold two events, and the meal is what claims the stock. */}
                               <Link
-                                href={`/planner/${c.planDate}`}
+                                href={`/planner/meal/${c.mealId}`}
                                 className="text-accent-text hover:underline"
                               >
                                 {dateWithYear(c.planDate)}

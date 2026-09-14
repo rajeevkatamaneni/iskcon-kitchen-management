@@ -828,7 +828,10 @@ export interface StockItemView {
 
 /** One meal's claim on one ingredient's stock (T-086), for the item detail screen's list. */
 export interface CommittedMeal {
-  mealPlanId: string;
+  /** The preparation that claims the stock — the id the stock ledger references (D-27). */
+  dishId: string;
+  /** The meal it belongs to, which is what the planner is addressed by (D-27). */
+  mealId: string;
   planDate: string;
   mealKind: string;
   eventName: string | null;
@@ -1235,93 +1238,24 @@ export interface DayContext {
   isEkadashi: boolean;
 }
 
-export interface MealPlanView {
+/**
+ * One preparation of a meal (D-27).
+ *
+ * <p>This was `MealPlanView`, and it carried every whole-meal fact — the head count, the ready-by,
+ * the event and its delivery — on every dish row, because a meal had no row of its own and "Lunch on
+ * 14 September" existed only as a grouping of its dishes. Since D-27 a meal is a row with its own id,
+ * so those facts live once on {@link MealView} and this carries only what belongs to one preparation.
+ */
+export interface MealDishView {
+  /** The dish's own id. The stock ledger and its corrections point at it, so it never changes. */
   id: string;
-  planDate: string;
-  mealKind: string;
-  /** "HH:mm:ss" — the local time the food must be ready. Every meal has one. */
-  readyBy: string;
+  mealId: string;
   recipeId: string;
   recipeName: string;
   targetYield: number;
-  dayType: DayType;
-  occasionName: string | null;
+  /** What `targetYield` is measured in — the recipe's own yield unit, carried by the server. */
+  targetYieldUnit: string;
   status: MealStatus;
-  /**
-   * What this event is called (E4-S15) — "Children's Bhagavad-gita Reading". It is what the day
-   * shows for the meal, so the Saturday reading appears under its own name rather than as *Event*
-   * with no further identity. Null on Breakfast, Lunch, Dinner and everything else that is not one.
-   */
-  eventName: string | null;
-  /** This food leaves the temple. What *Upcoming outside commitments* is keyed off. */
-  isOutside: boolean;
-  /**
-   * Pickup or delivery, on an event going outside. Null on an in-house one — and null on the
-   * outside plans V88 carried across, which predate the question being asked.
-   */
-  handover: Handover | null;
-  contactName: string | null;
-  contactPhone: string | null;
-  deliveryAddress: string | null;
-  /**
-   * Where exactly, once the driver is there — "Clubhouse", "Block C, second gate" (V93).
-   *
-   * <p>Deliberately not part of the address and never geocoded: a sub-premise is the part a map
-   * service is least likely to know and most likely to fail the whole lookup over. Being at the
-   * right gate is what matters, and the last fifty metres is a phone call.
-   */
-  deliverySubLocation: string | null;
-  /** Google's stable id for the picked address. Null where the address was typed, not chosen. */
-  deliveryPlaceId: string | null;
-  /**
-   * Where the food is actually going, as the server stored it (T-044).
-   *
-   * <p>**The absence of this pair was a live defect, not an omission.** Because the view never
-   * returned the coordinates, `MealComposer` had nothing to reopen an edit on and rebuilt the picked
-   * place as `{ placeId, latitude: 0, longitude: 0 }`. The server's `isPlaced()` is
-   * `latitude != null && longitude != null` — it never consults `placeId`, and `0` is not null — so
-   * every edit of a placed delivery event re-pinned it to 0°N 0°E and the travel estimate became the
-   * drive to the Gulf of Guinea.
-   *
-   * <p>Null is meaningful and is not the same as zero: it means the address was typed rather than
-   * picked, and `api.ts`'s own reader falls back to `deliveryPlaceId` when it sees it. That is why
-   * these are required-and-nullable rather than optional — `undefined` would collapse back into the
-   * ambiguity the defect lived in.
-   */
-  deliveryLatitude: number | null;
-  deliveryLongitude: number | null;
-  /**
-   * "HH:mm:ss" — when the guests sit down to eat, on a delivery. Not the ready-by: the travel
-   * estimate (E4-S16) works backwards from this to say when to leave the temple.
-   */
-  guestsEatAt: string | null;
-  /**
-   * How long the temple allows for this drive, in minutes (V93).
-   *
-   * <p>Prefilled from Google once there is an address and a serving time, and editable by anybody
-   * who knows the road better than a traffic model does. This is the figure the job card prints —
-   * the temple's own, never a live one.
-   */
-  travelMinutes: number | null;
-  /**
-   * `ESTIMATED` (Google's, untouched — refreshed when the card is printed) or `MANUAL` (a person
-   * set it, and printing leaves it alone). Null where there is no figure.
-   */
-  travelMinutesSource: string | null;
-  /** What an outside event's food is for (B6). A label for the kitchen; nothing computes on it. */
-  purpose: string | null;
-  adults: number | null;
-  children: number | null;
-  seniors: number | null;
-  /**
-   * How many people it takes to execute this meal (item 24), any mix of staff and volunteers. A
-   * whole-meal fact carried on each dish row, like the head count. Null where nobody has said, and
-   * null is the honest answer — a made-up number would not be.
-   */
-  crewRequired: number | null;
-  kitchenNotes: string | null;
-  /** The mirror of `kitchenNotes` for the people handing food out — the serving sheet carries it. */
-  serverNotes: string | null;
   /**
    * What this dish actually went out at, from the returned job card (B5). Null until the meal is
    * recorded, and never a replacement for targetYield — the gap between the two is what tells a
@@ -1334,13 +1268,8 @@ export interface MealPlanView {
   notMade: boolean;
   /**
    * What this dish was FIRST recorded at, before a correction replaced it (T-007). Null on every
-   * dish of a meal nobody has corrected.
-   *
-   * <p>It exists because correcting overwrites `actualServings` in place — the original recording is
-   * never rewritten as a *record*, but the figure a reader sees is the current one, so without this
-   * the screen could not say "640, corrected from 400" without reading it back out of the stock
-   * ledger. Required-and-nullable rather than optional, so a caller building one of these has to
-   * say which case it is in.
+   * dish of a meal nobody has corrected. Required-and-nullable rather than optional, so a caller
+   * building one of these has to say which case it is in.
    */
   originalActualServings: number | null;
   /** The consumed figure this dish was first recorded at. Null where nothing was corrected. */
@@ -1351,17 +1280,26 @@ export interface MealPlanView {
 }
 
 /**
- * One meal — a date and a kind — assembled from the dish rows that share them (B5).
+ * One meal, by its own id (D-27): a day, a kind — or an event's name — and the dishes under it.
  *
- * <p>There is no meal-line table: one meal plan row is one dish. This is the grouping the whole
- * product means whenever it says "the meal": one job card per meal kind, recording per meal rather
- * than per dish, servings per meal kind.
+ * <p>Rajeev, 2026-09-13: *"identifying things by text is a terrible idea and one that WILL fail
+ * eventually."* Until D-27 the planner addressed a meal as `/planner/[date]/[kind]`, recorded it by
+ * date + kind + event name, and printed its job card the same way, so every caller had to repeat the
+ * three parts and agree about them. Everything now goes by `mealId`, which is also what a volunteer
+ * shift points at.
+ *
+ * <p>Every field is required, and nullable where the server can say nothing. The server always sends
+ * all of them, and the lesson this file keeps relearning is that an optional field is a field a
+ * builder can forget and still compile (T-043, T-044).
  */
-export interface MealServiceView {
-  /** The meal's own row, or null until a card has been printed or the meal recorded. */
-  serviceId: string | null;
+export interface MealView {
+  /** The meal's own id — the planner's address, the job card's key and a shift's link. */
+  mealId: string;
+  mealKindId: string;
   planDate: string;
+  /** The kind's name today, read through its id, so a renamed kind reads with its new name. */
   mealKind: string;
+  /** "HH:mm:ss" — the local time the food must be ready. Every meal has one. */
   readyBy: string;
 
   adults: number | null;
@@ -1376,13 +1314,38 @@ export interface MealServiceView {
   occasionName: string | null;
   /** What this event is called (E4-S15), where the meal is one. Null for everything else. */
   eventName: string | null;
+  /** This food leaves the temple. What *Upcoming outside commitments* is keyed off. */
+  isOutside: boolean;
+  /** Pickup or delivery, on an event going outside. Null on an in-house one. */
+  handover: Handover | null;
   contactName: string | null;
   contactPhone: string | null;
   deliveryAddress: string | null;
+  /** Where exactly, once the driver is there — "Clubhouse". Never geocoded (V93). */
+  deliverySubLocation: string | null;
+  /** Google's stable id for the picked address. Null where the address was typed, not chosen. */
+  deliveryPlaceId: string | null;
+  /**
+   * Where the food is actually going, as the server stored it (T-044). Null is not zero: it means the
+   * address was typed rather than picked. Send it back exactly as received — a zero is read as a
+   * place somebody chose, which is how an edit once re-pinned a delivery to the Gulf of Guinea.
+   */
+  deliveryLatitude: number | null;
+  deliveryLongitude: number | null;
+  /** "HH:mm:ss" — when the guests sit down, on a delivery. What the travel estimate works back from. */
+  guestsEatAt: string | null;
+  /** How long the temple allows for this drive, in minutes (V93). The figure the job card prints. */
+  travelMinutes: number | null;
+  /** `ESTIMATED` (Google's, refreshed when the card prints) or `MANUAL`. Null where there is none. */
+  travelMinutesSource: string | null;
+  /** What an outside event's food is for (B6). A label for the kitchen; nothing computes on it. */
   purpose: string | null;
   kitchenNotes: string | null;
   /** The mirror of `kitchenNotes` for the people handing food out — the serving sheet carries it. */
   serverNotes: string | null;
+
+  /** COOKED if any dish was cooked, PLANNED if any is still planned, and CANCELLED otherwise. */
+  status: MealStatus;
 
   cardNumber: string | null;
   cardIssuedAt: string | null;
@@ -1393,20 +1356,22 @@ export interface MealServiceView {
   recordingNote: string | null;
 
   /**
-   * Whether a correction has been recorded against this meal (T-007), and by whom.
-   *
-   * <p>A correction is a compensating entry, not a reopening: the original recording stays exactly
-   * where it was and stays readable, and these four fields are what let the screen say *"640 plates,
-   * corrected from 400 by Anand on 8 September"* rather than silently showing a different number
-   * than it showed yesterday. `corrected` can only go true once — a second correction is
-   * `KMS-400137`.
+   * Whether a correction has been recorded against this meal (T-007), and by whom. A correction is a
+   * compensating entry, not a reopening, and `corrected` can only go true once (`KMS-400137`).
    */
   corrected: boolean;
   correctedAt: string | null;
   correctedByName: string | null;
   correctionNote: string | null;
 
-  dishes: MealPlanView[];
+  /** Every dish, cancelled ones included, in the order they were added. */
+  dishes: MealDishView[];
+
+  /**
+   * The meal's one live volunteer shift (D-27 answer 2), or null where it has none. Filled on the
+   * list and on the single meal; the answer to a recording or a correction carries null.
+   */
+  volunteerShift: ShiftView | null;
 }
 
 /**
@@ -1433,43 +1398,30 @@ export interface CorrectMealInput {
    * am saying nothing was consumed" have to be distinguishable, and an omitted key cannot do it.
    */
   dishes: {
-    mealPlanId: string;
+    dishId: string;
     actualServings: number | null;
     consumedQuantity: number | null;
     notMade: boolean;
   }[];
 }
 
-/** What actually went out at one meal, typed in from the card that came back. */
+/**
+ * What actually went out at one meal, typed in from the card that came back.
+ *
+ * <p>No date, kind or event name any more (D-27): the meal is the id in the path. The three used to
+ * be the meal's identity, and the one time a caller left the event name out, no event meal could be
+ * recorded from any screen and nothing said so (T-043). An id cannot be half-sent.
+ */
 export interface RecordMealInput {
-  planDate: string;
-  mealKind: string;
-  /**
-   * Which event this recording is for, and `null` for an everyday meal.
-   *
-   * <p><strong>Required and nullable on purpose, and the reason is a live defect (T-043).</strong>
-   * The server has always resolved the meal with `require(planDate, mealKind, eventName)` —
-   * "every event of every temple is called Event", so the date and the kind alone do not say which
-   * preparation is being written down. This type omitted the field entirely, so the only caller
-   * sent four fields, the server found nothing, and **no event meal could be recorded from any
-   * screen** — silently, because ordinary Breakfast/Lunch/Dinner recording has no event name and
-   * worked fine. TypeScript could not have caught it: the type agreed with the caller and both
-   * disagreed with the server.
-   *
-   * <p>So it is not optional. Optional would let the same omission happen again and compile.
-   * Required-and-nullable makes every caller say which case it is in, and an everyday meal says
-   * `null` out loud.
-   */
-  eventName: string | null;
   note?: string | null;
   /**
-   * Every dish the meal has. A dish left out is refused rather than guessed at.
+   * Every dish the meal still has to cook. A dish left out is refused rather than guessed at.
    *
    * <p>`actualServings` is how much was COOKED — the figure stock is drawn against —
    * and `consumedQuantity` how much of it went out. Both in the preparation's own yield unit.
    */
   dishes: {
-    mealPlanId: string;
+    dishId: string;
     actualServings?: number | null;
     consumedQuantity?: number | null;
     notMade: boolean;
@@ -1558,7 +1510,11 @@ export interface TodayAhead {
  * Today used to list one row per preparation, so a lunch of three dishes read as three lunches.
  */
 export interface TodayMeal {
+  /** The meal's own id (D-27). */
+  mealId: string;
   mealKind: string;
+  /** The event's own name, where the meal is one. Null for Breakfast, Lunch and Dinner. */
+  eventName: string | null;
   /** "HH:mm:ss" — the order the kitchen works in. */
   readyBy: string;
   /** What this meal scales to. Never the sum of its dishes (A4). */
@@ -1609,22 +1565,27 @@ export interface TodayDelivery {
 }
 
 /**
- * Plan a meal (E4-S7). No day type: whether a day is a weekend, a festival or an ordinary Tuesday
- * follows from the date and the calendar, so the server derives it and nobody is asked.
+ * "Save this meal" (E4-S7, rebuilt by D-27): the meal, all its dishes and its volunteer shift in one
+ * request, which the server saves in one transaction.
+ *
+ * <p>It replaces a loop of one request per dish. That loop could fail half way and leave a meal with
+ * some of its preparations, and it had nowhere to put a volunteer shift that must not outlive an
+ * abandoned meal (D-27 answer 2: *"we should not be left with an orphan shift"*).
+ *
+ * <p>No day type: whether a day is a weekend or a festival follows from the date and the calendar, so
+ * the server derives it and nobody is asked.
  */
-export interface CreateMealPlanInput {
+export interface SaveMealInput {
   planDate: string;
-  mealKind: string;
-  recipeId: string;
-  targetYield: number;
+  /** The kind's id from `listMealKinds`, never its name (D-27). */
+  mealKindId: string;
   /** "HH:mm". Optional only for a kind that carries a default time. */
   readyBy?: string | null;
 
   /**
-   * The event fields (E4-S15), honoured only by a kind flagged `isEvent` and dropped on the way in
-   * by every other kind. They are asked for in a chain: an event has a name; an event going outside
-   * also has a contact, name and phone both; a delivered one also has an address and the time the
-   * guests eat. An in-house event stops at its name.
+   * The event fields (E4-S15), honoured only by a kind flagged `isEvent`. They are asked for in a
+   * chain: an event has a name; an event going outside also has a contact; a delivered one also has
+   * an address and the time the guests eat.
    */
   eventName?: string | null;
   isOutside?: boolean;
@@ -1637,56 +1598,83 @@ export interface CreateMealPlanInput {
   /** Google's id for a picked address; absent when it was typed. */
   deliveryPlaceId?: string | null;
   /**
-   * The pin, sent back exactly as it came (T-044). See `MealPlanView` for what went wrong without it.
-   *
-   * <p>**Required-and-nullable in a record whose every other field is optional, deliberately.** The
-   * defect was that a payload builder could omit these and still compile: `mealFacts()` in
-   * `MealComposer` carries no return-type annotation and its result is *spread* into the request, and
-   * spread properties are exempt from TypeScript's excess-property check. Optional here would leave
-   * that hole open. Required forces the one construction site in the app to say what the pin is, and
-   * `null` — meaning "typed, not picked" — is a thing it is allowed to say.
+   * The pin, sent back exactly as it came (T-044). Required-and-nullable in a record whose other
+   * facts are optional, deliberately: the composer builds this with a spread, spread properties are
+   * exempt from the excess-property check, and an optional pin is one a builder can forget and still
+   * compile. `null` — "typed, not picked" — is a thing it is allowed to say.
    */
   deliveryLatitude: number | null;
   deliveryLongitude: number | null;
-  /** "HH:mm" — when the guests sit down, on a delivery. What the travel estimate works back from. */
+  /** "HH:mm" — when the guests sit down, on a delivery. */
   guestsEatAt?: string | null;
   /** How long to allow for the drive, in minutes. Prefilled from Google, editable. */
   travelMinutes?: number | null;
-  /**
-   * Whether a person set that figure themselves. It is what stops the job card refreshing it out
-   * from under them on the sheet a driver is about to act on.
-   */
+  /** Whether a person set that figure themselves, which stops the job card refreshing it. */
   travelMinutesManual?: boolean;
 
-  /** What the food is for, in the planner's own words (B6). No kind demands it; the card prints it. */
+  /** What the food is for, in the planner's own words (B6). */
   purpose?: string | null;
-  /**
-   * Which festival this meal is for, where the kind asks (item 26). Honoured only by a kind carrying
-   * `needsOccasion` — every other kind takes its occasion from the date and the calendar. Left out,
-   * a feast falls back to whatever the calendar says for that date.
-   */
+  /** Which festival this meal is for, where the kind asks (item 26). */
   occasionName?: string | null;
-  /** The hall as the planner expects it; the servings figure is derived from these three. */
   adults?: number | null;
   children?: number | null;
   seniors?: number | null;
-  /**
-   * How many people it takes to execute this meal (item 24). One counter, any mix of staff and
-   * volunteers — the mix does not matter, and splitting it would invent a constraint the temple does
-   * not have. Optional: a meal is planned weeks before anybody is rostered.
-   */
+  /** How many people it takes to execute this meal (item 24). Optional: planned before rostered. */
   crewRequired?: number | null;
   kitchenNotes?: string | null;
-  /** What the people serving need to know. Printed on the job card’s serving sheet. */
+  /** What the people serving need to know. Printed on the job card's serving sheet. */
   serverNotes?: string | null;
-  ekadashiAcknowledged?: boolean;
+  /** One answer for the whole save: grain preparations on a fasting day were confirmed. */
+  ekadashiAcknowledged: boolean;
+
+  /** At least one. On a new meal every `id` is null. */
+  dishes: MealDishDraft[];
+
+  /**
+   * The shift asking for volunteers, drafted in the planner's layer and saved only with the meal
+   * (D-27 answers 2 and 7).
+   *
+   * <p>Required-and-nullable, not optional, for the reason the pin above is: the composer builds this
+   * request from a spread, and a draft that silently went missing from the save is exactly the orphan
+   * — or, worse, the vanished shift — that the one-transaction rule exists to prevent. On an update,
+   * null leaves an existing shift exactly as it is.
+   */
+  volunteerShift: MealShiftDraft | null;
 }
 
 /**
- * Swap or edit a dish in place (B4) — instead of cancelling it and adding another, which loses the
- * row and its history. Allowed until the meal is recorded, refused the moment it is.
+ * One preparation of the meal being saved. `id` is the dish's own id when it is being kept or changed
+ * and null when it is being added; on an update, a planned dish left out of the list is cancelled.
  */
-export type UpdateMealPlanInput = CreateMealPlanInput;
+export interface MealDishDraft {
+  id: string | null;
+  recipeId: string;
+  targetYield: number;
+}
+
+/**
+ * "Update this meal". The same body minus the date and the kind: a meal is not moved (plan the new
+ * one and cancel this one), and a shift for it therefore never changes day either (D-27 answer 4).
+ */
+export type UpdateMealInput = Omit<SaveMealInput, "planDate" | "mealKindId">;
+
+/**
+ * A volunteer shift for the meal being saved (T-197's `MealShiftDraft`).
+ *
+ * <p>No date and no meal: the shift's date is its meal's, and its meal is the one being saved.
+ * `capacity` is what the screen calls *Volunteers requested* (D-27 answer 1).
+ */
+export interface MealShiftDraft {
+  title: string;
+  description: string | null;
+  /** "HH:mm". */
+  startTime: string;
+  /** "HH:mm". Never equal to the start; earlier than it means the shift runs through midnight. */
+  endTime: string;
+  location: string | null;
+  capacity: number;
+  reminderOffsetsMinutes: number[];
+}
 
 export interface MealKindInput {
   name: string;
@@ -1711,6 +1699,8 @@ export interface MealKindInput {
  * falls to lunch without anybody linking it to one.
  */
 export interface MealCrewView {
+  /** The meal this readout is for (D-27). Match on this, never on the kind's name. */
+  mealId: string;
   planDate: string;
   mealKind: string;
   /** "HH:mm:ss" — the moment the roster is asked about. */
@@ -1755,6 +1745,8 @@ export interface MenuHistoryView {
   missingCount: number;
   /** The ones that can still be planned. */
   preparations: MenuHistoryPreparation[];
+  /** The meal that was cooked, or null where there was none (D-27). */
+  mealId: string | null;
 }
 
 export interface MenuHistoryPreparation {
@@ -1788,9 +1780,12 @@ export interface IngredientShortfall {
 export type OrderUrgency = "IN_TIME" | "ORDER_TODAY" | "TOO_LATE";
 
 export interface MealSufficiency {
-  mealPlanId: string;
+  /** The preparation this is about. It was `mealPlanId` before a meal had a row of its own. */
+  dishId: string;
+  mealId: string;
   planDate: string;
   mealKind: string;
+  eventName: string | null;
   readyBy: string;
   recipeName: string;
   status: "SUFFICIENT" | "SHORT" | "PLANNING";
@@ -3311,21 +3306,23 @@ export interface ShiftView {
   createdAt: string;
 
   /**
-   * The meal this shift was posted for (D-14), or null on a shift that was not linked to one.
-   * All three move together: a linked shift counts toward its meal and no other, an unlinked one
-   * keeps counting toward every meal its hours span. `mealEventName` is null except where the meal
-   * is a named event.
+   * The one meal this shift is for (D-27), or null on a shift that is not for a meal.
    *
-   * Optional rather than required-nullable, and deliberately: the server always sends all three,
-   * but every existing test fixture in the tree builds a `ShiftView` by hand, and making them
-   * required would have meant editing test files that belong to other tasks' contracts to add three
-   * nulls that prove nothing. A reader must handle `undefined`, which is the same branch as null.
+   * <p>An id, where it used to be the meal's date, kind and event name copied onto the shift with
+   * nothing holding them to a meal. `mealKind` and `mealEventName` are read through that id, so a
+   * renamed kind reads with its new name. A meal shift's `shiftDate` is always its meal's date.
+   *
+   * <p>Required-and-nullable: the server always sends all three.
    */
-  mealDate?: string | null;
-  mealKind?: string | null;
-  mealEventName?: string | null;
+  mealId: string | null;
+  mealKind: string | null;
+  mealEventName: string | null;
 }
 
+/**
+ * Post a shift, from the Volunteer shifts screen. Always a shift not for a meal: a shift for a meal
+ * is asked for from that meal in the planner and saved with it (D-27 answer 3).
+ */
 export interface ShiftInput {
   title: string;
   description?: string | null;
@@ -3335,12 +3332,16 @@ export interface ShiftInput {
   location?: string | null;
   capacity: number;
   reminderOffsetsMinutes?: number[];
-
-  /** Link this shift to one meal (D-14). All three or none; the server refuses a half-filled link. */
-  mealDate?: string | null;
-  mealKind?: string | null;
-  mealEventName?: string | null;
 }
+
+/**
+ * Edit a shift from the Volunteer shifts screen, saved at once.
+ *
+ * <p>`mealId` is sent back exactly as `ShiftView` gave it: a meal shift cannot be moved to another
+ * meal or turned into a plain one (`KMS-400153`), and a plain shift cannot be given a meal. Required,
+ * so the edit screen cannot drop the link by leaving the field out.
+ */
+export type UpdateShiftInput = ShiftInput & { mealId: string | null };
 
 export interface AvailableShiftView {
   id: string;
@@ -3538,6 +3539,8 @@ export interface RepeatEventResult {
  * lines for one delivery would read as three deliveries.
  */
 export interface OutsideCommitment {
+  /** The event's own meal (D-27). */
+  mealId: string;
   planDate: string;
   eventName: string | null;
   mealKind: string;
@@ -3662,16 +3665,20 @@ export interface EventNameSuggestion {
 }
 
 /**
- * What a saved plan came back with (E4-S16).
+ * What a saved meal came back with (E4-S16, D-27).
  *
- * <p>There is exactly one thing that warns and it is never a refusal: a delivery address the map
- * service could not place (KMS-400078). The plan is saved and whole — a map service's opinion of a
- * street name is not a reason to throw away everything somebody typed — but it is worth saying,
- * because it is the one travel failure they can fix.
+ * <p>The meal's id — an existing meal's own id where the save landed on one already planned for that
+ * day and kind — and, at most, one warning that is never a refusal: a delivery address the map
+ * service could not place (KMS-400078). The meal is saved and whole either way.
  */
-export interface SavedMealPlan {
-  id?: string;
+export interface SavedMeal {
+  id: string;
   warning?: ErrorPayload;
+}
+
+/** What cancelling a meal did: how many signed-up and waitlisted volunteers were told (D-27 answer 5). */
+export interface CancelledMeal {
+  volunteersTold: number;
 }
 
 export interface PaymentSettingsView {
@@ -4589,12 +4596,12 @@ export const api = {
    * <p>The read capability that was missing, and the reason correcting a meal was not simply a
    * screen over `compensateMovement`: consumption writes **one movement per (ingredient, batch)
    * draw**, so a dish is a *set* of movements and `listMovements` could filter by ingredient, type
-   * and limit but never by what the movements were drawn for. `mealPlanId` is one dish's row — a
+   * and limit but never by what the movements were drawn for. `dishId` is one dish — a
    * meal of three dishes is three calls, because that is the grain `reference_id` is stored at.
    */
-  movementsForMeal: (mealPlanId: string, token?: string) =>
+  movementsForMeal: (dishId: string, token?: string) =>
     request<StockMovement[]>(
-      `/api/v1/inventory/movements?referenceId=${encodeURIComponent(mealPlanId)}`,
+      `/api/v1/inventory/movements?referenceId=${encodeURIComponent(dishId)}`,
       { method: "GET", token }
     ),
 
@@ -4779,19 +4786,6 @@ export const api = {
   deleteMealKind: (id: string, token?: string) =>
     request<void>(`/api/v1/meal-kinds/${id}`, { method: "DELETE", token }),
 
-  listMealPlans: (
-    filters: { from?: string; to?: string; status?: MealStatus; dayType?: DayType } = {},
-    token?: string
-  ) => {
-    const params = new URLSearchParams();
-    if (filters.from) params.set("from", filters.from);
-    if (filters.to) params.set("to", filters.to);
-    if (filters.status) params.set("status", filters.status);
-    if (filters.dayType) params.set("dayType", filters.dayType);
-    const query = params.toString();
-    return request<MealPlanView[]>(`/api/v1/meal-plans${query ? `?${query}` : ""}`, { method: "GET", token });
-  },
-
   // The whole morning screen in one request: it is the first thing loaded each day, often on a
   // phone on a temple's connection.
   today: (token?: string) => request<TodayView>("/api/v1/today", { method: "GET", token }),
@@ -4891,14 +4885,14 @@ export const api = {
    * nobody could place, a meal that is not a delivery — comes back as an unavailable estimate with
    * a reason, which the screen renders as one quiet line.
    */
-  travelEstimate: (id: string, token?: string) =>
-    request<TravelEstimate>(`/api/v1/meal-plans/${id}/travel-estimate`, { method: "GET", token }),
+  travelEstimate: (mealId: string, token?: string) =>
+    request<TravelEstimate>(`/api/v1/meals/${mealId}/travel-estimate`, { method: "GET", token }),
 
   /**
    * The same estimate for a delivery nobody has saved yet — what the composer asks while somebody
    * is still typing.
    *
-   * <p>The saved version takes a plan id, which a form has not got. This takes the place instead:
+   * <p>The saved version takes a meal id, which a form has not got. This takes the place instead:
    * the coordinates behind a picked address, or its place id if the coordinates are not to hand.
    * An address that was typed rather than picked has neither, and comes back `ADDRESS_NOT_FOUND` —
    * the honest answer, since nobody looked.
@@ -4955,36 +4949,45 @@ export const api = {
    * Repeats an event forward for a number of weeks (E4-S15 D8). Copies, not a series: each one is
    * editable and cancellable on its own.
    */
-  repeatEvent: (id: string, weeks: number, token?: string) =>
-    request<RepeatEventResult>(`/api/v1/meal-plans/${id}/repeat?weeks=${weeks}`, {
+  repeatEvent: (mealId: string, weeks: number, token?: string) =>
+    request<RepeatEventResult>(`/api/v1/meals/${mealId}/repeat?weeks=${weeks}`, {
       method: "POST",
       token,
     }),
 
-  createMealPlan: (input: CreateMealPlanInput, token?: string) =>
-    request<SavedMealPlan>("/api/v1/meal-plans", {
+  /**
+   * "Save this meal" (D-27): the meal, its dishes and any volunteer shift in one transaction. A meal
+   * already on that day with that kind and event name is reused, and its id comes back.
+   */
+  saveMeal: (input: SaveMealInput, token?: string) =>
+    request<SavedMeal>("/api/v1/meals", {
       method: "POST",
       body: JSON.stringify(input),
       token,
     }),
 
   /**
-   * Swap the recipe or re-scale a dish in place (B4). The whole meal is sent, as when it was
-   * planned, because a partial update would leave the server guessing which silence meant "unchanged"
-   * and which meant "clear it".
+   * "Update this meal". The whole meal is sent, dishes included, because a partial update would leave
+   * the server guessing which silence meant "unchanged" and which meant "clear it". A `volunteerShift`
+   * of null leaves the meal's shift as it is.
    */
-  updateMealPlan: (id: string, input: UpdateMealPlanInput, token?: string) =>
-    // 204 when there is nothing to say, 200 with a warning in the body in the one case that has
-    // something to say — the address that could not be placed. `request` hands back undefined for
-    // the 204, so a caller that only cares about success can ignore what comes out.
-    request<SavedMealPlan | undefined>(`/api/v1/meal-plans/${id}`, {
+  updateMeal: (mealId: string, input: UpdateMealInput, token?: string) =>
+    request<SavedMeal>(`/api/v1/meals/${mealId}`, {
       method: "PUT",
       body: JSON.stringify(input),
       token,
     }),
 
-  cancelMealPlan: (id: string, token?: string) =>
-    request<void>(`/api/v1/meal-plans/${id}/cancel`, { method: "POST", token }),
+  /**
+   * Cancels every planned dish of the meal and its volunteer shift, in one transaction. Volunteers
+   * signed up or waiting are sent the existing `shift_cancelled` message after it commits.
+   */
+  cancelMeal: (mealId: string, reason?: string | null, token?: string) =>
+    request<CancelledMeal>(`/api/v1/meals/${mealId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify(reason ? { reason } : {}),
+      token,
+    }),
 
   /**
    * Copies the previous week into the week beginning weekStart. Only ever adds — a day with
@@ -5011,16 +5014,22 @@ export const api = {
       token,
     }),
 
-  // ---- Meals as whole things, and the job card (B5) -------------------------
+  // ---- Meals as whole things, and the job card (B5, D-27) ------------------
   //
-  // There is no per-dish "mark cooked" call any more. A meal is recorded once, as a whole, from the
-  // card that came back to the office — which is also the only moment its ingredients leave stock.
+  // There is no per-dish "mark cooked" call. A meal is recorded once, as a whole, from the card that
+  // came back to the office — which is also the only moment its ingredients leave stock. And since
+  // D-27 every call here takes the meal's own id.
 
-  mealServices: (from: string, to: string, token?: string) =>
-    request<MealServiceView[]>(`/api/v1/meal-services?from=${from}&to=${to}`, {
+  /** The meals in a range, by date, ready-by and kind — each with its dishes and its live shift. */
+  meals: (from: string, to: string, token?: string) =>
+    request<MealView[]>(`/api/v1/meals?from=${from}&to=${to}`, {
       method: "GET",
       token,
     }),
+
+  /** One meal. `KMS-400030` for an id that is not this temple's. */
+  getMeal: (mealId: string, token?: string) =>
+    request<MealView>(`/api/v1/meals/${mealId}`, { method: "GET", token }),
 
   /**
    * How many people each meal in the range takes, and how many it has (item 24). One readout per
@@ -5053,14 +5062,15 @@ export const api = {
     ),
 
   /** How many meals went unrecorded in the range, and the servings each kind came to on `from`. */
-  mealServiceSummary: (from: string, to: string, token?: string) =>
+  mealSummary: (from: string, to: string, token?: string) =>
     request<{ unrecorded: number; platesByMealKind: Record<string, number> }>(
-      `/api/v1/meal-services/summary?from=${from}&to=${to}`,
+      `/api/v1/meals/summary?from=${from}&to=${to}`,
       { method: "GET", token }
     ),
 
-  recordMeal: (input: RecordMealInput, token?: string) =>
-    request<MealServiceView>("/api/v1/meal-services/record", {
+  /** Records what the meal actually served. The answer is the meal as it now reads. */
+  recordMeal: (mealId: string, input: RecordMealInput, token?: string) =>
+    request<MealView>(`/api/v1/meals/${mealId}/record`, {
       method: "POST",
       body: JSON.stringify(input),
       token,
@@ -5069,17 +5079,12 @@ export const api = {
   /**
    * Corrects what a recorded meal actually served (T-007), behind `CORRECT_RECORDED_MEAL`.
    *
-   * <p>`id` is the meal's own `serviceId`, which is non-null exactly once the meal has been
-   * recorded — so there is no case where this is callable and the identity is ambiguous, which is
-   * why it takes an id where `recordMeal` takes a date, a kind and an event name.
-   *
-   * <p>What comes back is the meal as it now reads, `corrected` true, with each dish carrying both
-   * its new figure and its `originalActualServings`. It is one call because it is one transaction:
-   * the compensating stock movements and the meal record cannot commit separately, or the ledger
-   * and the meal would disagree and nothing would say which was right.
+   * <p>What comes back is the meal as it now reads, `corrected` true, with each dish carrying both its
+   * new figure and its `originalActualServings`. It is one call because it is one transaction: the
+   * compensating stock movements and the meal record cannot commit separately.
    */
-  correctRecordedMeal: (id: string, input: CorrectMealInput, token?: string) =>
-    request<MealServiceView>(`/api/v1/meal-services/${id}/correct`, {
+  correctRecordedMeal: (mealId: string, input: CorrectMealInput, token?: string) =>
+    request<MealView>(`/api/v1/meals/${mealId}/correct`, {
       method: "POST",
       body: JSON.stringify(input),
       token,
@@ -5088,39 +5093,26 @@ export const api = {
   /**
    * Queues a job card, issuing its number if this is the first print of that meal.
    *
-   * <p>`eventName` is part of the key, not a detail. A meal is identified by its date, its kind and
-   * — since `V89` — the event's name, because every event carries the same kind and two events on
-   * one Saturday would otherwise share a card. Null for the three main meals, which have no event
-   * name and never will.
+   * <p>By the meal's id (D-27). It used to be the date, the kind and the event's name, and the event
+   * name was the part that went missing: two events on one Saturday shared a card until V89.
    *
    * <p>`language` is the recipes appendix's, not the sheet's — the worksheet is always English.
    * Pass `"none"` for the worksheet on its own.
    */
-  requestJobCard: (
-    date: string,
-    mealKind: string,
-    eventName: string | null,
-    language?: string,
-    token?: string
-  ) =>
+  requestJobCard: (mealId: string, language?: string, token?: string) =>
     request<{ documentId: string; cardNumber: string; status: string }>(
-      `/api/v1/job-cards?date=${date}&mealKind=${encodeURIComponent(mealKind)}` +
-        (eventName ? `&eventName=${encodeURIComponent(eventName)}` : "") +
+      `/api/v1/job-cards?mealId=${encodeURIComponent(mealId)}` +
         (language ? `&language=${encodeURIComponent(language)}` : ""),
       { method: "POST", token }
     ),
 
   /**
-   * What languages this meal's recipes can be printed in, and the one the picker opens on.
-   *
-   * <p>Never the full list of 23. English is always there because it is the source text; the rest
-   * are only the languages a translation actually exists in for the preparations on this card.
-   * Offering one with nothing behind it would print an English appendix under a Kannada heading.
+   * What languages this meal's recipes can be printed in, and the one the picker opens on. English is
+   * always there because it is the source text.
    */
-  jobCardLanguages: (date: string, mealKind: string, eventName: string | null, token?: string) =>
+  jobCardLanguages: (mealId: string, token?: string) =>
     request<{ languages: string[]; defaultLanguage: string }>(
-      `/api/v1/job-cards/languages?date=${date}&mealKind=${encodeURIComponent(mealKind)}` +
-        (eventName ? `&eventName=${encodeURIComponent(eventName)}` : ""),
+      `/api/v1/job-cards/languages?mealId=${encodeURIComponent(mealId)}`,
       { method: "GET", token }
     ),
 
@@ -5143,14 +5135,8 @@ export const api = {
   },
 
   /** The browser print view of the same card. `language` means what it does above. */
-  jobCardPrintUrl: (
-    date: string,
-    mealKind: string,
-    eventName: string | null,
-    language?: string
-  ): string =>
-    `${BASE_URL}/api/v1/job-cards/print?date=${date}&mealKind=${encodeURIComponent(mealKind)}` +
-    (eventName ? `&eventName=${encodeURIComponent(eventName)}` : "") +
+  jobCardPrintUrl: (mealId: string, language?: string): string =>
+    `${BASE_URL}/api/v1/job-cards/print?mealId=${encodeURIComponent(mealId)}` +
     (language ? `&language=${encodeURIComponent(language)}` : ""),
 
   mealSufficiency: (from: string, to: string, token?: string) =>
@@ -5955,7 +5941,7 @@ export const api = {
   createShift: (input: ShiftInput, token?: string) =>
     request<{ id: string }>("/api/v1/shifts", { method: "POST", body: JSON.stringify(input), token }),
 
-  updateShift: (id: string, input: ShiftInput, token?: string) =>
+  updateShift: (id: string, input: UpdateShiftInput, token?: string) =>
     request<void>(`/api/v1/shifts/${id}`, { method: "PUT", body: JSON.stringify(input), token }),
 
   cancelShift: (id: string, reason: string, token?: string) =>

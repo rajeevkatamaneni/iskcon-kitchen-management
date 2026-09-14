@@ -17,10 +17,9 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
  * <p>Harness copied from `planner-shift.test.tsx`, which drives `MealServices` the same way.
  */
 
-const { mealServices, mealCrew, listShifts, jobCardLanguages } = vi.hoisted(() => ({
-  mealServices: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
+const { meals, mealCrew, jobCardLanguages } = vi.hoisted(() => ({
+  meals: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
   mealCrew: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
-  listShifts: vi.fn(async (_f: { from?: string; to?: string } = {}, _t?: string) => [] as unknown[]),
   jobCardLanguages: vi.fn(async () => ({ languages: ["en"], defaultLanguage: "en" })),
 }));
 
@@ -36,7 +35,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
-    api: { ...actual.api, mealServices, mealCrew, listShifts, jobCardLanguages },
+    api: { ...actual.api, meals, mealCrew, jobCardLanguages },
   };
 });
 vi.mock("@/lib/use-authed-query", async () => {
@@ -69,34 +68,37 @@ const RECIPES = [
   },
 ];
 
+/** A meal by its own id (D-27), with the whole-meal facts on it once. */
 function lunch(crewRequired: number | null = 8, mealKind = "Lunch", eventName: string | null = null) {
   return {
-    serviceId: null, planDate: DATE, mealKind, readyBy: "12:00:00",
+    mealId: "meal-1", mealKindId: "k1", planDate: DATE, mealKind, readyBy: "12:00:00",
     adults: 200, children: 40, seniors: 30, plates: 248,
     crewRequired,
     dayType: "REGULAR", occasionName: null, eventName,
-    contactName: null, contactPhone: null, deliveryAddress: null, purpose: null,
-    kitchenNotes: null, serverNotes: null, cardNumber: null, cardIssuedAt: null,
+    isOutside: false, handover: null,
+    contactName: null, contactPhone: null, deliveryAddress: null, deliverySubLocation: null,
+    deliveryPlaceId: null, deliveryLatitude: null, deliveryLongitude: null, guestsEatAt: null,
+    travelMinutes: null, travelMinutesSource: null, purpose: null,
+    kitchenNotes: null, serverNotes: null, status: "PLANNED", cardNumber: null, cardIssuedAt: null,
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
     corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
     dishes: [
       {
-        id: "m1", planDate: DATE, mealKind: "Lunch", readyBy: "12:00:00",
-        recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 248,
-        dayType: "REGULAR", occasionName: null, status: "PLANNED", eventName: null,
-        contactName: null, contactPhone: null, deliveryAddress: null, purpose: null,
-        adults: 200, children: 40, seniors: 30, kitchenNotes: null,
-        actualServings: null, notMade: false, cookedAt: null, ekadashiAcknowledged: false,
-        createdAt: "2026-08-20T10:00:00Z",
+        id: "m1", mealId: "meal-1", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 248,
+        targetYieldUnit: "KG", status: "PLANNED", actualServings: null, consumedQuantity: null,
+        notMade: false, originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
+        ekadashiAcknowledged: false, createdAt: "2026-08-20T10:00:00Z",
       },
     ],
+    volunteerShift: null,
   };
 }
 
+/** The crew readout for that meal, matched to it by the meal's id and never by the kind's name. */
 function crewOf(staffIn: number, volunteers: number, required: number | null = 8, mealKind = "Lunch") {
   const rostered = staffIn + volunteers;
   return {
-    planDate: DATE, mealKind, readyBy: "12:00:00",
+    mealId: "meal-1", planDate: DATE, mealKind, readyBy: "12:00:00",
     crewRequired: required, staffIn, volunteers, rostered,
     shortOfCrew: required != null && rostered < required,
   };
@@ -127,9 +129,8 @@ async function pebble(container: HTMLElement, count: string): Promise<HTMLElemen
 
 describe("the crew pebble's breakdown", () => {
   beforeEach(() => {
-    mealServices.mockReset().mockResolvedValue([lunch()]);
+    meals.mockReset().mockResolvedValue([lunch()]);
     mealCrew.mockReset().mockResolvedValue([crewOf(3, 2)]);
-    listShifts.mockReset().mockResolvedValue([]);
   });
 
   it("carries no native title, on the pebble or anywhere near it", async () => {
@@ -191,7 +192,7 @@ describe("the crew pebble's breakdown", () => {
   });
 
   it("names the hint for an event by the event's own name, as the header does", async () => {
-    mealServices.mockResolvedValue([lunch(8, "Event", "Bhagavad Gita Parayanam")]);
+    meals.mockResolvedValue([lunch(8, "Event", "Bhagavad Gita Parayanam")]);
     mealCrew.mockResolvedValue([crewOf(3, 2, 8, "Event")]);
     const day = await openTheDay("Bhagavad Gita Parayanam");
     await pebble(day, "5 of 8");
@@ -220,7 +221,7 @@ describe("the crew pebble's breakdown", () => {
   });
 
   it("draws no pebble and no hint for a meal nobody has given a crew number", async () => {
-    mealServices.mockResolvedValue([lunch(null)]);
+    meals.mockResolvedValue([lunch(null)]);
     mealCrew.mockResolvedValue([crewOf(3, 2, null)]);
     const day = await openTheDay();
     // Give the crew request its turn to land before asserting absence.

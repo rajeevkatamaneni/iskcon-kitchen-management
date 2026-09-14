@@ -118,6 +118,9 @@ function roster(
       id: "shift-1",
       title: "Sunday prep",
       description: null,
+      mealId: null,
+      mealKind: null,
+      mealEventName: null,
       shiftDate: "2026-12-06",
       startTime: hours.startTime,
       endTime: hours.endTime,
@@ -173,6 +176,20 @@ describe("marking attendance on a roster", () => {
     // "20:00–02:00" alone would leave the person marking who turned up to work out for themselves
     // which morning the shift ended on.
     expect(screen.getByText(/20:00–02:00 \(next day\)/)).toBeInTheDocument();
+  });
+
+  it("labels a meal shift's roster with its meal and day, and a plain one not at all (D-27)", () => {
+    const meal = roster([signup()]);
+    meal.shift = { ...meal.shift, mealId: "meal-lunch", mealKind: "Lunch" };
+    queryRef.current = { data: meal, error: null, loading: false };
+    const { unmount } = render(<ShiftRosterPage />);
+    // The clock is pinned to 2026 above, so "6 December" is this year and carries no year.
+    expect(screen.getByText("For Lunch, 6 December")).toBeInTheDocument();
+    unmount();
+
+    queryRef.current = { data: roster([signup()]), error: null, loading: false };
+    render(<ShiftRosterPage />);
+    expect(screen.queryByText(/^For /)).not.toBeInTheDocument();
   });
 
   it("leaves an ordinary roster heading as it was", () => {

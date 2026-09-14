@@ -1208,6 +1208,35 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-14 — A meal is a row of its own: the planner, recording, job cards and volunteer shifts rebuilt on it, with the old meal data reset (tasks T-195 to T-199, decision D-27)
+
+**Migrations V135, V136 and V137**; staging moves from `V134` to `V137`. V138, V139 and V140 were
+reserved and not used, so the next free migration is V141. Two new error codes: **KMS-400152** (a
+meal already has a volunteer shift) and **KMS-400153** (a shift for a meal keeps that meal's date and
+meal). No new permission. **Not driven in a browser, and not seen working by Rajeev.**
+
+**What changes for the kitchen.** A meal (Lunch on 15 September, or a named event) is now one thing
+with its own id, instead of being implied by dishes that share a date and kind. The planner opens a
+meal at `/planner/meal/<id>`. Its volunteer shift belongs to it: *Ask for volunteers* appears in the
+composer when people needed exceed those rostered, the layer ends in **Done**, and nothing is saved
+until **Save this meal** or **Update this meal**, which saves the meal and its shift together.
+Cancelling a meal with a shift warns with the number of volunteers and cancels both. Changing a shift's
+times with volunteers signed up warns first and tells them *"The times changed to 07:00 to 10:00."*
+
+**Volunteer shifts.** *Post a shift* has no meal checkbox and points to the planner instead. A meal's
+shift is labelled *"For Lunch, 15 September"*; editing it there keeps its date and meal read-only. A
+plain shift moved to another day still shows the "moved" notice and sends nothing.
+
+**The data reset.** V135 deletes every meal, dish, shift, job card and meal stock movement in each
+temple, and first writes one balancing adjustment per ingredient batch so **every on-hand figure is
+unchanged**. V136 builds the new tables with row-level security. V137 seeds nine days of meals, an
+event, a meal shift and two plain shifts, for temples that have their own recipes, with no stock
+movements.
+
+**Not done:** the volunteer's own *My shifts* and *Shifts* pages carry no meal label (in
+`docs/work/AFTER-UAT.md`); costing still reads planned amounts. Proofs in `docs/work/proof/T-195.md`
+to `T-199.md`.
+
 ### 2026-09-13 — Leave rows read "3 to 4 September" instead of ISO dates, and the unused single-row uid lookup is removed (tasks T-194, T-191)
 
 **No migration**; staging stays at `V134`. No new error code, no new permission. **Not driven in a

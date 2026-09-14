@@ -49,7 +49,7 @@ export function DayView({ date }: { date: string }) {
   const { data: mealKinds } = useAuthedQuery(api.listMealKinds);
 
   const day = calQ.data?.[0];
-  const sufficiency = new Map((suffQ.data ?? []).map((s) => [s.mealPlanId, s]));
+  const sufficiency = new Map((suffQ.data ?? []).map((s) => [s.dishId, s]));
   const readOnly = date < todayIso();
   const canCorrect = appUser?.role === "TEMPLE_ADMIN" && !readOnly;
 

@@ -17,11 +17,18 @@ import org.iskcon.kms.vendor.OrderUrgency;
  *     matters is the one that runs out first.
  * @param orderUrgency where today stands against that date — amber while there is slack, red on the
  *     day, and a plain statement of fact past it. Null exactly when {@code orderBy} is.
+ * @param dishId which dish this badge is for. A badge is per dish, because the same recipe on two
+ *     days is two claims on the store (was {@code mealPlanId}, the same id, before D-27 renamed the
+ *     table).
+ * @param mealId the meal that dish belongs to, so the planner puts the badge on the meal by id
+ *     rather than by matching a date, a kind and an event name (D-27).
  */
 public record MealSufficiency(
-		UUID mealPlanId,
+		UUID dishId,
+		UUID mealId,
 		LocalDate planDate,
 		String mealKind,
+		String eventName,
 		java.time.LocalTime readyBy,
 		String recipeName,
 		SufficiencyStatus status,

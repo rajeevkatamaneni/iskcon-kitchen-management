@@ -76,8 +76,12 @@ public class ShiftController {
 
 	@PutMapping("/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_VOLUNTEER_SHIFTS')")
-	public ResponseEntity<Void> update(@PathVariable UUID id, @Valid @RequestBody UpdateShiftRequest request) {
-		service.update(id, request);
+	public ResponseEntity<Void> update(@PathVariable UUID id, @Valid @RequestBody UpdateShiftRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		// Saved at once (D-27, answer 7). A meal shift's date and meal are refused if changed
+		// (KMS-400153), and a change of times under signed-up volunteers tells them after commit —
+		// both inside the service, so the planner's save follows the same rules.
+		service.update(actor, id, request);
 		// A capacity increase may open spots the waitlist should fill (E6-S5).
 		signupService.promoteWaitlist(id).forEach(userId -> signupService.notifyPromotion(userId, id));
 		// A time or offset change moves every pending reminder to its new fire time (E6-S6).
