@@ -107,19 +107,20 @@ After D27-2 and D27-4 the work manager runs the merged-tree check, including eve
 - **T-214 proven.** Today names an event by its own name in the row heading, its accessible name, the servings line and the crew line. Crew rows are joined by `mealId`, because `MealCrewView` has no `eventName`. 6 new tests; negative control failed and restored; full frontend 138 files, 1856 tests passed before the other two had finished.
 - **T-215 proven.** New `GET /api/v1/meal-crew/at?date&readyBy` behind `MANAGE_MEAL_PLANS`, read-only, counted the same way as a saved meal's crew. The composer uses it for a meal with no row, so Rostered reads "2 of 5" and the layer prefills 3 before the first save. Nothing is written. Negative control: prefill `expected '5' to be '3'`, restored. Full backend **2674 tests, 0 failed, 7 skipped**. Full frontend after T-213 and T-214 finished: 139 files, 1871 tests passed; tsc, eslint and next build clean. That run is the merged frontend check for the wave. A new event reads "Not counted yet" until a Ready by is typed, on purpose: a count without a time would differ from the saved figure.
 - **Nothing committed.** Backend and frontend of T-215 ship together (the composer calls the new endpoint).
+- **Released 2026-09-14.** Commit `6dd436c`, clean-archive gate green (backend 2674 tests, 0 failed, 7 skipped; frontend 139 files, 1871 tests; tsc, eslint, next build), CI run 34835335217 success. No migration, no backup needed. Staging: `kms-staging-api-00167-6xb` `sha256:65f20d6aa27367a4f01cc3b0ed5dbd5f4fa5cddf6701921bb6ba24818ed524be`, `kms-staging-web-00155-9h6` `sha256:7a09aa79bf9eee9078502e7b59c7870b6218a37b2dc98d7c7c05086a68224dbe`, worker `kms-staging-worker-00149-sbj`. `GET /api/v1/meal-crew/at` answers 200 with `rostered` on staging; without `readyBy` it returns 500 (no screen calls it that way). Record: `docs/work/proof/RELEASE-phase-A-fixes.md`.
 
 ### T-213 — Every shift form box is named by its label
-- **id:** T-213 · **wave:** PA-F1 · **state:** proven 2026-09-14, committed 2026-09-14 (release in progress) · **proof:** `docs/work/proof/T-213.md`
+- **id:** T-213 · **wave:** PA-F1 · **state:** released to staging 2026-09-14 (commit 6dd436c, api-00167-6xb, web-00155-9h6), awaiting Rajeev · **proof:** `docs/work/proof/T-213.md`
 - **what:** Title, Date, Start time, End time, Location and Description on Post a shift, the Volunteer shifts edit page and the planner's shift layer have no accessible name. Give each an explicit label association and prove it by role and name.
 - **paths:** `frontend/app/volunteers/shift-form.tsx`; `frontend/__tests__/shift-form-labels.test.tsx` (new); only if forced: `frontend/__tests__/volunteer-shifts.test.tsx`, `frontend/__tests__/shift-edit-meal-shift.test.tsx`.
 
 ### T-214 — Today names an event by its own name
-- **id:** T-214 · **wave:** PA-F1 · **state:** proven 2026-09-14, committed 2026-09-14 (release in progress) · **proof:** `docs/work/proof/T-214.md`
+- **id:** T-214 · **wave:** PA-F1 · **state:** released to staging 2026-09-14 (commit 6dd436c, api-00167-6xb, web-00155-9h6), awaiting Rajeev · **proof:** `docs/work/proof/T-214.md`
 - **what:** Today's meal rows, summary line and crew lines show an event's own name, not "Event", following `derivedTitle`'s rule in `ShiftLayer.tsx`.
 - **paths:** `frontend/app/today/page.tsx`; `frontend/__tests__/today.test.tsx`.
 
 ### T-215 — The composer counts who is rostered before the first save
-- **id:** T-215 · **wave:** PA-F1 · **state:** proven 2026-09-14, committed 2026-09-14 (release in progress) · **proof:** `docs/work/proof/T-215.md`
+- **id:** T-215 · **wave:** PA-F1 · **state:** released to staging 2026-09-14 (commit 6dd436c, api-00167-6xb, web-00155-9h6), awaiting Rajeev · **proof:** `docs/work/proof/T-215.md`
 - **what:** a brand-new unsaved meal (an event, or a main meal with no meal of that kind that day) shows Rostered as "Not counted yet", so the layer prefills the whole People needed. Add a read-only count of who is rostered at a date and ready-by with no meal row, have the composer use it before the first save, and keep "nothing is saved until Save this meal".
 - **paths:** `backend/src/main/java/org/iskcon/kms/meal/MealCrewController.java`, `MealCrewService.java`, `MealCrewView.java`; `backend/src/main/java/org/iskcon/kms/staff/WorkforceService.java` and `staff/MealMoment.java` only if forced; `backend/src/test/java/org/iskcon/kms/meal/MealCrewIT.java`; `frontend/lib/api.ts`; `frontend/components/planner/MealComposer.tsx`; `frontend/__tests__/meal-composer.test.tsx`, `frontend/__tests__/planner-shift.test.tsx`, and `frontend/__tests__/planner-day-routes.test.tsx` only if forced.
 
