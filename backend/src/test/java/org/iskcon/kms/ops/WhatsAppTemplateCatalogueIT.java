@@ -22,13 +22,13 @@ import java.util.TreeSet;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.notification.NotificationTemplate;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -36,15 +36,14 @@ import org.springframework.test.web.servlet.MockMvc;
 /**
  * {@code GET /api/v1/ops/whatsapp-templates}, the operator's catalogue of templates (T-177).
  *
- * <p>Built on exactly OpsIT's configuration, the same {@code @AutoConfigureMockMvc} and the same
- * imported stub verifier, so the two share one cached Spring context rather than adding another.
+ * <p>Built on exactly OpsIT's configuration, the same {@code @AutoConfigureMockMvc} and no stub
+ * configuration of its own, so the two share one cached Spring context rather than adding another.
  *
  * <p>The recorded wordings are seeded as the container superuser with fixed times, so every date rule
  * is asserted against a known answer rather than against whatever this JVM's start-up happened to
  * write.
  */
 @AutoConfigureMockMvc
-@Import(OpsIT.StubVerifierConfiguration.class)
 class WhatsAppTemplateCatalogueIT extends AbstractIntegrationTest {
 
 	private static final Instant EARLIEST = Instant.parse("2026-09-13T03:00:00Z");
@@ -55,7 +54,7 @@ class WhatsAppTemplateCatalogueIT extends AbstractIntegrationTest {
 	private MockMvc mvc;
 
 	@Autowired
-	private OpsIT.StubTokenVerifier stubVerifier;
+	private StubTokenVerifier stubVerifier;
 
 	@Autowired
 	private ObjectMapper json;
@@ -66,7 +65,6 @@ class WhatsAppTemplateCatalogueIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		admin.update("DELETE FROM whatsapp_template_wording_seen");
 		temple = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)

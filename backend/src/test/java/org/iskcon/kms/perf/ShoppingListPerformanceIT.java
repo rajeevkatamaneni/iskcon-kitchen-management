@@ -6,10 +6,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.auth.TokenVerifier.VerifiedSubject;
 import org.iskcon.kms.perf.PerfReport.Timing;
-import org.iskcon.kms.perf.PerfStubVerifierConfiguration.PerfStubTokenVerifier;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -66,7 +68,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @Tag("perf")
 @EnabledIfEnvironmentVariable(named = "KMS_PERF", matches = "1|true|yes|on",
 		disabledReason = "T-139's fixture takes minutes to build. Set KMS_PERF=1 to run it.")
-@Import(PerfStubVerifierConfiguration.class)
+@Import(StatementRecordingConfiguration.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 
@@ -103,6 +105,9 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 
 	private static final String STAFF_UID = "uid-perf-staff";
 
+	/** The bearer token this class signs in with; see {@link #signIn()}. */
+	private static final String TOKEN = "perf-token";
+
 	/**
 	 * How many page loads the {@code pg_stat_all_tables} window covers.
 	 *
@@ -117,7 +122,7 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 	private TestRestTemplate rest;
 
 	@Autowired
-	private PerfStubTokenVerifier stubVerifier;
+	private StubTokenVerifier stubVerifier;
 
 	private JdbcTemplate admin;
 	private TempleScaleFixture fixture;
@@ -129,8 +134,6 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 	@BeforeAll
 	void buildTheTemple() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
-		stubVerifier.accept(STAFF_UID);
 
 		// The tenant row and its users are scaffolding, created as the superuser exactly as every
 		// other integration class here does. A tenant is not tenant-owned data and the application
@@ -158,6 +161,17 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 		// what the database actually holds against the arithmetic in TempleScale, and refuses the run
 		// rather than reporting a number nobody could have checked.
 		TempleScaleFixture.verify(counts, scale);
+	}
+
+	/**
+	 * Signed in before every test, not once in {@code buildTheTemple}: the suite's shared verifier is
+	 * reset before each test (see {@code AbstractIntegrationTest}), so a sign-in made once per class
+	 * would be gone by the first one. The token and the subject are the ones this class signed in with
+	 * before T-189, so the request being measured is the request that was measured.
+	 */
+	@BeforeEach
+	void signIn() {
+		stubVerifier.accept(TOKEN, new VerifiedSubject(STAFF_UID, STAFF_UID + "@example.com", "+919000000001"));
 	}
 
 	@AfterAll
@@ -557,7 +571,7 @@ class ShoppingListPerformanceIT extends AbstractIntegrationTest {
 
 	private ResponseEntity<String> call(HttpMethod method, String path) {
 		HttpHeaders headers = new HttpHeaders();
-		headers.setBearerAuth(PerfStubTokenVerifier.TOKEN);
+		headers.setBearerAuth(TOKEN);
 		return rest.exchange(path, method, new HttpEntity<>(headers), String.class);
 	}
 

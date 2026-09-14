@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -39,19 +39,18 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * webhook, an unsubscribe link or the temple list; an implementation that threw would pass the
  * first three tests here and fail the rest, which is why the rest exist.
  *
- * <p>Token verification is stubbed, reusing {@link AuthenticationFilterIT}'s stub deliberately: it
- * makes this class share that one's Spring context instead of starting a second, and there is no
- * second definition of "an accepted token" to drift out of step with the first. Everything below
+ * <p>Token verification is stubbed with the suite's one shared verifier, the same one
+ * {@link AuthenticationFilterIT} uses, so the two share a Spring context and there is no second
+ * definition of "an accepted token" to drift out of step with the first. Everything below
  * verification is real.
  */
-@Import(AuthenticationFilterIT.StubVerifierConfiguration.class)
 class AuthenticationFailureIT extends AbstractIntegrationTest {
 
 	@Autowired
 	private TestRestTemplate rest;
 
 	@Autowired
-	private AuthenticationFilterIT.StubTokenVerifier stubVerifier;
+	private StubTokenVerifier stubVerifier;
 
 	@LocalServerPort
 	private int port;
@@ -62,7 +61,6 @@ class AuthenticationFailureIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 
 		tenantId = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)

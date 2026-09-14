@@ -5,14 +5,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
-import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.notification.DeliveryStatus;
 import org.iskcon.kms.notification.NotificationDeliveryService;
 import org.iskcon.kms.tenancy.TenantContext;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,11 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.quartz.Scheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -36,7 +30,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * A mocked {@link Scheduler} keeps the enqueue path hermetic (the notification stays PENDING).
  */
 @AutoConfigureMockMvc
-@Import(PurchaseOrderWhatsAppIT.StubVerifierConfiguration.class)
 class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -60,7 +53,6 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		tenant = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
 				VALUES ('radha-govinda', 'Bengaluru Temple', 12.9716, 77.5946, 'Asia/Kolkata')
@@ -283,37 +275,4 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 		stubVerifier.accept(uid);
 	}
 
-	// ---------------------------------------------------------------------
-
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid) {
-			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
-		}
-	}
 }

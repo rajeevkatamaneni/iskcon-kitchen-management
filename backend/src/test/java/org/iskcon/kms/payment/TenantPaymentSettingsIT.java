@@ -6,14 +6,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
-import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.iskcon.kms.tenancy.TenantSecretStore;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,8 +36,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * and the webhook secret belong to the secret store, and no query and no endpoint will produce them.
  */
 @AutoConfigureMockMvc
-@Import({TenantPaymentSettingsIT.StubVerifierConfiguration.class,
-		TenantPaymentSettingsIT.StubProbeConfiguration.class})
+@Import(TenantPaymentSettingsIT.StubProbeConfiguration.class)
 class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -56,10 +54,17 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 	private JdbcTemplate admin;
 	private UUID tenant;
 
+	/**
+	 * Every key id in this class carries this, so no two tests, and no two classes, ever store the same
+	 * one. {@code PaymentGatewayResolver} caches the clients it builds by key id for the life of the
+	 * context and never forgets one, and since T-189 a context outlives many classes: a key id reused
+	 * with a different secret or provider would be handed whichever client was built for it first.
+	 */
+	private final String run = UUID.randomUUID().toString();
+
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		probe.reset();
 		tenant = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
@@ -94,10 +99,10 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 		mvc.perform(authed(put("/api/v1/settings/payments"))
 						.contentType("application/json")
 						.content("""
-								{"provider":"RAZORPAY","keyId":"rzp_test_abc123","keySecret":"s3cr3t-value"}"""))
+								{"provider":"RAZORPAY","keyId":"%s","keySecret":"s3cr3t-value"}""".formatted(keyId("rzp_test_abc123"))))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.configured").value(true))
-				.andExpect(jsonPath("$.keyId").value("rzp_test_abc123"))
+				.andExpect(jsonPath("$.keyId").value(keyId("rzp_test_abc123")))
 				.andExpect(jsonPath("$.verifiedAt").exists())
 				// The screen is never told the secret, under any name.
 				.andExpect(jsonPath("$.keySecret").doesNotExist());
@@ -106,7 +111,7 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 				"SELECT payment_provider, payment_key_id, payment_webhook_token FROM tenant_settings WHERE tenant_id = ?",
 				tenant);
 		assert "RAZORPAY".equals(row.get("payment_provider"));
-		assert "rzp_test_abc123".equals(row.get("payment_key_id"));
+		assert keyId("rzp_test_abc123").equals(row.get("payment_key_id"));
 		assert row.get("payment_webhook_token") != null : "a webhook needs an address to arrive at";
 
 		// The one that matters: the secret is in the store, and nowhere in the temple's row.
@@ -126,7 +131,7 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 		mvc.perform(authed(put("/api/v1/settings/payments"))
 						.contentType("application/json")
 						.content("""
-								{"provider":"RAZORPAY","keyId":"rzp_test_wrong","keySecret":"nope"}"""))
+								{"provider":"RAZORPAY","keyId":"%s","keySecret":"nope"}""".formatted(keyId("rzp_test_wrong"))))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400082"));
 
@@ -140,7 +145,7 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 	@DisplayName("the webhook address survives a later edit, because the provider already has it")
 	void theWebhookTokenIsMintedOnceAndKept() throws Exception {
 		signIn("uid-admin");
-		save("rzp_test_abc123", "s3cr3t-value");
+		save(keyId("rzp_test_abc123"), "s3cr3t-value");
 		String first = admin.queryForObject(
 				"SELECT payment_webhook_token FROM tenant_settings WHERE tenant_id = ?", String.class, tenant);
 
@@ -148,9 +153,9 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 		mvc.perform(authed(put("/api/v1/settings/payments"))
 						.contentType("application/json")
 						.content("""
-								{"provider":"RAZORPAY","keyId":"rzp_test_corrected"}"""))
+								{"provider":"RAZORPAY","keyId":"%s"}""".formatted(keyId("rzp_test_corrected"))))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.keyId").value("rzp_test_corrected"));
+				.andExpect(jsonPath("$.keyId").value(keyId("rzp_test_corrected")));
 
 		String second = admin.queryForObject(
 				"SELECT payment_webhook_token FROM tenant_settings WHERE tenant_id = ?", String.class, tenant);
@@ -163,7 +168,7 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 	@DisplayName("a webhook finds its temple by the token, with no tenant established")
 	void theWebhookTokenResolvesItsTemple() throws Exception {
 		signIn("uid-admin");
-		save("rzp_test_abc123", "s3cr3t-value");
+		save(keyId("rzp_test_abc123"), "s3cr3t-value");
 		String token = admin.queryForObject(
 				"SELECT payment_webhook_token FROM tenant_settings WHERE tenant_id = ?", String.class, tenant);
 
@@ -184,7 +189,7 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 		mvc.perform(authed(put("/api/v1/settings/payments"))
 						.contentType("application/json")
 						.content("""
-								{"provider":"RAZORPAY","keyId":"rzp_test_abc123","keySecret":"s3cr3t-value"}"""))
+								{"provider":"RAZORPAY","keyId":"%s","keySecret":"s3cr3t-value"}""".formatted(keyId("rzp_test_abc123"))))
 				.andExpect(status().isForbidden());
 		mvc.perform(authed(post("/api/v1/settings/payments/webhook-secret")))
 				.andExpect(status().isForbidden());
@@ -194,7 +199,7 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 	@DisplayName("revealing the webhook secret hands it over once and writes down who asked")
 	void revealingTheWebhookSecretIsAudited() throws Exception {
 		signIn("uid-admin");
-		save("rzp_test_abc123", "s3cr3t-value");
+		save(keyId("rzp_test_abc123"), "s3cr3t-value");
 
 		mvc.perform(authed(post("/api/v1/settings/payments/webhook-secret")))
 				.andExpect(status().isOk())
@@ -219,11 +224,11 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 	@DisplayName("a provider that can register its own webhook is asked to, with our url and our secret")
 	void webhookRegisteredForUs() throws Exception {
 		signIn("uid-admin");
-		save("rzp_test_selfreg", "shhh");
+		save(keyId("rzp_test_selfreg"), "shhh");
 
 		RecordingProbe.Registration registered = probe.lastRegistration;
 		assert registered != null : "a provider that can register should have been asked to";
-		assert registered.keyId().equals("rzp_test_selfreg");
+		assert registered.keyId().equals(keyId("rzp_test_selfreg"));
 
 		// Our address and our secret — a webhook signed with anything else fails the check on the
 		// way back in, so registering with a different one would be worse than not registering.
@@ -251,14 +256,14 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 	void registrationFailureLeavesCredentialsSaved() throws Exception {
 		signIn("uid-admin");
 		probe.failRegistration("this account may not manage webhooks");
-		save("rzp_test_norereg", "shhh");
+		save(keyId("rzp_test_norereg"), "shhh");
 
 		// The credentials were proven and are worth keeping; only the callback is unconfigured, and
 		// the screen falls back to telling the administrator how to do it by hand.
 		mvc.perform(authed(get("/api/v1/settings/payments")))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.configured").value(true))
-				.andExpect(jsonPath("$.keyId").value("rzp_test_norereg"))
+				.andExpect(jsonPath("$.keyId").value(keyId("rzp_test_norereg")))
 				.andExpect(jsonPath("$.webhookRegisteredAt").doesNotExist());
 	}
 
@@ -296,6 +301,11 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 
 	@Autowired
 	private TenantPaymentSettingsService settingsService;
+
+	/** A key id unique to this test; see {@link #run}. */
+	private String keyId(String name) {
+		return name + "_" + run;
+	}
 
 	private void save(String keyId, String keySecret) throws Exception {
 		mvc.perform(authed(put("/api/v1/settings/payments"))
@@ -376,35 +386,6 @@ class TenantPaymentSettingsIT extends AbstractIntegrationTest {
 		@Order(Ordered.HIGHEST_PRECEDENCE)
 		RecordingProbe recordingProbe() {
 			return new RecordingProbe();
-		}
-	}
-
-	static class StubVerifierConfiguration {
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid) {
-			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
 		}
 	}
 }

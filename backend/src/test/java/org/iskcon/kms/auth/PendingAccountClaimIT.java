@@ -5,17 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.TokenVerifier.VerifiedSubject;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -31,7 +28,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * once used to fake it — and that the claim is narrow: only a Firebase-verified contact, only a
  * pending row, never a way to inherit an account that is already someone's.
  */
-@Import(PendingAccountClaimIT.StubVerifierConfiguration.class)
 class PendingAccountClaimIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -49,7 +45,6 @@ class PendingAccountClaimIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		temple = insertTenant("radha-govinda", "Sri Sri Radha Govinda Temple");
 	}
 
@@ -235,36 +230,4 @@ class PendingAccountClaimIT extends AbstractIntegrationTest {
 				"http://localhost:" + port + path, HttpMethod.GET, new HttpEntity<>(headers), String.class);
 	}
 
-	// ---------------------------------------------------------------------
-
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private VerifiedSubject subject;
-
-		void accept(VerifiedSubject subject) {
-			this.subject = subject;
-		}
-
-		void reset() {
-			this.subject = null;
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			if (subject == null || !"valid-token".equals(idToken)) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
-		}
-	}
 }

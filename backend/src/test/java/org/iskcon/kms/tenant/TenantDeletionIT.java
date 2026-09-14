@@ -9,25 +9,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.jobs.KmsJob;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.quartz.JobDataMap;
 import org.iskcon.kms.tenancy.TenantSecretStore;
-import org.iskcon.kms.auth.TokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -40,7 +34,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * behaviour; mocking them would prove nothing.
  */
 @AutoConfigureMockMvc
-@Import(TenantDeletionIT.StubVerifierConfiguration.class)
 class TenantDeletionIT extends AbstractIntegrationTest {
 
 	// Every tenant-owned table seedTemple() writes to. audit_events is append-only and references
@@ -64,7 +57,6 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 	}
 
 	@AfterEach
@@ -424,37 +416,4 @@ class TenantDeletionIT extends AbstractIntegrationTest {
 		return builder.header("Authorization", "Bearer valid-token");
 	}
 
-	// ---------------------------------------------------------------------
-
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid) {
-			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
-		}
-	}
 }

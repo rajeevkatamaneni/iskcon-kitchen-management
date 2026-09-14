@@ -27,6 +27,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +39,6 @@ import org.quartz.Trigger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -78,8 +78,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * here rather than in a class of its own for two reasons: a reader comparing the two races should
  * find them side by side, and the held-transaction harness below — an unprivileged connection with
  * the tenant set as {@code TenantAwareDataSource} sets it — is the same harness, which a second
- * class would have to copy. A second class would also cost a second Spring context, because
- * {@code @Import} is part of the test-context cache key.
+ * class would have to copy.
  *
  * <p>T-102 adds a third, smaller kind of claim to the same class, and it is deliberately not an
  * end-to-end one. What makes a letter send once is now the predicate on {@code recordSend}'s own
@@ -101,13 +100,11 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * rule against asserting on the text of SQL, not a licence to do it elsewhere. Its class comment
  * carries the argument; read that before copying its shape.
  *
- * <p>It imports {@link CommunicationIT.StubVerifierConfiguration} rather than declaring a stub of
- * its own on purpose: {@code @Import} is part of Spring's test-context cache key, so a second,
- * identical configuration class here would build and cache a whole second application context for
- * no gain. Sharing the one class shares the one context.
+ * <p>It declares no stub configuration of its own and the same single {@code @MockBean} as
+ * {@link CommunicationIT}, on purpose: both are part of Spring's test-context cache key, so the two
+ * classes share one application context.
  */
 @AutoConfigureMockMvc
-@Import(CommunicationIT.StubVerifierConfiguration.class)
 class CommunicationRetryIT extends AbstractIntegrationTest {
 
 	private static final ObjectMapper JSON = new ObjectMapper();
@@ -116,7 +113,7 @@ class CommunicationRetryIT extends AbstractIntegrationTest {
 	private MockMvc mvc;
 
 	@Autowired
-	private CommunicationIT.StubTokenVerifier stubVerifier;
+	private StubTokenVerifier stubVerifier;
 
 	@MockBean
 	private Scheduler scheduler;
@@ -130,7 +127,6 @@ class CommunicationRetryIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		tenant = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
 				VALUES ('radha-govinda', 'Bengaluru Temple', 12.9716, 77.5946, 'Asia/Kolkata')

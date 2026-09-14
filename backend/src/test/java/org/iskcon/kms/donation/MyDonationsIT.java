@@ -24,6 +24,7 @@ import org.iskcon.kms.document.DocumentGenerationService;
 import org.iskcon.kms.notification.NotificationService;
 import org.iskcon.kms.security.PanCipher;
 import org.iskcon.kms.tenancy.TenantContext;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,11 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.quartz.Scheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -58,7 +55,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * by an administrator, so that a test can show the row's contacts prove nothing.
  */
 @AutoConfigureMockMvc
-@Import(MyDonationsIT.StubVerifierConfiguration.class)
 class MyDonationsIT extends AbstractIntegrationTest {
 
 	private static final String VERIFIED_PHONE = "+919876543210";
@@ -102,7 +98,6 @@ class MyDonationsIT extends AbstractIntegrationTest {
 	void setUp() {
 		TenantContext.clear();
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 
 		temple = tenant("radha-govinda", "Sri Sri Radha Govinda Temple");
 		otherTemple = tenant("jagannath", "Sri Jagannath Temple");
@@ -575,37 +570,5 @@ class MyDonationsIT extends AbstractIntegrationTest {
 
 	private MockHttpServletRequestBuilder as(String token, MockHttpServletRequestBuilder builder) {
 		return builder.header("Authorization", "Bearer " + token);
-	}
-
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String token, VerifiedSubject subject) {
-			accepted.put(token, subject);
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
-		}
 	}
 }

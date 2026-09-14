@@ -8,21 +8,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
-import org.iskcon.kms.auth.TokenVerifier;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -40,7 +35,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * history or in flight.
  */
 @AutoConfigureMockMvc
-@Import(MealPlannerAdoptionIT.StubVerifierConfiguration.class)
 class MealPlannerAdoptionIT extends AbstractIntegrationTest {
 
 	private static final ZoneId TEMPLE_TIME = ZoneId.of("Asia/Kolkata");
@@ -61,7 +55,6 @@ class MealPlannerAdoptionIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		today = LocalDate.now(TEMPLE_TIME);
 
 		temple = admin.queryForObject("""
@@ -305,37 +298,5 @@ class MealPlannerAdoptionIT extends AbstractIntegrationTest {
 
 	private void signIn(String uid) {
 		stubVerifier.accept(uid);
-	}
-
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, TokenVerifier.VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid) {
-			accepted.put("valid-token", new TokenVerifier.VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public TokenVerifier.VerifiedSubject verify(String idToken) throws TokenVerifier.InvalidTokenException {
-			TokenVerifier.VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new TokenVerifier.InvalidTokenException("Unrecognised token");
-			}
-			return subject;
-		}
 	}
 }

@@ -12,25 +12,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
-import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.inventory.StockMovementService;
 import org.iskcon.kms.notification.NotificationService;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -51,7 +46,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * intake sends is not this story's concern, and mocking it keeps this context off Quartz.
  */
 @AutoConfigureMockMvc
-@Import(DonationVoidIT.StubVerifierConfiguration.class)
 class DonationVoidIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -80,7 +74,6 @@ class DonationVoidIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		tenant = insertTenant();
 		insertUser(tenant, "uid-admin", "admin@example.com", "TEMPLE_ADMIN");
 		insertUser(tenant, "uid-manager", "manager@example.com", "KITCHEN_MANAGER");
@@ -382,37 +375,4 @@ class DonationVoidIT extends AbstractIntegrationTest {
 				""", UUID.class, tenant, name);
 	}
 
-	// ---------------------------------------------------------------------
-
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid) {
-			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
-		}
-	}
 }

@@ -15,10 +15,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
-import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.geo.GeocodingProvider;
 import org.iskcon.kms.geo.TravelTimeProvider;
 import org.iskcon.kms.tenancy.TenantContext;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -73,7 +73,6 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 	void setUp() {
 		TenantContext.clear();
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		geocoder.reset();
 		router.reset();
 
@@ -472,14 +471,16 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 
 	// ---------------------------------------------------------------------
 
+	/**
+	 * The stubs only this class needs: a geocoder and a router that know only the places these tests name.
+	 *
+	 * <p>A nested {@code @TestConfiguration} is part of Spring's context cache key, so this class keeps
+	 * an application context of its own; the alternative is a paid external call from the suite. The
+	 * token verifier is not declared here: it is the suite's shared one, from
+	 * {@code AbstractIntegrationTest} (T-189).
+	 */
 	@TestConfiguration
 	static class Stubs {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
 
 		@Bean
 		@Primary
@@ -582,28 +583,6 @@ class TravelEstimateIT extends AbstractIntegrationTest {
 		@Override
 		public boolean configured() {
 			return on;
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid) {
-			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
 		}
 	}
 }

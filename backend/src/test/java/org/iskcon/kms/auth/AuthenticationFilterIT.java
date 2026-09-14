@@ -2,22 +2,17 @@ package org.iskcon.kms.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -34,7 +29,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * the user lookup through the narrow RLS escape, the disabled-user check, tenant resolution,
  * and the filter's cleanup of thread-local state.
  */
-@Import(AuthenticationFilterIT.StubVerifierConfiguration.class)
 class AuthenticationFilterIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -55,7 +49,6 @@ class AuthenticationFilterIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 
 		tenantId = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
@@ -153,41 +146,4 @@ class AuthenticationFilterIT extends AbstractIntegrationTest {
 				""", tenantId, uid, "Test User", email, phone, role, status);
 	}
 
-	// ---------------------------------------------------------------------
-
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	/**
-	 * Accepts only tokens a test has explicitly registered. Anything else fails verification,
-	 * mirroring how a real verifier behaves for a forged token.
-	 */
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid, String email, String phone) {
-			accepted.put("valid-token", new VerifiedSubject(uid, email, phone));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
-		}
-	}
 }

@@ -2,13 +2,11 @@ package org.iskcon.kms.tenant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.AuthenticationFilter;
-import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.geo.GeocodingProvider;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,7 +16,6 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -35,7 +32,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * gives them exactly one volunteer membership, and that holding two memberships never lets a request
  * see further than the one it is speaking for.
  */
-@Import(MembershipIT.StubVerifierConfiguration.class)
 class MembershipIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -54,7 +50,6 @@ class MembershipIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		govinda = insertTenant("radha-govinda", "Sri Sri Radha Govinda Temple");
 		krishna = insertTenant("radha-krishna", "Sri Sri Radha Krishna Temple");
 	}
@@ -69,7 +64,7 @@ class MembershipIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a devotee with no temple may see the temples and join one, and nothing else")
 	void joinsATemple() {
-		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101", true);
 
 		// Before joining they are somebody Google vouched for and nobody this product knows.
 		assertThat(get("/api/v1/whoami").getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
@@ -93,7 +88,7 @@ class MembershipIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("the new member shows up in that temple's people, and only that temple's")
 	void appearsInTheTemplesUsers() {
-		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101", true);
 		post("/api/v1/temples/" + govinda + "/join");
 
 		assertThat(admin.queryForObject("""
@@ -115,7 +110,7 @@ class MembershipIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("joining the same temple twice changes nothing")
 	void joiningTwiceIsANoOp() {
-		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101", true);
 
 		post("/api/v1/temples/" + govinda + "/join");
 		post("/api/v1/temples/" + govinda + "/join");
@@ -128,7 +123,7 @@ class MembershipIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a devotee may serve at two temples, and each request speaks for one of them")
 	void twoTemplesOneRequestAtATime() {
-		stubVerifier.accept("uid-both", "seva@example.com", "+919000000102");
+		stubVerifier.accept("uid-both", "seva@example.com", "+919000000102", true);
 		post("/api/v1/temples/" + govinda + "/join");
 		post("/api/v1/temples/" + krishna + "/join");
 
@@ -149,7 +144,7 @@ class MembershipIT extends AbstractIntegrationTest {
 	void findsTemplesNearby() {
 		// Mysore is about 130 km from Bengaluru: outside any sensible "temples near me".
 		UUID mysore = insertTenantAt("iskcon-mysore", "ISKCON Mysore", 12.2958, 76.6394);
-		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101", true);
 
 		ResponseEntity<String> near = get("/api/v1/temples?near=12.9716,77.5946&withinKm=25");
 		assertThat(near.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -172,7 +167,7 @@ class MembershipIT extends AbstractIntegrationTest {
 	@DisplayName("a place is looked up on the map, so it need not be spelled the way an address is")
 	void findsTemplesNearAPlace() {
 		insertTenantAt("iskcon-mysore", "ISKCON Mysore", 12.2958, 76.6394);
-		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101", true);
 
 		// "Mysuru" appears in no temple's name or address — only the map knows it is Mysore.
 		ResponseEntity<String> byPlace = get("/api/v1/temples?q=Mysuru");
@@ -187,7 +182,7 @@ class MembershipIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a temple needs a name and a number, whichever way they signed in")
 	void nameAndNumberAreRequired() {
-		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101", true);
 
 		// Google proves an email and nothing else. A shift cannot be staffed from an email address.
 		assertThat(post("/api/v1/temples/" + govinda + "/join",
@@ -206,7 +201,7 @@ class MembershipIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a joining devotee's number typed with spaces and hyphens is stored as the bare number")
 	void aSpacedNumberIsStoredBare() {
-		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101", true);
 
 		assertThat(post("/api/v1/temples/" + govinda + "/join",
 				"{\"firstName\":\"Nitai\",\"lastName\":\"Das\",\"phone\":\"+91 90000-00202\"}")
@@ -220,7 +215,7 @@ class MembershipIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("joining a temple that does not exist is refused")
 	void unknownTempleIsRefused() {
-		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101");
+		stubVerifier.accept("uid-new", "devotee@example.com", "+919000000101", true);
 
 		assertThat(post("/api/v1/temples/" + UUID.randomUUID() + "/join").getStatusCode())
 				.isEqualTo(HttpStatus.NOT_FOUND);
@@ -273,14 +268,16 @@ class MembershipIT extends AbstractIntegrationTest {
 
 	// ---------------------------------------------------------------------
 
+	/**
+	 * The one stub this class needs that others do not: a geocoder with one place on it.
+	 *
+	 * <p>A nested {@code @TestConfiguration} is part of Spring's context cache key, so this gives the
+	 * class an application context of its own. That is the price of never calling the map service, and
+	 * the reason nothing else lives here: the token verifier is the suite's shared one, from
+	 * {@code AbstractIntegrationTest}, as it is for every other class (T-189).
+	 */
 	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
+	static class MapStub {
 
 		/**
 		 * A map with one place on it. The suite must not call the map service — it would make the
@@ -293,28 +290,6 @@ class MembershipIT extends AbstractIntegrationTest {
 			return place -> "mysuru".equalsIgnoreCase(place.trim())
 					? java.util.Optional.of(new GeocodingProvider.Coordinates(12.2958, 76.6394))
 					: java.util.Optional.empty();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void reset() {
-			accepted.clear();
-		}
-
-		void accept(String uid, String email, String phone) {
-			accepted.put("valid-token", new VerifiedSubject(uid, email, phone, true));
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("not accepted by the stub");
-			}
-			return subject;
 		}
 	}
 }

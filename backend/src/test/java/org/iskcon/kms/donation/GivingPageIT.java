@@ -5,22 +5,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
-import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.tenancy.TenantContext;
+import org.iskcon.kms.auth.TokenVerifier;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -40,7 +35,6 @@ import org.springframework.test.web.servlet.ResultActions;
  * what {@link #figuresStopAtTheTenantBoundary} now turns on.
  */
 @AutoConfigureMockMvc
-@Import(GivingPageIT.StubVerifierConfiguration.class)
 class GivingPageIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -56,7 +50,6 @@ class GivingPageIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		tenant = tenant("radha-govinda", "Bengaluru Temple");
 		staff = user(tenant, "uid-page-staff", "staff-page@example.com", "+919876500091");
 	}
@@ -301,7 +294,8 @@ class GivingPageIT extends AbstractIntegrationTest {
 	 * because the uid is all the endpoint gets: the temple follows from whose account it is.
 	 */
 	private ResultActions page(String uid) throws Exception {
-		stubVerifier.accept(uid);
+		// A token per person, so a test can hold two people signed in at once.
+		stubVerifier.accept("token-" + uid, new TokenVerifier.VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
 		return mvc.perform(get("/api/v1/donations/page").header("Authorization", "Bearer token-" + uid));
 	}
 
@@ -438,41 +432,5 @@ class GivingPageIT extends AbstractIntegrationTest {
 				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit, expected_price)
 				VALUES (?, ?, ?, ?::numeric, 'KG', ?::numeric)
 				""", tenantId, po, ingredient, quantity, price);
-	}
-
-	/**
-	 * Signing in, without Firebase. One token per uid rather than one shared "valid-token", so that
-	 * two people from two temples can both be signed in across a single test.
-	 */
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid) {
-			accepted.put("token-" + uid, new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
-		}
 	}
 }

@@ -6,18 +6,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
-import org.iskcon.kms.auth.TokenVerifier;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -32,7 +28,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>The acceptance criterion from the story is the last of these tests — a newly provisioned
  * temple must be usable, not merely present in a table.
  */
-@Import(TenantProvisioningIT.StubVerifierConfiguration.class)
 class TenantProvisioningIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -49,7 +44,6 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 	}
 
 	@AfterEach
@@ -410,46 +404,4 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 				String.class);
 	}
 
-	// ---------------------------------------------------------------------
-
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid) {
-			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
-		}
-
-		/** A token whose email is Firebase-verified, for exercising the first-sign-in claim. */
-		void acceptVerified(String uid, String email) {
-			accepted.put("valid-token", new VerifiedSubject(uid, email, "+919000000000", true));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		boolean isEmpty() {
-			return accepted.isEmpty();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
-		}
-	}
 }

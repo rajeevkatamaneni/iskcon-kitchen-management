@@ -12,24 +12,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
-import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.perf.StatementRecorder;
+import org.iskcon.kms.perf.StatementRecordingConfiguration;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -47,7 +42,9 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * covers is simply not there.
  */
 @AutoConfigureMockMvc
-@Import(ShoppingListIT.StubVerifierConfiguration.class)
+// The statement recorder, for theLedgerIsSummedOncePerPageLoad (T-140). It proxies every connection,
+// so it is imported only by the classes that count SQL, and they share one context between them.
+@Import(StatementRecordingConfiguration.class)
 class ShoppingListIT extends AbstractIntegrationTest {
 
 	private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
@@ -68,7 +65,6 @@ class ShoppingListIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		tenant = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
 				VALUES ('radha-govinda', 'Bengaluru Temple', 12.9716, 77.5946, 'Asia/Kolkata')
@@ -590,50 +586,5 @@ class ShoppingListIT extends AbstractIntegrationTest {
 
 	private void signIn(String uid) {
 		stubVerifier.accept(uid);
-	}
-
-	// ---------------------------------------------------------------------
-
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-
-		/**
-		 * Records the SQL a request issues, so {@link #theLedgerIsSummedOncePerPageLoad()} can count
-		 * it (T-140). Declared here rather than in a configuration of its own because an imported
-		 * configuration class is part of the TestContext cache key, and a second one would ask for a
-		 * second Spring context to run one assertion.
-		 */
-		@Bean
-		static BeanPostProcessor shoppingListStatementRecorder() {
-			return StatementRecorder.wrapTheDataSource();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid) {
-			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
-		}
 	}
 }

@@ -846,6 +846,32 @@ and the family-to-status agreement across all 128 codes.
 
 Not governing documents, but recorded here because these items are the ones CI evidence alone was taken as proof of — the first two were E1-S1 acceptance criteria marked done on a green run, and the entries since are about the runs themselves.
 
+### 2026-09-13 — The backend suite builds 21 Spring contexts instead of 126, and stops running out of memory at the release gate (task T-189)
+
+**Test code only.** No production code, no migration, nothing deployed. The test heap stays at 2 GB;
+`build.gradle.kts` changes one comment.
+
+**Why it was 126.** 99 integration classes each declared their own nested stub token verifier, and
+Spring treats each nested configuration as a different context. Every one was built and most were
+kept in memory, so the live heap at the end of a run reached 1,273 MB against the 2 GB ceiling. That
+is what had been killing release gates with no failing test.
+
+**What changed.** One shared stub verifier, imported by `AbstractIntegrationTest` and reset before
+every test. The base class also declares `@AutoConfigureMockMvc`, which is part of the context key
+and had split off 25 more classes. The perf classes' SQL recorder moved to
+`perf/StatementRecordingConfiguration`. The 21 contexts left are real differences: mocked beans,
+different properties, or stubs that change behaviour.
+
+**Numbers, same command before and after:** contexts 126 to 21; live heap at the end 1,273 MB to
+279 MB (peak 1,289 MB to 306 MB); local run 5m02s to 3m47s. Tests 2,626 to 2,629: every original is
+present, and three are added in `testsupport/SharedStubVerifierResetIT`, which fails if the shared
+reset is removed (no existing test noticed). Three consecutive green full runs, one in random class
+order (seed 189013).
+
+**Not done:** two texts in `build.gradle.kts` are now wrong, the paragraph saying the repair is filed
+separately and the out-of-memory message citing 81 contexts; both are in T-191. Proof in
+`docs/work/proof/T-189.md`.
+
 ### 2026-09-08 — Two tests stop reading a picker before it has been filled, and the release they were blocking can ship (task T-075)
 
 **A release sat undeployed for a day because of a race in a test, and nothing was wrong with the

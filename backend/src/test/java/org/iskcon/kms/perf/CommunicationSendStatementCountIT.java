@@ -9,8 +9,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.auth.TokenVerifier.VerifiedSubject;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -76,7 +79,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * repetition this class counts is the one that happened inside a single request.
  */
 @AutoConfigureMockMvc
-@Import(PerfStubVerifierConfiguration.class)
+@Import(StatementRecordingConfiguration.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CommunicationSendStatementCountIT extends AbstractIntegrationTest {
 
@@ -106,11 +109,14 @@ class CommunicationSendStatementCountIT extends AbstractIntegrationTest {
 	/** The frame that issues the lookup under examination. */
 	private static final String TEMPLE_NAME_LOOKUP = "communication.CommunicationService.templeName";
 
+	/** The bearer token this class signs in with; see {@link #signIn()}. */
+	private static final String TOKEN = "perf-token";
+
 	@Autowired
 	private MockMvc mvc;
 
 	@Autowired
-	private PerfStubVerifierConfiguration.PerfStubTokenVerifier stubVerifier;
+	private StubTokenVerifier stubVerifier;
 
 	/**
 	 * Mocked for the reason {@code CommunicationIT} mocks it: Quartz is excluded from this suite's
@@ -127,7 +133,6 @@ class CommunicationSendStatementCountIT extends AbstractIntegrationTest {
 	@BeforeAll
 	void buildTheTemple() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 
 		tenant = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
@@ -152,8 +157,17 @@ class CommunicationSendStatementCountIT extends AbstractIntegrationTest {
 					""", tenant, "t097-dev-" + i, "Devotee " + i,
 					"t097-dev-" + i + "@example.com", String.format("+9198765%05d", 10000 + i));
 		}
+	}
 
-		stubVerifier.accept("t097-admin");
+	/**
+	 * Signed in before every test, not once in {@code buildTheTemple}: the suite's shared verifier is
+	 * reset before each test (see {@code AbstractIntegrationTest}), so a sign-in made once per class
+	 * would be gone by the first one. The token and the subject are the ones this class signed in with
+	 * before T-189, so the request being measured is the request that was measured.
+	 */
+	@BeforeEach
+	void signIn() {
+		stubVerifier.accept(TOKEN, new VerifiedSubject("t097-admin", "t097-admin@example.com", "+919000000001"));
 	}
 
 	@AfterAll
@@ -280,7 +294,7 @@ class CommunicationSendStatementCountIT extends AbstractIntegrationTest {
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder b) {
 		return b.header("Authorization",
-				"Bearer " + PerfStubVerifierConfiguration.PerfStubTokenVerifier.TOKEN);
+				"Bearer " + TOKEN);
 	}
 
 	private static long sentBy(List<StatementRecorder.Executed> statements, String callerPrefix) {

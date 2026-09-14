@@ -141,11 +141,13 @@ class TenantPaymentWebhookIT extends AbstractIntegrationTest {
 				""", UUID.class, slug, name);
 	}
 
+	// A key id of its own every time: PaymentGatewayResolver caches clients by key id for the life of
+	// the context, and since T-189 that context is shared with other classes.
 	private void configure(UUID tenantId, String token, String webhookSecret) {
 		admin.update("""
 				INSERT INTO tenant_settings (tenant_id, payment_provider, payment_key_id, payment_webhook_token)
-				VALUES (?, 'RAZORPAY', 'rzp_test_key', ?)
-				""", tenantId, token);
+				VALUES (?, 'RAZORPAY', ?, ?)
+				""", tenantId, "rzp_test_key_" + UUID.randomUUID(), token);
 		secrets.put(tenantId, TenantSecretStore.Kind.PAYMENT_WEBHOOK_SECRET, webhookSecret);
 	}
 

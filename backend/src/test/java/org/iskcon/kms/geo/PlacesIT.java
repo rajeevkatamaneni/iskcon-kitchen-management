@@ -12,15 +12,13 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.iskcon.kms.AbstractIntegrationTest;
-import org.iskcon.kms.auth.TokenVerifier;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -83,7 +81,6 @@ class PlacesIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		places.reset();
 	}
 
@@ -440,14 +437,16 @@ class PlacesIT extends AbstractIntegrationTest {
 		return uid;
 	}
 
+	/**
+	 * The stubs only this class needs: a Places service with one temple on it, which records what it was asked.
+	 *
+	 * <p>A nested {@code @TestConfiguration} is part of Spring's context cache key, so this class keeps
+	 * an application context of its own; the alternative is a paid external call from the suite. The
+	 * token verifier is not declared here: it is the suite's shared one, from
+	 * {@code AbstractIntegrationTest} (T-189).
+	 */
 	@TestConfiguration
 	static class Stubs {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
 
 		@Bean
 		@Primary
@@ -506,28 +505,6 @@ class PlacesIT extends AbstractIntegrationTest {
 			}
 			return Optional.of(new Place(
 					placeId, RESOLVED_ADDRESS, new GeocodingProvider.Coordinates(13.0098, 77.5511)));
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid) {
-			accepted.put("valid-token", new VerifiedSubject(uid, uid + "@example.com", "+919000000000"));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
 		}
 	}
 }

@@ -2,21 +2,17 @@ package org.iskcon.kms.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -37,8 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Endpoints here are defined by the test rather than borrowed from the application, so this
  * exercises the enforcement mechanism itself and does not break every time a real endpoint moves.
  */
-@Import({AccessControlEnforcementIT.TestEndpoints.class,
-		AccessControlEnforcementIT.StubVerifierConfiguration.class})
+@Import(AccessControlEnforcementIT.TestEndpoints.class)
 class AccessControlEnforcementIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -56,7 +51,6 @@ class AccessControlEnforcementIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 
 		tenantId = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
@@ -225,42 +219,6 @@ class AccessControlEnforcementIT extends AbstractIntegrationTest {
 		@PreAuthorize("hasAuthority('MANAGE_EQUIPMENT_SERVICING')")
 		String equipmentServicing() {
 			return "ok";
-		}
-	}
-
-	@TestConfiguration
-	static class StubVerifierConfiguration {
-
-		@Bean
-		@Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
-	}
-
-	static class StubTokenVerifier implements TokenVerifier {
-
-		private final Map<String, VerifiedSubject> accepted = new HashMap<>();
-
-		void accept(String uid, String email, String phone) {
-			accepted.put("valid-token", new VerifiedSubject(uid, email, phone));
-		}
-
-		void reset() {
-			accepted.clear();
-		}
-
-		boolean isEmpty() {
-			return accepted.isEmpty();
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			VerifiedSubject subject = accepted.get(idToken);
-			if (subject == null) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return subject;
 		}
 	}
 }

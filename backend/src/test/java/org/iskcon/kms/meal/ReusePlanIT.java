@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.tenancy.TenantContext;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,7 +35,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * — so the preview and the commit must be the same walk, or the preview is a second opinion.
  */
 @AutoConfigureMockMvc
-@org.springframework.context.annotation.Import(ReusePlanIT.Stubs.class)
 class ReusePlanIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -101,7 +101,7 @@ class ReusePlanIT extends AbstractIntegrationTest {
 		} finally {
 			TenantContext.clear();
 		}
-		stubVerifier.accept("uid-reuse");
+		stubVerifier.accept("uid-reuse", "uid-reuse@example.com", "+919876500099");
 	}
 
 	@AfterEach
@@ -311,33 +311,5 @@ class ReusePlanIT extends AbstractIntegrationTest {
 				SELECT DISTINCT meal_kind FROM meal_plans
 				WHERE tenant_id = ? AND plan_date = ? AND status <> 'CANCELLED' ORDER BY meal_kind
 				""", String.class, tenant, date);
-	}
-
-	/** The one token these tests present, standing for the planner who signed in. */
-	static class StubTokenVerifier implements org.iskcon.kms.auth.TokenVerifier {
-
-		private String uid;
-
-		void accept(String subject) {
-			this.uid = subject;
-		}
-
-		@Override
-		public VerifiedSubject verify(String idToken) throws InvalidTokenException {
-			if (uid == null || !"valid-token".equals(idToken)) {
-				throw new InvalidTokenException("Unrecognised token");
-			}
-			return new VerifiedSubject(uid, uid + "@example.com", "+919876500099");
-		}
-	}
-
-	@org.springframework.boot.test.context.TestConfiguration
-	static class Stubs {
-
-		@org.springframework.context.annotation.Bean
-		@org.springframework.context.annotation.Primary
-		StubTokenVerifier stubTokenVerifier() {
-			return new StubTokenVerifier();
-		}
 	}
 }

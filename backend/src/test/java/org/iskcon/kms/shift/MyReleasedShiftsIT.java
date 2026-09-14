@@ -17,6 +17,7 @@ import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.auth.Permission;
 import org.iskcon.kms.auth.RolePermissions;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.iskcon.kms.user.User;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +27,6 @@ import org.quartz.Scheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -47,12 +47,11 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * written in with fixtures, so the rows this reads are the rows the application actually stores.
  * Only the clock is moved by hand, in the week-boundary test, because a week cannot be waited out.
  *
- * <p>Borrows {@link ReleaseIT}'s verifier configuration and the same {@code @MockBean} rather than
- * declaring its own copies: both are part of Spring's context cache key, so this class then shares
- * ReleaseIT's application context instead of starting another one.
+ * <p>Declares the same single {@code @MockBean} as {@link ReleaseIT} and no stub configuration of its
+ * own: both are part of Spring's context cache key, so this class shares ReleaseIT's application
+ * context instead of starting another one.
  */
 @AutoConfigureMockMvc
-@Import(ReleaseIT.StubVerifierConfiguration.class)
 class MyReleasedShiftsIT extends AbstractIntegrationTest {
 
 	/** Far enough ahead that no shift here has started, which removal and release both require. */
@@ -67,7 +66,7 @@ class MyReleasedShiftsIT extends AbstractIntegrationTest {
 	private ObjectMapper json;
 
 	@Autowired
-	private ReleaseIT.StubTokenVerifier stubVerifier;
+	private StubTokenVerifier stubVerifier;
 
 	@MockBean
 	private Scheduler scheduler;
@@ -81,7 +80,6 @@ class MyReleasedShiftsIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		tenant = admin.queryForObject("""
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
 				VALUES ('radha-govinda', 'Bengaluru Temple', 12.9716, 77.5946, 'Asia/Kolkata')

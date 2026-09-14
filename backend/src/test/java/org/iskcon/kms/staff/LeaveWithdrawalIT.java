@@ -24,6 +24,7 @@ import org.iskcon.kms.auth.Permission;
 import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.notification.NotificationDispatcher;
 import org.iskcon.kms.tenancy.TenantContext;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.iskcon.kms.user.User;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +34,6 @@ import org.quartz.Scheduler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -47,8 +47,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * <em>"Cant be modified"</em>; the manager is told, <em>"YES"</em>; and the person is confirmed by
  * <em>"Email and WattsApp both. If both are setup IF not, Just email."</em>
  *
- * <p><strong>Same context as {@link StaffLeaveIT}, on purpose.</strong> The same {@code @Import}, the
- * same single {@code @MockBean} and no properties of its own, so Spring's context cache hands this class
+ * <p><strong>Same context as {@link StaffLeaveIT}, on purpose.</strong> No stub configuration of its
+ * own, the same single {@code @MockBean} and no properties of its own, so Spring's context cache hands this class
  * the context StaffLeaveIT already built rather than a new one: CI has died of heap from contexts before.
  * The cost is that this context configures no mail relay, so an email attempt here records FAILED
  * ("no email sender is configured"). The channel tests therefore assert which channels were attempted,
@@ -58,7 +58,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * about the day boundary moves the temple to a zone where it is a few minutes before or after midnight.
  */
 @AutoConfigureMockMvc
-@Import(StaffLeaveIT.StubVerifierConfiguration.class)
 class LeaveWithdrawalIT extends AbstractIntegrationTest {
 
 	private static final ObjectMapper JSON = new ObjectMapper();
@@ -70,7 +69,7 @@ class LeaveWithdrawalIT extends AbstractIntegrationTest {
 	private MockMvc mvc;
 
 	@Autowired
-	private StaffLeaveIT.StubTokenVerifier stubVerifier;
+	private StubTokenVerifier stubVerifier;
 
 	@Autowired
 	private NotificationDispatcher dispatcher;
@@ -93,7 +92,6 @@ class LeaveWithdrawalIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() throws Exception {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		today = LocalDate.now(TEMPLE);
 		tenant = temple("radha-govinda", "Bengaluru Temple");
 		templeAdmin = user(tenant, "uid-admin", "Temple Admin", "+919876500001", "TEMPLE_ADMIN");

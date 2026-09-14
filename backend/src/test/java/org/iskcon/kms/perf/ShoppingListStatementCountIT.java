@@ -57,7 +57,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 // Deliberately NOT tagged `perf`, unlike its two siblings in this package. That tag exists so a
 // future build script can exclude the whole package, and a guard that a build change can silently
 // switch off is not a guard. It lives here because StatementRecorder and TempleScaleFixture do.
-@Import(PerfStubVerifierConfiguration.class)
+@Import(StatementRecordingConfiguration.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ShoppingListStatementCountIT extends AbstractIntegrationTest {
 

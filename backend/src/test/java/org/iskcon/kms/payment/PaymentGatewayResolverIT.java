@@ -40,6 +40,14 @@ class PaymentGatewayResolverIT extends AbstractIntegrationTest {
 	private UUID bengaluru;
 	private UUID mysore;
 
+	/**
+	 * Every key id in this class carries this, so no two tests, and no two classes, ever store the same
+	 * one. {@code PaymentGatewayResolver} caches the clients it builds by key id for the life of the
+	 * context and never forgets one, and since T-189 a context outlives many classes: a key id reused
+	 * with a different secret or provider would be handed whichever client was built for it first.
+	 */
+	private final String run = UUID.randomUUID().toString();
+
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
@@ -59,20 +67,20 @@ class PaymentGatewayResolverIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("each temple collects into its own account, never into another temple's")
 	void eachTempleGetsItsOwnGateway() {
-		configure(bengaluru, "rzp_test_bengaluru", "bengaluru-secret");
-		configure(mysore, "rzp_test_mysore", "mysore-secret");
+		configure(bengaluru, keyId("rzp_test_bengaluru"), "bengaluru-secret");
+		configure(mysore, keyId("rzp_test_mysore"), "mysore-secret");
 
 		TenantContext.set(bengaluru);
-		assertThat(resolver.forCurrentTenant().publicKey()).isEqualTo("rzp_test_bengaluru");
+		assertThat(resolver.forCurrentTenant().publicKey()).isEqualTo(keyId("rzp_test_bengaluru"));
 
 		TenantContext.set(mysore);
-		assertThat(resolver.forCurrentTenant().publicKey()).isEqualTo("rzp_test_mysore");
+		assertThat(resolver.forCurrentTenant().publicKey()).isEqualTo(keyId("rzp_test_mysore"));
 	}
 
 	@Test
 	@DisplayName("a temple that has set nothing up falls back rather than borrowing someone's account")
 	void anUnconfiguredTempleFallsBack() {
-		configure(bengaluru, "rzp_test_bengaluru", "bengaluru-secret");
+		configure(bengaluru, keyId("rzp_test_bengaluru"), "bengaluru-secret");
 
 		TenantContext.set(mysore);
 		// The platform default, which without credentials is the stub — it takes no money.
@@ -85,8 +93,8 @@ class PaymentGatewayResolverIT extends AbstractIntegrationTest {
 		// Configured, but the secret is not in the store — a half-migration, or a manual deletion.
 		admin.update("""
 				INSERT INTO tenant_settings (tenant_id, payment_provider, payment_key_id, payment_webhook_token)
-				VALUES (?, 'RAZORPAY', 'rzp_test_orphan', 'token-orphan')
-				""", bengaluru);
+				VALUES (?, 'RAZORPAY', ?, 'token-orphan')
+				""", bengaluru, keyId("rzp_test_orphan"));
 
 		TenantContext.set(bengaluru);
 		assertThat(resolver.forCurrentTenant().name()).isEqualTo("stub");
@@ -95,16 +103,16 @@ class PaymentGatewayResolverIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("rotating the key gives the next donation a client built from the new one")
 	void rotatingTheKeyIsPickedUp() {
-		configure(bengaluru, "rzp_test_first", "first-secret");
+		configure(bengaluru, keyId("rzp_test_first"), "first-secret");
 		TenantContext.set(bengaluru);
-		assertThat(resolver.forCurrentTenant().publicKey()).isEqualTo("rzp_test_first");
+		assertThat(resolver.forCurrentTenant().publicKey()).isEqualTo(keyId("rzp_test_first"));
 
-		admin.update("UPDATE tenant_settings SET payment_key_id = 'rzp_test_second' WHERE tenant_id = ?",
-				bengaluru);
+		admin.update("UPDATE tenant_settings SET payment_key_id = ? WHERE tenant_id = ?",
+				keyId("rzp_test_second"), bengaluru);
 		secrets.put(bengaluru, TenantSecretStore.Kind.PAYMENT_KEY_SECRET, "second-secret");
 
 		// Cached by key id, so a rotation is picked up without anything being invalidated by hand.
-		assertThat(resolver.forCurrentTenant().publicKey()).isEqualTo("rzp_test_second");
+		assertThat(resolver.forCurrentTenant().publicKey()).isEqualTo(keyId("rzp_test_second"));
 	}
 
 	// ---- helpers ----------------------------------------------------------
@@ -114,6 +122,11 @@ class PaymentGatewayResolverIT extends AbstractIntegrationTest {
 				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
 				VALUES (?, ?, 12.9716, 77.5946, 'Asia/Kolkata') RETURNING id
 				""", UUID.class, slug, name);
+	}
+
+	/** A key id unique to this test; see {@link #run}. */
+	private String keyId(String name) {
+		return name + "_" + run;
 	}
 
 	private void configure(UUID tenantId, String keyId, String keySecret) {

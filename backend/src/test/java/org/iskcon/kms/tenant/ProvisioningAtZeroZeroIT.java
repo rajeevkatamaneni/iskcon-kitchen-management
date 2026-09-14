@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,7 +18,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -38,11 +38,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <p>The bodies are written as raw JSON rather than a map, so {@code 0.000000} reaches the server
  * as exactly those characters and not as whatever a serialiser makes of a number.
  *
- * <p>Imports {@code TenantProvisioningIT}'s verifier configuration rather than declaring its own:
- * {@code @Import} is part of Spring's context cache key, and a second identical configuration
- * class would start a second application context for no reason.
+ * <p>Declares no stub configuration of its own, so it shares the suite's context; the token verifier
+ * comes from {@code AbstractIntegrationTest}, as every class's does since T-189.
  */
-@Import(TenantProvisioningIT.StubVerifierConfiguration.class)
 class ProvisioningAtZeroZeroIT extends AbstractIntegrationTest {
 
 	private static final String AT_ZERO_ZERO = "That puts the temple at 0, 0. Choose its real place.";
@@ -51,7 +49,7 @@ class ProvisioningAtZeroZeroIT extends AbstractIntegrationTest {
 	private TestRestTemplate rest;
 
 	@Autowired
-	private TenantProvisioningIT.StubTokenVerifier stubVerifier;
+	private StubTokenVerifier stubVerifier;
 
 	@Autowired
 	private ObjectMapper json;
@@ -64,7 +62,6 @@ class ProvisioningAtZeroZeroIT extends AbstractIntegrationTest {
 	@BeforeEach
 	void setUp() {
 		admin = new JdbcTemplate(adminDataSource());
-		stubVerifier.reset();
 		signInAsSuperAdmin();
 	}
 

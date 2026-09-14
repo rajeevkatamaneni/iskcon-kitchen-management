@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -50,7 +49,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @Tag("perf")
 @EnabledIfEnvironmentVariable(named = "KMS_PERF", matches = "1|true|yes|on",
 		disabledReason = "T-139's control builds real fixtures. Set KMS_PERF=1 to run it.")
-@Import(PerfStubVerifierConfiguration.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TempleScaleFixtureControlIT extends AbstractIntegrationTest {
 

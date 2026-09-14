@@ -5,7 +5,13 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import javax.sql.DataSource;
+import org.iskcon.kms.testsupport.StubTokenVerifier;
+import org.iskcon.kms.testsupport.StubVerifierConfiguration;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -48,11 +54,48 @@ import org.testcontainers.containers.PostgreSQLContainer;
 // the scheduler runs solely in the worker; recreating it in every @SpringBootTest context would
 // put a dozen schedulers of the same name into one JVM, contending in Quartz's process-wide
 // registry. Off by default keeps each test's context to what it actually needs.
+//
+// The stub token verifier is imported here, once, for every integration class (T-189). Before, 99
+// classes each declared a private nested copy of it, and a nested @TestConfiguration is part of
+// Spring's context cache key, so each copy built a context of its own: 126 per run, 1273 MB live at
+// the end, against a 2 GB ceiling. Inheriting one import is what lets classes with the same mocks
+// and properties share a context. So a test class must not declare a nested @TestConfiguration
+// unless it genuinely needs a different application, and it should say why when it does.
+//
+// @AutoConfigureMockMvc is declared here for the same reason. It imports auto-configuration, so it is
+// part of the key too: measured on T-189's tree, the 25 classes without it and the 60 with it were two
+// contexts of an otherwise identical application. It adds a MockMvc and nothing a class that talks
+// through TestRestTemplate can see, and declaring it on a subclass as well changes nothing.
 @SpringBootTest(
 		webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
 		properties = "spring.autoconfigure.exclude="
 				+ "org.springframework.boot.autoconfigure.quartz.QuartzAutoConfiguration")
+@AutoConfigureMockMvc
+@Import(StubVerifierConfiguration.class)
 public abstract class AbstractIntegrationTest {
+
+	/**
+	 * Shared by every class in this context, so it is reset here before every test rather than by
+	 * each class for itself.
+	 *
+	 * <p>A shared context outlives the test class that signed somebody in, and JUnit does not fix
+	 * the order classes run in. Without this, a token accepted by the last test of one class is still
+	 * accepted when the first test of the next class sends it, and that class's "an unknown token is
+	 * refused" test passes or fails depending on which class happened to run before it. JUnit runs a
+	 * superclass's {@code @BeforeEach} before the subclass's, so every test's own setup starts from
+	 * nobody signed in, exactly as it did when each class had a verifier of its own.
+	 *
+	 * <p>Classes with {@code @TestInstance(PER_CLASS)} must therefore sign in from a
+	 * {@code @BeforeEach}, never a {@code @BeforeAll}: a sign-in made once per class is gone by the
+	 * first test.
+	 */
+	@Autowired
+	private StubTokenVerifier sharedStubVerifier;
+
+	@BeforeEach
+	void signEverybodyOut() {
+		sharedStubVerifier.reset();
+	}
 
 	protected static final String APP_ROLE = "kms_app";
 	protected static final String APP_PASSWORD = "kms_app_password";

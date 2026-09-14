@@ -126,11 +126,15 @@ tasks.withType<Test> {
 	// nothing. That default is sized for unit tests. This is not a unit-test suite, and the
 	// measurements below are from a full run of it on 2026-09-08 (1830 tests).
 	//
-	// It creates about a hundred distinct Spring application contexts — *119* on
-	// 2026-09-11, counted two ways that agree: the suite's own census (`-PcontextCensus`,
-	// see ContextCensus in the test sources) and Spring's own `missCount`. 99 of the 128
-	// integration classes declare a nested `StubVerifierConfiguration`, 97 of them
-	// byte-for-byte identical, and each one asks for a context of its own.
+	// It created about a hundred distinct Spring application contexts — *119* on
+	// 2026-09-11 and *126* on 2026-09-13, counted two ways that agree: the suite's own census
+	// (`-PcontextCensus`, see ContextCensus in the test sources) and Spring's own `missCount`.
+	// 99 of the 128 integration classes declared a nested `StubVerifierConfiguration`, 97 of
+	// them byte-for-byte identical, and each one asked for a context of its own.
+	//
+	// *T-189, 2026-09-13:* the same census on the same command now reads *21* contexts and
+	// `missCount` *21*, with *279 MB* live at the end of the run where there were *1273 MB*,
+	// because those classes now share one stub verifier imported by AbstractIntegrationTest.
 	//
 	// *Corrected 2026-09-11, and the correction matters more than the number.* This
 	// comment used to say that the `@Import` was what split the cache. It is not. Spring
