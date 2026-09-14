@@ -302,6 +302,10 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 	 * these rows up as well — see {@code OwnAccountsAtOtherTemplesIT}. This test is here so the next
 	 * person to notice the visibility reads it as deliberate, and so it cannot quietly widen: it is the
 	 * person's own rows only, readable only, and gone the moment the uid is.
+	 *
+	 * <p>V2's comment on this policy says it exposes "exactly one row". That comment predates V52 and
+	 * is wrong now; the migration is left unedited because Flyway checksums applied migrations. The
+	 * current account of it is on {@code TenantContext.setAuthLookupUid}.
 	 */
 	@Test
 	@DisplayName("a signed-in person can read their own accounts at other temples, and change none of them")

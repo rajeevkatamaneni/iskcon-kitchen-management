@@ -3,7 +3,9 @@ package org.iskcon.kms.tenancy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.lang.reflect.Method;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -342,6 +344,29 @@ class OwnAccountsAtOtherTemplesIT extends AbstractIntegrationTest {
 		TenantContext.clear();
 
 		assertThat(digestRecipientsAt(templeA)).containsExactly(personAtA);
+	}
+
+	// ---- Looking a person up by uid -------------------------------------------------------------
+
+	@Test
+	@DisplayName("a uid lookup during a request sees both of a two-temple person's accounts, and this temple's is picked by temple")
+	void uidLookupSeesEveryAccountAndIsNarrowedByTemple() {
+		signedInAtA();
+
+		// T-191. UserRepository used to offer findByFirebaseUid, one Optional<User> by uid alone, used
+		// only by tests. Here, where the escape shows both accounts, it threw on a non-unique result. It
+		// is gone; the lookup below is what those tests do instead, and it finds this temple's account.
+		assertThat(userRepository.findAllByFirebaseUid(PERSON_UID))
+				.extracting(User::getId)
+				.as("every account the person holds, at either temple: this is what sign-in chooses from")
+				.containsExactlyInAnyOrder(personAtA, personAtB);
+
+		User here = userRepository.findAllByFirebaseUid(PERSON_UID).stream().filter(account -> templeA.equals(account.getTenantId())).findFirst().orElseThrow();
+		assertThat(here.getId()).as("the person's account at the temple they are signed in at").isEqualTo(personAtA);
+
+		assertThat(Arrays.stream(UserRepository.class.getDeclaredMethods()).map(Method::getName))
+				.as("no single-row lookup by uid alone, which cannot answer for a person with two temples")
+				.doesNotContain("findByFirebaseUid");
 	}
 
 	// ---------------------------------------------------------------------------------------------

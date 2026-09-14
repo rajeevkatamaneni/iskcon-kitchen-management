@@ -88,16 +88,41 @@ public final class TenantContext {
 	}
 
 	/**
-	 * Permits reading exactly one user row — the one whose Firebase UID this is — before the
-	 * tenant is known.
+	 * Permits reading every {@code users} row that carries this Firebase uid — one per temple the
+	 * person belongs to — before the tenant is known, and for the rest of the request after it.
 	 *
 	 * <p>This exists to break a genuine chicken-and-egg: the user record is what tells us which
-	 * tenant to scope to, but RLS would hide that record until the tenant is already set.
+	 * tenant to scope to, but RLS would hide that record until the tenant is already set. The read
+	 * policy on {@code users} (V2, re-created in V4) therefore admits a row when its temple is the
+	 * request's temple <em>or</em> its {@code firebase_uid} equals {@code app.auth_uid}.
 	 *
-	 * <p>The escape is deliberately narrow. The policy matches on the UID itself rather than
-	 * disabling isolation, so it exposes a single row, and only to a caller who already holds a
-	 * Firebase token that Google verified for that exact UID. It cannot be used to enumerate
-	 * users, and it grants no access to any other table.
+	 * <p><strong>What it exposes.</strong> Not a single row. Since V52 one person holds one
+	 * {@code users} row per temple, and the escape shows <em>all</em> of them, at every temple. And
+	 * it lasts the whole signed-in request: {@code AuthenticationFilter} sets it before the lookup
+	 * and nothing clears it once the temple is chosen, only {@link #clear()} at the end of the
+	 * request. So during a request signed in at temple A, a query on {@code users} sees temple A's
+	 * rows plus the caller's own accounts at temples B and C. (V2's own comment on the policy says
+	 * "exactly one row"; it was written before V52 and is left as it is, because an applied
+	 * migration is checksummed by Flyway and must never be edited.)
+	 *
+	 * <p><strong>What it is for.</strong> Two reads legitimately want every membership: sign-in
+	 * finding the person's accounts and choosing the one this request speaks for
+	 * ({@code AuthenticationFilter} through {@code UserRepository.findAllByFirebaseUid}), and the
+	 * temple switcher listing them ({@code WhoAmIController.temples()}).
+	 *
+	 * <p><strong>What it does not do.</strong> It grants no write: the insert, update and delete
+	 * policies on {@code users} (V8) are temple-only, with no uid branch, so an own account elsewhere
+	 * can be read but never changed. It cannot enumerate other people, because it matches the uid
+	 * exactly and only a caller holding a Firebase token Google verified for that uid ever sets it.
+	 * It reaches no other table.
+	 *
+	 * <p><strong>The rule it imposes (T-190).</strong> On every other table the policy alone confines
+	 * a request to its temple; on {@code users} it does not. <em>Any read of {@code users} during a
+	 * request must name the temple in its own SQL</em> ({@code tenant_id = app.tenant_id}, or a
+	 * lookup by an id already known to be this temple's), unless it means to see every membership,
+	 * as the two reads above do. A read that trusted RLS to supply the temple picked up the caller's
+	 * other accounts: {@code OwnAccountsAtOtherTemplesIT} holds one test for each that was found, and
+	 * {@code RowLevelSecurityIT} pins the visibility itself as deliberate.
 	 */
 	public static void setAuthLookupUid(String firebaseUid) {
 		AUTH_LOOKUP_UID.set(firebaseUid);

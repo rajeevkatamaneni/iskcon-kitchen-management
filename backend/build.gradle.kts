@@ -180,21 +180,20 @@ tasks.withType<Test> {
 	// the worker dead after 1260 of 1830 tests, a summary reading `Failed: 0` beside
 	// `Result: FAILURE`, and 8m10s instead of 3m17s, most of it spent collecting.
 	//
-	// 2 GB is roughly twice the measured live set and four times the floor, on a runner with
-	// 16 GB whose only other tenants are the Gradle process and one Postgres container. It
-	// is a ceiling, not a reservation. It is deliberately not larger, and the 2026-09-11
-	// measurement above sharpens rather than weakens the reason: a much bigger heap would
-	// hide what the suite is holding rather than pay for it, and what it is holding is a
-	// hundred-odd contexts it did not need to build. This buys room; it does not repair
-	// anything.
+	// 2 GB was roughly twice the live set measured then and four times the floor, on a runner
+	// with 16 GB whose only other tenants are the Gradle process and one Postgres container.
+	// It is a ceiling, not a reservation. It was deliberately not larger, and the 2026-09-11
+	// measurement above sharpened rather than weakened the reason: a much bigger heap would
+	// have hidden what the suite was holding rather than paid for it, and what it was holding
+	// was a hundred-odd contexts it did not need to build. The ceiling bought room; it
+	// repaired nothing.
 	//
-	// The repair is one change to the test sources and it is not in this file: give those
-	// classes one shared stub-verifier configuration instead of the 99 private ones they
-	// declare today — deleting the nested classes, not merely re-aiming the imports —
-	// which collapses a hundred-odd cached contexts into a handful and takes the live set
-	// down with them. It is filed separately, because it is 99 test classes and it changes
-	// which classes share a context, which is not a thing to do in a wave where every other
-	// task is being verified by this suite.
+	// The repair was one change to the test sources, not to this file: give those classes one
+	// shared stub-verifier configuration instead of 99 private ones — deleting the nested
+	// classes, not merely re-aiming the imports. It was filed separately, because it changed
+	// which classes share a context, and it was done in T-189 on 2026-09-13: 126 contexts
+	// became 21, and the live set at the end of a run fell from 1273 MB to 279 MB (the T-189
+	// paragraph above). maxHeapSize was not changed with it and is still 2 GB.
 	//
 	// The second half of that repair, "find what holds a closed context reachable", was
 	// filed separately too and has since been answered: nothing does, strongly. See above.
@@ -303,9 +302,10 @@ tasks.withType<Test> {
 						  is broken. Re-running will very likely be green, and that
 						  reflex is exactly what this message exists to stop.
 						
-						  This suite creates about a hundred Spring application
-						  contexts and keeps 81 of them reachable at once. It needs
-						  446 MB of heap at the very least and wants 886 MB. It was
+						  Measured on 2026-09-13 (T-189), a full run of this suite
+						  builds 21 Spring application contexts and ends with 279 MB
+						  live. If it ran out now, the number of contexts has most
+						  likely grown: count them with -PcontextCensus. It was
 						  given $heapCeiling. Raise maxHeapSize in backend/build.gradle.kts,
 						  or cut the number of distinct test contexts. Do not simply
 						  run it again.

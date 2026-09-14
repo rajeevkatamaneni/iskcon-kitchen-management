@@ -479,7 +479,10 @@ class TemplateStatusCopyIT extends AbstractIntegrationTest {
 		TenantContext.setAuthLookupUid(firebaseUid);
 		AuthenticatedUser actor;
 		try {
-			actor = new AuthenticatedUser(users.findByFirebaseUid(firebaseUid).orElseThrow());
+			// No temple to filter by here: the operator has none. Each fixture uid holds one account.
+			var accounts = users.findAllByFirebaseUid(firebaseUid);
+			assertThat(accounts).as("accounts held by " + firebaseUid).hasSize(1);
+			actor = new AuthenticatedUser(accounts.get(0));
 		} finally {
 			TenantContext.clear();
 		}

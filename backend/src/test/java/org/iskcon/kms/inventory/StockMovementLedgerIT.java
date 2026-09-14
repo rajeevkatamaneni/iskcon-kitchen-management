@@ -202,7 +202,7 @@ class StockMovementLedgerIT extends AbstractIntegrationTest {
 		TenantContext.set(templeA);
 		try {
 			AuthenticatedUser actor = new AuthenticatedUser(
-					users.findByFirebaseUid("uid-admin-a").orElseThrow());
+					users.findById(actorA).orElseThrow());
 
 			// No endpoint reaches this — every one of them validates earlier. That is the point: the
 			// ledger is what an endpoint written next month, forgetting to check, still runs into.
@@ -227,7 +227,7 @@ class StockMovementLedgerIT extends AbstractIntegrationTest {
 		TenantContext.set(templeA);
 		try {
 			AuthenticatedUser actor = new AuthenticatedUser(
-					users.findByFirebaseUid("uid-admin-a").orElseThrow());
+					users.findById(actorA).orElseThrow());
 			UUID batch = UUID.randomUUID();
 
 			// Toor Dal is held in Kg. Two kilos arrive, and 500 grams are cooked — issuing and

@@ -238,7 +238,8 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 	}
 
 	private void signInAs(String firebaseUid) {
-		AuthenticatedUser actor = new AuthenticatedUser(users.findByFirebaseUid(firebaseUid).orElseThrow());
+		AuthenticatedUser actor = new AuthenticatedUser(users.findAllByFirebaseUid(firebaseUid).stream()
+				.filter(account -> govinda.equals(account.getTenantId())).findFirst().orElseThrow());
 		SecurityContextHolder.getContext().setAuthentication(
 				new UsernamePasswordAuthenticationToken(actor, null, actor.getAuthorities()));
 	}

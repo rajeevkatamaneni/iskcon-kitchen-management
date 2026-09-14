@@ -123,7 +123,8 @@ class WhatsAppTestSendIT extends AbstractIntegrationTest {
 				.build();
 
 		TenantContext.set(govinda);
-		AuthenticatedUser actor = new AuthenticatedUser(users.findByFirebaseUid("uid-admin-t151").orElseThrow());
+		AuthenticatedUser actor = new AuthenticatedUser(users.findAllByFirebaseUid("uid-admin-t151").stream()
+				.filter(account -> govinda.equals(account.getTenantId())).findFirst().orElseThrow());
 		SecurityContextHolder.getContext().setAuthentication(
 				new UsernamePasswordAuthenticationToken(actor, null, actor.getAuthorities()));
 	}

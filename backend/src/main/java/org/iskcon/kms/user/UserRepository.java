@@ -1,7 +1,6 @@
 package org.iskcon.kms.user;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -10,29 +9,21 @@ import org.springframework.data.repository.query.Param;
 public interface UserRepository extends JpaRepository<User, UUID> {
 
 	/**
-	 * Looks up a user by their Firebase identity.
-	 *
-	 * <p>Uses a native query with an explicit RLS bypass consideration: this runs *before* the
-	 * tenant context is established, since resolving the user is how we learn which tenant to
-	 * set. Ordinary RLS-filtered access would return nothing at that point — a chicken-and-egg
-	 * that would make login impossible.
-	 *
-	 * <p>Safe because the lookup is by Firebase UID, which the caller cannot forge: it comes
-	 * from a token already verified against Google's public keys. Knowing a UID reveals nothing
-	 * and grants nothing on its own.
-	 */
-	@Query(value = """
-			SELECT * FROM users
-			WHERE firebase_uid = :firebaseUid
-			""", nativeQuery = true)
-	Optional<User> findByFirebaseUid(@Param("firebaseUid") String firebaseUid);
-
-	/**
 	 * Every membership one person holds, oldest first — a person may belong to several temples
 	 * (V52), and the oldest is the one they joined first, which is their default.
 	 *
-	 * <p>Same safety as above: the lookup is by a uid that came from a verified token, and the RLS
-	 * escape in V2 exposes only rows carrying that exact uid.
+	 * <p>Uses a native query because it runs <em>before</em> the tenant context is established:
+	 * resolving the user is how we learn which tenant to set, and ordinary RLS-filtered access would
+	 * return nothing at that point. It relies on the {@code app.auth_uid} escape instead (V2, see
+	 * {@code TenantContext.setAuthLookupUid}). Safe because the uid comes from a token already
+	 * verified against Google's public keys, and the escape exposes only rows carrying that exact uid.
+	 *
+	 * <p><strong>There is deliberately no single-row lookup by uid alone (T-191).</strong> One used to
+	 * sit here returning {@code Optional<User>}. For a person with accounts at two temples it would
+	 * throw on a non-unique result, because during a signed-in request the escape shows every one of
+	 * their accounts, not only this temple's. It had no caller in the application, only tests, which
+	 * is exactly how the next caller would have found it. A caller wanting one account filters this
+	 * list by temple, or looks the account up by its id.
 	 */
 	@Query(value = """
 			SELECT * FROM users
