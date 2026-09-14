@@ -11,6 +11,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -343,6 +345,320 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 		}
 	}
 
+	// ---------------------------------------------------------------------
+	// The platform audit log's two non-operator escapes name the temple (V133)
+	// ---------------------------------------------------------------------
+	//
+	// V65 and V66 let a temple user append to platform_audit_events for bans and notices, "attributed
+	// to themselves", checked as "a users row carrying the caller's uid". Since V52 one uid may have a
+	// row at several temples, and the users read policy shows all of them for the whole request — so
+	// before V133 a request at temple A could write a platform audit row whose author is the caller's
+	// own account at temple B. The application passes the right id; these pin that the database
+	// refuses the wrong one regardless. Each is the request exactly as AuthenticationFilter leaves it:
+	// the temple set, the uid set, through the unprivileged application connection.
+	//
+	// Written without RETURNING on purpose: PostgreSQL applies a table's SELECT policy to RETURNING,
+	// and a temple user cannot read this table, so a RETURNING insert would be refused for the read
+	// and prove nothing about the write.
+
+	/** The three entity types the two escapes cover. */
+	private static final List<String> NON_OPERATOR_ENTITY_TYPES =
+			List.of("EMPLOYMENT_BAN", "EMPLOYMENT_BAN_CHECK", "PLATFORM_NOTICE");
+
+	// One invocation per entity type rather than a loop, so the two policies are proved independently:
+	// in a loop the first refusal that fails to happen ends the test, and a hole in V66 would hide
+	// behind one in V65.
+	@ParameterizedTest(name = "as {0}")
+	@ValueSource(strings = {"EMPLOYMENT_BAN", "EMPLOYMENT_BAN_CHECK", "PLATFORM_NOTICE"})
+	@DisplayName("signed in at one temple, a person cannot author a platform audit row as their account at another")
+	void platformAuditRefusesTheCallersAccountAtAnotherTemple(String entityType) {
+		UUID atA = insertMember(templeA, "uid-audit-two-temples", "+919800000041", "TEMPLE_ADMIN", "ACTIVE");
+		UUID atB = insertMember(templeB, "uid-audit-two-temples", "+919800000041", "TEMPLE_ADMIN", "ACTIVE");
+		try {
+			TenantContext.set(templeA);
+			TenantContext.setAuthLookupUid("uid-audit-two-temples");
+
+			// The precondition that makes this a real risk rather than a theoretical one: the account at
+			// B is visible to this request, so the policy's EXISTS can find it.
+			assertThat(jdbc.queryForList("SELECT id FROM users WHERE id = ?", UUID.class, atB))
+					.as("the caller's own account at temple B is readable from temple A (V4, V52)")
+					.containsExactly(atB);
+
+			assertThatThrownBy(() -> insertPlatformAudit(atB, entityType))
+					.as("a %s row authored by the caller's account at another temple must be refused", entityType)
+					.hasStackTraceContaining("row-level security");
+
+			assertThat(admin.queryForObject("SELECT count(*) FROM platform_audit_events", Integer.class))
+					.as("nothing was written").isZero();
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id IN (?, ?)", atA, atB);
+		}
+	}
+
+	@Test
+	@DisplayName("the same person authoring as their active account at the temple they are signed in at is admitted")
+	void platformAuditAdmitsTheCallersActiveAccountHere() {
+		UUID atA = insertMember(templeA, "uid-audit-two-temples", "+919800000042", "TEMPLE_ADMIN", "ACTIVE");
+		UUID atB = insertMember(templeB, "uid-audit-two-temples", "+919800000042", "TEMPLE_ADMIN", "ACTIVE");
+		try {
+			TenantContext.set(templeA);
+			TenantContext.setAuthLookupUid("uid-audit-two-temples");
+
+			for (String entityType : NON_OPERATOR_ENTITY_TYPES) {
+				assertThat(insertPlatformAudit(atA, entityType))
+						.as("a %s row authored by this temple's own active account is the legitimate write", entityType)
+						.isEqualTo(1);
+			}
+
+			assertThat(admin.queryForList(
+					"SELECT entity_type FROM platform_audit_events WHERE actor_user_id = ?", String.class, atA))
+					.containsExactlyInAnyOrderElementsOf(NON_OPERATOR_ENTITY_TYPES);
+
+			// And the narrowing did not open anything else: an entity type outside the two escapes is
+			// still refused for a temple user, even authored correctly.
+			assertThatThrownBy(() -> insertPlatformAudit(atA, "USER"))
+					.as("a temple user still writes only bans, ban checks and notices here")
+					.hasStackTraceContaining("row-level security");
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id IN (?, ?)", atA, atB);
+		}
+	}
+
+	// One invocation per entity type, for the same reason as above. Refused for the notice before V133
+	// too (V66 checked status); for the two ban types this is new — so without V133 the notice
+	// invocation stays green and the ban invocations go red, which is the expected shape of the control.
+	@ParameterizedTest(name = "as {0}")
+	@ValueSource(strings = {"EMPLOYMENT_BAN", "EMPLOYMENT_BAN_CHECK", "PLATFORM_NOTICE"})
+	@DisplayName("a disabled account at this temple cannot author a platform audit row")
+	void platformAuditRefusesADisabledAccountHere(String entityType) {
+		UUID disabled = insertMember(templeA, "uid-audit-disabled", "+919800000043", "TEMPLE_ADMIN", "DISABLED");
+		try {
+			TenantContext.set(templeA);
+			TenantContext.setAuthLookupUid("uid-audit-disabled");
+
+			assertThatThrownBy(() -> insertPlatformAudit(disabled, entityType))
+					.as("a %s row authored by a DISABLED account must be refused", entityType)
+					.hasStackTraceContaining("row-level security");
+			assertThat(admin.queryForObject("SELECT count(*) FROM platform_audit_events", Integer.class))
+					.isZero();
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id = ?", disabled);
+		}
+	}
+
+	@Test
+	@DisplayName("an operator with no temple still writes the platform audit log, bans and notices included")
+	void platformAuditOperatorWritesAreUnchanged() {
+		// Operators have tenant_id NULL, so they can never satisfy V133's temple condition; they write
+		// through V9's platform_audit_superadmin_insert, which V133 does not touch and which does not
+		// look at entity_type. The notice is how operators actually write today (raise and withdraw with
+		// no temple); USER is the account claim. Operators hold no MANAGE_STAFF, so they do not write the
+		// ban types in practice — included to show V9 would admit them regardless, i.e. nothing about
+		// the operator path hangs on the escapes V133 narrowed.
+		UUID operator = insertMember(null, "uid-audit-operator", "+919800000044", "SUPER_ADMIN", "ACTIVE");
+		try {
+			TenantContext.setAuthLookupUid("uid-audit-operator");
+			assertThat(TenantContext.get()).as("no temple is set for an operator").isEmpty();
+
+			for (String entityType : List.of("USER", "PLATFORM_NOTICE", "EMPLOYMENT_BAN_CHECK")) {
+				assertThat(insertPlatformAudit(operator, entityType))
+						.as("an operator's %s row is admitted by V9's policy", entityType)
+						.isEqualTo(1);
+			}
+			assertThat(jdbc.queryForObject("SELECT count(*) FROM platform_audit_events", Integer.class))
+					.as("and the operator reads them back").isEqualTo(3);
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id = ?", operator);
+		}
+	}
+
+	@Test
+	@DisplayName("a temple user who may write the platform audit log still cannot read it")
+	void platformAuditStaysUnreadableToATempleUser() {
+		UUID atA = insertMember(templeA, "uid-audit-reader", "+919800000045", "TEMPLE_ADMIN", "ACTIVE");
+		try {
+			TenantContext.set(templeA);
+			TenantContext.setAuthLookupUid("uid-audit-reader");
+			assertThat(insertPlatformAudit(atA, "PLATFORM_NOTICE")).isEqualTo(1);
+
+			assertThat(jdbc.queryForObject("SELECT count(*) FROM platform_audit_events", Integer.class))
+					.as("the writer cannot read even the row they just wrote").isZero();
+			assertThat(admin.queryForObject("SELECT count(*) FROM platform_audit_events", Integer.class))
+					.as("though it is there").isEqualTo(1);
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id = ?", atA);
+		}
+	}
+
+	// ---------------------------------------------------------------------
+	// T-193 (V134): an operator's platform audit row must name the operator who wrote it.
+	//
+	// V9's platform_audit_superadmin_insert asked only whether the connected uid held a SUPER_ADMIN
+	// row, never whether actor_user_id was that row. These cases pin the author. Each method makes
+	// exactly one assertion, so each refusal can go red on its own in the negative control: with V134
+	// removed the two "as themselves" cases stay green and every mis-authored case goes red.
+	//
+	// Every case is an operator request as the authentication filter leaves one: app.auth_uid set to
+	// the operator's verified uid, no temple set (the filter sets a tenant only for a temple account).
+	//
+	// The refusal cases run as TENANT, which only operators write, and as PLATFORM_NOTICE, which V133's
+	// notice escape also covers. Permissive policies are OR'd, so the second proves that escape does
+	// not readmit a mis-authored operator row (it needs app.tenant_id, which an operator never has).
+	// ---------------------------------------------------------------------
+
+	@Test
+	@DisplayName("an operator authoring a platform notice row as themselves is admitted")
+	void platformAuditOperatorAsThemselvesWritesANotice() {
+		// The real path: NoticeService.raise and withdraw, called by an operator from NoticeController.
+		UUID operator = insertMember(null, "uid-t193-operator", "+919800000051", "SUPER_ADMIN", "ACTIVE");
+		try {
+			TenantContext.setAuthLookupUid("uid-t193-operator");
+
+			assertThat(insertPlatformAudit(operator, "PLATFORM_NOTICE"))
+					.as("an operator's own PLATFORM_NOTICE row is the legitimate write")
+					.isEqualTo(1);
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id = ?", operator);
+		}
+	}
+
+	@Test
+	@DisplayName("an operator authoring a temple export or deletion row as themselves is admitted")
+	void platformAuditOperatorAsThemselvesRecordsATempleAction() {
+		// Operators write no ban rows today: every ban write sits behind MANAGE_STAFF, which a
+		// SUPER_ADMIN does not hold (T-192). The operator-only entity type written today is TENANT —
+		// TenantExportService.export (TENANT_EXPORTED) and TenantDeletionService.delete
+		// (TENANT_DELETED), both from TenantController behind DELETE_TENANT. Neither V65's nor V66's
+		// escape covers TENANT, so this row is admitted by V134's policy alone.
+		UUID operator = insertMember(null, "uid-t193-operator", "+919800000051", "SUPER_ADMIN", "ACTIVE");
+		try {
+			TenantContext.setAuthLookupUid("uid-t193-operator");
+
+			assertThat(insertPlatformAudit(operator, "TENANT"))
+					.as("an operator's own TENANT row is the legitimate write")
+					.isEqualTo(1);
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id = ?", operator);
+		}
+	}
+
+	@ParameterizedTest(name = "operator names another operator, as {0}")
+	@ValueSource(strings = {"TENANT", "PLATFORM_NOTICE"})
+	@DisplayName("an operator cannot author a platform audit row as another operator")
+	void platformAuditOperatorCannotNameAnotherOperator(String entityType) {
+		UUID operator = insertMember(null, "uid-t193-operator", "+919800000051", "SUPER_ADMIN", "ACTIVE");
+		UUID otherOperator = insertMember(null, "uid-t193-other-operator", "+919800000052", "SUPER_ADMIN", "ACTIVE");
+		try {
+			TenantContext.setAuthLookupUid("uid-t193-operator");
+
+			assertThatThrownBy(() -> insertPlatformAudit(otherOperator, entityType))
+					.as("a %s row naming a different Super Admin as its author must be refused", entityType)
+					.hasStackTraceContaining("row-level security");
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id IN (?, ?)", operator, otherOperator);
+		}
+	}
+
+	@ParameterizedTest(name = "operator names a temple user, as {0}")
+	@ValueSource(strings = {"TENANT", "PLATFORM_NOTICE"})
+	@DisplayName("an operator cannot author a platform audit row as a temple user")
+	void platformAuditOperatorCannotNameATempleUser(String entityType) {
+		UUID operator = insertMember(null, "uid-t193-operator", "+919800000051", "SUPER_ADMIN", "ACTIVE");
+		UUID templeAdmin = insertMember(templeA, "uid-t193-temple-admin", "+919800000053", "TEMPLE_ADMIN", "ACTIVE");
+		try {
+			TenantContext.setAuthLookupUid("uid-t193-operator");
+
+			assertThatThrownBy(() -> insertPlatformAudit(templeAdmin, entityType))
+					.as("a %s row naming somebody's temple account as its author must be refused", entityType)
+					.hasStackTraceContaining("row-level security");
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id IN (?, ?)", operator, templeAdmin);
+		}
+	}
+
+	@ParameterizedTest(name = "operator names their own temple account, as {0}")
+	@ValueSource(strings = {"TENANT", "PLATFORM_NOTICE"})
+	@DisplayName("an operator cannot author a platform audit row as their own account at a temple")
+	void platformAuditOperatorCannotNameTheirOwnTempleAccount(String entityType) {
+		// The sharper form of the case above. Since V52 one uid may hold a temple account as well as
+		// the operator row, and that account carries the same verified uid and is visible to the
+		// request (V2, V4). So matching the author on the uid alone would admit it; the policy has to
+		// name the SUPER_ADMIN row itself.
+		UUID operator = insertMember(null, "uid-t193-operator", "+919800000051", "SUPER_ADMIN", "ACTIVE");
+		UUID ownTempleAccount = insertMember(templeA, "uid-t193-operator", "+919800000051", "TEMPLE_ADMIN", "ACTIVE");
+		try {
+			TenantContext.setAuthLookupUid("uid-t193-operator");
+
+			assertThatThrownBy(() -> insertPlatformAudit(ownTempleAccount, entityType))
+					.as("a %s row naming the operator's own temple account as its author must be refused", entityType)
+					.hasStackTraceContaining("row-level security");
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id IN (?, ?)", operator, ownTempleAccount);
+		}
+	}
+
+	@Test
+	@DisplayName("an operator cannot author a platform audit row with no author at all")
+	void platformAuditOperatorCannotNameNobody() {
+		// actor_user_id has been nullable since V66 (so a deleted temple's authors can go to NULL
+		// rather than block the purge), and a NULL satisfies no foreign key. Before V134 nothing
+		// refused an operator writing an authorless row; now u.id = NULL matches no row.
+		UUID operator = insertMember(null, "uid-t193-operator", "+919800000051", "SUPER_ADMIN", "ACTIVE");
+		try {
+			TenantContext.setAuthLookupUid("uid-t193-operator");
+
+			assertThatThrownBy(() -> insertPlatformAudit(null, "TENANT"))
+					.as("a TENANT row with a NULL author must be refused")
+					.hasStackTraceContaining("row-level security");
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id = ?", operator);
+		}
+	}
+
+	@Test
+	@DisplayName("an operator naming an id that is nobody is refused by the policy, not only by the foreign key")
+	void platformAuditOperatorCannotNameAnIdThatIsNobody() {
+		// Before V134 this was already refused, by the foreign key platform_audit_events_actor (V66).
+		// The assertion is on the refusal's cause: PostgreSQL checks the row-level WITH CHECK before
+		// the foreign key (an after-row trigger), so under V134 the policy refuses it first. Without
+		// V134 this goes red with a foreign-key message rather than being admitted — which shows the
+		// FK was the only thing standing there, and that it would not have been for a NULL (above).
+		UUID operator = insertMember(null, "uid-t193-operator", "+919800000051", "SUPER_ADMIN", "ACTIVE");
+		try {
+			TenantContext.setAuthLookupUid("uid-t193-operator");
+
+			assertThatThrownBy(() -> insertPlatformAudit(UUID.randomUUID(), "TENANT"))
+					.as("a TENANT row naming no user must be refused by row-level security")
+					.hasStackTraceContaining("row-level security");
+		} finally {
+			TenantContext.clear();
+			admin.update("DELETE FROM platform_audit_events");
+			admin.update("DELETE FROM users WHERE id = ?", operator);
+		}
+	}
+
 	@Test
 	@DisplayName("switching tenants on a pooled connection does not leak the previous tenant")
 	void pooledConnectionDoesNotLeakTenant() {
@@ -380,6 +696,23 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 				VALUES (?, ?, 'Person', ?, ?, 'VOLUNTEER', 'ACTIVE')
 				RETURNING id
 				""", UUID.class, tenantId, uid, uid + "@example.com", phone);
+	}
+
+	/** Seeded through the privileged connection; a null tenant is an operator. */
+	private UUID insertMember(UUID tenantId, String uid, String phone, String role, String status) {
+		return admin.queryForObject("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, ?, 'Person', ?, ?, ?, ?)
+				RETURNING id
+				""", UUID.class, tenantId, uid, uid + "@example.com", phone, role, status);
+	}
+
+	/** Through the application's own connection, so every policy applies. */
+	private int insertPlatformAudit(UUID actorUserId, String entityType) {
+		return jdbc.update("""
+				INSERT INTO platform_audit_events (actor_user_id, actor_label, action, entity_type, entity_id)
+				VALUES (?, 'Person', 'TEST_WRITE', ?, ?)
+				""", actorUserId, entityType, UUID.randomUUID());
 	}
 
 	private void seedRecipe(UUID tenantId, String name) {

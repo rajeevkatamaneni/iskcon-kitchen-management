@@ -118,9 +118,20 @@ public class AuditService {
 	 * Records a platform-level action — one belonging to no temple — in {@code platform_audit_events}.
 	 *
 	 * <p>The counterpart to {@link #record} for the platform super-admin, who sits outside every
-	 * tenant and so cannot use the tenant-scoped log (E1-S14). The row carries no {@code tenant_id};
-	 * the table's RLS admits the write only when the connection's verified identity is a super-admin.
-	 * Joins the caller's transaction, like {@link #record}.
+	 * tenant and so cannot use the tenant-scoped log (E1-S14). The row carries no {@code tenant_id}.
+	 *
+	 * <p>Who the table's RLS lets write here is narrower than "anyone who calls this", and wider than
+	 * it once was. A verified super-admin may write any entity type (V9). A temple user may write
+	 * exactly two kinds of row and nothing else: a ban or a ban check ({@code EMPLOYMENT_BAN},
+	 * {@code EMPLOYMENT_BAN_CHECK}, V65) and a platform notice ({@code PLATFORM_NOTICE}, V66) — and
+	 * only as the author. Since V133, "the author" means the caller's own <em>active account at the
+	 * temple this request speaks for</em>, not merely a {@code users} row carrying their uid: one
+	 * person may hold an account at several temples (V52), and the uid alone would let a request at
+	 * one temple attribute the row to their account at another. Passing {@code actor.getUserId()},
+	 * as this method does, is always that account; the policy is the backstop if a caller ever passes
+	 * anything else. Reading stays super-admin only.
+	 *
+	 * <p>Joins the caller's transaction, like {@link #record}.
 	 */
 	public void recordPlatform(
 			AuthenticatedUser actor,

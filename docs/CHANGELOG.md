@@ -1182,6 +1182,38 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-13 — Staff withdraw their own leave before it begins, and the platform audit log refuses entries that name the wrong author (tasks T-184, T-192, T-193)
+
+**Migrations `V132`, `V133` and `V134`.** New error code `KMS-400151`. Two new message templates, so
+the count is 21. **Not driven in a browser, and not seen working by Rajeev.** This deploy also takes
+T-190 (`04ea52a`, the entry below) to staging.
+
+**A staff member can withdraw their own leave (T-184).** From My profile, leave that is pending or
+approved can be withdrawn until its first day. They confirm first: *"Withdraw your approved leave for
+12 to 14 August? Your manager will be told."* The row stays, marked `WITHDRAWN` with when it happened
+and who had approved it. No rota changes, because rotas count only approved leave. Who is told:
+
+- approved leave: the person who approved it, or everyone at the temple who may approve leave if that
+  person no longer can;
+- a pending request: everyone at the temple who may approve leave.
+
+The person gets a confirmation on WhatsApp and email when the temple has WhatsApp connected, otherwise
+email only; a failed WhatsApp copy does not fall back to SMS or a second email. Leave that has begun is
+refused with `KMS-400151`. Also in this task: finding who approves leave now names the temple, so a
+manager's account at another temple is not told; and approve, decline and revoke refuse a request that
+changed after it was opened.
+
+**The platform audit log refuses an entry with the wrong author (T-192, T-193).** `V133`: a temple-side
+ban or notice entry must name the caller's own active account at this temple. `V134`: an operator's
+entry must name the operator themselves, and an entry with no author is refused. Every real writer
+already passes the signed-in person's own id, so these are backstops against an app bug. Rows already
+stored are untouched.
+
+**Not done:** the row on My profile still shows ISO dates while the dialog says *"12 to 14 August"*; the
+two new templates show as waiting on each temple's templates button until sent to Meta, and the
+WhatsApp confirmation fails until Meta approves them (the email still goes). Proofs are in
+`docs/work/proof/T-184.md`, `T-192.md` and `T-193.md`.
+
 ### 2026-09-13 — A person's own accounts at other temples stop showing up in this temple (task T-190)
 
 **No migration**, and the row-level security policies are unchanged. No new error code, no new
