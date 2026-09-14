@@ -88,6 +88,14 @@ After D27-2 and D27-4 the work manager runs the merged-tree check, including eve
 - **Nothing committed, pushed or deployed.** For the release: backend and frontend ship together, because the old frontend calls endpoints the new backend removed. The staging Cloud SQL backup is taken first and its id recorded here (brief), and production must still hold no temple data. Migrations V135–V137; V138, V139 and V140 unused, so the next free migration is **V141**. Error codes KMS-400152 and KMS-400153 added.
 - **For Rajeev's eye when he tests (reversible calls, no mockup existed):** the section 4 buttons and dialog words; the new *Cancel this meal* on the day's block; the day block no longer opens a shift layer; the browser Back button is not caught by *Leave without saving?*; a plain shift's time-only change messages volunteers; the new default cancel wording in `MealPlanService.DEFAULT_CANCEL_REASON`; "the temple's own recipes" read as any active temple recipe, library copies included.
 
+### Phase A released to staging, 2026-09-14
+- **Commit** `74d3535` (130 files, named paths). Clean-archive gate green: backend 2664 passed / 0 failed / 7 skipped; frontend tsc, 1850 tests, next build. **CI** run 34827586907 success (hygiene, backend, frontend).
+- **Staging Cloud SQL backup, taken before deploy:** instance `kms-staging-5325bd0d`, on-demand backup id **`1789378310032`** (2026-09-14T09:31:50Z, SUCCESSFUL).
+- **Deployed:** api `kms-staging-api-00166-8j8` and worker `kms-staging-worker-00148-x2j` on `sha256:05e093895fb9…f0f36` (was api-00165 / worker-00147 on `9d30f2be1e64…`); web `kms-staging-web-00154-874` on `sha256:45ec52641120…3b13` (was web-00153 on `2ceda8e68a2f…`). Build 6m11s, rollout 2m19s.
+- **Migrations:** V135, V136, V137 applied, now at v137. V138–V140 were never written. V135 on the one temple: 113 dishes, 27 shifts, 12 job cards, 1 scheduled job, 973 stock movements removed, 165 balancing adjustments. **V137 reseed:** 28 meals from 12 to 20 September, a meal shift, volunteer signed up: yes.
+- **On-hand stock matched.** Before 264 ingredient batches, total 271776314.500; after 263, same total, every row identical. The one missing row is a Curd batch that was 0.000 before, made only of meal movements that netted to zero, so it now has no rows at all.
+- Detail and the commands: `docs/work/proof/RELEASE-phase-A.md`. Not yet driven in a browser.
+
 ## ⚖️ RAJEEV'S RULE — 2026-09-13, binding until the list is finished
 
 > *"I want to finish the list you gave me 'CLEANLY' without creating another list as a biproduct of building this list."*

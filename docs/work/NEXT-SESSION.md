@@ -154,3 +154,4 @@ deploy to staging, and tell Rajeev in a few lines what is live.
 - 2026-09-13 — brief written. Nothing started. Item 13 (costing follows actuals) added at Rajeev's request.
 - 2026-09-13 — Phase A started: work-manager dispatched to plan and build the five D-27 tasks (no release yet).
 - 2026-09-14 — Phase A built (T-195..T-199), all green locally (backend 2,671, frontend 1,850, tsc/eslint/next build). Release dispatched: staging backup, commit, CI, deploy. Browser test follows.
+- 2026-09-14 — Phase A released: commit 74d3535, CI green, staging backup 1789378310032, api-00166-8j8 / web-00154-874 at V137. On-hand stock unchanged; reseed wrote 28 meals. Browser test next.
