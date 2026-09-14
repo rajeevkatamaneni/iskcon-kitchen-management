@@ -1312,3 +1312,177 @@ vendor relationship behind it needs the human decision described above.
 **Related:** [[D-24a]] (a line leaves on creation and returns on cancellation — closing is the third
 door), [[D-25]], T-124, T-129, T-137.
 
+
+---
+
+## D-27 · A meal is a row of its own, and a volunteer shift points at it by id
+
+**Ruled by Rajeev, 2026-09-13, to be built before UAT.**
+
+### What was there
+
+A meal had no row. `meal_plans` holds one row per dish (`V22__meal_plans.sql`), and "Lunch on
+14 September" existed only as a GROUP BY of date, meal kind and event name. A volunteer shift
+remembered its meal by copying that date, the meal kind's text and the event name
+(`V95__a_shift_says_which_meal.sql`), with no foreign key, because `meal_kinds` is unique only on an
+expression (`lower(name)`) and there was no meal id to point at.
+
+### His design, in his words
+
+> *"Meal Plan for each day wil be saved in a dedicated table with its own unique ID and related info.
+> Then each Meal for that day (breakfast, Lunch, Dinner ....etc) will be created in a dedicated Meal
+> table. Each meal gets its own unique ID and related infomration and a Foreign Key relation to the
+> Meal Plan's ID. That way they are linked. When a Volenteer shift is raised, it should have it sown
+> unique ID and a foreign key relation to a Meal ID. That way a shift is unambiguisloy linked to ONE
+> and ONLY one meal."*
+
+And on moving a shift: *"all we have to do is let the user pick the date and then auto populate the
+list of meals planned for that day and they pick one from the drop down and save and we just update
+the Meal ID foreign key refference on the Volenteer shift record."*
+
+On identifying things by text: *"identifying things by text is a terrible idea and one that WILL
+fail eventually."*
+
+So, the model:
+
+- **Meal plan day** — one row per temple per date, own id.
+- **Meal** — own id, foreign key to its day; which meal (breakfast, lunch, dinner, or an event) and
+  the per-meal facts (head count, people needed, and the rest).
+- **Dishes of a meal** — foreign key to the meal.
+- **Volunteer shift** — own id, and a nullable foreign key to one meal. Null means "not for a meal".
+
+### Why now, when it was offered for after UAT
+
+It was put to him that the change touches nearly everything that reads a meal (planner, ingredient
+check and reserved stock, shopping list, job cards, recording, cost per serving, menu history, crew,
+events, Today, store issues, ingredient requests), and that the building was about a day. He chose
+to do it now:
+
+> *"there is only 1 temple and it does not matter if we have to nuke all data from Isckon south
+> bangalore and do this change and then seed a minimum data set back to it to make it usable for my
+> UAT testing. We will still leave the vonfiguration data like Watts app, email stuff and thememing
+> and the staff and any thing that is not connected to this change."*
+
+**No conversion of existing plans is written.** South Bengaluru's meal-connected operational data is
+wiped and a minimum data set is seeded back. Configuration (WhatsApp, email, theming), staff, and
+anything not connected to meals and shifts is kept.
+
+### The screens that change with it
+
+**1. Asking for volunteers happens inside the meal planner.** In section 4, "Who will run it", the
+moment *People needed* exceeds *Rostered*, an **Ask for volunteers** button appears right there.
+It opens the shift form as a layer; on save the layer closes and the planner shows **View volunteer
+shift** in its place. That button also shows when the meal already has a shift.
+
+**2. The shift is not committed until the meal is saved.** His words: *"IF the user does the shift
+setup and all from the meal planner page and abandons the meal plan with out saving, we should not
+be left with an orphan shift. The Sift when saved shoudl be left uncommited until the meal is saved.
+Once the meal is saved, we take the ID of the meal and update the Volenteer reruest with that ID and
+then commit everything."* So the meal and its shift are saved in one transaction.
+
+**3. Post a shift is redesigned.** Fields: Title, Date, a check box asking whether this is for a
+meal (checked shows a drop-down of that date's meals), Start time, End time, Location, Reminder hours
+before, Description. **In the planner layer the check box and drop-down are not shown** — the shift
+is for that meal and the link is forced when the meal is saved.
+
+### Still to settle before the build starts (answers recorded below as given)
+
+- His field list for Post a shift leaves out **Capacity**, which the screen has today.
+- Whether a meal may have **more than one** volunteer shift.
+- What happens to a meal's shift when the **meal is deleted**.
+- A shift with signed-up volunteers **moved** to another meal or day: tell them and keep their
+  places, or warn the admin and cancel everyone.
+- Whether editing an existing shift from the planner is also held until the meal is saved.
+- The exact wipe list, confirmed with him before anything is deleted.
+
+**Related:** V22, V95, T-146 (a shift may cross midnight), the planner volunteer layer, [[D-24]].
+
+**Answer 1, Capacity (2026-09-13):** kept, and renamed. *"Yes, keep capacity, prefilled from the
+planner. AND rename it to something nicer than capacity. How about, Volenteers Requested"*. The label
+is **Volunteers requested** on both screens; in the planner layer it is prefilled as People needed
+minus Rostered and can be changed. The column may stay `capacity`; only the words on screen change.
+
+**Answer 2, shifts per meal (2026-09-13):** one. His reasoning: *"From the meal planners perspective, a
+volenteer shift is either to help with the actual cookingprocess OR cutting vegitables and preparring
+stuff for the cooks to doi their thing. Could also be for washing dishes and helping with cleaning the
+kitchen after meal prep. All of those are Kitchen related activities which IMHO all can be bundled
+into 1 Volenteer shift request. That way we dont need to haev more than one Volenteer shift request
+Per Meal (Lunch on Spetember 15'th is 1 Meal). For other kinds of shifts, we have the Dediated Post a
+shift Screen."* Garlands, crowd control and decorating are shifts not for a meal. Enforced by a unique
+meal id on shifts (among shifts not cancelled).
+
+He then raised, undecided: taking the "for a meal" check box off Post a shift so meal shifts are
+raised only from the planner; and whether a meal shift edited from the Volunteer shifts page may be
+turned into a shift not for a meal. Checked: every role that can manage volunteer shifts (Temple
+Admin, Kitchen Manager, Kitchen Staff) can also plan meals (`RolePermissions.java`), so planner-only
+creation locks nobody out.
+
+**Answers 3 and 4 (2026-09-13): "Yes to both".**
+- **A shift for a meal is raised only from the meal planner.** Post a shift loses the "for a meal"
+  check box and gains one sentence above its fields: *Kitchen help for a meal? Ask from that meal in
+  the planner.*, with "in the planner" a link. A meal shift still appears in the Volunteer shifts list
+  like any other, labelled with its meal (e.g. "For Lunch, 15 September").
+- **A meal shift cannot be turned into a shift not for a meal.** Edited from the Volunteer shifts page,
+  title, times, location, volunteers requested, reminder and description can change; the date and
+  the meal are shown read-only with a link to the meal. If it is no longer for that meal, it is
+  cancelled (volunteers told) and a new shift posted.
+- Consequence: a meal shift's date always comes from its meal, so it can never be moved to another day
+  or meal. The earlier "moved shift with signups" question reduces to a change of times only.
+
+**Answer 5, a meal cancelled while it has a shift (2026-09-13):** *"Yes, warn then cancel both."* Before
+cancelling, the planner says the meal has a volunteer shift and how many are signed up, and that
+cancelling the meal cancels the shift and tells them. On confirm both are cancelled and signed-up and
+waitlisted volunteers get the existing shift cancellation message.
+
+**Answer 6, a meal shift's times change after people signed up (2026-09-13):** *"Option 1 : Approved"*.
+Before saving, the editor is warned how many volunteers are signed up and that they will be told the
+new times. On save their places are kept and each gets the already-approved `shift_broadcast` message
+with the coordinator text *"The times changed to <start> to <end>."* — no new Meta template. Replaces
+the after-save `MovedNotice` ("That shift moved … have not been told") for this case. The words are
+"times changed", never "moved".
+
+**Answer 7, editing a meal's shift from inside the planner (2026-09-13):** *"Option 1: nothing saved until
+the meal is saved : Aggreed."* One rule for the whole planner: nothing — a new shift or a change to an
+existing one — is saved until "Save this meal" / "Update this meal". The layer's button reads **Done**,
+not "Save changes". Leaving with unsaved changes asks "Leave without saving?". The times-changed
+message to volunteers goes only when the meal is saved. Editing from the Volunteer shifts page (no meal
+open) still saves immediately.
+
+**Events and names (checked, not asked):** an event already cannot be saved without a name
+(`MealPlanService.requireEventFields`, `EVENT_NAME_REQUIRED`). The new meals table carries the same
+identity as today's `meal_services_one_per_meal`: one meal per date, meal kind and event name
+(compared case-insensitively), so two events on one day must have different names.
+
+**Answer 8, stock after the wipe (2026-09-13):** *"Option 1 : Approved"*. For each ingredient the purge
+inserts one `ADJUSTMENT` stock movement equal to the net of the meal-connected movements it deletes
+(meal draws and their corrections), labelled as the meal data reset, so every on-hand figure reads the
+same after the wipe as before it. Deliveries, purchase orders and vendor history are untouched.
+
+**Answer 9, the wipe and the reseed (2026-09-13):** *"Approved"*. For ISKCON South Bengaluru on staging,
+applied when the rebuild deploys, **after a full backup of the staging database**:
+
+- **Deleted:** every meal plan and its dishes; served-meal records and corrections; job cards and their
+  PDFs; the stock movements of cooked meals and their corrections (balanced by Answer 8's adjustments);
+  every volunteer shift, plain ones included, with signups, waitlist, reminders and broadcasts. The job
+  card number counter restarts at 1.
+- **Kept:** WhatsApp, email and theme settings; staff and user accounts; recipes, ingredients and stock
+  levels; meal kinds and occasions; vendors, purchase orders, deliveries, invoices, payments and scores;
+  donations and receipts; leave; equipment; the audit history.
+- **Seeded back** (a minimum for his testing, not the demo temple): the next 7 days of Breakfast, Lunch
+  and Dinner with 3–4 dishes each from the temple's own recipes; one named event that week; one meal with
+  a volunteer shift a test volunteer account has signed up for; two plain shifts (e.g. garland making,
+  crowd control); the previous 2 days cooked and recorded so job cards, cost per serving and menu history
+  have content.
+
+The purge loops over temples rather than naming South Bengaluru's id, because migrations run everywhere
+and there is only one temple. Production holds no temple data yet; if that ever stops being true before
+this ships, the purge must not ship as written.
+
+**ON HOLD (2026-09-13):** right after the build was handed to the coordinator, Rajeev said *"No Dont rebuild
+anyting, Stop it"* and asked to finish the yes/no questions first. The coordinator was stopped within a
+minute; no builder started, no file was changed and no lock was taken. **Do not dispatch D-27 until he
+says so.** The design and answers above stand as recorded.
+
+**HOLD LIFTED for the next session (2026-09-13):** Rajeev asked for the next session to *"start with the
+meal rebuild and the planner and shift screen changes. Test it thoroughly on the UI and then check in,
+deploy to cloud live."* The build brief is `docs/work/NEXT-SESSION.md`.

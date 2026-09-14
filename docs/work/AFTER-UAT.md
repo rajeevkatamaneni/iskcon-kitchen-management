@@ -16,3 +16,6 @@ One line per thing noticed while building that its task did not ask for. Not tas
 - (T-194) `frontend/app/staff-schedule/page.tsx:145` prints "Week of {weekStart}" as a raw ISO date.
 - (T-194) `frontend/lib/format.ts` has an orphaned doc comment above `longDay` that describes `longDate` and says "reader's own locale", which is no longer true.
 - (T-194) `frontend/__tests__/profile.test.tsx` logs React `act(...)` warnings from `CommunicationPreferences` on every test (pre-existing; tests pass).
+- (Rajeev 2026-09-13) A vendor refund has no record: a credit that would leave the temple owed is refused (`VendorInvoiceService.creditInvoice`), so an overpaid bill stays overpaid. Build a refund record on the bill after UAT.
+- (Rajeev 2026-09-13) The GitHub issues copy of the stories (`docs/stories/github-import/`) holds 55 of 118 stories. Bring it up to date after UAT.
+- (Rajeev 2026-09-13) Meta: move WhatsApp to the temple's real number and account, complete business verification, set the India time zone. After UAT; the current account is his own test account.
