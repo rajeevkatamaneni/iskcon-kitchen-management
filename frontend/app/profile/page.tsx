@@ -270,10 +270,30 @@ function MyLeave() {
       await api.withdrawLeave(id, await getToken());
       await load();
     } catch (e) {
-      setError(toApiError(e, "We couldn’t withdraw that request."));
+      // "Leave", not "request": since T-184 approved leave can be withdrawn too.
+      setError(toApiError(e, "We couldn’t withdraw that leave."));
     } finally {
       setBusy(false);
     }
+  }
+
+  // T-184 rework: the row whose withdrawal is waiting on "Are you sure?", or null. A withdrawal cannot
+  // be taken back by the person (they would have to ask again, and the manager is told at once), so one
+  // press no longer does it. The confirmation is the recipe page's inline alertdialog, not a new
+  // component: there is no shared dialog in this application, and that panel is its confirm pattern.
+  const [confirming, setConfirming] = useState<LeaveView | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  // Focus lands on Cancel, so a stray Enter backs out rather than withdraws.
+  useEffect(() => {
+    if (confirming) cancelRef.current?.focus();
+  }, [confirming]);
+
+  function confirmWithdraw() {
+    if (!confirming || busy) return;
+    const id = confirming.id;
+    setConfirming(null);
+    void withdraw(id);
   }
 
   if (noRecord || !leave) return null;
@@ -344,12 +364,42 @@ function MyLeave() {
               </span>
               <span className="flex items-center gap-3">
                 <span className={statusTone(row.status)}>{statusWord(row.status)}</span>
-                {row.status === "PENDING" && (
-                  <button type="button" disabled={busy} onClick={() => withdraw(row.id)} className="text-ink-secondary hover:underline disabled:opacity-60">
+                {/* T-184: the server says whether this can still be withdrawn: their own, waiting or
+                    approved, and not yet begun in the temple's calendar. The browser's clock is never asked. */}
+                {row.canWithdraw && confirming?.id !== row.id && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConfirming(row)}
+                    className="text-ink-secondary hover:underline disabled:opacity-60"
+                  >
                     Withdraw
                   </button>
                 )}
               </span>
+              {confirming?.id === row.id && (
+                <div role="alertdialog" aria-label="Withdraw this leave" className="basis-full rounded-lg bg-danger-bg px-5 py-4">
+                  <p className="text-sm font-medium text-danger">{withdrawQuestion(row)}</p>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      ref={cancelRef}
+                      type="button"
+                      onClick={() => setConfirming(null)}
+                      className="min-h-touch rounded border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmWithdraw}
+                      disabled={busy}
+                      className="min-h-touch rounded bg-danger px-5 text-sm text-ink-inverse transition-opacity duration-state hover:opacity-90 disabled:opacity-60"
+                    >
+                      Withdraw
+                    </button>
+                  </div>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -358,8 +408,50 @@ function MyLeave() {
   );
 }
 
+/**
+ * "Withdraw your approved leave for 12 to 14 August? Your manager will be told." (T-184 rework,
+ * wording from the main session's review). Approved leave has a manager who approved it; a request
+ * still waiting goes to whoever approves leave, which is who the server tells in each case.
+ */
+function withdrawQuestion(row: LeaveView): string {
+  return row.status === "APPROVED"
+    ? `Withdraw your approved leave for ${spokenRange(row)}? Your manager will be told.`
+    : `Withdraw your leave request for ${spokenRange(row)}? Whoever approves leave will be told.`;
+}
+
+/**
+ * "12 August", "12 to 14 August", "30 September to 2 October", or "12 August (half day)". The month is
+ * said once when both days share it, as a person would say it. No year: withdrawable leave has not yet
+ * begun, so it is always about the weeks ahead.
+ */
+function spokenRange(row: LeaveView): string {
+  const dayMonth = (iso: string) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+  if (row.halfDay) return `${dayMonth(row.fromDate)} (half day)`;
+  if (row.fromDate === row.toDate) return dayMonth(row.fromDate);
+  const sameMonth = row.fromDate.slice(0, 7) === row.toDate.slice(0, 7);
+  const firstDay = new Date(`${row.fromDate}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric" });
+  return sameMonth ? `${firstDay} to ${dayMonth(row.toDate)}` : `${dayMonth(row.fromDate)} to ${dayMonth(row.toDate)}`;
+}
+
+/**
+ * Each status named from the reader's side. Before T-184 anything that was not waiting, approved or
+ * declined fell through to "Withdrawn by the temple", which was right for REVOKED alone. A person's
+ * own withdrawal says so instead, so they are never told the temple did what they did.
+ */
 function statusWord(status: LeaveView["status"]): string {
-  return status === "PENDING" ? "Waiting" : status === "APPROVED" ? "Approved" : status === "DECLINED" ? "Not approved" : "Withdrawn by the temple";
+  switch (status) {
+    case "PENDING":
+      return "Waiting";
+    case "APPROVED":
+      return "Approved";
+    case "DECLINED":
+      return "Not approved";
+    case "REVOKED":
+      return "Withdrawn by the temple";
+    case "WITHDRAWN":
+      return "Withdrawn by you";
+  }
 }
 
 function statusTone(status: LeaveView["status"]): string {

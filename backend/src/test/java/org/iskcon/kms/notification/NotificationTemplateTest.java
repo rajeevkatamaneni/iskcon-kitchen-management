@@ -119,6 +119,46 @@ class NotificationTemplateTest {
 		}
 	}
 
+	@Test
+	@DisplayName("the leave withdrawal messages read as reviewed, in both channels' forms (T-184)")
+	void leaveWithdrawalWording() {
+		// Pinned word for word, because both go to the main session for approval before release and a
+		// later edit must be a visible change to this test rather than a quiet one.
+		Map<String, Object> person = Map.of(
+				"name", "Radha Devi", "temple", "ISKCON South Bengaluru", "dates", "12 to 14 August 2026");
+		assertThat(NotificationTemplate.LEAVE_WITHDRAWN.render(person).subject())
+				.isEqualTo("Your leave at ISKCON South Bengaluru has been withdrawn");
+		assertThat(NotificationTemplate.LEAVE_WITHDRAWN.render(person).body()).isEqualTo(
+				"Hare Krishna Radha Devi, your request to withdraw your leave at ISKCON South Bengaluru "
+						+ "for 12 to 14 August 2026 has been successfully completed.");
+		assertThat(NotificationTemplate.LEAVE_WITHDRAWN.whatsappBodyText()).isEqualTo(
+				"Hare Krishna {{1}}, your request to withdraw your leave at {{2}} for {{3}} has been successfully completed.");
+
+		Map<String, Object> notice = new LinkedHashMap<>(person);
+		notice.put("state", "still waiting for an answer");
+		assertThat(NotificationTemplate.LEAVE_WITHDRAWN_NOTICE.render(notice).subject())
+				.isEqualTo("Radha Devi has withdrawn their leave at ISKCON South Bengaluru");
+		assertThat(NotificationTemplate.LEAVE_WITHDRAWN_NOTICE.render(notice).body()).isEqualTo(
+				"Hare Krishna. Radha Devi has withdrawn their leave at ISKCON South Bengaluru for 12 to 14 August 2026 "
+						+ "before it began. That leave was still waiting for an answer, and their usual schedule stands for those dates.");
+		assertThat(NotificationTemplate.LEAVE_WITHDRAWN_NOTICE.whatsappBodyText()).isEqualTo(
+				"Hare Krishna. {{1}} has withdrawn their leave at {{2}} for {{3}} before it began. "
+						+ "That leave was {{4}}, and their usual schedule stands for those dates.");
+		assertThat(NotificationTemplate.LEAVE_WITHDRAWN_NOTICE.whatsappExampleValues())
+				.containsExactly("Radha Devi", "ISKCON South Bengaluru", "12 to 14 August 2026", "approved");
+	}
+
+	@Test
+	@DisplayName("only the withdrawal confirmation opts out of the fallback cascade (T-184)")
+	void onlyTheWithdrawalConfirmationSkipsTheCascade() {
+		// Off by default: every template sent before T-184 still cascades to SMS and email, and a new one
+		// has to say otherwise deliberately.
+		for (NotificationTemplate template : NotificationTemplate.values()) {
+			assertThat(template.fallsBack()).as("%s", template)
+					.isEqualTo(template != NotificationTemplate.LEAVE_WITHDRAWN);
+		}
+	}
+
 	private static List<Integer> placeholdersIn(String body) {
 		List<Integer> numbers = new java.util.ArrayList<>();
 		Matcher matcher = PLACEHOLDER.matcher(body);

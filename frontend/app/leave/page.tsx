@@ -222,6 +222,9 @@ function StatusBadge({ status }: { status: LeaveView["status"] }) {
   if (status === "APPROVED") return <Badge tone="success">Approved</Badge>;
   if (status === "DECLINED") return <Badge tone="danger">Declined</Badge>;
   if (status === "REVOKED") return <Badge tone="neutral">Revoked</Badge>;
+  // T-184: taken back by the person before it began. Neutral like a revocation, and named apart from
+  // it, because one was the temple's decision and the other was theirs. It shows only under Everything.
+  if (status === "WITHDRAWN") return <Badge tone="neutral">Withdrawn</Badge>;
   return <Badge tone="warning">Waiting</Badge>;
 }
 

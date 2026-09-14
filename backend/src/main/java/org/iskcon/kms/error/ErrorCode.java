@@ -997,6 +997,11 @@ public enum ErrorCode {
 			"Close it instead. What arrived stays on the vendor's record, and what didn't goes back "
 					+ "on the shopping list."),
 
+	// T-184: staff withdraw their own leave only before its first day, in the temple's calendar.
+	LEAVE_ALREADY_STARTED(400151, 409,
+			"This leave has already begun, so it can't be withdrawn.",
+			"Ask whoever approves leave to change it."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

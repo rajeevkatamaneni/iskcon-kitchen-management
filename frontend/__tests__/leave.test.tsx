@@ -66,6 +66,8 @@ function leave(overrides: Partial<LeaveView> = {}): LeaveView {
     halfDay: false,
     reason: "Fever",
     status: "PENDING",
+    // The approver's queue is somebody else's leave, so the server never offers them Withdraw (T-184).
+    canWithdraw: false,
     requestedByName: "Head Cook A",
     requestedAt: "2026-09-01T04:00:00Z",
     decidedByName: null,
@@ -222,6 +224,31 @@ describe("leave queue", () => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     render(<LeavePage />);
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
+  });
+
+  // T-184: leave the person took back themselves has its own badge, apart from the temple's Revoked,
+  // and nothing to answer. It is neither waiting nor approved, so only Everything shows it.
+  it("shows withdrawn leave under Everything, with its own badge and nothing to press", () => {
+    queueRef.current = {
+      data: [leave({ status: "WITHDRAWN", decidedByName: "Temple Admin" })],
+      error: null,
+      loading: false,
+    };
+    paramsRef.current = new URLSearchParams("tab=ALL");
+    render(<LeavePage />);
+    expect(screen.getByText("Withdrawn")).toBeInTheDocument();
+    expect(screen.queryByText("Revoked")).not.toBeInTheDocument();
+    for (const name of ["Approve", "Decline", "Revoke"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it("leaves withdrawn leave off the Approved tab", () => {
+    queueRef.current = { data: [leave({ status: "WITHDRAWN" })], error: null, loading: false };
+    paramsRef.current = new URLSearchParams("tab=APPROVED");
+    render(<LeavePage />);
+    expect(screen.queryByText("Withdrawn")).not.toBeInTheDocument();
+    expect(screen.getByText("Nothing to show")).toBeInTheDocument();
   });
 });
 

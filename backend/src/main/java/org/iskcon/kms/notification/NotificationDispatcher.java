@@ -86,7 +86,7 @@ public class NotificationDispatcher {
 		}
 		OutboundMessage message = new OutboundMessage(template, n.params(), render(template, n.params()));
 
-		for (NotificationChannel channel : cascade(n.preferredChannel())) {
+		for (NotificationChannel channel : cascade(template, n.preferredChannel())) {
 			String address = addressFor(channel, n);
 			if (address == null) {
 				recordAttempt(n.id(), channel, "SKIPPED", null, "no address for this channel");
@@ -135,10 +135,20 @@ public class NotificationDispatcher {
 		return template.render(params);
 	}
 
-	/** Preferred channel first, then SMS, then email — with duplicates removed. */
-	private Set<NotificationChannel> cascade(NotificationChannel preferred) {
+	/**
+	 * Preferred channel first, then SMS, then email — with duplicates removed.
+	 *
+	 * <p>Or the preferred channel alone, for a template that says it does not fall back (T-184). Only
+	 * {@link NotificationTemplate#LEAVE_WITHDRAWN} says so. Its sender queues one message per channel
+	 * it means, WhatsApp and email, and a cascade under each would turn a failed WhatsApp into a second
+	 * email, or into an SMS nobody asked for. See {@link NotificationTemplate#fallsBack()}.
+	 */
+	private Set<NotificationChannel> cascade(NotificationTemplate template, NotificationChannel preferred) {
 		Set<NotificationChannel> order = new LinkedHashSet<>();
 		order.add(preferred);
+		if (!template.fallsBack()) {
+			return order;
+		}
 		order.add(NotificationChannel.SMS);
 		order.add(NotificationChannel.EMAIL);
 		return order;

@@ -3125,7 +3125,8 @@ export interface WeekScheduleView {
 export type LeaveType = "TIME_OFF" | "SICK" | "UNPAID";
 
 /** Only PENDING and APPROVED keep somebody off the roster. */
-export type LeaveStatus = "PENDING" | "APPROVED" | "DECLINED" | "REVOKED";
+/** WITHDRAWN: the person took it back themselves before its first day (T-184). The row is kept. */
+export type LeaveStatus = "PENDING" | "APPROVED" | "DECLINED" | "REVOKED" | "WITHDRAWN";
 
 export interface LeaveView {
   id: string;
@@ -3139,6 +3140,11 @@ export interface LeaveView {
   halfDay: boolean;
   reason: string | null;
   status: LeaveStatus;
+  /**
+   * Whether the person may still withdraw this (T-184): their own, PENDING or APPROVED, and its first
+   * day is still ahead in the temple's calendar. Decided by the server, never by the browser's clock.
+   */
+  canWithdraw: boolean;
   /** Null where the temple recorded this for somebody who holds no login. */
   requestedByName: string | null;
   requestedAt: string;

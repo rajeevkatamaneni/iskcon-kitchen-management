@@ -343,7 +343,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 	// ---- what it answers -----------------------------------------------------------------------------
 
 	@Test
-	@DisplayName("all nineteen held and identical: every entry matches exactly, shows no bodies, and was asked with the stored token")
+	@DisplayName("all twenty-one held and identical: every entry matches exactly, shows no bodies, and was asked with the stored token")
 	void allHeldAndIdentical() throws Exception {
 		aConnectedTemple();
 		meta.holdEveryTemplateAsReleased();
@@ -352,7 +352,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 
 		assertThat(report.get("wabaId").asText()).isEqualTo("waba-govinda");
 		assertThat(report.get("language").asText()).isEqualTo("en");
-		assertThat(NotificationTemplate.values()).hasSize(19);
+		assertThat(NotificationTemplate.values()).hasSize(21); // T-184 added leave_withdrawn and leave_withdrawn_notice
 		assertThat(byName(report).keySet()).containsExactly(Arrays.stream(NotificationTemplate.values())
 				.map(NotificationTemplate::whatsappTemplateName).toArray(String[]::new));
 		for (JsonNode entry : report.get("templates")) {
@@ -372,12 +372,12 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 
 		// The stub counts, and the token was in use: without these the zero-POST and never-logged checks
 		// in tearDown could pass against a stub that saw nothing.
-		assertThat(meta.lookups.get()).as("one lookup per template").isEqualTo(19);
+		assertThat(meta.lookups.get()).as("one lookup per template").isEqualTo(21);
 		assertThat(meta.lookedUpNames).containsExactlyInAnyOrderElementsOf(byName(report).keySet());
 		assertThat(meta.authorizations).containsOnly("Bearer " + TOKEN);
 		assertThat(logs.list.stream().map(ILoggingEvent::getFormattedMessage))
-				.anyMatch(line -> line.startsWith("Compared 19 WhatsApp templates with Meta for temple " + govinda
-						+ ": 19 identical, 0 identical only after trimming, 0 worded differently, 0 not held, 0 not answered"));
+				.anyMatch(line -> line.startsWith("Compared 21 WhatsApp templates with Meta for temple " + govinda
+						+ ": 21 identical, 0 identical only after trimming, 0 worded differently, 0 not held, 0 not answered"));
 	}
 
 	@Test
@@ -416,7 +416,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 		assertThat(entry.get("metaBody").asText()).isEqualTo(normalised);
 		assertThat(entry.get("ourBody").asText()).isEqualTo(body("shift_broadcast"));
 		assertThat(entries.values().stream().filter(e -> e.get("bodyMatchesExactly").asBoolean()).count())
-				.as("the other eighteen are untouched by one difference").isEqualTo(18);
+				.as("the other twenty are untouched by one difference").isEqualTo(20);
 	}
 
 	@Test
@@ -476,7 +476,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 		assertThat(refused.get("lookupProblem").asText()).isEqualTo(WhatsAppTemplateComparison.META_ANSWERED_WITH_AN_ERROR);
 
 		assertThat(entries.values().stream().filter(e -> e.get("lookupProblem").isNull()
-				&& e.get("bodyMatchesExactly").asBoolean()).count()).as("the other seventeen").isEqualTo(17);
+				&& e.get("bodyMatchesExactly").asBoolean()).count()).as("the other nineteen").isEqualTo(19);
 	}
 
 	// ---- when it cannot answer -----------------------------------------------------------------------
@@ -525,7 +525,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 
 		signInAs("uid-admin-t173");
 		assertThat(compare(securedMvc).getStatus()).isEqualTo(200);
-		assertThat(meta.lookups.get()).isEqualTo(19);
+		assertThat(meta.lookups.get()).isEqualTo(21);
 	}
 
 	// ---- what it never does --------------------------------------------------------------------------
@@ -556,7 +556,7 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 		assertThat(admin.queryForObject("SELECT count(*) FROM audit_events WHERE tenant_id = ?", Integer.class, govinda))
 				.as("audit entries").isZero();
 		assertThat(response.getStatus()).as(response.getContentAsString()).isEqualTo(200);
-		assertThat(meta.lookups.get()).as("every template was asked about").isGreaterThanOrEqualTo(19);
+		assertThat(meta.lookups.get()).as("every template was asked about").isGreaterThanOrEqualTo(21);
 	}
 
 	@Test

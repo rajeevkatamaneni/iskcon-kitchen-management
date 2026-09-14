@@ -58,22 +58,32 @@ public class LeaveController {
 				.body(Map.of("id", leave.request(actor, input)));
 	}
 
-	/** Takes back a request of mine that nobody has answered yet. */
+	/**
+	 * Takes back leave of mine, pending or approved, before its first day (T-184). The row is kept as
+	 * WITHDRAWN. Still a DELETE, because to the person it is removing their leave, and the path the
+	 * screen already calls did not need to change.
+	 *
+	 * <p>The notices go after the withdrawal has committed, for the same reason as a decision's: a
+	 * message that cannot be queued must never undo the withdrawal.
+	 */
 	@DeleteMapping("/mine/{id}")
 	@PreAuthorize("hasAuthority('REQUEST_OWN_LEAVE')")
 	public ResponseEntity<Void> withdraw(
 			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
-		leave.withdraw(actor, id);
+		leave.notifyWithdrawal(leave.withdraw(actor, id));
 		return ResponseEntity.noContent().build();
 	}
 
 	// ---- The approver's queue --------------------------------------------
 
-	/** Everything waiting, then everything answered. One list, so a decision moves within it. */
+	/**
+	 * Everything waiting, then everything answered. One list, so a decision moves within it. The reader
+	 * is passed so each row can say whether it is theirs to withdraw, which it is only for their own.
+	 */
 	@GetMapping
 	@PreAuthorize("hasAuthority('APPROVE_LEAVE')")
-	public List<LeaveView> queue() {
-		return leave.queue();
+	public List<LeaveView> queue(@AuthenticationPrincipal AuthenticatedUser actor) {
+		return leave.queue(actor.getUserId());
 	}
 
 	/**

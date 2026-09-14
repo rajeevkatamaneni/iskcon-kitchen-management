@@ -478,20 +478,23 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 	/**
 	 * The staging data in this class is a claim about the code's templates, so it is checked against
 	 * them: the eleven, the two, and what is left — which must be the six T-159 reworded, less the one T-180 removed, plus the
-	 * renamed connection check, the seven staging's log counted as submitted.
+	 * renamed connection check, the seven staging's log counted as submitted, plus the two T-184 added after staging's save.
 	 */
 	@Test
-	@DisplayName("the staging template names used here are the application's own, and account for all nineteen")
+	@DisplayName("the staging template names used here are the application's own, and account for all twenty-one")
 	void stagingNamesAreReal() {
 		Set<String> all = Arrays.stream(NotificationTemplate.values())
 				.map(NotificationTemplate::whatsappTemplateName).collect(Collectors.toSet());
-		assertThat(all).hasSize(19).containsAll(ALREADY_HELD_ON_STAGING).containsAll(HELD_AS_MARKETING_ON_STAGING);
+		assertThat(all).hasSize(21).containsAll(ALREADY_HELD_ON_STAGING).containsAll(HELD_AS_MARKETING_ON_STAGING);
 
 		Set<String> rest = new HashSet<>(all);
 		rest.removeAll(ALREADY_HELD_ON_STAGING);
 		rest.removeAll(HELD_AS_MARKETING_ON_STAGING);
 		Set<String> expected = new HashSet<>(REFUSED_ON_STAGING);
 		expected.add("whatsapp_connection_check");
+		// T-184: not on staging when it saved, so neither held nor refused there.
+		expected.add("leave_withdrawn");
+		expected.add("leave_withdrawn_notice");
 		assertThat(rest).isEqualTo(expected);
 	}
 
@@ -546,10 +549,10 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 
 		assertThat(storedSubmittedAt()).isNotNull();
 		Map<String, String> kinds = storedKinds();
-		assertThat(kinds).hasSize(19);
+		assertThat(kinds).hasSize(21);
 		assertThat(kinds.entrySet().stream().filter(e -> e.getValue().equals("HELD_UNDER_ANOTHER_CATEGORY"))
 				.map(Map.Entry::getKey)).containsExactlyInAnyOrderElementsOf(HELD_AS_MARKETING_ON_STAGING);
-		assertThat(kinds.values().stream().filter("REFUSED"::equals)).hasSize(17);
+		assertThat(kinds.values().stream().filter("REFUSED"::equals)).hasSize(19);
 	}
 
 	/**

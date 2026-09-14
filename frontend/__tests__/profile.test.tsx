@@ -19,6 +19,13 @@ const { authRef, queryRef, giveConsentMock, updateChannelMock } = vi.hoisted(() 
   updateChannelMock: vi.fn(),
 }));
 
+// T-184: the leave section reads and withdraws through these. Until a test says otherwise its list never
+// answers, so the section renders nothing and the older tests above see the page they always did.
+const { myLeaveMock, withdrawLeaveMock } = vi.hoisted(() => ({
+  myLeaveMock: vi.fn((): Promise<import("@/lib/api").LeaveView[]> => new Promise(() => {})),
+  withdrawLeaveMock: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "test-token" }),
@@ -28,7 +35,13 @@ vi.mock("@/lib/api", async (orig) => {
   const actual = await orig<typeof import("@/lib/api")>();
   return {
     ...actual,
-    api: { ...actual.api, giveConsent: giveConsentMock, updatePreferredChannel: updateChannelMock },
+    api: {
+      ...actual.api,
+      giveConsent: giveConsentMock,
+      updatePreferredChannel: updateChannelMock,
+      myLeave: myLeaveMock,
+      withdrawLeave: withdrawLeaveMock,
+    },
   };
 });
 
@@ -157,5 +170,136 @@ describe("profile", () => {
     // current page is marked on it rather than on a link.
     const nav = screen.getByRole("navigation", { name: /main/i });
     expect(within(nav).getByRole("button", { current: "page" })).toHaveAccessibleName(/test person/i);
+  });
+});
+
+describe("your leave (T-184)", () => {
+  type Leave = import("@/lib/api").LeaveView;
+
+  function row(overrides: Partial<Leave>): Leave {
+    return {
+      id: "l1",
+      staffProfileId: "p1",
+      staffName: "Radha Devi",
+      jobTitleLabel: "Cook",
+      leaveType: "TIME_OFF",
+      leaveTypeLabel: "Time off",
+      fromDate: "2026-09-20",
+      toDate: "2026-09-21",
+      halfDay: false,
+      reason: null,
+      status: "PENDING",
+      canWithdraw: false,
+      requestedByName: "Radha Devi",
+      requestedAt: "2026-09-10T04:00:00Z",
+      decidedByName: null,
+      decidedAt: null,
+      decisionNote: null,
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", fullName: "Radha Devi" } };
+    queryRef.current = {
+      data: profile({ role: "KITCHEN_STAFF", consentNeeded: false, consentAt: "2026-08-01T00:00:00Z", consentVersion: "1" }),
+      error: null,
+      loading: false,
+    };
+    withdrawLeaveMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("offers Withdraw only on the rows the server says can still be withdrawn", async () => {
+    // Approved and still ahead: withdrawable. Pending but already begun: the server says no, and the
+    // screen does not second-guess it with the browser's clock.
+    myLeaveMock.mockReset().mockResolvedValue([
+      row({ id: "ahead", status: "APPROVED", canWithdraw: true }),
+      row({ id: "begun", status: "PENDING", canWithdraw: false, fromDate: "2026-09-01", toDate: "2026-09-01" }),
+    ]);
+    render(<ProfilePage />);
+
+    const section = await screen.findByRole("region", { name: "Your leave" });
+    await within(section).findByText("Approved");
+    expect(within(section).getAllByRole("button", { name: "Withdraw" })).toHaveLength(1);
+    expect(within(section).getByText("Waiting")).toBeInTheDocument();
+  });
+
+  // T-184 rework: one press no longer withdraws. The row's Withdraw asks "Are you sure?" first, because
+  // the person cannot take a withdrawal back and their manager is told at once.
+  async function openConfirmation(leave: Leave) {
+    myLeaveMock.mockReset().mockResolvedValue([leave]);
+    render(<ProfilePage />);
+    const section = await screen.findByRole("region", { name: "Your leave" });
+    fireEvent.click(await within(section).findByRole("button", { name: "Withdraw" }));
+    return { section, dialog: await screen.findByRole("alertdialog", { name: "Withdraw this leave" }) };
+  }
+
+  it("asks about approved leave in its own words", async () => {
+    const { dialog } = await openConfirmation(
+      row({ id: "ahead", status: "APPROVED", canWithdraw: true, fromDate: "2026-08-12", toDate: "2026-08-14" })
+    );
+    expect(dialog).toHaveTextContent("Withdraw your approved leave for 12 to 14 August? Your manager will be told.");
+  });
+
+  it("asks about a pending request in its own words", async () => {
+    const { dialog } = await openConfirmation(
+      row({ id: "waiting", status: "PENDING", canWithdraw: true, fromDate: "2026-08-12", toDate: "2026-08-14" })
+    );
+    expect(dialog).toHaveTextContent(
+      "Withdraw your leave request for 12 to 14 August? Whoever approves leave will be told."
+    );
+  });
+
+  it("puts focus on Cancel when it asks", async () => {
+    const { dialog } = await openConfirmation(row({ id: "ahead", status: "APPROVED", canWithdraw: true }));
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus());
+  });
+
+  it("withdraws exactly once when Withdraw is pressed in the question, then reads the list again", async () => {
+    const { dialog } = await openConfirmation(row({ id: "ahead", status: "APPROVED", canWithdraw: true }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Withdraw" }));
+
+    await waitFor(() => expect(myLeaveMock).toHaveBeenCalledTimes(2));
+    expect(withdrawLeaveMock).toHaveBeenCalledTimes(1);
+    expect(withdrawLeaveMock).toHaveBeenCalledWith("ahead", "test-token");
+  });
+
+  it("changes nothing when Cancel is pressed", async () => {
+    const { section, dialog } = await openConfirmation(row({ id: "ahead", status: "APPROVED", canWithdraw: true }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(withdrawLeaveMock).not.toHaveBeenCalled();
+    expect(within(section).getByText("Approved")).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: "Withdraw" })).toBeInTheDocument();
+  });
+
+  it("still shows the server's sentence when the withdrawal is refused", async () => {
+    const { ApiError } = await import("@/lib/api");
+    withdrawLeaveMock.mockReset().mockRejectedValue(
+      new ApiError({
+        code: "KMS-400151",
+        message: "This leave has already begun, so it can't be withdrawn.",
+        action: "Ask whoever approves leave to change it.",
+        fieldErrors: [],
+      })
+    );
+    const { dialog, section } = await openConfirmation(row({ id: "ahead", status: "APPROVED", canWithdraw: true }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Withdraw" }));
+
+    expect(await within(section).findByText("This leave has already begun, so it can't be withdrawn.")).toBeInTheDocument();
+  });
+
+  it("says a withdrawal was the person's own, and a revocation was the temple's", async () => {
+    myLeaveMock.mockReset().mockResolvedValue([
+      row({ id: "mine", status: "WITHDRAWN" }),
+      row({ id: "theirs", status: "REVOKED", fromDate: "2026-10-01", toDate: "2026-10-01" }),
+    ]);
+    render(<ProfilePage />);
+
+    const section = await screen.findByRole("region", { name: "Your leave" });
+    expect(await within(section).findByText("Withdrawn by you")).toBeInTheDocument();
+    expect(within(section).getByText("Withdrawn by the temple")).toBeInTheDocument();
+    expect(within(section).queryByRole("button", { name: "Withdraw" })).not.toBeInTheDocument();
   });
 });

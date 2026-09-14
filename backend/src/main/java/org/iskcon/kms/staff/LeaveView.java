@@ -30,6 +30,15 @@ public record LeaveView(
 
 		LeaveStatus status,
 
+		/**
+		 * Whether the person reading this may still withdraw it (T-184): it is their own leave, it is
+		 * PENDING or APPROVED, and its first day is still ahead in the temple's calendar. Decided here,
+		 * with {@code TempleClock}, so a phone in another zone or with a wrong clock cannot offer a
+		 * button the server would refuse. False on every row of the approver's queue that is not the
+		 * approver's own.
+		 */
+		boolean canWithdraw,
+
 		/** Null where the temple recorded this for somebody who holds no login (B7 §4). */
 		String requestedByName,
 		Instant requestedAt,

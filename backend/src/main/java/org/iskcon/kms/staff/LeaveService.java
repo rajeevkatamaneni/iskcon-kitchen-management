@@ -2,6 +2,8 @@ package org.iskcon.kms.staff;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -10,6 +12,8 @@ import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
 import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.auth.Permission;
+import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.meal.MealCrewService;
@@ -17,6 +21,10 @@ import org.iskcon.kms.meal.MealCrewView;
 import org.iskcon.kms.notification.NotificationRecipient;
 import org.iskcon.kms.notification.NotificationService;
 import org.iskcon.kms.notification.NotificationTemplate;
+import org.iskcon.kms.notification.TenantWhatsAppSettingsService;
+import org.iskcon.kms.tenancy.TempleClock;
+import org.iskcon.kms.user.User;
+import org.iskcon.kms.user.User.NotificationChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -60,6 +68,14 @@ public class LeaveService {
 	private static final DateTimeFormatter SPOKEN_DATE =
 			DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH);
 
+	/**
+	 * What the managers' notice says the withdrawn leave was (T-184). Two fixed phrases, written here
+	 * and nowhere else, and the only values {@link NotificationTemplate#LEAVE_WITHDRAWN_NOTICE}'s
+	 * {@code state} is ever given.
+	 */
+	static final String WAS_APPROVED = "approved";
+	static final String WAS_WAITING = "still waiting for an answer";
+
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final NotificationService notificationService;
@@ -68,12 +84,23 @@ public class LeaveService {
 	// day off costs is a fact about the meals that day, and the meals are where that fact lives.
 	private final MealCrewService mealCrewService;
 
+	// The temple's own today (T-184): "before its first day" is a question about the kitchen's calendar,
+	// never the server's, which runs in UTC and would let a Bengaluru cook withdraw leave at 1 a.m. on
+	// its first day for five and a half more hours.
+	private final TempleClock clock;
+
+	// Only to ask whether this temple has WhatsApp connected, for the person's confirmation (T-184).
+	private final TenantWhatsAppSettingsService whatsAppSettings;
+
 	public LeaveService(JdbcTemplate jdbc, AuditService auditService,
-			NotificationService notificationService, MealCrewService mealCrewService) {
+			NotificationService notificationService, MealCrewService mealCrewService,
+			TempleClock clock, TenantWhatsAppSettingsService whatsAppSettings) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.notificationService = notificationService;
 		this.mealCrewService = mealCrewService;
+		this.clock = clock;
+		this.whatsAppSettings = whatsAppSettings;
 	}
 
 	// ---- Reading --------------------------------------------------------
@@ -89,7 +116,8 @@ public class LeaveService {
 	@Transactional(readOnly = true)
 	public List<LeaveView> myLeave(UUID userId) {
 		UUID profileId = ownProfileId(userId);
-		return jdbc.query(SELECT + " WHERE l.staff_profile_id = ? ORDER BY l.from_date DESC", MAPPER, profileId);
+		return jdbc.query(SELECT + " WHERE l.staff_profile_id = ? ORDER BY l.from_date DESC",
+				mapper(userId, clock.today()), profileId);
 	}
 
 	/**
@@ -98,12 +126,17 @@ public class LeaveService {
 	 * <p>One list rather than two endpoints. "What is pending" and "what has been approved" are the
 	 * same rows sorted differently, and a screen that fetches them separately is a screen where
 	 * approving something makes it disappear from one list without appearing in the other.
+	 *
+	 * <p>A WITHDRAWN row sorts with the answered ones (T-184). It is no longer waiting for anybody,
+	 * and the screen shows it only under its Everything filter.
+	 *
+	 * @param viewerUserId who is reading, so each row's {@code canWithdraw} is true only on their own
 	 */
 	@Transactional(readOnly = true)
-	public List<LeaveView> queue() {
+	public List<LeaveView> queue(UUID viewerUserId) {
 		return jdbc.query(SELECT + """
 				ORDER BY CASE l.status WHEN 'PENDING' THEN 0 ELSE 1 END, l.from_date DESC
-				""", MAPPER);
+				""", mapper(viewerUserId, clock.today()));
 	}
 
 	/**
@@ -155,26 +188,67 @@ public class LeaveService {
 	}
 
 	/**
-	 * Withdraws a request the person made themselves and nobody has answered yet.
+	 * The person withdraws their own leave, pending or approved, before its first day (T-184).
 	 *
-	 * <p>Removed rather than kept as a fifth status. An unanswered request that was taken back says
-	 * nothing anybody will ever need — it is not a decision, and the audit log already holds the fact
-	 * that it existed and was withdrawn, with who did both.
+	 * <p><strong>This reverses what was here.</strong> Withdrawal used to accept a pending request
+	 * only and delete the row, and its comment said "Removed rather than kept as a fifth status": an
+	 * unanswered request taken back was thought to say nothing anybody would need. Rajeev ruled on
+	 * 2026-09-13 that staff may withdraw approved leave as well, and, asked whether the manager should
+	 * be told, answered <em>"YES"</em>. A manager who approved leave arranged a week around it, so the
+	 * row is kept as WITHDRAWN, for the reason REVOKED is kept, and the approval stays on it (V132).
+	 *
+	 * <p><strong>Only before it begins, in the temple's calendar.</strong> His ruling on leave already
+	 * under way: <em>"Cant be modified."</em> The first day being today counts as begun. A cook who is
+	 * off today and wants to come in asks whoever approves leave, who can revoke it
+	 * (KMS-400151 says so). The check reads {@link TempleClock}, never the server's zone.
+	 *
+	 * <p><strong>"Their own" is the leave's staff record, not who typed it.</strong> Leave the temple
+	 * recorded on a person's behalf, from the week grid or for a phone call at six in the morning, has
+	 * no requester, and before T-184 it could not be withdrawn because it could not be pending. It is
+	 * now withdrawable by the person it belongs to, and by nobody else, and whoever recorded it is told.
+	 *
+	 * <p>The order of refusals is the one a person can act on: not yours first, then already closed
+	 * (a declined, revoked or withdrawn row keeps KMS-400090), then already begun.
+	 *
+	 * @return who to tell and what, for {@link #notifyWithdrawal}, called after this commits
 	 */
 	@Transactional
-	public void withdraw(AuthenticatedUser actor, UUID id) {
+	public LeaveWithdrawal withdraw(AuthenticatedUser actor, UUID id) {
 		LeaveRow row = row(id);
-		if (!sameUser(row.requestedBy(), actor.getUserId())) {
+		if (!sameUser(row.userId(), actor.getUserId())) {
 			throw new ApplicationException(ErrorCode.NOT_YOUR_LEAVE_REQUEST, Map.of("leaveId", id));
 		}
-		if (row.status() != LeaveStatus.PENDING) {
+		if (!stillOpen(row.status())) {
 			throw new ApplicationException(ErrorCode.LEAVE_ALREADY_DECIDED,
 					Map.of("leaveId", id, "status", row.status()));
 		}
+		LocalDate templeToday = clock.today();
+		if (!notYetBegun(row.fromDate(), templeToday)) {
+			throw new ApplicationException(ErrorCode.LEAVE_ALREADY_STARTED,
+					Map.of("leaveId", id, "fromDate", row.fromDate(), "templeToday", templeToday));
+		}
+
+		// Guarded on the status that was read, so an approval landing between the read and this write
+		// cannot be silently turned into a withdrawal of something the person never saw approved.
+		int changed = jdbc.update("""
+				UPDATE staff_leave SET status = 'WITHDRAWN', withdrawn_at = now(), updated_at = now()
+				WHERE id = ? AND status = ?
+				""", id, row.status().name());
+		if (changed != 1) {
+			throw new ApplicationException(ErrorCode.LEAVE_ALREADY_DECIDED, Map.of("leaveId", id));
+		}
+
+		// The after-state is read back from the row, never assumed from what was asked for.
+		LeaveRow stored = row(id);
 		auditService.record(actor, AuditAction.LEAVE_WITHDRAWN, AuditEntityType.STAFF_LEAVE, id,
-				shape(row.leaveType(), row.fromDate(), row.toDate(), row.halfDay(), "PENDING"), null,
-				"Withdrawn before it was answered.");
-		jdbc.update("DELETE FROM staff_leave WHERE id = ?", id);
+				shape(row.leaveType(), row.fromDate(), row.toDate(), row.halfDay(), row.status().name()),
+				shape(stored.leaveType(), stored.fromDate(), stored.toDate(), stored.halfDay(), stored.status().name()),
+				row.status() == LeaveStatus.APPROVED
+						? "Withdrawn by them before it began. It had been approved."
+						: "Withdrawn by them before it began, while it was still waiting for an answer.");
+
+		return new LeaveWithdrawal(actor.getUserId(), row.staffName(), row.status(), row.decidedBy(),
+				row.fromDate(), row.toDate(), row.halfDay());
 	}
 
 	/**
@@ -282,11 +356,18 @@ public class LeaveService {
 	private LeaveDecision write(
 			AuthenticatedUser actor, LeaveRow row, LeaveStatus outcome, String note, AuditAction action) {
 
-		jdbc.update("""
+		// Guarded on the status that was read (T-184). Before withdrawal kept its rows, a request withdrawn
+		// while its approver's screen was open was deleted, and this update matched nothing. Now it would
+		// match the WITHDRAWN row and approve leave the person had just taken back, so a row that moved
+		// since it was read is refused as already answered.
+		int changed = jdbc.update("""
 				UPDATE staff_leave
 				SET status = ?, decided_by = ?, decided_at = now(), decision_note = ?, updated_at = now()
-				WHERE id = ?
-				""", outcome.name(), actor.getUserId(), trimToNull(note), row.id());
+				WHERE id = ? AND status = ?
+				""", outcome.name(), actor.getUserId(), trimToNull(note), row.id(), row.status().name());
+		if (changed != 1) {
+			throw new ApplicationException(ErrorCode.LEAVE_ALREADY_DECIDED, Map.of("leaveId", row.id()));
+		}
 
 		auditService.record(actor, action, AuditEntityType.STAFF_LEAVE, row.id(),
 				shape(row.leaveType(), row.fromDate(), row.toDate(), row.halfDay(), row.status().name()),
@@ -315,20 +396,18 @@ public class LeaveService {
 			case APPROVED -> NotificationTemplate.LEAVE_APPROVED;
 			case DECLINED -> NotificationTemplate.LEAVE_DECLINED;
 			case REVOKED -> NotificationTemplate.LEAVE_REVOKED;
-			case PENDING -> null;
+			// Not a decision: the person withdrew it, and notifyWithdrawal tells whoever needs to know.
+			case PENDING, WITHDRAWN -> null;
 		};
 		if (template == null) {
 			return;
 		}
 		try {
-			String templeName = jdbc.queryForObject("""
-					SELECT name FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-					""", String.class);
 			notificationService.notify(
 					NotificationRecipient.user(decision.staffUserId()),
 					template,
 					Map.of("name", decision.staffName() == null ? "" : decision.staffName(),
-							"temple", templeName == null ? "" : templeName,
+							"temple", templeName(),
 							"dates", spokenRange(decision.fromDate(), decision.toDate(), decision.halfDay())),
 					null);
 		} catch (RuntimeException e) {
@@ -343,6 +422,176 @@ public class LeaveService {
 			LeaveStatus status,
 			String staffName,
 			LeaveType leaveType,
+			LocalDate fromDate,
+			LocalDate toDate,
+			boolean halfDay) {
+	}
+
+	/**
+	 * Best-effort: after a withdrawal commits, confirms it to the person and tells whoever approves
+	 * leave (T-184). Never fails the withdrawal, and each message is queued on its own, so one that
+	 * cannot be queued does not stop the rest.
+	 *
+	 * <p><strong>The person</strong> gets WhatsApp and email when this temple has WhatsApp connected,
+	 * and email alone when it has not. Rajeev: <em>"Email and WattsApp both. If both are setup IF not,
+	 * Just email."</em> These are queued as one message per channel, overriding the person's preferred
+	 * channel, and {@link NotificationTemplate#LEAVE_WITHDRAWN} does not fall back, so the person gets
+	 * at most one of each and never an SMS. Consent and opt-out still apply to each, as to every
+	 * message, and this one is operational, so opting out of nothing silences it.
+	 *
+	 * <p><strong>Whoever approves leave</strong>, on their own preferred channel, with the ordinary
+	 * cascade. See {@link #withdrawalNoticeRecipients}.
+	 */
+	public void notifyWithdrawal(LeaveWithdrawal withdrawal) {
+		if (withdrawal == null) {
+			return;
+		}
+		String temple = templeName();
+		String dates = spokenRange(withdrawal.fromDate(), withdrawal.toDate(), withdrawal.halfDay());
+		String name = withdrawal.staffName() == null ? "" : withdrawal.staffName();
+
+		for (NotificationChannel channel : confirmationChannels()) {
+			try {
+				notificationService.notify(
+						NotificationRecipient.user(withdrawal.withdrawnBy()),
+						NotificationTemplate.LEAVE_WITHDRAWN,
+						Map.of("name", name, "temple", temple, "dates", dates),
+						channel);
+			} catch (RuntimeException e) {
+				log.warn("Could not queue a leave withdrawal confirmation by {} for staff {}: {}",
+						channel, withdrawal.withdrawnBy(), e.toString());
+			}
+		}
+
+		List<UUID> recipients;
+		try {
+			recipients = withdrawalNoticeRecipients(withdrawal);
+		} catch (RuntimeException e) {
+			log.warn("Could not work out who approves leave, to tell them of a withdrawal: {}", e.toString());
+			return;
+		}
+		Map<String, Object> notice = Map.of("name", name, "temple", temple, "dates", dates,
+				"state", withdrawal.priorStatus() == LeaveStatus.APPROVED ? WAS_APPROVED : WAS_WAITING);
+		for (UUID approver : recipients) {
+			try {
+				notificationService.notify(
+						NotificationRecipient.user(approver), NotificationTemplate.LEAVE_WITHDRAWN_NOTICE, notice, null);
+			} catch (RuntimeException e) {
+				log.warn("Could not queue a leave withdrawal notice for approver {}: {}", approver, e.toString());
+			}
+		}
+	}
+
+	/**
+	 * WhatsApp and email when this temple has WhatsApp connected, email alone when it has not.
+	 *
+	 * <p>"Connected" is read the way the settings screen and Reload read it, from the temple's stored
+	 * settings, and nothing asks Meta. If even that read fails, email alone: it is the channel the
+	 * ruling sends in both cases.
+	 */
+	private List<NotificationChannel> confirmationChannels() {
+		boolean connected;
+		try {
+			connected = whatsAppSettings.read().connected();
+		} catch (RuntimeException e) {
+			log.warn("Could not read whether WhatsApp is connected, so confirming a withdrawal by email only: {}",
+					e.toString());
+			connected = false;
+		}
+		return connected
+				? List.of(NotificationChannel.WHATSAPP, NotificationChannel.EMAIL)
+				: List.of(NotificationChannel.EMAIL);
+	}
+
+	/**
+	 * Who is told that leave was withdrawn (the main session's ruling of 2026-09-13, following Rajeev's
+	 * "Should the manager be told? YES").
+	 *
+	 * <ul>
+	 *   <li><strong>Approved leave:</strong> the person who approved it, which for leave the temple
+	 *       recorded on somebody's behalf is whoever recorded it. If they can no longer approve leave
+	 *       at this temple, because their role here lost the permission, they are disabled, or they have
+	 *       no account here at all, then everybody here who can. Also everybody, when the approval names
+	 *       nobody (V62's carried-over days off) or names the person withdrawing, who approved their own.</li>
+	 *   <li><strong>A request still waiting:</strong> everybody here who can approve leave, since any
+	 *       of them might have been about to answer it.</li>
+	 * </ul>
+	 *
+	 * <p>Never the person withdrawing, even when they hold the permission themselves: they have their
+	 * own confirmation.
+	 */
+	List<UUID> withdrawalNoticeRecipients(LeaveWithdrawal withdrawal) {
+		UUID approver = withdrawal.decidedBy();
+		if (withdrawal.priorStatus() == LeaveStatus.APPROVED
+				&& approver != null
+				&& !approver.equals(withdrawal.withdrawnBy())
+				&& canApproveLeaveHere(approver)) {
+			return List.of(approver);
+		}
+		return approversHere().stream().filter(id -> !id.equals(withdrawal.withdrawnBy())).toList();
+	}
+
+	/**
+	 * Whether this person holds APPROVE_LEAVE at this temple now: an ACTIVE account here whose role
+	 * carries the permission.
+	 *
+	 * <p><strong>The temple is named in the query, and not left to the row policy alone.</strong> The
+	 * policy on {@code users} lets a signed-in caller read their own rows at every temple
+	 * ({@code firebase_uid = app.auth_uid}, V2), and a withdrawal runs as that caller. A person is one
+	 * row per temple (V52), so an approver who left this temple and manages another would otherwise
+	 * still be found, and so would the withdrawer's own rows elsewhere.
+	 */
+	private boolean canApproveLeaveHere(UUID userId) {
+		List<String> roles = jdbc.queryForList("""
+				SELECT role FROM users
+				WHERE id = ? AND status = 'ACTIVE'
+				  AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", String.class, userId);
+		return !roles.isEmpty() && RolePermissions.has(User.Role.valueOf(roles.get(0)), Permission.APPROVE_LEAVE);
+	}
+
+	/** Every ACTIVE account at this temple whose role carries APPROVE_LEAVE, in a stable order. */
+	private List<UUID> approversHere() {
+		List<User.Role> roles = rolesThatApproveLeave();
+		if (roles.isEmpty()) {
+			return List.of();
+		}
+		String placeholders = String.join(", ", Collections.nCopies(roles.size(), "?"));
+		Object[] args = roles.stream().map(Enum::name).toArray();
+		return jdbc.queryForList("""
+				SELECT id FROM users
+				WHERE status = 'ACTIVE'
+				  AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				  AND role IN (%s)
+				ORDER BY id
+				""".formatted(placeholders), UUID.class, args);
+	}
+
+	/**
+	 * The roles that may approve leave, taken from {@link RolePermissions} rather than typed out.
+	 *
+	 * <p>The nearest pattern in the tree, the low-stock digest, lists its roles by hand. Here that would
+	 * mean a change to who holds APPROVE_LEAVE silently leaves the new holders untold, and nothing would
+	 * fail. Asking the policy means there is one list.
+	 */
+	static List<User.Role> rolesThatApproveLeave() {
+		return Arrays.stream(User.Role.values())
+				.filter(role -> RolePermissions.has(role, Permission.APPROVE_LEAVE))
+				.toList();
+	}
+
+	/**
+	 * What the controller needs after a withdrawal: who withdrew it, what it was, and who approved it.
+	 *
+	 * @param withdrawnBy the person, always the one the leave belongs to
+	 * @param priorStatus PENDING or APPROVED, the status it had when it was withdrawn
+	 * @param decidedBy   who approved it, kept from the row; null for a request still waiting
+	 */
+	public record LeaveWithdrawal(
+			UUID withdrawnBy,
+			String staffName,
+			LeaveStatus priorStatus,
+			UUID decidedBy,
 			LocalDate fromDate,
 			LocalDate toDate,
 			boolean halfDay) {
@@ -366,12 +615,27 @@ public class LeaveService {
 		}
 	}
 
+	/** Leave a person can still take back: not yet answered, or approved. The other three are closed. */
+	static boolean stillOpen(LeaveStatus status) {
+		return status == LeaveStatus.PENDING || status == LeaveStatus.APPROVED;
+	}
+
+	/**
+	 * Whether leave starting on {@code firstDay} has not yet begun, in the temple's calendar. The first
+	 * day itself counts as begun, from the temple's midnight: Rajeev's "Cant be modified" is about leave
+	 * somebody is already on, and on its first morning they are.
+	 */
+	static boolean notYetBegun(LocalDate firstDay, LocalDate templeToday) {
+		return firstDay.isAfter(templeToday);
+	}
+
 	/**
 	 * Refuses leave that lands on days the same person already has leave for.
 	 *
 	 * <p>Pending counts as well as approved. Two overlapping requests from the same cook are an
 	 * approver being asked the same question twice with two different answers available, and the
-	 * second one is almost always a form submitted twice.
+	 * second one is almost always a form submitted twice. Withdrawn leave does not count (T-184): it
+	 * no longer asks anything, and a person who withdrew the wrong days must be able to ask again.
 	 */
 	private void refuseIfOverlapping(UUID profileId, LocalDate from, LocalDate to) {
 		Integer clashes = jdbc.queryForObject("""
@@ -406,11 +670,23 @@ public class LeaveService {
 		}
 	}
 
-	/** The row as the decisions need it: status, dates, and who to tell afterwards. */
+	private String templeName() {
+		try {
+			String name = jdbc.queryForObject("""
+					SELECT name FROM tenants WHERE id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+					""", String.class);
+			return name == null ? "" : name;
+		} catch (RuntimeException e) {
+			log.warn("Could not read the temple's name for a leave notice: {}", e.toString());
+			return "";
+		}
+	}
+
+	/** The row as the decisions need it: status, dates, who approved it, and who to tell afterwards. */
 	private LeaveRow row(UUID id) {
 		List<LeaveRow> rows = jdbc.query("""
 				SELECT l.id, l.staff_profile_id, l.leave_type, l.from_date, l.to_date, l.half_day,
-				       l.status, l.requested_by, sp.full_name AS staff_name, sp.user_id
+				       l.status, l.requested_by, l.decided_by, sp.full_name AS staff_name, sp.user_id
 				FROM staff_leave l JOIN staff_profiles sp ON sp.id = l.staff_profile_id
 				WHERE l.id = ?
 				""", (rs, n) -> new LeaveRow(
@@ -423,7 +699,8 @@ public class LeaveService {
 				rs.getObject("to_date", LocalDate.class),
 				rs.getBoolean("half_day"),
 				LeaveStatus.valueOf(rs.getString("status")),
-				rs.getObject("requested_by", UUID.class)), id);
+				rs.getObject("requested_by", UUID.class),
+				rs.getObject("decided_by", UUID.class)), id);
 		if (rows.isEmpty()) {
 			throw notFound(id);
 		}
@@ -432,7 +709,8 @@ public class LeaveService {
 
 	private record LeaveRow(
 			UUID id, UUID staffProfileId, UUID userId, String staffName, LeaveType leaveType,
-			LocalDate fromDate, LocalDate toDate, boolean halfDay, LeaveStatus status, UUID requestedBy) {
+			LocalDate fromDate, LocalDate toDate, boolean halfDay, LeaveStatus status, UUID requestedBy,
+			UUID decidedBy) {
 	}
 
 	private static Map<String, Object> shape(
@@ -451,9 +729,10 @@ public class LeaveService {
 	}
 
 	/**
-	 * Null-safe, and null is never a match: leave recorded on somebody's behalf has no requester at
-	 * all, and treating "nobody asked for this" as "you asked for this" would let any staff member
-	 * withdraw a record the temple wrote.
+	 * Null-safe, and null is never a match. Before T-184 this compared the requester, so leave the temple
+	 * recorded for somebody could not be withdrawn by any staff member. It now compares the user the
+	 * leave's staff record belongs to, and a staff record with no login matches nobody: a janitor's leave
+	 * is withdrawn by nobody, because nobody can sign in as the janitor.
 	 */
 	private static boolean sameUser(UUID a, UUID b) {
 		return a != null && a.equals(b);
@@ -472,7 +751,7 @@ public class LeaveService {
 	}
 
 	private static final String SELECT = """
-			SELECT l.id, l.staff_profile_id, sp.full_name AS staff_name,
+			SELECT l.id, l.staff_profile_id, sp.full_name AS staff_name, sp.user_id AS staff_user_id,
 			       sp.job_title, sp.job_title_other,
 			       l.leave_type, l.from_date, l.to_date, l.half_day, l.reason, l.status,
 			       requester.full_name AS requested_by_name, l.requested_at,
@@ -483,26 +762,40 @@ public class LeaveService {
 			LEFT JOIN users decider ON decider.id = l.decided_by
 			""";
 
-	private static final RowMapper<LeaveView> MAPPER = (rs, n) -> {
-		LeaveType type = LeaveType.valueOf(rs.getString("leave_type"));
-		JobTitle title = JobTitle.valueOf(rs.getString("job_title"));
-		return new LeaveView(
-				rs.getObject("id", UUID.class),
-				rs.getObject("staff_profile_id", UUID.class),
-				rs.getString("staff_name"),
-				StaffEmploymentService.titleLabel(title, rs.getString("job_title_other")),
-				type,
-				type.label(),
-				rs.getObject("from_date", LocalDate.class),
-				rs.getObject("to_date", LocalDate.class),
-				rs.getBoolean("half_day"),
-				rs.getString("reason"),
-				LeaveStatus.valueOf(rs.getString("status")),
-				rs.getString("requested_by_name"),
-				rs.getObject("requested_at", java.time.OffsetDateTime.class).toInstant(),
-				rs.getString("decided_by_name"),
-				rs.getObject("decided_at", java.time.OffsetDateTime.class) == null
-						? null : rs.getObject("decided_at", java.time.OffsetDateTime.class).toInstant(),
-				rs.getString("decision_note"));
-	};
+	/**
+	 * A leave row as a screen reads it, for one reader on the temple's today.
+	 *
+	 * <p>{@code canWithdraw} is the same two rules {@link #withdraw} applies, plus "yours", so the button
+	 * is offered exactly where the press would be accepted (T-184).
+	 */
+	private static RowMapper<LeaveView> mapper(UUID viewerUserId, LocalDate templeToday) {
+		return (rs, n) -> {
+			LeaveType type = LeaveType.valueOf(rs.getString("leave_type"));
+			JobTitle title = JobTitle.valueOf(rs.getString("job_title"));
+			LeaveStatus status = LeaveStatus.valueOf(rs.getString("status"));
+			LocalDate from = rs.getObject("from_date", LocalDate.class);
+			boolean canWithdraw = sameUser(rs.getObject("staff_user_id", UUID.class), viewerUserId)
+					&& stillOpen(status)
+					&& notYetBegun(from, templeToday);
+			return new LeaveView(
+					rs.getObject("id", UUID.class),
+					rs.getObject("staff_profile_id", UUID.class),
+					rs.getString("staff_name"),
+					StaffEmploymentService.titleLabel(title, rs.getString("job_title_other")),
+					type,
+					type.label(),
+					from,
+					rs.getObject("to_date", LocalDate.class),
+					rs.getBoolean("half_day"),
+					rs.getString("reason"),
+					status,
+					canWithdraw,
+					rs.getString("requested_by_name"),
+					rs.getObject("requested_at", java.time.OffsetDateTime.class).toInstant(),
+					rs.getString("decided_by_name"),
+					rs.getObject("decided_at", java.time.OffsetDateTime.class) == null
+							? null : rs.getObject("decided_at", java.time.OffsetDateTime.class).toInstant(),
+					rs.getString("decision_note"));
+		};
+	}
 }

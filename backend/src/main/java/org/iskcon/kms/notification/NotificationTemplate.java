@@ -530,6 +530,75 @@ public enum NotificationTemplate {
 	},
 
 	/**
+	 * The member of staff's own confirmation that they withdrew their leave (T-184).
+	 *
+	 * <p><strong>The wording is Rajeev's.</strong> Reviewing {@code leave_revoked} on 2026-09-13, he
+	 * guessed at a message for the staff member withdrawing their own leave, recorded in the work
+	 * ledger as <em>"…your request to withdrawn your leave request for 12 to 14 August 2026 has been
+	 * successfully completed"</em>. Kept to his meaning and his order, with the grammar mended
+	 * ("withdraw", and "leave request" once) and the temple named as the three leave decisions above
+	 * name it. The dates are {@code LeaveService.spokenRange}, as theirs are.
+	 *
+	 * <p><strong>It goes on WhatsApp and email both, and neither falls back.</strong> His ruling on
+	 * how the person is told: <em>"Email and WattsApp both. If both are setup IF not, Just email."</em>
+	 * So the sender queues one notification per channel, and {@link #fallsBack()} is false here and
+	 * nowhere else: a WhatsApp send that fails must not cascade into a second copy of the email, or into
+	 * an SMS the ruling never mentions.
+	 */
+	LEAVE_WITHDRAWN("leave_withdrawn") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					"Your leave at " + value(params, "temple") + " has been withdrawn",
+					"Hare Krishna %s, your request to withdraw your leave at %s for %s has been successfully completed."
+							.formatted(value(params, "name"), value(params, "temple"), value(params, "dates")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("name", "temple", "dates");
+		}
+
+		@Override
+		public boolean fallsBack() {
+			return false;
+		}
+	},
+
+	/**
+	 * Whoever approves leave, told that a member of staff withdrew theirs before it began (T-184).
+	 *
+	 * <p>Rajeev, asked whether the manager should be told: <em>"YES"</em>. Who receives it is decided
+	 * in {@code LeaveService.notifyWithdrawal}: the person who approved it, or everybody at the temple
+	 * who can approve leave when it was still waiting or that person no longer can.
+	 *
+	 * <p>One template with a small hole, {@code state}, rather than one per earlier status. The hole is
+	 * one of two phrases written in our own code, "approved" or "still waiting for an answer", and
+	 * neither changes what the message says: this person's leave is withdrawn and their usual schedule
+	 * stands. That is the test {@link #REMOVED_FROM_SHIFT} applies to its reason, and the opposite of
+	 * the three leave decisions, where the hole would have turned good news into bad.
+	 *
+	 * <p>"Their usual schedule stands" is chosen because it is true in both cases, and stays true
+	 * whatever that schedule is: approved leave came off the rota with the withdrawal, and pending leave
+	 * was never on it. It does not claim the person is working those days, which a part-timer may not be.
+	 */
+	LEAVE_WITHDRAWN_NOTICE("leave_withdrawn_notice") {
+		@Override
+		public RenderedMessage render(Map<String, Object> params) {
+			return new RenderedMessage(
+					value(params, "name") + " has withdrawn their leave at " + value(params, "temple"),
+					"Hare Krishna. %s has withdrawn their leave at %s for %s before it began. That leave was %s, and their usual schedule stands for those dates."
+							.formatted(value(params, "name"), value(params, "temple"), value(params, "dates"),
+									value(params, "state")));
+		}
+
+		@Override
+		public List<String> parameterOrder() {
+			return List.of("name", "temple", "dates", "state");
+		}
+	},
+
+	/**
 	 * T-159: Meta refused "{{1}} item(s) at {{2}} are below their reorder level: {{3}}." because it
 	 * began with a detail. It now begins with words and ends with a sentence of its own.
 	 */
@@ -669,6 +738,9 @@ public enum NotificationTemplate {
 			case LEAVE_APPROVED -> List.of("Telling a member of staff that their leave was approved");
 			case LEAVE_DECLINED -> List.of("Telling a member of staff that their leave was not approved");
 			case LEAVE_REVOKED -> List.of("Telling a member of staff that their manager cancelled their approved leave");
+			case LEAVE_WITHDRAWN -> List.of("Confirming to a member of staff that they withdrew their own leave");
+			case LEAVE_WITHDRAWN_NOTICE -> List.of(
+					"Telling whoever approves leave that a member of staff withdrew their leave before it began");
 			case LOW_STOCK_DIGEST -> List.of("The daily low-stock message to the kitchen staff, kitchen managers and temple admins");
 			case WHATSAPP_TEST -> List.of("The test message a temple admin sends from WhatsApp settings");
 		};
@@ -766,6 +838,24 @@ public enum NotificationTemplate {
 		return CommunicationCategory.OPERATIONAL;
 	}
 
+	/**
+	 * Whether a send that fails on its channel moves on to SMS and then email (T-184).
+	 *
+	 * <p>True for every template but one, which is the cascade SYSTEM_DESIGN.md §6 describes and every
+	 * message before T-184 relied on. {@link #LEAVE_WITHDRAWN} says false, because its sender asks for
+	 * WhatsApp and email as two separate messages, and Rajeev's ruling was both of those, or email
+	 * alone. With the cascade, a WhatsApp that failed would send the email a second time, and an email
+	 * that failed would send an SMS.
+	 *
+	 * <p>Kept on the template rather than as a column on the notification, because it is a fact about
+	 * what this message is for, not about one send of it, and so it needed no migration of a table
+	 * that every channel writes. The cost is that anything else sending {@code LEAVE_WITHDRAWN} gets no
+	 * cascade either, which is the point.
+	 */
+	public boolean fallsBack() {
+		return true;
+	}
+
 	/** Sample values for Meta's reviewer, who will not approve a template without them. */
 	public List<String> whatsappExampleValues() {
 		return parameterOrder().stream().map(NotificationTemplate::example).toList();
@@ -799,6 +889,8 @@ public enum NotificationTemplate {
 			case "intro" -> "Kitchen seva starts at 4am and everyone is welcome.";
 			case "link" -> "https://example.org/c/2f6a1c";
 			case "dates" -> "12 to 14 August 2026";
+			// Where withdrawn leave stood (T-184): one of exactly two phrases LeaveService writes.
+			case "state" -> "approved";
 			// A split wish-list gift (T-081). Meta's reviewer sees the grinder Rajeev argued it from:
 			// ₹14,000 given, ₹4,000 of it all that was still owed, ₹10,000 to the general fund.
 			case "item" -> "A wet grinder";
