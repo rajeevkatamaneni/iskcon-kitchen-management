@@ -85,10 +85,10 @@ CI green, deploy to staging.
 
 ---
 
-## Phase B — the 12 items (all answered yes by Rajeev, 2026-09-13)
+## Phase B — the 13 items (all answered by Rajeev, 2026-09-13)
 
-Plan them into waves with no two builders on one file. Item 9 touches `MealComposer.tsx`, so it
-runs after Phase A.
+Plan them into waves with no two builders on one file. Items 9 and 13 touch code Phase A rewrites
+(`MealComposer.tsx`, the costing services), so they run after Phase A.
 
 1. **Attach the purchase order PDF to the vendor's WhatsApp message** (T-182, "MUST"). A Meta **App
    ID** box in Settings → WhatsApp (same read-only / Edit / Save pattern; not a secret). The
@@ -125,21 +125,25 @@ runs after Phase A.
 11. **Add `eslint-plugin-react-hooks` with `rules-of-hooks` only** — not `exhaustive-deps`. Fix only
     what that rule flags.
 12. **Update `docs/uat/TRACEABILITY.md` section 1** for everything built since it was written,
-    including Phase A and items 1–11.
+    including Phase A and items 1–11 and 13.
+13. **Cost per serving follows what was actually cooked.** Rajeev: *"Costing follows actuals, option
+    1."* A meal that has been recorded is costed at what the job card says was cooked; a meal not yet
+    recorded is costed at what was planned; the screen says which each figure is. Applies to the cost
+    per serving report and the Today food cost tile alike (today both use the planned amount on
+    purpose — `MealKindCostService.dishesIn`, `MaterialsCostService` — so update their comments and
+    tests with the rule). Stock already draws on what was cooked, so this makes the two agree.
 
 **Not code, with Rajeev (about five minutes):** switch on WhatsApp delivery receipts. Settings →
 WhatsApp shows the callback URL and a "show verify token" button; he pastes both into the Meta app
 dashboard (Webhooks, subscribe to `messages`). Guide him; he handles the token.
 
-**Then test all 12 in the browser** (an agent, as the role each is for), fix, commit, CI green,
+**Then test all 13 in the browser** (an agent, as the role each is for), fix, commit, CI green,
 deploy to staging, and tell Rajeev in a few lines what is live.
 
 ---
 
 ## Told to Rajeev, not to build unless he says
 
-- A note from his 2026-09-08 review records him ruling that cost per serving should follow what was
-  cooked; the code still costs at planned. Unanswered whether it goes in before UAT.
 - Staging email is still the Mailgun free sandbox (only pre-authorised addresses receive mail).
 - WhatsApp is Meta's test number, which only reaches a few verified recipient numbers.
 
@@ -147,4 +151,4 @@ deploy to staging, and tell Rajeev in a few lines what is live.
 
 ## Progress
 
-- 2026-09-13 — brief written. Nothing started.
+- 2026-09-13 — brief written. Nothing started. Item 13 (costing follows actuals) added at Rajeev's request.
