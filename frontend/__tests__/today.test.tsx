@@ -559,6 +559,147 @@ describe("today", () => {
     );
   });
 
+  describe("an event is named by its own name, never as another 'Event' (T-214)", () => {
+    // The browser test of the meal rebuild found Today reading "09:00 Event, 20 servings" and
+    // "Breakfast 97 · Event 20 · Lunch 184 · Dinner 124" for an event the planner and the job card
+    // both called by name. These are the four places Today names a meal.
+    function eventMeal(mealId: string, eventName: string, readyBy: string, plates: number) {
+      return {
+        mealId,
+        mealKind: "Event",
+        eventName,
+        readyBy,
+        plates,
+        recorded: false,
+        awaitingRecord: true,
+        occasionName: null,
+        dishes: [],
+      };
+    }
+
+    function crew(mealId: string, mealKind: string, readyBy: string, rostered: number, crewRequired: number) {
+      return {
+        mealId,
+        planDate: "2026-08-14",
+        mealKind,
+        readyBy,
+        crewRequired,
+        staffIn: rostered,
+        volunteers: 0,
+        rostered,
+        shortOfCrew: rostered < crewRequired,
+      };
+    }
+
+    function dayWithFeast() {
+      const lunch = today().meals[0];
+      return today({
+        meals: [eventMeal("meal-feast", "Janmashtami Feast", "09:00:00", 20), lunch],
+        workforce: {
+          staffIn: 4,
+          volunteers: 3,
+          meals: [
+            crew("meal-feast", "Event", "09:00:00", 6, 6),
+            crew("meal-lunch", "Lunch", "12:00:00", 5, 8),
+          ],
+        },
+      });
+    }
+
+    it("heads the meal row with the event's name, and never with 'Event'", () => {
+      queryRef.current = { data: dayWithFeast(), error: null, loading: false };
+      render(<TodayPage />);
+
+      const meals = screen.getByRole("region", { name: /meals planned for today/i });
+      const rows = within(meals).getAllByRole("link");
+      expect(within(rows[0]).getByText("Janmashtami Feast")).toBeInTheDocument();
+      expect(rows[0]).not.toHaveTextContent(/\bEvent\b/);
+      // The ordinary meal beside it keeps its kind.
+      expect(within(rows[1]).getByText("Lunch")).toBeInTheDocument();
+    });
+
+    it("announces the event by its name to a screen reader", () => {
+      queryRef.current = { data: dayWithFeast(), error: null, loading: false };
+      render(<TodayPage />);
+
+      const meals = screen.getByRole("region", { name: /meals planned for today/i });
+      const rows = within(meals).getAllByRole("link");
+      expect(rows[0]).toHaveAccessibleName("Janmashtami Feast at 09:00");
+      expect(rows[1]).toHaveAccessibleName("Lunch at 12:00");
+      expect(screen.queryByRole("link", { name: /^Event at/ })).not.toBeInTheDocument();
+    });
+
+    it("names the event in the servings line", () => {
+      queryRef.current = { data: dayWithFeast(), error: null, loading: false };
+      render(<TodayPage />);
+
+      const tile = screen.getByRole("link", { name: /servings today/i });
+      expect(tile).toHaveTextContent("Janmashtami Feast 20 · Lunch 820");
+      expect(tile).not.toHaveTextContent(/\bEvent\b/);
+    });
+
+    it("names the event in the crew line, found by the meal's id", () => {
+      queryRef.current = { data: dayWithFeast(), error: null, loading: false };
+      render(<TodayPage />);
+
+      const tile = screen.getByRole("link", { name: /working today/i });
+      expect(tile).toHaveTextContent("Janmashtami Feast 6 of 6");
+      expect(tile).toHaveTextContent("Lunch 5 of 8");
+      expect(tile).not.toHaveTextContent(/\bEvent\b/);
+    });
+
+    it("tells two events on one day apart by name, everywhere", () => {
+      queryRef.current = {
+        data: today({
+          meals: [
+            eventMeal("meal-abhishek", "Abhishek Prasadam", "09:00:00", 20),
+            eventMeal("meal-feast", "Janmashtami Feast", "18:00:00", 40),
+          ],
+          workforce: {
+            staffIn: 4,
+            volunteers: 3,
+            meals: [
+              crew("meal-abhishek", "Event", "09:00:00", 3, 4),
+              crew("meal-feast", "Event", "18:00:00", 9, 9),
+            ],
+          },
+        }),
+        error: null,
+        loading: false,
+      };
+      render(<TodayPage />);
+
+      const meals = screen.getByRole("region", { name: /meals planned for today/i });
+      expect(within(meals).getByRole("link", { name: "Abhishek Prasadam at 09:00" })).toBeInTheDocument();
+      expect(within(meals).getByRole("link", { name: "Janmashtami Feast at 18:00" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /servings today/i })).toHaveTextContent(
+        "Abhishek Prasadam 20 · Janmashtami Feast 40"
+      );
+      // Both crew rows share the kind "Event", so a lookup keyed on the kind would give both the same
+      // name. Keyed on the id, each keeps its own — and the short one still stands out.
+      expect(screen.getByText("Abhishek Prasadam 3 of 4").className).toContain("text-warning");
+      expect(screen.getByText("Janmashtami Feast 9 of 9").className).not.toContain("text-warning");
+    });
+
+    it("falls back to the kind for a crew row with no meal beside it", () => {
+      // A meal whose every dish was called off is not in today's list, but may still have a crew.
+      queryRef.current = {
+        data: today({
+          workforce: {
+            staffIn: 4,
+            volunteers: 3,
+            meals: [crew("meal-called-off", "Breakfast", "07:30:00", 2, 4)],
+          },
+        }),
+        error: null,
+        loading: false,
+      };
+      render(<TodayPage />);
+
+      expect(screen.getByRole("link", { name: /working today/i })).toHaveTextContent("Breakfast 2 of 4");
+    });
+  });
+
   it("names the temple in the menu", () => {
     render(<TodayPage />);
 

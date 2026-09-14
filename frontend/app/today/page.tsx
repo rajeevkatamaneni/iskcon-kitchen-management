@@ -107,10 +107,11 @@ function TodayScreen() {
                   href="/planner"
                   note={
                     data.meals.length
-                      ? // Per meal kind, from each meal's head count — never a sum of dish
-                        // servings, which read a three-dish lunch as three lunches (A4).
+                      ? // Per meal, from each meal's head count — never a sum of dish servings,
+                        // which read a three-dish lunch as three lunches (A4). Each named by
+                        // mealName, so two events on one day are not "Event 20 · Event 40".
                         data.meals
-                          .map((m) => `${m.mealKind} ${m.plates.toLocaleString("en-IN")}`)
+                          .map((m) => `${mealName(m)} ${m.plates.toLocaleString("en-IN")}`)
                           .join(" · ")
                       : "Nothing planned yet — plan a meal"
                   }
@@ -139,7 +140,7 @@ function TodayScreen() {
                   }
                   icon="users"
                   href={maySeeSchedule ? "/staff-schedule" : undefined}
-                  note={<WorkforceNote workforce={data.workforce} />}
+                  note={<WorkforceNote workforce={data.workforce} meals={data.meals} />}
                 />
                 <StatTile
                   label="Cost of materials"
@@ -171,6 +172,22 @@ function TodayScreen() {
  */
 function dishAmount(dish: TodayDish, value: number): string {
   return cooksQuantity(value, dish.targetYieldUnit);
+}
+
+/**
+ * What a meal is called wherever Today names it: an event by its own name, anything else by its
+ * kind (T-214).
+ *
+ * <p>The same rule as `derivedTitle` in the planner's shift layer, which names an event "by its own
+ * name rather than as another 'Event'". Today used to print the kind everywhere, so an event planned
+ * as "UAT-test record" read "09:00 Event, 20 servings" here while the planner and the job card both
+ * called it by name — and two events on one day could not be told apart at all.
+ *
+ * <p>`||` rather than `??`, as `derivedTitle` has it: an empty name is no name, and a meal row with
+ * a blank heading is worse than one that says "Event".
+ */
+function mealName(meal: Pick<TodayMeal, "mealKind" | "eventName">): string {
+  return meal.eventName || meal.mealKind;
 }
 
 /** One line under the date: what the day holds, and how much of it there is. */
@@ -287,8 +304,9 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
               key={meal.mealId}
               href={`/planner?date=${date}`}
               // Named for what it is, so a screen reader announces "Lunch at 12:00" rather than
-              // reading the whole block of dishes before saying where the link goes.
-              aria-label={`${meal.mealKind} at ${hhmm(meal.readyBy)}`}
+              // reading the whole block of dishes before saying where the link goes. An event is
+              // announced by its name, the same as the heading it stands for.
+              aria-label={`${mealName(meal)} at ${hhmm(meal.readyBy)}`}
               // Item 14. Pulled out and padded back, so the hover tone gains 12px each side and a
               // radius rather than hugging the words. Nothing on the row moves: the negative margin
               // and the padding cancel, and only the highlight is bigger.
@@ -299,7 +317,7 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
                   {hhmm(meal.readyBy)}
                 </span>
                 <span className="grid flex-1">
-                  <span className="text-base font-medium text-ink">{meal.mealKind}</span>
+                  <span className="text-base font-medium text-ink">{mealName(meal)}</span>
                   <span className="text-xs text-ink-muted">
                     {meal.plates.toLocaleString("en-IN")} servings
                     {meal.occasionName ? ` · ${meal.occasionName}` : ""}
@@ -399,9 +417,16 @@ function workforceValue(workforce: TodayWorkforce): string {
  * because it is the only part of the line anybody has to do anything about.
  *
  * <p>A meal nobody has said a number for is left out rather than drawn as short of nothing.
+ *
+ * <p>Each readout is named by `mealName`, like every other place Today names a meal. The crew
+ * readout does not carry the event's name itself, so it is found through the meal's id among
+ * today's meals — the id, never the kind, which is exactly what two events on one day share. A crew
+ * row with no meal beside it (a meal whose every dish was called off is not in today's list) falls
+ * back to its kind rather than to nothing.
  */
-function WorkforceNote({ workforce }: { workforce: TodayWorkforce }) {
+function WorkforceNote({ workforce, meals }: { workforce: TodayWorkforce; meals: TodayMeal[] }) {
   const counted = workforce.meals.filter((m) => m.crewRequired != null);
+  const eventNames = new Map(meals.map((m) => [m.mealId, m.eventName]));
 
   if (counted.length === 0) {
     if (workforce.staffIn === 0 && workforce.volunteers === 0) {
@@ -421,7 +446,8 @@ function WorkforceNote({ workforce }: { workforce: TodayWorkforce }) {
         <span key={meal.mealId} className="flex items-center gap-1.5">
           {i > 0 && <span aria-hidden="true">·</span>}
           <span className={meal.shortOfCrew ? "font-semibold text-warning" : undefined}>
-            {meal.mealKind} {meal.rostered} of {meal.crewRequired}
+            {mealName({ mealKind: meal.mealKind, eventName: eventNames.get(meal.mealId) ?? null })}{" "}
+            {meal.rostered} of {meal.crewRequired}
           </span>
         </span>
       ))}

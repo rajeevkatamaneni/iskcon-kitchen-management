@@ -45,3 +45,11 @@ One line per thing noticed while building that its task did not ask for. Not tas
 - (T-199) `/my-shifts` and `/shifts` cannot label a meal shift until the volunteer-side endpoints send the meal's id, kind and event name.
 - (T-199) Cancelling a shift from the Volunteer shifts list still uses `window.prompt` for the reason.
 - (T-199) A meal shift's list row shows the date twice: in the label and in the When column.
+- (T-214) `MealCrewView` carries no `eventName`, so any other screen drawing a crew readout must join by `mealId` or it will say "Event" too.
+- (T-214) Today's test fixture types out `workforce.meals` rows in full each time; a shared builder would shorten the tests.
+- (T-213) Many other forms use the same wrapped-label shape, so they may read as unnamed to the same accessibility check; worth one sweep once the shift form's shape is accepted.
+- (T-213) The End time sentences ("Ends the next day", the same-time refusal) are not tied to the box with `aria-describedby`.
+- (T-213) Every shift form carries the fixed form id `shift-form`, so two shift forms on one page would share it; they are never on screen together today.
+- (T-215) Editing an existing meal's Ready by does not recount Rostered until the meal is updated.
+- (T-215) A new Lunch on a day that already has a Lunch reads that Lunch's crew row at its own ready-by, not the ready-by typed in the composer.
+- (T-215) `meal-composer.test.tsx` still logs React act() warnings from the composer's async effects.

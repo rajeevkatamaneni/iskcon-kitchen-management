@@ -17,6 +17,7 @@ import {
   api,
   toApiError,
   type ApiError,
+  type CrewAtView,
   type EventNameSuggestion,
   type Handover,
   type MealCrewView,
@@ -324,14 +325,17 @@ export function MealComposer({
   /**
    * Which crew row is this meal's. By its id once it has one (D-27) — never by the kind's name, which
    * two events on one day share. A meal not yet saved has no row of its own: one of the main meals is
-   * matched by its kind, because saving it lands on that day's meal of that kind if there is one, and
-   * an event stays uncounted until it is saved.
+   * matched by its kind, because saving it lands on that day's meal of that kind if there is one.
+   * Anything else not yet saved — every new event, and a main meal with no meal of its kind that day —
+   * is counted at its date and ready-by instead, below.
    */
   const existingId = existing?.mealId ?? null;
   const matchByKind = !existing && !kind?.isEvent;
 
   /** Who is actually rostered over this meal's ready-by, for the readout in step 4. */
   const [crew, setCrew] = useState<MealCrewView | null>(null);
+  /** Whether the day's crew rows have answered (or failed to) — until then nobody knows there is no row. */
+  const [crewLooked, setCrewLooked] = useState(false);
   useEffect(() => {
     let live = true;
     tokenRef
@@ -342,15 +346,65 @@ export function MealComposer({
           setCrew(
             rows.find((r) => (existingId ? r.mealId === existingId : matchByKind && r.mealKind === kindName)) ?? null
           );
+          setCrewLooked(true);
         }
       })
       .catch(() => {
-        if (live) setCrew(null);
+        if (live) {
+          setCrew(null);
+          setCrewLooked(true);
+        }
       });
     return () => {
       live = false;
     };
   }, [date, kindName, existingId, matchByKind]);
+
+  /**
+   * Who is rostered at this date and ready-by, for a meal with no crew row to read (T-215).
+   *
+   * <p>Rajeev ruled that *Volunteers requested* opens on People needed minus Rostered (D-27 answer 1),
+   * and a new event had no Rostered at all: the browser test prefilled 5 where 2 staff were rostered,
+   * and the same meal read "2 of 5" once saved. The server counts the moment exactly as it counts a
+   * saved meal, so the figure here is the figure after Save. Asking is a GET and saves nothing — no
+   * meal, no day, no shift — because nothing in the planner is saved until the meal is (answer 7).
+   *
+   * <p>Asked again whenever the ready-by or the date changes, since a cook on 06:00–14:00 is in for
+   * a 12:00 event and not for an 18:00 one. Only an answer for the time and date on screen is used,
+   * so a slow reply to the time before is never read out as the count for this one; while the new one
+   * is on its way, and if it cannot be fetched at all, the readout says it has not counted, which is
+   * true.
+   */
+  const needsCount = !existingId && crewLooked && crew === null;
+  const countableReadyBy = /^\d{2}:\d{2}(:\d{2})?$/.test(readyBy) ? readyBy.slice(0, 5) : null;
+  const [crewAt, setCrewAt] = useState<CrewAtView | null>(null);
+  useEffect(() => {
+    if (!needsCount || !countableReadyBy) return;
+    let live = true;
+    tokenRef
+      .current()
+      .then((t) => api.mealCrewAt(date, countableReadyBy, t))
+      .then((count) => {
+        if (live) setCrewAt(count);
+      })
+      .catch(() => {
+        if (live) setCrewAt(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [needsCount, date, countableReadyBy]);
+
+  /** What step 4 reads out and measures People needed against: the meal's row, else the count. */
+  const roster: Roster | null =
+    crew ??
+    (needsCount &&
+    crewAt &&
+    countableReadyBy &&
+    crewAt.planDate === date &&
+    crewAt.readyBy.slice(0, 5) === countableReadyBy
+      ? crewAt
+      : null);
 
   /** The median of the last three ordinary meals of this kind (Q11), or null where there are none. */
   useEffect(() => {
@@ -900,10 +954,12 @@ export function MealComposer({
   /**
    * How many hands the meal is short: People needed against Rostered. What *Ask for volunteers* is
    * offered on (strictly more than none short — at equal the meal is covered) and what the layer's
-   * *Volunteers requested* opens on (D-27 answer 1). A meal with no crew row yet counts nobody as
-   * rostered, which is what the crew pebble on the day has always drawn.
+   * *Volunteers requested* opens on (D-27 answer 1). Rostered is the meal's crew row, or for a meal
+   * not saved yet the count at its date and ready-by (T-215). Where neither is known — the count could
+   * not be fetched, or no ready-by is given yet — nobody is counted as rostered, and the layer opens on
+   * People needed in full, as it did before the count existed.
    */
-  const shortBy = crewRequired == null ? 0 : crewRequired - (crew?.rostered ?? 0);
+  const shortBy = crewRequired == null ? 0 : crewRequired - (roster?.rostered ?? 0);
 
   /**
    * Whether this save changes the times of a shift people have signed up for — the one save that stops
@@ -1506,10 +1562,10 @@ export function MealComposer({
           />
           <Readout
             label="Rostered"
-            value={rosterReadout(crew, crewRequired)}
+            value={rosterReadout(roster, crewRequired)}
             // Quiet, and only a warning. A meal is planned weeks before anybody is rostered, so
             // being short of hands today says nothing about the plan and never blocks saving it.
-            tone={crewRequired != null && crew != null && crew.rostered < crewRequired ? "warning" : "neutral"}
+            tone={crewRequired != null && roster != null && roster.rostered < crewRequired ? "warning" : "neutral"}
           />
         </FieldRow>
 
@@ -1682,15 +1738,21 @@ function shiftLine(saved: ShiftView | null, draft: MealShiftDraft | null): strin
 }
 
 /**
+ * The three figures step 4 reads, whether they came from the meal's crew row or, before its first
+ * save, from the count at its date and ready-by (T-215). Both are counted the same way on the server.
+ */
+type Roster = Pick<MealCrewView, "staffIn" | "volunteers" | "rostered">;
+
+/**
  * "3 staff · 2 volunteers · 5 of 8" — who is rostered over this meal, against what it takes.
  *
- * <p>A meal the server has never seen has no crew row, and that is <em>not knowing</em> rather than
- * nobody: the day may be fully staffed and this reads it before the meal exists to be read against.
- * It used to say "0 of 8" there, which is a count the screen had not made — the same mistake in the
- * opposite direction to counting an uncrewed meal as covered (E6-S15). Once the meal is saved the
- * row arrives and the real figures replace this.
+ * <p>Nothing counted is <em>not knowing</em> rather than nobody: the day may be fully staffed. Since
+ * T-215 a meal not yet saved is counted at its date and ready-by, so this is left for the count that
+ * could not be fetched and the meal with no ready-by yet. It used to say "0 of 8" there, which is a
+ * count the screen had not made — the same mistake in the opposite direction to counting an uncrewed
+ * meal as covered (E6-S15).
  */
-function rosterReadout(crew: MealCrewView | null, required: number | null): string {
+function rosterReadout(crew: Roster | null, required: number | null): string {
   if (!crew) return "Not counted yet";
   const parts = [
     `${crew.staffIn} staff`,

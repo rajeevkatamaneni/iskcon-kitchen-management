@@ -1,5 +1,6 @@
 package org.iskcon.kms.meal;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -300,7 +301,146 @@ class MealCrewIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.workforce.meals[0].shortOfCrew").value(true));
 	}
 
+	// ---- A meal not saved yet (T-215) ------------------------------------
+
+	@Test
+	@DisplayName("a meal not saved yet is counted at its date and ready-by, reads the same once saved, and asking writes nothing")
+	void anUnsavedMealIsCountedAsItWillBeOnceSaved() throws Exception {
+		// A midday cook on 10:00–15:00, so two staff are in over 12:00: the morning cook and this one.
+		// The evening cook starts at 14:00 and is not.
+		insertUser("uid-midday", "KITCHEN_STAFF", "+919876500005");
+		hire("uid-midday", "Midday Cook", "10:00", "15:00");
+
+		// Another temple with a cook in all day, every day. The count is read through the signed-in
+		// temple's connection, so Row-Level Security must leave this one out — three here would mean it
+		// did not.
+		otherTempleWithACookAllDay();
+
+		int mealsBefore = rows("meals");
+		int daysBefore = rows("meal_plan_days");
+		int shiftsBefore = rows("shifts");
+		int dishesBefore = rows("meal_dishes");
+
+		mvc.perform(authed(get("/api/v1/meal-crew/at").param("date", DATE).param("readyBy", "12:00")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.planDate").value(DATE))
+				.andExpect(jsonPath("$.readyBy").value("12:00:00"))
+				.andExpect(jsonPath("$.staffIn").value(2))
+				.andExpect(jsonPath("$.volunteers").value(0))
+				.andExpect(jsonPath("$.rostered").value(2));
+
+		// Asking wrote nothing: no meal, no day, no dish, no shift. Nothing in the planner is saved
+		// until the meal is (D-27 answer 7).
+		assertThat(rows("meals")).isEqualTo(mealsBefore);
+		assertThat(rows("meal_plan_days")).isEqualTo(daysBefore);
+		assertThat(rows("meal_dishes")).isEqualTo(dishesBefore);
+		assertThat(rows("shifts")).isEqualTo(shiftsBefore);
+
+		// Now saved at that date and ready-by, through the planner's own endpoint, as a new event — the
+		// case the browser test found reading "Not counted yet" before the save and "2 of 5" after it.
+		UUID eventKind = MealFixture.kindId(admin, tenant, "Event");
+		String body = mvc.perform(authed(post("/api/v1/meals")).contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"planDate":"%s","mealKindId":"%s","readyBy":"12:00","eventName":"Bhajan prasadam",
+								 "adults":100,"crewRequired":5,"dishes":[{"recipeId":"%s","targetYield":100}]}
+								""".formatted(DATE, eventKind, khichdi)))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		UUID saved = MealRequests.idOf(body);
+
+		// The saved meal's own crew row gives the figure the count gave before it existed.
+		mvc.perform(authed(get("/api/v1/meal-crew").param("from", DATE).param("to", DATE)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].mealId").value(saved.toString()))
+				.andExpect(jsonPath("$[0].staffIn").value(2))
+				.andExpect(jsonPath("$[0].volunteers").value(0))
+				.andExpect(jsonPath("$[0].rostered").value(2))
+				.andExpect(jsonPath("$[0].crewRequired").value(5));
+	}
+
+	@Test
+	@DisplayName("before the first save a volunteer counts through a shift not for a meal that covers the ready-by, never through another meal's shift")
+	void anUnsavedMealCountsOnlyShiftsNotForAMeal() throws Exception {
+		// Lunch is saved already; the meal being planned is something else due at 12:00 the same day.
+		UUID lunch = plan("Lunch", 400, 4);
+		UUID volunteer = admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'uid-vol'", UUID.class);
+
+		// Not for a meal, 11:00–14:00: covers 12:00, so it counts, exactly as it would for any meal.
+		UUID general = shift("Hall seva", "11:00", "14:00", null);
+		// For Lunch, and covering 12:00 too. It counts toward Lunch and no other (D-14), so a meal with no
+		// id yet cannot have it.
+		UUID forLunch = shift("Lunch prep", "09:00", "13:00", lunch);
+		// Not for a meal, but over by 11:30: the clock places it before 12:00, so it does not count.
+		UUID early = shift("Garlands", "08:00", "11:30", null);
+		for (UUID shift : new UUID[] {general, forLunch, early}) {
+			admin.update("INSERT INTO shift_signups (tenant_id, shift_id, volunteer_user_id) VALUES (?, ?, ?)",
+					tenant, shift, volunteer);
+		}
+
+		mvc.perform(authed(get("/api/v1/meal-crew/at").param("date", DATE).param("readyBy", "12:00")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.staffIn").value(1))
+				.andExpect(jsonPath("$.volunteers").value(1))
+				.andExpect(jsonPath("$.rostered").value(2));
+
+		// Lunch's own row still has both of the shifts that are its to have.
+		mvc.perform(authed(get("/api/v1/meal-crew").param("from", DATE).param("to", DATE)))
+				.andExpect(jsonPath("$[0].mealId").value(lunch.toString()))
+				.andExpect(jsonPath("$[0].volunteers").value(2));
+	}
+
+	@Test
+	@DisplayName("a volunteer, who cannot plan meals, is refused the count for a meal not saved yet")
+	void theCountIsBehindPlanningMeals() throws Exception {
+		signIn("uid-vol");
+		mvc.perform(authed(get("/api/v1/meal-crew/at").param("date", DATE).param("readyBy", "12:00")))
+				.andExpect(status().isForbidden());
+	}
+
 	// ---- helpers ----------------------------------------------------------
+
+	/** Rows in a table across every temple, read as the owner — for "nothing was written". */
+	private int rows(String table) {
+		Integer n = admin.queryForObject("SELECT count(*) FROM " + table, Integer.class);
+		return n == null ? 0 : n;
+	}
+
+	/** A volunteer shift on {@link #DATE}, for a meal where {@code mealId} is given. */
+	private UUID shift(String title, String start, String end, UUID mealId) {
+		return admin.queryForObject("""
+				INSERT INTO shifts (tenant_id, title, shift_date, start_time, end_time, capacity, created_by, meal_id)
+				VALUES (?, ?, ?::date, ?::time, ?::time, 4, (SELECT id FROM users WHERE firebase_uid = 'uid-admin'), ?)
+				RETURNING id
+				""", UUID.class, tenant, title, DATE, start, end, mealId);
+	}
+
+	/** A second temple whose one cook is in from 00:00 to 23:59 every day. */
+	private void otherTempleWithACookAllDay() {
+		UUID other = admin.queryForObject("""
+				INSERT INTO tenants (slug, name, latitude, longitude, timezone)
+				VALUES ('other-temple', 'Mysuru Temple', 12.2958, 76.6394, 'Asia/Kolkata')
+				RETURNING id
+				""", UUID.class);
+		admin.update("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'uid-other-cook', 'Other Cook', 'other-cook@example.com', '+919876500099', 'KITCHEN_STAFF', 'ACTIVE')
+				""", other);
+		UUID profile = admin.queryForObject("""
+				INSERT INTO staff_profiles (
+					tenant_id, user_id, full_name, job_title, employment_type, date_of_joining)
+				VALUES (?, (SELECT id FROM users WHERE firebase_uid = 'uid-other-cook'), 'Other Cook', 'COOK',
+						'FULL_TIME', '2026-01-01')
+				RETURNING id
+				""", UUID.class, other);
+		for (int day = 1; day <= 7; day++) {
+			admin.update("""
+					INSERT INTO staff_schedule_template (
+						tenant_id, staff_profile_id, day_of_week, working, start_time, end_time)
+					VALUES (?, ?, ?, true, '00:00'::time, '23:59'::time)
+					""", other, profile, day);
+		}
+	}
 
 	private UUID plan(String kind, int servings, Integer crew) {
 		return meal(DATE, kind, null, null, crew);

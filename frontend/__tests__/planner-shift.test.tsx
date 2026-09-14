@@ -33,6 +33,9 @@ const { authRef, api } = vi.hoisted(() => ({
     cancelMeal: vi.fn(async (_id: string, _reason?: string | null, _t?: string) => ({ volunteersTold: 0 })),
     meals: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
     mealCrew: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
+    // Who is rostered at a date and ready-by before the meal is saved (T-215). Read-only.
+    mealCrewAt: vi.fn(async (_date: string, _readyBy: string, _t?: string) =>
+      ({ planDate: "", readyBy: "", staffIn: 0, volunteers: 0, rostered: 0 })),
     suggestedCrew: vi.fn(async (_kind: string, _t?: string) => ({ crewRequired: null as number | null })),
     jobCardLanguages: vi.fn(async () => ({ languages: ["en"], defaultLanguage: "en" })),
     eventNameSuggestions: vi.fn(async () => [] as unknown[]),
@@ -211,6 +214,8 @@ beforeEach(() => {
   push.mockReset();
   for (const fn of Object.values(api)) fn.mockClear();
   api.mealCrew.mockReset().mockResolvedValue([crewOf()]);
+  // Refused unless a test says otherwise: every test above a meal with a crew row never asks for it.
+  api.mealCrewAt.mockReset().mockRejectedValue(new Error("not counted"));
   api.suggestedCrew.mockReset().mockResolvedValue({ crewRequired: null });
   api.saveMeal.mockReset().mockResolvedValue({ id: "meal-new" });
   api.updateMeal.mockReset().mockResolvedValue({ id: "meal-lunch" });
@@ -325,6 +330,151 @@ describe("Ask for volunteers, in section 4 of the composer", () => {
     expect(screen.getByRole("button", ASK)).toBeInTheDocument();
     expect(screen.queryByRole("button", VIEW)).toBeNull();
     nothingSavedAShift();
+  });
+});
+
+describe("a meal not saved yet is counted before its first save (T-215)", () => {
+  /**
+   * The browser test's case: a brand-new event, needing five, with two staff rostered over its
+   * ready-by. Before T-215 it read "Not counted yet" and the layer asked for all five; after saving,
+   * the same meal read "2 of 5". The count here stands in for the server's answer at that date and
+   * ready-by, echoing the time it was asked about as the server does.
+   */
+  function countOf(rostered: number, readyBy = "12:00") {
+    return { planDate: DATE, readyBy: `${readyBy}:00`, staffIn: rostered, volunteers: 0, rostered };
+  }
+
+  async function planANewEvent(needed: string) {
+    // No meal of any kind on the day, so there is no crew row to borrow.
+    api.mealCrew.mockResolvedValue([]);
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Event" }));
+    fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
+      target: { value: "Bhajan prasadam" },
+    });
+    fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "12:00" } });
+    fireEvent.change(screen.getByLabelText("People needed"), { target: { value: needed } });
+  }
+
+  it("reads Rostered as the count at the event's date and ready-by, not Not counted yet", async () => {
+    api.mealCrewAt.mockImplementation(async (_d: string, readyBy: string) => countOf(2, readyBy));
+    await planANewEvent("5");
+
+    expect(await screen.findByText("2 staff · 0 volunteers · 2 of 5")).toBeInTheDocument();
+    expect(screen.queryByText("Not counted yet")).toBeNull();
+    expect(api.mealCrewAt).toHaveBeenLastCalledWith(DATE, "12:00", "t");
+    // Five needed, two rostered: short, so asking is offered.
+    expect(screen.getByRole("button", ASK)).toBeInTheDocument();
+  });
+
+  it("prefills Volunteers requested as People needed minus the count", async () => {
+    api.mealCrewAt.mockImplementation(async (_d: string, readyBy: string) => countOf(2, readyBy));
+    await planANewEvent("5");
+    await screen.findByText("2 staff · 0 volunteers · 2 of 5");
+
+    fireEvent.click(screen.getByRole("button", ASK));
+    // Five needed, two rostered: three, where the browser test saw five.
+    expect(field("capacity").value).toBe("3");
+  });
+
+  it("sends no request at Done apart from the read-only count", async () => {
+    api.mealCrewAt.mockImplementation(async (_d: string, readyBy: string) => countOf(2, readyBy));
+    // Anything reaching the network without a mock in front of it would come through here.
+    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      await planANewEvent("5");
+      await screen.findByText("2 staff · 0 volunteers · 2 of 5");
+      fireEvent.click(screen.getByRole("button", ASK));
+      fireEvent.change(field("startTime"), { target: { value: "09:00" } });
+
+      const before = new Map(Object.entries(api).map(([name, fn]) => [name, fn.mock.calls.length]));
+      done();
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(screen.getByRole("button", VIEW)).toBeInTheDocument();
+
+      // Nothing was called by Done, the count included; and nothing at all that writes, ever.
+      const calledSince = Object.entries(api)
+        .filter(([name, fn]) => fn.mock.calls.length !== before.get(name))
+        .map(([name]) => name);
+      expect(calledSince.filter((name) => name !== "mealCrewAt")).toEqual([]);
+      nothingSavedAShift();
+      expect(api.saveMeal).not.toHaveBeenCalled();
+      expect(api.updateMeal).not.toHaveBeenCalled();
+      expect(api.cancelMeal).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("asks for the count with a GET carrying the date and the ready-by and nothing else", async () => {
+    const { api: real } = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+    const fetchSpy = vi.fn(async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify(countOf(2)), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      await real.mealCrewAt(DATE, "12:00", "t");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    const parsed = new URL(url, "http://kms.test");
+    expect(parsed.pathname.endsWith("/api/v1/meal-crew/at")).toBe(true);
+    expect(Array.from(parsed.searchParams.keys())).toEqual(["date", "readyBy"]);
+    expect(parsed.searchParams.get("date")).toBe(DATE);
+    expect(parsed.searchParams.get("readyBy")).toBe("12:00");
+    // A read: GET, and no body to save anything with.
+    expect(Object.keys(init ?? {}).sort()).toEqual(["headers", "method"]);
+    expect(init?.method).toBe("GET");
+  });
+
+  it("asks again when the ready-by changes, and reads out the new answer", async () => {
+    api.mealCrewAt.mockImplementation(async (_d: string, readyBy: string) =>
+      countOf(readyBy === "18:00" ? 1 : 2, readyBy));
+    await planANewEvent("5");
+    await screen.findByText("2 staff · 0 volunteers · 2 of 5");
+    const asked = api.mealCrewAt.mock.calls.length;
+
+    fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "18:00" } });
+
+    expect(await screen.findByText("1 staff · 0 volunteers · 1 of 5")).toBeInTheDocument();
+    expect(api.mealCrewAt.mock.calls.length).toBe(asked + 1);
+    expect(api.mealCrewAt).toHaveBeenLastCalledWith(DATE, "18:00", "t");
+  });
+
+  it("does not offer Ask for volunteers when the count already covers People needed", async () => {
+    api.mealCrewAt.mockImplementation(async (_d: string, readyBy: string) => countOf(5, readyBy));
+    await planANewEvent("5");
+
+    await screen.findByText("5 staff · 0 volunteers · 5 of 5");
+    expect(screen.queryByRole("button", ASK)).toBeNull();
+  });
+
+  it("says Not counted yet, and prefills People needed in full, when the count cannot be fetched", async () => {
+    await planANewEvent("5");
+    await waitFor(() => expect(api.mealCrewAt).toHaveBeenCalled());
+
+    expect(await screen.findByText("Not counted yet")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", ASK));
+    expect(field("capacity").value).toBe("5");
+  });
+
+  it("counts a new main meal with no meal of its kind that day the same way", async () => {
+    api.mealCrewAt.mockImplementation(async (_d: string, readyBy: string) => countOf(2, readyBy));
+    api.mealCrew.mockResolvedValue([]);
+    render(<Harness />);
+    fireEvent.change(screen.getByLabelText("People needed"), { target: { value: "6" } });
+
+    expect(await screen.findByText("2 staff · 0 volunteers · 2 of 6")).toBeInTheDocument();
+    // Lunch opens at its kind's default ready-by.
+    expect(api.mealCrewAt).toHaveBeenLastCalledWith(DATE, "12:00", "t");
+  });
+
+  it("does not ask for the count where the meal's kind already has a row that day", async () => {
+    await planALunch("8");
+    expect(api.mealCrewAt).not.toHaveBeenCalled();
   });
 });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { HintedField } from "@/components/ds/InfoHint";
 import type { ShiftInput, ShiftView } from "@/lib/api";
 import { crossesMidnight, dayRange } from "@/lib/format";
@@ -104,6 +104,39 @@ export function ShiftFields({
   // well, so the refusal above wins and only one of the two lines is ever shown.
   const overnight = !sameTime && startTime !== "" && endTime !== "" && crossesMidnight(startTime, endTime);
 
+  // Every box is named by a `<label htmlFor>` of its own, standing beside the box rather than wrapped
+  // around it (T-213). The browser test of the meal rebuild read this form's accessibility tree and
+  // found Title, Date, Start time, End time, Location and Description announced as bare text boxes,
+  // while "Reminder hours before" was named. The difference was the markup, not the words: those six
+  // sat *inside* a `<label>` with their words in a `<span>`, and the one that worked is HintedField's,
+  // a separate `<label htmlFor>` holding its words directly. Wrapping is valid HTML and a browser
+  // following the spec names the box from it, but not every tool that reads the page does: the
+  // accessibility tree the test was driven through named none of the wrapped boxes, and still named
+  // none when `for` was added to the wrapping label. Only the separate label was named, for every kind
+  // of box on this form (text, date, time, number). So every field is now built the way the working
+  // one already was, and a reader of the page does not have to know the wrapping rule to find the name.
+  //
+  // It also keeps the End time's own sentences ("Ends the next day", the refusal) out of its name. A
+  // wrapping label's name is all of its text, so those were being read as part of what the box is
+  // called.
+  //
+  // The words, their classes and the column the field sits in are unchanged; only the element that
+  // carries the classes moved from a wrapping `<label>` to a `<div>`.
+  //
+  // `useId`, never a fixed string: the meal planner's layer can be open over a page that renders
+  // this same form, and two boxes with one id would hand both names to whichever came first.
+  const uid = useId();
+  const ids = {
+    title: `${uid}-title`,
+    date: `${uid}-date`,
+    dateFixedNote: `${uid}-date-fixed`,
+    capacity: `${uid}-capacity`,
+    startTime: `${uid}-start`,
+    endTime: `${uid}-end`,
+    location: `${uid}-location`,
+    description: `${uid}-description`,
+  };
+
   return (
     <Form
       id={SHIFT_FORM}
@@ -120,12 +153,19 @@ export function ShiftFields({
         onSubmit(event);
       }}
     >
-      <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Title</span>
-        <input name="title" required defaultValue={shift?.title ?? ""} className={FIELD} />
-      </label>
-      <DateSlot asLabel={!meal}>
-        <span className="pl-field-inset font-medium text-ink">Date</span>
+      <div className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+        <label htmlFor={ids.title} className="pl-field-inset font-medium text-ink">Title</label>
+        <input id={ids.title} name="title" required defaultValue={shift?.title ?? ""} className={FIELD} />
+      </div>
+      {/* The word "Date" is a label only where there is a box for it to name. A meal shift on the
+          Volunteer shifts page has no box, only words and a link, and a label naming nothing labels
+          nothing. */}
+      <div className="flex flex-col gap-1 text-sm text-ink-secondary">
+        {meal ? (
+          <span className="pl-field-inset font-medium text-ink">Date</span>
+        ) : (
+          <label htmlFor={ids.date} className="pl-field-inset font-medium text-ink">Date</label>
+        )}
         {/* Fixed, it is `readOnly` and never `disabled`: a disabled input is left out of the form's
             data, so the save would go without a date, and a disabled box cannot be focused, so a
             keyboard or screen-reader user could not even reach it to hear what it holds. Read-only
@@ -136,33 +176,35 @@ export function ShiftFields({
         ) : fixedDate ? (
           <>
             <input
+              id={ids.date}
               name="shiftDate"
               type="date"
               required
               readOnly
               value={fixedDate}
-              aria-describedby="shift-date-fixed"
+              aria-describedby={ids.dateFixedNote}
               className={`${FIELD} cursor-default bg-sunken text-ink-secondary`}
             />
-            <span id="shift-date-fixed" className="pl-field-inset text-ink-muted">
+            <span id={ids.dateFixedNote} className="pl-field-inset text-ink-muted">
               <i aria-hidden="true" className="ti ti-lock" /> The day of the meal. It cannot be changed here.
             </span>
           </>
         ) : (
-          <input name="shiftDate" type="date" required defaultValue={shift?.shiftDate ?? ""} className={FIELD} />
+          <input id={ids.date} name="shiftDate" type="date" required defaultValue={shift?.shiftDate ?? ""} className={FIELD} />
         )}
-      </DateSlot>
+      </div>
       {/* "Volunteers requested", not "Capacity" (D-27 answer 1, Rajeev 2026-09-13: "rename it to
           something nicer than capacity. How about, Volenteers Requested"). The words only: the
           field is still `capacity` on the wire and in the column. One label for every screen that
           renders this form — the planner's layer and the volunteers screens alike. */}
-      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Volunteers requested</span>
-        <input name="capacity" type="number" min="1" required defaultValue={shift?.capacity ?? 1} className={FIELD} />
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Start time</span>
+      <div className="flex flex-col gap-1 text-sm text-ink-secondary">
+        <label htmlFor={ids.capacity} className="pl-field-inset font-medium text-ink">Volunteers requested</label>
+        <input id={ids.capacity} name="capacity" type="number" min="1" required defaultValue={shift?.capacity ?? 1} className={FIELD} />
+      </div>
+      <div className="flex flex-col gap-1 text-sm text-ink-secondary">
+        <label htmlFor={ids.startTime} className="pl-field-inset font-medium text-ink">Start time</label>
         <input
+          id={ids.startTime}
           name="startTime"
           type="time"
           required
@@ -170,10 +212,11 @@ export function ShiftFields({
           onChange={(e) => setStartTime(e.target.value)}
           className={FIELD}
         />
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">End time</span>
+      </div>
+      <div className="flex flex-col gap-1 text-sm text-ink-secondary">
+        <label htmlFor={ids.endTime} className="pl-field-inset font-medium text-ink">End time</label>
         <input
+          id={ids.endTime}
           name="endTime"
           type="time"
           required
@@ -194,11 +237,11 @@ export function ShiftFields({
         ) : overnight ? (
           <span className="pl-field-inset text-ink-muted">Ends the next day — this shift runs through midnight</span>
         ) : null}
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Location</span>
-        <input name="location" defaultValue={shift?.location ?? ""} className={FIELD} />
-      </label>
+      </div>
+      <div className="flex flex-col gap-1 text-sm text-ink-secondary">
+        <label htmlFor={ids.location} className="pl-field-inset font-medium text-ink">Location</label>
+        <input id={ids.location} name="location" defaultValue={shift?.location ?? ""} className={FIELD} />
+      </div>
       {/* The one line on this form that says something the label does not: that the box takes more
           than one number. It is in the label's "i" rather than under the box — and a HintedField
           rather than a hand-built one, because the "i" is a button and a button inside a `<label>`
@@ -213,10 +256,10 @@ export function ShiftFields({
           />
         )}
       </HintedField>
-      <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Description</span>
-        <input name="description" defaultValue={shift?.description ?? ""} className={FIELD} />
-      </label>
+      <div className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+        <label htmlFor={ids.description} className="pl-field-inset font-medium text-ink">Description</label>
+        <input id={ids.description} name="description" defaultValue={shift?.description ?? ""} className={FIELD} />
+      </div>
     </Form>
   );
 }
@@ -279,16 +322,6 @@ export function mealLabel(
   const meal = mealOfShift(shift);
   if (!meal) return null;
   return `For ${meal.name}, ${dayRange(meal.date, meal.date, false)}`;
-}
-
-/**
- * The Date slot. A `<label>` where it holds a box, and a plain block where it holds only words: a
- * label with no control in it labels nothing, and the form's own refusal sentences look for the box a
- * label wraps.
- */
-function DateSlot({ asLabel, children }: { asLabel: boolean; children: React.ReactNode }) {
-  const className = "flex flex-col gap-1 text-sm text-ink-secondary";
-  return asLabel ? <label className={className}>{children}</label> : <div className={className}>{children}</div>;
 }
 
 /**

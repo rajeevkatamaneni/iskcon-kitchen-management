@@ -6,7 +6,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 // their way past an untyped mock — which is how this file passed locally and failed in CI.
 const {
   saveMeal, updateMeal, ekadashiCheck,
-  suggestedCrew, mealCrew, menuHistory, mealDayContext, listOccasions, listRecipes,
+  suggestedCrew, mealCrew, mealCrewAt, menuHistory, mealDayContext, listOccasions, listRecipes,
   eventNameSuggestions,
   placesAvailable, placeSuggestions, resolvePlace, travelEstimateFor,
 } = vi.hoisted(() => ({
@@ -21,6 +21,11 @@ const {
   // tests are about a temple that has never recorded one, where the field opens empty.
   suggestedCrew: vi.fn(async (_kind: string, _token?: string) => ({ crewRequired: null as number | null })),
   mealCrew: vi.fn(async (_from: string, _to: string, _token?: string) => [] as unknown[]),
+  // Who is rostered at a date and ready-by before the meal is saved (T-215). Refused by default, so
+  // every test here that is not about it reads the honest "Not counted yet" it always did.
+  mealCrewAt: vi.fn(async (_date: string, _readyBy: string, _token?: string): Promise<{
+    planDate: string; readyBy: string; staffIn: number; volunteers: number; rostered: number;
+  }> => { throw new Error("not counted"); }),
   menuHistory: vi.fn(async (_occasion: string, _before: string, _token?: string) => ({
     occasionName: "Janmashtami",
     lastCookedOn: null as string | null,
@@ -79,7 +84,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     api: {
       ...actual.api,
       saveMeal, updateMeal, ekadashiCheck,
-      suggestedCrew, mealCrew, menuHistory, mealDayContext, listOccasions, listRecipes,
+      suggestedCrew, mealCrew, mealCrewAt, menuHistory, mealDayContext, listOccasions, listRecipes,
       eventNameSuggestions,
       placesAvailable, placeSuggestions, resolvePlace, travelEstimateFor,
     },
@@ -881,6 +886,18 @@ describe("who will run it", () => {
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "100" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
     expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
+  });
+
+  it("reads a new meal with no crew row as the count at its date and ready-by (T-215)", async () => {
+    suggestedCrew.mockResolvedValue({ crewRequired: 8 });
+    mealCrewAt.mockImplementationOnce(async (date: string, readyBy: string) => ({
+      planDate: date, readyBy: `${readyBy}:00`, staffIn: 2, volunteers: 1, rostered: 3,
+    }));
+    open();
+
+    const readout = await screen.findByText("2 staff · 1 volunteer · 3 of 8");
+    expect(readout.className).toContain("text-warning");
+    expect(mealCrewAt).toHaveBeenLastCalledWith("2026-08-16", "12:00", "t");
   });
 
   it("sends the number with the meal", async () => {

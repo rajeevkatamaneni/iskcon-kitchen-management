@@ -1,6 +1,7 @@
 package org.iskcon.kms.meal;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -104,6 +105,43 @@ public class MealCrewService {
 			affected.add(readout(meal, after));
 		}
 		return affected;
+	}
+
+	// ---- A meal not saved yet (T-215) -----------------------------------
+
+	/**
+	 * Who is rostered at a date and ready-by that has no meal row yet: the figure the composer reads
+	 * out, and prefills <em>Volunteers requested</em> from, before the meal's first save.
+	 *
+	 * <p><strong>Why this exists.</strong> Rajeev ruled (D-27 answer 1) that the planner's volunteer
+	 * layer opens on People needed minus Rostered. The composer could only find Rostered on a meal the
+	 * server had already seen, so a brand-new event, or a main meal with no meal of its kind that day,
+	 * read "Not counted yet" and prefilled the whole of People needed. The browser test saw it: five
+	 * asked for where two staff were rostered and three were short, and the same meal read "2 of 5"
+	 * the moment it was saved.
+	 *
+	 * <p><strong>Counted the way a saved meal is counted, and nowhere else.</strong> The question goes
+	 * through {@link WorkforceService#countAt} as a {@link MealMoment}, exactly as {@link #crewFor}
+	 * asks it, so the figure before the first save and the figure after it are the same arithmetic on
+	 * the same roster. A second count written here would be the first thing to drift.
+	 *
+	 * <p><strong>The moment has no meal id, and that decides the volunteers.</strong> A shift <em>for a
+	 * meal</em> counts toward that meal and no other (D-14), matched by id; with no id,
+	 * {@link MealMoment#isFor} is false for every one of them, so none counts here. A shift <em>not for
+	 * a meal</em> counts if it is open on that date and its window covers the ready-by, both ends
+	 * inclusive — the rule every meal already uses for those. That is also what the saved meal reads
+	 * the moment it is saved: the only shift that could newly point at it is the one drafted with it,
+	 * and nobody has signed up for that yet.
+	 *
+	 * <p>Read-only by construction, not by care: nothing here writes, and the transaction says so.
+	 * Planning a meal saves nothing until Save this meal (D-27 answer 7), and asking who is rostered is
+	 * not an exception to that.
+	 */
+	@Transactional(readOnly = true)
+	public WorkforceCount crewAt(LocalDate date, LocalTime readyBy) {
+		MealMoment moment = new MealMoment(null, date, readyBy, null, null);
+		WorkforceCount count = workforceService.countAt(List.of(moment)).get(moment);
+		return count != null ? count : new WorkforceCount(date, 0, 0);
 	}
 
 	// ---- The default the composer opens with ----------------------------

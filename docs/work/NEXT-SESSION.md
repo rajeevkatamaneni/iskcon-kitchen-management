@@ -155,3 +155,5 @@ deploy to staging, and tell Rajeev in a few lines what is live.
 - 2026-09-13 — Phase A started: work-manager dispatched to plan and build the five D-27 tasks (no release yet).
 - 2026-09-14 — Phase A built (T-195..T-199), all green locally (backend 2,671, frontend 1,850, tsc/eslint/next build). Release dispatched: staging backup, commit, CI, deploy. Browser test follows.
 - 2026-09-14 — Phase A released: commit 74d3535, CI green, staging backup 1789378310032, api-00166-8j8 / web-00154-874 at V137. On-hand stock unchanged; reseed wrote 28 meals. Browser test next.
+- 2026-09-14 — Phase A released: commit 74d3535 (+9ba6285 record), CI green, backup 1789378310032, api-00166-8j8 / web-00154-874, V135–V137, on-hand stock identical before/after, reseed 28 meals. Browser test of Phase A dispatched -> docs/work/proof/phase-A-browser.md.
+- 2026-09-14 — Phase A browser test: matches the spec; 3 fixes sent back (shift-form accessible names, Today event name, new-meal prefill ignores rostered). Five taste items left for Rajeev in phase-A-browser.md. Phase B planned as T-200..T-212 in 4 waves (DISPATCH.md "PHASE B"), waiting for the Phase A fix release.

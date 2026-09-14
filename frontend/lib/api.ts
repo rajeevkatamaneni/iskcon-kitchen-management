@@ -1722,6 +1722,21 @@ export interface MealCrewView {
 }
 
 /**
+ * Who is rostered at a date and ready-by for a meal not saved yet (T-215): the same three figures a
+ * {@link MealCrewView} carries, counted the same way, with no meal behind them. A volunteer counts
+ * only through a shift not for a meal whose window covers the ready-by; a shift for another meal never
+ * counts here.
+ */
+export interface CrewAtView {
+  planDate: string;
+  /** "HH:mm:ss". */
+  readyBy: string;
+  staffIn: number;
+  volunteers: number;
+  rostered: number;
+}
+
+/**
  * What was cooked for this festival last time (item 26b) — "Last Janmashtami, 26 August 2025 — 18
  * preparations."
  *
@@ -5038,6 +5053,17 @@ export const api = {
    */
   mealCrew: (from: string, to: string, token?: string) =>
     request<MealCrewView[]>(`/api/v1/meal-crew?from=${from}&to=${to}`, { method: "GET", token }),
+
+  /**
+   * Who is rostered at this date and ready-by ("HH:mm") before the meal is saved (T-215), so a new
+   * meal's Rostered and its Volunteers requested prefill are real figures. Read-only: asking saves
+   * nothing.
+   */
+  mealCrewAt: (date: string, readyBy: string, token?: string) =>
+    request<CrewAtView>(
+      `/api/v1/meal-crew/at?${new URLSearchParams({ date, readyBy }).toString()}`,
+      { method: "GET", token }
+    ),
 
   /**
    * What to open the crew counter at for a new meal of this kind: the median of the last three
