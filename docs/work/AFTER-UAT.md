@@ -53,3 +53,35 @@ One line per thing noticed while building that its task did not ask for. Not tas
 - (T-215) Editing an existing meal's Ready by does not recount Rostered until the meal is updated.
 - (T-215) A new Lunch on a day that already has a Lunch reads that Lunch's crew row at its own ready-by, not the ready-by typed in the composer.
 - (T-215) `meal-composer.test.tsx` still logs React act() warnings from the composer's async effects.
+- (T-203) `VendorStatusDialog`'s optional reason when bringing a vendor back still sends `null` for a reason of only spaces; it is optional, so no message shows.
+- (T-205) `MonetaryDonationService.completedAmount` (~line 529) is a second copy of the "still standing" sum that `WishlistService` owns.
+- (T-205) A void reopens a fulfilled wish-list item even when the shortfall came from a later price rise rather than from the struck gift.
+- (T-205) Audit before/after timestamps read through `queryForMap` are written as `java.sql.Timestamp` text, not ISO instants; `DonationVoidService.after`'s `voidedAt` is likely the same.
+- (T-206) `recordPayment` and `voidInvoice` do not lock the invoice row, so a payment made at the same moment as a void can land on a voided bill (fix: `SELECT … FOR UPDATE` on `vendor_invoices` in both).
+- (T-206) Bills voided on staging before T-206 that still have payments standing are not listed anywhere for anyone to find.
+- (T-209) Delete the legacy job card fingerprint match and `legacyEquipment()` once every meal printed before 2026-09-14 has been reprinted or is in the past.
+- (T-216) A required multipart part left out (`MissingServletRequestPartException`) still answers `KMS-500001`.
+- (T-201) "Why" is still used for the same idea elsewhere on the equipment page: the reinstate form's "Why it is coming back", the scrap dialog's "they must record why", and the history "Why" column.
+- (T-207) Reconciliation could report a COMPLETED gift that names a provider but has no `provider_payment_id` as its own anomaly, rather than skipping it with counter cash.
+- (T-210) `react-hooks/exhaustive-deps` would flag 5 effects (donations page, inventory item page, inventory list page, `MealComposer`, auth-context); each needs someone who knows that screen before the rule is considered.
+- (T-212) Cost per serving divides by the planned head count even for a recorded meal; if the job card ever records who actually ate, the divisor could follow it.
+- (T-212) `costBasis` wording lives in both the Cost per serving and Today pages; it could move to `lib/format.ts`.
+- (T-212) The Today food cost tile links to `/planner`; now that it reads what was cooked, Cost per serving may be the better destination.
+- (T-212) `CostByMealKind`'s javadoc may still describe a meal as "a date and a kind", which is stale since D-27.
+- (T-202) The composer's "Send myself a copy" and "Send to everyone…" stay disabled until a subject is typed, with no sentence saying why.
+- (T-204) Other `type="number"` boxes in the app still show spinner arrows; only the Give page box was changed.
+- (T-208) No seeded occasion carries default servings, so the festival default is invisible on staging until a Temple Admin sets one.
+- (T-208) If a planner types Children or Seniors (not Adults) before the day context arrives, Adults still takes the festival default.
+- (T-200) A temple with no App ID sees its purchase order template listed as "Refused", and the button says "1 template Meta did not accept last time", although Meta refused nothing.
+- (T-200) `TemplateStatusCopy` (ops) records `wording_matches` from the body alone, so the operator's status copy will not show `po_delivery` held without its header.
+- (T-200) `WhatsAppTestSendIT` builds the service with no App ID, so its first-connection save now also stores the `po_delivery` reason; green, but it asserts nothing about that list.
+- (T-211) Section 2 still shows G3 (no screen for festival occasions) as open, though T-004 built one. G6 (staff cannot see their own schedule) looks answered by T-006, and G8 (no manual purchase order) by T-026. Section 2 was out of this task's contract.
+- (T-211) UAT-005 step 5 expects kitchen staff to see My shifts. T-031 removed it, so the step is now wrong.
+- (T-211) UAT-035 still has testers press a per-dish Cook. E4-S10 replaced that, and D-27 rebuilt meals since.
+- (T-211) UAT-077 says on-time is scored per order. T-124 made it per item.
+- (T-211) UAT-032 steps 32–35 test *Duplicate last week*, which was written before Reuse a plan.
+- (T-211) UAT-032, 035, 048, 062, 078 and 086 all describe meals as they were before the D-27 rebuild.
+- (T-211) No UAT script covers WhatsApp settings or templates (eleven tasks).
+- (T-211) No UAT script covers voiding bills, payments or gifts, attendance, leave, staff pay, the notice board, or the check at hire.
+- (T-211) E2-S8 says "UAT to be written"; none was.
+- (T-211) The Commandment 6 sentence under the table ("every surface is covered") was true to 2026-08-20. I qualified it in place rather than deleting it.

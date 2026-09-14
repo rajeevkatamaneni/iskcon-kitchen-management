@@ -232,8 +232,9 @@ describe("the vendor status dialog, a form of its own opened over a page (T-163)
   /**
    * Until T-172 the dialog's commit button stayed disabled until the reason had words in it, so this
    * test had to dispatch the submit event itself to reach `Form`'s check. The button is pressable now,
-   * and a real press names the blank box. A reason of only spaces passes `required`; the dialog's own
-   * trim check stops it and nothing is sent.
+   * and a real press names the blank box. A reason of only spaces used to pass `required` silently;
+   * since T-203 `Form` names it as blank too, on a fresh dialog so the sentence cannot be left over from
+   * the blank press, and the dialog's own trim check still stops the send.
    *
    * <p>The wrapping label holds the hint sentence as well as the question. Until T-171 the name was
    * both, run together; `Form` now leaves out words coloured as a hint, so the name is the question.
@@ -254,8 +255,15 @@ describe("the vendor status dialog, a form of its own opened over a page (T-163)
     );
     expect(mocks.deactivateVendor).not.toHaveBeenCalled();
 
-    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "   " } });
-    fireEvent.click(commit);
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /make inactive/i }));
+    const fresh = screen.getByRole("dialog");
+    const box = within(fresh).getByRole("textbox");
+    expect(within(fresh).queryByText(/is required/)).not.toBeInTheDocument();
+
+    fireEvent.change(box, { target: { value: "   " } });
+    fireEvent.click(within(fresh).getByRole("button", { name: /make inactive/i }));
+    expectRefused(box, "Why are they being dropped? is required");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.deactivateVendor).not.toHaveBeenCalled();
   });
@@ -350,14 +358,14 @@ describe("equipment (T-163)", () => {
     expect(mocks.updateEquipment).not.toHaveBeenCalled();
   });
 
-  it("changing condition: names a blank Why, and records nothing", async () => {
+  it("changing condition: names a blank Reason, and records nothing", async () => {
     render(<EquipmentItemPage />);
     fireEvent.click(await screen.findByRole("button", { name: /change condition/i }));
     const form = screen.getByRole("form", { name: /change condition/i });
 
     fireEvent.click(within(form).getByRole("button", { name: /record the change/i }));
 
-    expectRefused(within(form).getByLabelText(/^why$/i), "Why is required");
+    expectRefused(within(form).getByLabelText(/^reason$/i), "Reason is required");
     expect(mocks.changeEquipmentCondition).not.toHaveBeenCalled();
   });
 
@@ -369,7 +377,7 @@ describe("equipment (T-163)", () => {
     fireEvent.change(within(form).getByLabelText(/new condition/i), { target: { value: "SCRAPPED" } });
     fireEvent.click(within(form).getByRole("button", { name: /record the change/i }));
 
-    expectRefused(within(form).getByLabelText(/^why$/i), "Why is required");
+    expectRefused(within(form).getByLabelText(/^reason$/i), "Reason is required");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(mocks.changeEquipmentCondition).not.toHaveBeenCalled();
   });

@@ -279,7 +279,18 @@ function MoneyTab({
                   gift that is not above zero ("A gift has to be more than zero."), and the smallest
                   whole rupee above zero is one.
 
-                  Not `required`: blank is an ordinary answer, and means the preset above is the gift. */}
+                  Not `required`: blank is an ordinary answer, and means the preset above is the gift.
+
+                  No spinner arrows (T-204, Rajeev's call in Phase B). `type="number"` brings the
+                  browser's up/down arrows with it, and on this box they are worse than nothing: they
+                  step one rupee at a time towards a gift that is usually hundreds, and on desktop they
+                  sit exactly where the ₹ sign is drawn. The type stays, because it is what gives
+                  `min` its meaning; only the arrows go. WebKit and Blink draw them as two
+                  pseudo-elements, hidden with an arbitrary variant each. Firefox has no such
+                  pseudo-element and draws them unless the box's appearance is `textfield`, which
+                  Tailwind 3.4 has no utility for, hence the arbitrary property. Kept on the input
+                  rather than in globals.css so the rule sits beside the one box it is about, and
+                  no other number box in the app changes behind its back. */}
               <input
                 type="number"
                 min="1"
@@ -288,7 +299,7 @@ function MoneyTab({
                 value={other}
                 onChange={(e) => setOther(e.target.value)}
                 placeholder="0"
-                className="min-h-touch w-full rounded-control border border-hairline px-3 pr-8 text-ink tabular-nums"
+                className="min-h-touch w-full rounded-control border border-hairline px-3 pr-8 text-ink tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
               <span aria-hidden className="absolute inset-y-0 right-3 grid place-items-center text-ink-muted">₹</span>
             </span>

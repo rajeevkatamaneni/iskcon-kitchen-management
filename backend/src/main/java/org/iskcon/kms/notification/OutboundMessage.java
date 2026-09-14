@@ -24,6 +24,16 @@ public record OutboundMessage(
 	 * <p>The whole reason {@link NotificationTemplate#parameterOrder()} exists: everything else here
 	 * addresses a parameter by name, and Meta addresses it by position.
 	 */
+	/**
+	 * What fills the template's header, as text, or null when the template has no header or this message
+	 * carries no value for it (T-200). For a purchase order it is the sheet's document id.
+	 */
+	public String headerParameter() {
+		String name = template.whatsappHeaderParameter();
+		Object value = name == null || params == null ? null : params.get(name);
+		return value == null ? null : value.toString();
+	}
+
 	public List<String> orderedParameters() {
 		return template.parameterOrder().stream()
 				.map(name -> {

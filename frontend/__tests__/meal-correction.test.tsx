@@ -232,8 +232,8 @@ describe("correcting a recorded meal", () => {
   /**
    * T-172. The correction is a `Form` now, and Record this correction is pressable before a reason is
    * written. It used to stay disabled (and call the server from its click), so nothing could ever say
-   * the reason was missing. A press names the box. A reason of only spaces passes `required` and is
-   * stopped by the page's own trim check. A written reason, pressed once, sends once.
+   * the reason was missing. A press names the box. A reason of only spaces is named as blank too
+   * (T-203), with the page's own trim check behind it. A written reason, pressed once, sends once.
    */
   it("refuses to send until a reason has been given, and names the blank reason when pressed", async () => {
     await open([recordedLunch()]);
@@ -251,6 +251,9 @@ describe("correcting a recorded meal", () => {
 
     fireEvent.change(reason, { target: { value: "   " } });
     fireEvent.click(submit);
+    // Typing spaces re-checks the box; it is still blank, so the sentence stays rather than clearing.
+    expect(screen.getByText("Why the figures are being changed is required")).toHaveClass("text-danger");
+    expect(reason).toHaveAttribute("aria-invalid", "true");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(correctRecordedMeal).not.toHaveBeenCalled();
 

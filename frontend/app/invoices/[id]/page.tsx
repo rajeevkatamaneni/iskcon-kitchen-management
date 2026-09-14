@@ -399,10 +399,9 @@ function CorrectionDialog({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // `Form` has already named a blank box or a negative amount. Two things get past it: a reason of
-    // only spaces, which passes `required`, and a credit of exactly 0, which passes `min="0"`. The
-    // button used to stay disabled for both; it is pressable now (T-172), so the same check stops
-    // the send here. Neither has a sentence of its own yet — see T-172's proof.
+    // `Form` has already named a blank box, a reason of only spaces (as blank), and a credit of 0 or
+    // less ("must be more than 0", from the amount box's `data-more-than`) before this runs (T-203).
+    // This check stays as the twin guard, so neither is sent even if the form's check were removed.
     if (!ready) return;
     setBusy(true);
     setError(null);
@@ -454,6 +453,8 @@ function CorrectionDialog({
               name="amount"
               type="number"
               min="0"
+              // Exclusive: a credit of exactly 0 is refused in words, which `min` cannot do (T-203).
+              data-more-than="0"
               step="any"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -544,8 +545,8 @@ function ReverseDialog({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Spaces pass `required`. The button used to stay disabled for them (T-172 made it pressable),
-    // so the same check stops the send here.
+    // `Form` counts a reason of only spaces as blank and says "What happened? is required" before this
+    // runs (T-203). This check stays as the twin guard, so nothing is sent for spaces.
     if (written === "") return;
     setBusy(true);
     setError(null);

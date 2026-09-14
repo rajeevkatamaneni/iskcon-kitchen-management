@@ -55,8 +55,8 @@ export function VendorStatusDialog({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Spaces pass `required`. The button used to stay disabled for them; now it is pressable (T-172),
-    // so the same check sits here and nothing is sent.
+    // `Form` counts a reason of only spaces as blank when dropping, and names the box in red before
+    // this runs (T-203). This check stays as the twin guard, so nothing is sent for spaces either way.
     if (dropping && written === "") return;
     setBusy(true);
     setError(null);

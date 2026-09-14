@@ -132,6 +132,35 @@ public class MetaWhatsAppClient {
 	 */
 	public String sendTemplate(String phoneNumberId, String accessToken, String toPhone,
 			String templateName, String languageCode, List<String> parameters) {
+		return sendTemplate(phoneNumberId, accessToken, toPhone, templateName, languageCode, parameters, null);
+	}
+
+	/**
+	 * Sends one approved template whose header carries a document (T-200), or no header when
+	 * {@code header} is null, which is exactly {@link #sendTemplate(String, String, String, String, String, List)}.
+	 *
+	 * <p>The header goes first among the components and names the document by the media id
+	 * {@link #uploadMedia} returned. Meta's media object takes "Either {@code id} or {@code link}"; the id
+	 * is used, because a link would have to be a public address to a temple's purchase order, and this
+	 * application serves documents only behind sign-in. The file name is what the vendor's phone shows
+	 * under the PDF.
+	 */
+	public String sendTemplate(String phoneNumberId, String accessToken, String toPhone,
+			String templateName, String languageCode, List<String> parameters, HeaderDocument header) {
+
+		List<Map<String, Object>> components = new java.util.ArrayList<>();
+		if (header != null) {
+			components.add(Map.of(
+					"type", "header",
+					"parameters", List.of(Map.of(
+							"type", "document",
+							"document", Map.of("id", header.mediaId(), "filename", header.filename())))));
+		}
+		components.add(Map.of(
+				"type", "body",
+				"parameters", parameters.stream()
+						.map(p -> Map.of("type", "text", "text", p))
+						.toList()));
 
 		Map<String, Object> body = Map.of(
 				"messaging_product", "whatsapp",
@@ -140,11 +169,7 @@ public class MetaWhatsAppClient {
 				"template", Map.of(
 						"name", templateName,
 						"language", Map.of("code", languageCode),
-						"components", List.of(Map.of(
-								"type", "body",
-								"parameters", parameters.stream()
-										.map(p -> Map.of("type", "text", "text", p))
-										.toList()))));
+						"components", components));
 
 		HttpResponse<String> response = post(
 				graphBaseUrl + "/" + encode(phoneNumberId) + "/messages", accessToken, body);
@@ -184,18 +209,191 @@ public class MetaWhatsAppClient {
 	 */
 	public TemplateSubmission createTemplate(String wabaId, String accessToken, String name,
 			String category, String languageCode, String bodyText, List<String> exampleValues) {
+		return createTemplate(wabaId, accessToken, name, category, languageCode, bodyText, exampleValues, null);
+	}
 
-		Map<String, Object> component = exampleValues.isEmpty()
-				? Map.of("type", "BODY", "text", bodyText)
-				: Map.of("type", "BODY", "text", bodyText,
-						"example", Map.of("body_text", List.of(exampleValues)));
+	/**
+	 * Registers a template with a header (T-200); with {@code header} null it is exactly the seven-argument
+	 * form above.
+	 *
+	 * <p>The header component is Meta's, from its template components guide: {@code {"type": "HEADER",
+	 * "format": "DOCUMENT", "example": {"header_handle": ["4::YX..."]}}}. The handle is what
+	 * {@link #uploadTemplateSample} returns, and Meta's reviewer sees that sample.
+	 * https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/components
+	 */
+	public TemplateSubmission createTemplate(String wabaId, String accessToken, String name,
+			String category, String languageCode, String bodyText, List<String> exampleValues,
+			TemplateHeader header) {
 
 		HttpResponse<String> response = post(
 				graphBaseUrl + "/" + encode(wabaId) + "/message_templates", accessToken,
 				Map.of("name", name, "category", category, "language", languageCode,
-						"components", List.of(component)));
+						"components", components(bodyText, exampleValues, header)));
 
 		return templateOutcome(name, response.statusCode(), response.body());
+	}
+
+	/**
+	 * The components of a registration or an edit: the header first when there is one, then the body.
+	 * One method so a create and an edit cannot describe the same template in two shapes.
+	 */
+	private static List<Map<String, Object>> components(String bodyText, List<String> exampleValues,
+			TemplateHeader header) {
+		List<Map<String, Object>> components = new java.util.ArrayList<>();
+		if (header != null) {
+			components.add(Map.of("type", "HEADER", "format", header.format(),
+					"example", Map.of("header_handle", List.of(header.exampleHandle()))));
+		}
+		components.add(exampleValues.isEmpty()
+				? Map.of("type", "BODY", "text", bodyText)
+				: Map.of("type", "BODY", "text", bodyText,
+						"example", Map.of("body_text", List.of(exampleValues))));
+		return components;
+	}
+
+	/**
+	 * A template header as it is registered: Meta's format, e.g. {@code DOCUMENT}, and the handle of the
+	 * sample Meta's reviewer is shown.
+	 */
+	public record TemplateHeader(String format, String exampleHandle) {
+	}
+
+	/** A document to send in a template's header: Meta's media id for it, and the name the phone shows. */
+	public record HeaderDocument(String mediaId, String filename) {
+	}
+
+	/**
+	 * Uploads a sample file through Meta's Resumable Upload API and returns its handle, for the example a
+	 * template with a media header must be registered with (T-200).
+	 *
+	 * <p><strong>Meta's steps, from its Resumable Upload API guide</strong>
+	 * (https://developers.facebook.com/docs/graph-api/guides/upload):
+	 * <ol>
+	 *   <li>{@code POST /<APP_ID>/uploads} with {@code file_name}, {@code file_length} and {@code file_type},
+	 *       which answers {@code {"id": "upload:<UPLOAD_SESSION_ID>"}}.</li>
+	 *   <li>{@code POST /upload:<UPLOAD_SESSION_ID>} with the headers {@code Authorization: OAuth
+	 *       <USER_ACCESS_TOKEN>} and {@code file_offset: 0} and the file's bytes as the body, which answers
+	 *       {@code {"h": "<UPLOADED_FILE_HANDLE>"}}.</li>
+	 * </ol>
+	 *
+	 * <p><strong>Two things this does that the guide's example does not.</strong> The token goes in the
+	 * {@code Authorization} header on the first request too, rather than as the {@code access_token} query
+	 * parameter the guide shows, so it can never land in an access log as part of a URL; the Graph API
+	 * reads either. And the session id is appended to the address exactly as Meta sent it, not encoded,
+	 * because Meta's own id carries its colon and may carry a query of its own, and encoding either would
+	 * address a different session. It is checked to start with {@code upload:} and to hold no slash or
+	 * whitespace first, so an answer that is not a session id is never followed anywhere.
+	 *
+	 * <p><strong>Unknown, and deliberately not tried by the builder:</strong> the guide asks for "A User
+	 * access token", and a temple stores a System User token. Whether Meta accepts that here is verified
+	 * on staging, not assumed. A refusal comes back as {@link WhatsAppSendFailed} carrying Meta's sentence,
+	 * for the log and for the caller to translate.
+	 *
+	 * @throws WhatsAppCredentialsRejected when Meta cannot be reached
+	 * @throws WhatsAppSendFailed when Meta answers with an error, or with no session id or handle
+	 */
+	public String uploadTemplateSample(String appId, String accessToken, byte[] content, String fileName,
+			String fileType) {
+		HttpResponse<String> started = call(HttpRequest.newBuilder(
+						URI.create(graphBaseUrl + "/" + encode(appId) + "/uploads?file_name=" + encode(fileName)
+								+ "&file_length=" + content.length + "&file_type=" + encode(fileType)))
+				.timeout(TIMEOUT)
+				.header("Authorization", "OAuth " + accessToken)
+				.POST(HttpRequest.BodyPublishers.noBody()));
+		if (started.statusCode() >= 400) {
+			String readable = readableError(started);
+			log.warn("Meta would not start an upload session for a template sample: {}", readable);
+			throw new WhatsAppSendFailed(readable);
+		}
+		String sessionId = field(started.body(), "id");
+		if (sessionId == null || !sessionId.startsWith("upload:") || sessionId.matches(".*[\\s/].*")) {
+			throw new WhatsAppSendFailed("Meta did not answer with an upload session.");
+		}
+
+		HttpResponse<String> uploaded = call(HttpRequest.newBuilder(URI.create(graphBaseUrl + "/" + sessionId))
+				.timeout(TIMEOUT)
+				.header("Authorization", "OAuth " + accessToken)
+				.header("file_offset", "0")
+				.POST(HttpRequest.BodyPublishers.ofByteArray(content)));
+		if (uploaded.statusCode() >= 400) {
+			String readable = readableError(uploaded);
+			log.warn("Meta would not take the bytes of a template sample: {}", readable);
+			throw new WhatsAppSendFailed(readable);
+		}
+		String handle = field(uploaded.body(), "h");
+		if (handle == null || handle.isBlank()) {
+			throw new WhatsAppSendFailed("Meta took the sample but named no handle for it.");
+		}
+		return handle;
+	}
+
+	/**
+	 * Uploads one file to the temple's phone number, for a message to carry (T-200), and returns Meta's
+	 * media id.
+	 *
+	 * <p>Meta's media reference: {@code POST /<PHONE_NUMBER_ID>/media} as {@code multipart/form-data} with
+	 * {@code file}, {@code type} and {@code messaging_product=whatsapp}, answering {@code {"id":
+	 * "<MEDIA_ID>"}}; a PDF may be up to 100 MB.
+	 * https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media
+	 *
+	 * @throws WhatsAppCredentialsRejected when Meta cannot be reached
+	 * @throws WhatsAppSendFailed when Meta answers with an error, or with no id
+	 */
+	public String uploadMedia(String phoneNumberId, String accessToken, byte[] content, String fileName,
+			String mimeType) {
+		String boundary = "kms-" + java.util.UUID.randomUUID();
+		java.io.ByteArrayOutputStream form = new java.io.ByteArrayOutputStream();
+		writePart(form, boundary, "messaging_product", null, null, "whatsapp".getBytes(StandardCharsets.UTF_8));
+		writePart(form, boundary, "type", null, null, mimeType.getBytes(StandardCharsets.UTF_8));
+		writePart(form, boundary, "file", safeFileName(fileName), mimeType, content);
+		form.writeBytes(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+
+		HttpResponse<String> response = call(HttpRequest.newBuilder(
+						URI.create(graphBaseUrl + "/" + encode(phoneNumberId) + "/media"))
+				.timeout(TIMEOUT)
+				.header("Authorization", "Bearer " + accessToken)
+				.header("Content-Type", "multipart/form-data; boundary=" + boundary)
+				.POST(HttpRequest.BodyPublishers.ofByteArray(form.toByteArray())));
+		if (response.statusCode() >= 400) {
+			throw new WhatsAppSendFailed(readableError(response));
+		}
+		String id = field(response.body(), "id");
+		if (id == null || id.isBlank()) {
+			throw new WhatsAppSendFailed("Meta took the file but named no id for it.");
+		}
+		return id;
+	}
+
+	private static void writePart(java.io.ByteArrayOutputStream form, String boundary, String name,
+			String fileName, String contentType, byte[] value) {
+		StringBuilder head = new StringBuilder("--").append(boundary).append("\r\n")
+				.append("Content-Disposition: form-data; name=\"").append(name).append('"');
+		if (fileName != null) {
+			head.append("; filename=\"").append(fileName).append('"');
+		}
+		head.append("\r\n");
+		if (contentType != null) {
+			head.append("Content-Type: ").append(contentType).append("\r\n");
+		}
+		head.append("\r\n");
+		form.writeBytes(head.toString().getBytes(StandardCharsets.UTF_8));
+		form.writeBytes(value);
+		form.writeBytes("\r\n".getBytes(StandardCharsets.UTF_8));
+	}
+
+	/** A file name safe inside a quoted form-data header: letters, digits, dot, dash and underscore only. */
+	static String safeFileName(String fileName) {
+		String safe = fileName == null ? "" : fileName.replaceAll("[^A-Za-z0-9._-]", "-");
+		return safe.isBlank() ? "document.pdf" : safe;
+	}
+
+	/** One text field of a JSON answer, or null when the answer is not JSON or has no such field. */
+	private String field(String body, String name) {
+		try {
+			return body == null ? null : text(objectMapper.readTree(body), name);
+		} catch (IOException e) {
+			return null;
+		}
 	}
 
 	/**
@@ -353,13 +551,20 @@ public class MetaWhatsAppClient {
 				continue;
 			}
 			String body = null;
+			String headerFormat = null;
 			for (JsonNode component : held.path("components")) {
 				if ("BODY".equalsIgnoreCase(text(component, "type"))) {
 					body = text(component, "text");
 				}
+				// T-200: the header's format, so a template Meta holds without the PDF header reads as not
+				// matching ours, and one that has it reads as matching. Upper-cased because it is compared
+				// with ours, which is Meta's own spelling.
+				if ("HEADER".equalsIgnoreCase(text(component, "type")) && text(component, "format") != null) {
+					headerFormat = text(component, "format").toUpperCase(Locale.ROOT);
+				}
 			}
 			return Optional.of(new HeldTemplate(id, text(held, "status"), text(held, "category"), body,
-					text(held, "rejected_reason")));
+					text(held, "rejected_reason"), headerFormat));
 		}
 		return Optional.empty();
 	}
@@ -389,14 +594,20 @@ public class MetaWhatsAppClient {
 	 */
 	public TemplateEdit editTemplate(String templateId, String accessToken, String name, String bodyText,
 			List<String> exampleValues) {
+		return editTemplate(templateId, accessToken, name, bodyText, exampleValues, null);
+	}
 
-		Map<String, Object> component = exampleValues.isEmpty()
-				? Map.of("type", "BODY", "text", bodyText)
-				: Map.of("type", "BODY", "text", bodyText,
-						"example", Map.of("body_text", List.of(exampleValues)));
+	/**
+	 * The edit with a header (T-200). Meta's edit "replaces all components with the components in the edit
+	 * request payload", so a template that has a header must send it on every edit, or the edit would take
+	 * the header away.
+	 */
+	public TemplateEdit editTemplate(String templateId, String accessToken, String name, String bodyText,
+			List<String> exampleValues, TemplateHeader header) {
 
 		HttpResponse<String> response = post(
-				graphBaseUrl + "/" + encode(templateId), accessToken, Map.of("components", List.of(component)));
+				graphBaseUrl + "/" + encode(templateId), accessToken,
+				Map.of("components", components(bodyText, exampleValues, header)));
 
 		if (response.statusCode() < 400) {
 			if (saysSuccessFalse(response.body())) {
@@ -442,7 +653,19 @@ public class MetaWhatsAppClient {
 	 *     same lookup Reload makes rather than in a second call, so the operator's status copy and Reload's
 	 *     comparison cannot read two different answers. Nothing in Reload reads it.
 	 */
-	public record HeldTemplate(String id, String status, String category, String bodyText, String rejectedReason) {
+	public record HeldTemplate(String id, String status, String category, String bodyText, String rejectedReason,
+			String headerFormat) {
+
+		/**
+		 * A template with no header (T-200), the shape every one of these had before the purchase order
+		 * gained its PDF.
+		 *
+		 * @param headerFormat (on the canonical constructor) the format of the HEADER component Meta lists,
+		 *     upper-cased, e.g. {@code DOCUMENT}; null when Meta lists no header or one with no format
+		 */
+		public HeldTemplate(String id, String status, String category, String bodyText, String rejectedReason) {
+			this(id, status, category, bodyText, rejectedReason, null);
+		}
 	}
 
 	/**

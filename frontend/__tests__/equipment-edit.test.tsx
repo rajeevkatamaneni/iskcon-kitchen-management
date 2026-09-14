@@ -229,7 +229,7 @@ describe("scrapping a machine", () => {
   function commitCondition(condition: string, reason: string) {
     fireEvent.click(screen.getByRole("button", { name: /change condition/i }));
     fireEvent.change(screen.getByLabelText(/new condition/i), { target: { value: condition } });
-    fireEvent.change(screen.getByLabelText(/^why$/i), { target: { value: reason } });
+    fireEvent.change(screen.getByLabelText(/^reason$/i), { target: { value: reason } });
     fireEvent.click(screen.getByRole("button", { name: /record the change/i }));
   }
 
@@ -279,7 +279,7 @@ describe("scrapping a machine", () => {
     expect(conditionMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // What was typed is still there: cancelling the question costs the click and nothing else.
-    expect(screen.getByLabelText(/^why$/i)).toHaveValue("Misread the row");
+    expect(screen.getByLabelText(/^reason$/i)).toHaveValue("Misread the row");
   });
 
   it("names the way back without offering it", () => {

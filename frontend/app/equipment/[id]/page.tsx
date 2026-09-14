@@ -519,7 +519,7 @@ function ChangeConditionForm({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Why</span>
+          <span className="pl-field-inset font-medium text-ink">Reason</span>
           <input name="reason" required maxLength={500} className={FIELD} />
         </label>
         <div className="col-span-2 flex gap-3">

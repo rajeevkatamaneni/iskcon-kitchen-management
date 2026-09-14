@@ -13,6 +13,9 @@ import java.util.List;
  * @param connected     whether this temple can send a WhatsApp message at all
  * @param phoneNumberId Meta's id for the temple's business number
  * @param wabaId        the WhatsApp Business Account that owns the approved templates
+ * @param appId         the temple's Meta App ID (T-200, V141), which registering the purchase-order
+ *                      template's sample PDF is addressed to. Not a secret, so shown in full. Null until
+ *                      an administrator enters it.
  * @param displayNumber the number as Meta describes it, so an administrator can see they connected
  *                      the one they meant to. Null until the credentials have been checked once.
  * @param webhookUrl    the address Meta must be told to call
@@ -33,6 +36,7 @@ public record TenantWhatsAppSettings(
 		boolean connected,
 		String phoneNumberId,
 		String wabaId,
+		String appId,
 		String displayNumber,
 		String webhookUrl,
 		Instant verifiedAt,
@@ -48,7 +52,7 @@ public record TenantWhatsAppSettings(
 
 	/** A temple that has not connected WhatsApp. */
 	public static TenantWhatsAppSettings none() {
-		return new TenantWhatsAppSettings(false, null, null, null, null, null, null, null, List.of(),
+		return new TenantWhatsAppSettings(false, null, null, null, null, null, null, null, null, List.of(),
 				TemplatesPending.NOTHING);
 	}
 

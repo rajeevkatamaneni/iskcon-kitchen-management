@@ -329,6 +329,29 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 		org.mockito.Mockito.verify(gateway, org.mockito.Mockito.times(1)).fetchPaymentStatus("pay_bogus_standing");
 	}
 
+	@Test
+	@DisplayName("counter cash is not a mismatch and the gateway is never asked about it")
+	void reconciliationSkipsCashTheGatewayNeverSaw() throws Exception {
+		// T-207, Rajeev's decision for Phase B item 8, overriding T-072's acceptance line. Cash taken
+		// at the counter has no provider_payment_id, so the gateway can only answer "not captured"
+		// about it, and every cash gift used to sit in this report on every run with nothing an
+		// operator could do to clear it. The gateway gift beside it, which the stub does not
+		// recognise, is what keeps this from passing vacuously: the report must still name a card or
+		// UPI gift the provider cannot confirm, and must still have asked about it.
+		seedCash();
+		seedCompleted("pay_bogus_card");
+
+		List<ReconciliationMismatch> mismatches =
+				reconciliationService.reconcile(tenant, LocalDate.now().minusDays(1), LocalDate.now().plusDays(1));
+
+		List<String> flagged = mismatches.stream().map(ReconciliationMismatch::providerPaymentId).toList();
+		assert flagged.equals(List.of("pay_bogus_card"))
+				: "only the gateway gift should flag, never the cash, was " + flagged;
+		org.mockito.Mockito.verify(gateway, org.mockito.Mockito.never())
+				.fetchPaymentStatus(org.mockito.ArgumentMatchers.isNull());
+		org.mockito.Mockito.verify(gateway, org.mockito.Mockito.times(1)).fetchPaymentStatus("pay_bogus_card");
+	}
+
 	// ---------------------------------------------------------------------
 
 	/**
@@ -362,6 +385,20 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 					provider_payment_id, donated_on)
 				VALUES (?, 'ONE_TIME', 501, 'COMPLETED', true, 'stub', ?, CURRENT_DATE)
 				""", tenant, paymentId);
+	}
+
+	/**
+	 * A cash gift in the exact shape {@code DonationRecorder.insertDonation} writes one: ONE_TIME,
+	 * COMPLETED by default, {@code payment_mode} CASH, a person in {@code recorded_by}, and no
+	 * {@code provider} or {@code provider_payment_id}, because no gateway ever saw it.
+	 */
+	private void seedCash() {
+		admin.update("""
+				INSERT INTO donations (tenant_id, type, amount_inr, is_anonymous, payment_mode, donated_on,
+					recorded_by)
+				VALUES (?, 'ONE_TIME', 1001, true, 'CASH', CURRENT_DATE,
+					(SELECT id FROM users WHERE firebase_uid = 'uid-devotee'))
+				""", tenant);
 	}
 
 	/**

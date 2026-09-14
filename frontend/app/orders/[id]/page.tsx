@@ -1339,7 +1339,7 @@ function PurchaseOrderDetailView() {
                     */}
                     <label className="mt-4 flex flex-col gap-1 text-sm text-ink-secondary">
                       <span className="pl-field-inset font-medium text-ink">
-                        {closeNeedsASentence ? "Why" : "Why, if you want to say"}
+                        {closeNeedsASentence ? "Reason" : "Reason, if you want to say"}
                       </span>
                       <input
                         name="closeNote"
@@ -1353,7 +1353,7 @@ function PurchaseOrderDetailView() {
                     </label>
                     {/* Outside the label and pointed at by aria-describedby, not inside it. A hint
                         nested in a label becomes part of the field's accessible NAME, so the box
-                        would be called "Why This goes on Govind Wholesale's record beside the
+                        would be called "Reason This goes on Govind Wholesale's record beside the
                         outcome" to a screen reader and to anything else that asks. */}
                     {closeNeedsASentence && (
                       <p id="close-note-hint" className="mt-1 max-w-prose text-sm text-ink-muted">

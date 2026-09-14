@@ -1,6 +1,6 @@
 import React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 // Typed like the real call, so the assertions below can read what was sent rather than casting
 // their way past an untyped mock — which is how this file passed locally and failed in CI.
@@ -1371,5 +1371,121 @@ describe("a figure out of range names its box (T-165)", () => {
     expect(travel.getAttribute("aria-describedby")).toContain(said.id);
     expect(screen.getAllByText(/ must be at least /)).toHaveLength(1);
     expect(saveMeal).not.toHaveBeenCalled();
+  });
+});
+
+// --- Phase B item 9 (T-208): a festival day's usual crowd -----------------------
+
+/**
+ * A new meal on a festival day opens on the occasion's usual crowd as its adults.
+ *
+ * <p>The server fills `suggestedServings` from the occasion's default servings on a date one of the
+ * temple's occasions falls on, and null on any other. The number is a default the planner can change,
+ * never a figure written over one they typed, and never applied to a meal that is being corrected.
+ */
+describe("a festival day opens on its usual crowd (T-208)", () => {
+  const FESTIVAL_500 = {
+    suggestedDayType: "FESTIVAL", occasionName: "Janmashtami" as string | null,
+    suggestedServings: 500 as number | null, isEkadashi: false,
+  };
+
+  /** A saved Lunch of 100 adults, with no occasion on it. */
+  const SAVED_LUNCH = {
+    mealId: "meal-lunch", mealKindId: "k1",
+    planDate: "2026-08-16", mealKind: "Lunch", readyBy: "12:00:00",
+    adults: 100, children: 0, seniors: 0, plates: 100, crewRequired: null,
+    dayType: "FESTIVAL", occasionName: null,
+    eventName: null, isOutside: false, handover: null, contactName: null, contactPhone: null,
+    deliveryAddress: null, deliverySubLocation: null, deliveryPlaceId: null,
+    deliveryLatitude: null, deliveryLongitude: null, guestsEatAt: null,
+    travelMinutes: null, travelMinutesSource: null,
+    purpose: null, kitchenNotes: null, serverNotes: null,
+    status: "PLANNED", cardNumber: null, cardIssuedAt: null,
+    recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
+    corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
+    dishes: [],
+    volunteerShift: null,
+  };
+
+  /** Lets every pending reply and the renders it causes finish, so an absence can be asserted. */
+  async function settle() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  beforeEach(() => {
+    saveMeal.mockClear();
+    mealDayContext.mockReset();
+    mealDayContext.mockResolvedValue(FESTIVAL_500);
+    suggestedCrew.mockResolvedValue({ crewRequired: null });
+    mealCrew.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    // Back to the file's default, a date with no usual crowd, for whatever describe runs next.
+    mealDayContext.mockReset();
+    mealDayContext.mockResolvedValue({ ...FESTIVAL_500, suggestedServings: null });
+  });
+
+  it("opens a new Lunch on a festival date at the occasion's 500 adults, and the planner can change it", async () => {
+    open();
+    // Lunch, the first kind: not a feast, so this is the default reaching an ordinary meal kind.
+    await vi.waitFor(() => expect(screen.getByLabelText("Adults")).toHaveValue(500));
+    expect(mealDayContext).toHaveBeenCalledWith("2026-08-16", "t");
+    expect(screen.getByText("500 people")).toBeInTheDocument();
+
+    // A ticked preparation follows the default exactly as it follows a typed count.
+    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(500);
+
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "320" } });
+    expect(screen.getByLabelText("Adults")).toHaveValue(320);
+    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(320);
+
+    fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+    expect(saveMeal.mock.calls[0][0]).toMatchObject({ adults: 320 });
+  });
+
+  it("opens a new meal on a regular date at nought", async () => {
+    mealDayContext.mockResolvedValue({
+      suggestedDayType: "REGULAR", occasionName: null, suggestedServings: null, isEkadashi: false,
+    });
+    open();
+    await vi.waitFor(() => expect(mealDayContext).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(screen.getByLabelText("Adults")).toHaveValue(0);
+  });
+
+  it("keeps a corrected meal's own adults on a festival date, and does not ask the day for them", async () => {
+    render(<Harness existing={SAVED_LUNCH as never} />);
+    await settle();
+    expect(screen.getByLabelText("Adults")).toHaveValue(100);
+    // A Lunch asks no occasion and its adults are its own, so there is nothing to ask the day for.
+    expect(mealDayContext).not.toHaveBeenCalled();
+  });
+
+  it("does not write over adults the planner typed before the day's answer arrived", async () => {
+    let answer: (ctx: typeof FESTIVAL_500) => void = () => undefined;
+    mealDayContext.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    open();
+    await vi.waitFor(() => expect(mealDayContext).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "350" } });
+    await act(async () => {
+      answer(FESTIVAL_500);
+    });
+    await settle();
+    expect(screen.getByLabelText("Adults")).toHaveValue(350);
+  });
+
+  it("still names a feast's occasion from the calendar, alongside the usual crowd", async () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Festival feast" }));
+    await vi.waitFor(() =>
+      expect(screen.getByLabelText(/what is the occasion/i, { selector: "input" })).toHaveValue("Janmashtami")
+    );
+    expect(screen.getByLabelText("Adults")).toHaveValue(500);
   });
 });

@@ -231,7 +231,7 @@ describe("closing a part-delivered order", () => {
     render(<PurchaseOrderDetailPage />);
 
     fireEvent.click(screen.getByRole("radio", { name: /made it right/i }));
-    fireEvent.change(screen.getByLabelText(/^why$/i), {
+    fireEvent.change(screen.getByLabelText(/^reason$/i), {
       target: { value: "Rang the same afternoon, 10% off the next load." },
     });
     await act(async () => {
@@ -255,17 +255,17 @@ describe("closing a part-delivered order", () => {
     showOrder(detail());
     render(<PurchaseOrderDetailPage />);
 
-    expect(screen.getByLabelText(/^why, if you want to say$/i)).not.toBeRequired();
+    expect(screen.getByLabelText(/^reason, if you want to say$/i)).not.toBeRequired();
 
     fireEvent.click(screen.getByRole("radio", { name: /the vendor let us down/i }));
-    expect(screen.getByLabelText(/^why$/i)).toBeRequired();
+    expect(screen.getByLabelText(/^reason$/i)).toBeRequired();
     expect(screen.getByText(/goes on Govind Wholesale’s record/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: /made it right/i }));
-    expect(screen.getByLabelText(/^why$/i)).toBeRequired();
+    expect(screen.getByLabelText(/^reason$/i)).toBeRequired();
   });
 
-  it("names the blank Why when the outcome needs a sentence, and closes nothing (T-162)", async () => {
+  it("names the blank Reason when the outcome needs a sentence, and closes nothing (T-162)", async () => {
     const close = vi.spyOn(api, "closePurchaseOrder").mockResolvedValue(undefined as never);
     showOrder(detail());
     render(<PurchaseOrderDetailPage />);
@@ -275,10 +275,10 @@ describe("closing a part-delivered order", () => {
       fireEvent.click(screen.getByRole("button", { name: /^close order$/i }));
     });
 
-    const sentence = screen.getByText("Why is required");
+    const sentence = screen.getByText("Reason is required");
     // Added to the hint the box already points at, not in place of it.
-    const why = screen.getByLabelText(/^why$/i);
-    expect(why.getAttribute("aria-describedby")?.split(" ")).toEqual(["close-note-hint", sentence.id]);
+    const reason = screen.getByLabelText(/^reason$/i);
+    expect(reason.getAttribute("aria-describedby")?.split(" ")).toEqual(["close-note-hint", sentence.id]);
     expect(close).not.toHaveBeenCalled();
   });
 

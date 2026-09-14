@@ -196,9 +196,16 @@ public final class JobCardTemplate {
 			/** The serving sheet's equivalent — what the people handing food out need to know. */
 			String serverNotes,
 
+			/*
+			 * There is no equipment on this card, and there used to be. It listed every machine the
+			 * temple had, broken ones first, and it was removed on 2026-09-14 because it does not belong
+			 * on the sheet. Rajeev: "The Kitchen staff know about their equipment better than ANY APP or
+			 * Job card will ever know." Nothing links a recipe to the equipment it needs, so the list
+			 * could only ever repeat what the people standing in the kitchen can see for themselves.
+			 */
+
 			/** One row of the food-items table per preparation, in the order the meal lists them. */
 			List<Preparation> preparations,
-			List<String> equipment,
 
 			/**
 			 * How many people the meal was planned to take, already worded for print. Null until that
@@ -345,11 +352,8 @@ public final class JobCardTemplate {
 		foodItems(h, m);
 		crew(h, m);
 
-		if (!m.equipment().isEmpty()) {
-			h.append("<h2>Equipment</h2>");
-			h.append("<p class=\"chips\">").append(esc(String.join(" · ", m.equipment())))
-					.append("</p>");
-		}
+		// An Equipment section used to sit here, listing every machine the temple had. It was removed
+		// on 2026-09-14 (see CardModel): the kitchen knows its equipment better than a sheet can.
 
 		h.append("<div class=\"signoff\">");
 		signBox(h, "Kitchen manager / head cook", "The cooked figures above were checked.");
@@ -722,7 +726,6 @@ public final class JobCardTemplate {
 						+ "letter-spacing:.08em;color:var(--ink-2);margin:14px 0 8px}")
 				.append("h3{font-size:var(--sm);font-weight:600;color:var(--ink-2);margin:12px 0 4px}")
 				.append("p{margin:0 0 8px}")
-				.append(".chips{font-size:var(--sm)}")
 
 				.append("table{width:100%;border-collapse:collapse;margin:4px 0 8px}")
 				.append("th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--rule);"

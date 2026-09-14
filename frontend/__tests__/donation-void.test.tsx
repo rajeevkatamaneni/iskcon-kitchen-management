@@ -176,11 +176,12 @@ describe("striking a gift that was recorded wrongly", () => {
   /**
    * T-172. Void this gift is pressable while the reason is blank, because the press is what has the
    * dialog say which box is empty. It used to stay disabled until there were words in the box, and
-   * nothing on the page said why it would not respond. A space bar is still not a reason: spaces pass
-   * `required`, so the dialog's own trim check stops them where the press arrives, and nothing is sent.
-   * The server refuses a blank reason too, and the column's CHECK behind it.
+   * nothing on the page said why it would not respond. A space bar is still not a reason. Since T-203
+   * `Form` counts spaces as blank and says so in red beside the box, the same sentence as an empty box;
+   * the dialog's own trim check stays behind it. The server refuses a blank reason too, and the
+   * column's CHECK behind it.
    */
-  it("keeps Void this gift pressable while the reason is blank, sends nothing for spaces, and a reason once (T-172)", async () => {
+  it("keeps Void this gift pressable while the reason is blank, names spaces as blank and sends nothing, and a reason once (T-172, T-203)", async () => {
     render(<DonationsPage />);
     fireEvent.click(within(rowFor("Govind Das")).getByRole("button", { name: "Void" }));
 
@@ -193,6 +194,10 @@ describe("striking a gift that was recorded wrongly", () => {
     fireEvent.change(box, { target: { value: "   " } });
     expect(commit).toBeEnabled();
     fireEvent.click(commit);
+    const said = within(dialog).getByText("Why it is being voided is required");
+    expect(said).toHaveClass("text-danger");
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box.closest("label")?.nextElementSibling).toBe(said.parentElement);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(voidMock).not.toHaveBeenCalled();
 

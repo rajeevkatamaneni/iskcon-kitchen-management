@@ -581,9 +581,9 @@ function VoidDonation({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // A reason of only spaces passes `required`, so `Form` lets it through and it stops here. It used
-    // to be stopped by the button staying disabled; the button is pressable now (T-172), and this is
-    // the same check moved to where a press arrives. Nothing is sent, as before.
+    // `Form` counts a reason of only spaces as blank and says "Why it is being voided is required"
+    // before this runs (T-203). This check stays as the twin guard, so nothing is sent for spaces even
+    // if the form's own check were ever taken away.
     if (written === "") return;
     setBusy(true);
     setError(null);

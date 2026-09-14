@@ -212,19 +212,109 @@ class InvoiceCorrectionIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a struck bill cannot be paid, and a reversal does not bring it back")
-	void aStruckBillStaysStruck() throws Exception {
+	@DisplayName("a struck bill cannot be paid")
+	void aStruckBillCannotBePaid() throws Exception {
+		// Reshaped by T-206. This used to pay ₹200 first and then void, which is now refused; the
+		// half of it that still stands is that a bill struck as never owed takes no payment.
 		UUID inv = invoice("INV-8", "500", null);
-		UUID payment = pay(inv, "200", "CASH");
 		mvc.perform(voidInvoice(inv, "The goods went back.")).andExpect(status().isNoContent());
 
 		mvc.perform(payRequest(inv, "300", "CASH"))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400132"));
+		assertThat(paidToDate(inv)).isEqualByComparingTo("0");
+	}
+
+	@Test
+	@DisplayName("a bill struck before T-206 with money still paid on it stays struck when that is reversed")
+	void aReversalDoesNotBringAStruckBillBack() throws Exception {
+		// The other half of the old test, which the API can no longer set up: since T-206 a bill with
+		// money paid against it cannot be voided. Bills struck before that can still be in this state
+		// on a live tenant, and reversing their payments must recover the money without resurrecting
+		// the bill — the VOIDED guard in restateStatus is what stops it reappearing in the pay queue.
+		// So the old state is written directly, in the shape V103's void constraint requires.
+		UUID inv = invoice("INV-8B", "500", null);
+		UUID payment = admin.queryForObject("""
+				INSERT INTO invoice_payments (tenant_id, invoice_id, paid_on, amount, method, recorded_by)
+				VALUES (?, ?, CURRENT_DATE, 200, 'CASH', ?) RETURNING id
+				""", UUID.class, tenant, inv, adminId);
+		admin.update("""
+				UPDATE vendor_invoices
+				SET status = 'VOIDED', voided_at = now(), voided_by = ?, void_reason = 'The goods went back.'
+				WHERE id = ?
+				""", adminId, inv);
 
 		// Recovering the ₹200 is still a legitimate act; resurrecting the bill is not.
 		mvc.perform(reverse(inv, payment, "Money returned.")).andExpect(status().isNoContent());
 		assertThat(invoiceStatus(inv)).isEqualTo("VOIDED");
+		assertThat(paidToDate(inv)).isEqualByComparingTo("0");
+	}
+
+	@Test
+	@DisplayName("a bill with money still paid against it cannot be voided, and nothing is written")
+	void voidRefusedWhilePaymentsStand() throws Exception {
+		// Rajeev's decision for Phase B item 7 (T-206). Voiding says the bill was never owed; a payment
+		// standing against it says it was owed and paid. Both a bill paid in full and a part-paid one,
+		// because PAID and PENDING are different statuses and the refusal must not hang on either.
+		UUID paidInFull = invoice("INV-20", "500", null);
+		pay(paidInFull, "500", "UPI");
+		UUID partPaid = invoice("INV-21", "500", null);
+		pay(partPaid, "200", "CASH");
+
+		for (UUID inv : new UUID[] {paidInFull, partPaid}) {
+			String billBefore = invoiceJson(inv);
+			String paymentsBefore = paymentsJson(inv);
+
+			mvc.perform(voidInvoice(inv, "Never received."))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.code").value("KMS-400154"))
+					.andExpect(jsonPath("$.message").value("This bill has payments that have not been reversed."))
+					.andExpect(jsonPath("$.action").value("Reverse the payments on this bill before voiding it."));
+
+			// The whole row on both sides, not the columns this test happens to think of: a refusal
+			// that wrote updated_at, or half a void mark, is a refusal that changed the bill.
+			assertThat(invoiceJson(inv)).as("the bill is unchanged").isEqualTo(billBefore);
+			assertThat(paymentsJson(inv)).as("its payments are unchanged").isEqualTo(paymentsBefore);
+			assertThat(audit("INVOICE_VOIDED", inv)).as("no audit entry for an act that did not happen").isZero();
+		}
+		assertThat(invoiceStatus(paidInFull)).isEqualTo("PAID");
+		assertThat(invoiceStatus(partPaid)).isEqualTo("PENDING");
+
+		// Reversing is per payment and the refusal reads the net, so a bill paid twice with only one of
+		// the two reversed still has ₹100 standing against it and is still refused.
+		UUID twice = invoice("INV-22", "500", null);
+		UUID first = pay(twice, "300", "UPI");
+		pay(twice, "100", "UPI");
+		mvc.perform(reverse(twice, first, "Paid against the wrong bill.")).andExpect(status().isNoContent());
+		mvc.perform(voidInvoice(twice, "Never received."))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400154"));
+	}
+
+	@Test
+	@DisplayName("once every payment on a bill is reversed, the bill can be voided")
+	void voidAllowedOnceEveryPaymentIsReversed() throws Exception {
+		UUID inv = invoice("INV-23", "500", null);
+		UUID payment = pay(inv, "500", "CHEQUE");
+		mvc.perform(voidInvoice(inv, "Never received.")).andExpect(status().isConflict());
+
+		mvc.perform(reverse(inv, payment, "The cheque bounced.")).andExpect(status().isNoContent());
+		mvc.perform(voidInvoice(inv, "Never received.")).andExpect(status().isNoContent());
+
+		assertThat(invoiceStatus(inv)).isEqualTo("VOIDED");
+		assertThat(audit("INVOICE_VOIDED", inv)).isEqualTo(1);
+		assertThat(admin.queryForObject("""
+				SELECT before_state ->> 'paidToDate' FROM audit_events
+				WHERE action = 'INVOICE_VOIDED' AND entity_id = ?
+				""", String.class, inv)).as("the audit still records what was paid when it was struck").isEqualTo("0.00");
+
+		// The hand-entered compensating entry V40 has allowed since 2025 carries no link to the payment
+		// it corrects, but it nets the same way, and the refusal reads the net.
+		UUID corrected = invoice("INV-24", "500", null);
+		pay(corrected, "250", "UPI");
+		pay(corrected, "-250", "UPI");
+		mvc.perform(voidInvoice(corrected, "Billed twice.")).andExpect(status().isNoContent());
+		assertThat(invoiceStatus(corrected)).isEqualTo("VOIDED");
 	}
 
 	@Test
@@ -383,6 +473,19 @@ class InvoiceCorrectionIT extends AbstractIntegrationTest {
 	private String rowJson(UUID paymentId) {
 		return admin.queryForObject(
 				"SELECT row_to_json(p)::text FROM invoice_payments p WHERE p.id = ?", String.class, paymentId);
+	}
+
+	private String invoiceJson(UUID invoiceId) {
+		return admin.queryForObject(
+				"SELECT row_to_json(vi)::text FROM vendor_invoices vi WHERE vi.id = ?", String.class, invoiceId);
+	}
+
+	/** Every payment row on the bill, in a fixed order, so two readings compare as one string. */
+	private String paymentsJson(UUID invoiceId) {
+		return admin.queryForObject("""
+				SELECT COALESCE(json_agg(p ORDER BY p.created_at, p.id)::text, '[]')
+				FROM invoice_payments p WHERE p.invoice_id = ?
+				""", String.class, invoiceId);
 	}
 
 	private int audit(String action, UUID entityId) {

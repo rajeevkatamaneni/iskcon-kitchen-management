@@ -10,8 +10,8 @@ import java.util.List;
  * data, and a temple that cooks a Festival feast, an Annadana or a hostel dinner sees exactly those
  * rows. Kinds with no meals in the period do not appear at all — a row of dashes is not a finding.
  *
- * @param meals                 how many meals of this kind the period holds. A meal is a date and a
- *                              kind, so a lunch of three dishes counts once.
+ * @param meals                 how many meals of this kind the period holds. A meal is its own row
+ *                              (D-27), so a lunch of three dishes counts once.
  * @param servings              the head count across the meals that recorded one. Never a sum of
  *                              dishes: a lunch of three dishes for 250 people fed 250 people.
  * @param mealsWithoutServings  how many of those meals nobody gave a head count. They are in
@@ -23,6 +23,11 @@ import java.util.List;
  * @param ingredientsWithoutPrice how many of this kind's ingredients the estimate does not cover.
  *                              Shown wherever the total is shown (E3-S8 D2); {@code unpriced} names
  *                              them.
+ * @param mealsCostedAsCooked   of {@code meals}, how many were recorded and so are costed at what
+ *                              their job card says was cooked (T-212).
+ * @param mealsCostedAsPlanned  of {@code meals}, how many were not yet recorded and so are costed
+ *                              at what was planned. The two always add up to {@code meals}: a row
+ *                              over a month mixes both, and the screen says how many of each.
  */
 public record MealKindCost(
 		String mealKind,
@@ -33,5 +38,7 @@ public record MealKindCost(
 		BigDecimal costPerServing,
 		int ingredientsPriced,
 		int ingredientsWithoutPrice,
-		List<UnpricedIngredient> unpriced) {
+		List<UnpricedIngredient> unpriced,
+		int mealsCostedAsCooked,
+		int mealsCostedAsPlanned) {
 }

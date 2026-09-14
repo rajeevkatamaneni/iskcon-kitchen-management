@@ -147,7 +147,7 @@ function TodayScreen() {
                   value={inr(data.materialsCost.estimatedTotal)}
                   icon="receipt"
                   href="/planner"
-                  note={materialsNote(data.materialsCost)}
+                  note={<MaterialsNote cost={data.materialsCost} />}
                 />
               </div>
 
@@ -453,6 +453,40 @@ function WorkforceNote({ workforce, meals }: { workforce: TodayWorkforce; meals:
       ))}
     </span>
   );
+}
+
+/**
+ * The cost tile's note: what the estimate leaves out, and then what it was worked out from (T-212).
+ *
+ * <p>A recorded meal is in the figure at what its job card says was cooked, and a meal not yet
+ * recorded at what was planned. In the morning the figure is all plan and by evening mostly cooking,
+ * and a number that quietly changes what it means through the day needs to say so beneath it.
+ */
+function MaterialsNote({ cost }: { cost: TodayMaterialsCost }) {
+  const basis = costBasis(cost);
+  return (
+    <>
+      {materialsNote(cost)}
+      {basis && <span className="block">{basis}</span>}
+    </>
+  );
+}
+
+/**
+ * "2 meals from what was cooked, 1 from the plan" — Rajeev's wording (T-212), said the same way on
+ * Cost per serving. Only the half that has meals is said, and nothing when neither does. The same
+ * lines live in `app/cost-per-serving/page.tsx`, because a page file may export nothing but its page.
+ */
+function costBasis(cost: TodayMaterialsCost): string {
+  const cooked = cost.mealsCostedAsCooked ?? 0;
+  const planned = cost.mealsCostedAsPlanned ?? 0;
+  const meals = (n: number) => `${n.toLocaleString("en-IN")} ${n === 1 ? "meal" : "meals"}`;
+  if (cooked > 0 && planned > 0) {
+    return `${meals(cooked)} from what was cooked, ${planned.toLocaleString("en-IN")} from the plan`;
+  }
+  if (cooked > 0) return `${meals(cooked)} from what was cooked`;
+  if (planned > 0) return `${meals(planned)} from the plan`;
+  return "";
 }
 
 /**

@@ -532,32 +532,34 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 				java.sql.Timestamp.class, mealId())).isNull();
 	}
 
-	// ---- What a correction does NOT move, pinned deliberately ---------------
+	// ---- What a correction moves beyond the store room -----------------------
 
 	/**
-	 * <strong>A finding written as a test, not a fix.</strong>
+	 * <strong>A correction changes what the meal cost, because it changes what was cooked (T-212).</strong>
 	 *
-	 * <p>The task's acceptance asked that cost-per-serving "recompute from the corrected number". It
-	 * does not, and it should not: {@code MealKindCostService:167} costs each dish at
-	 * {@code d.target_yield} — what was <em>planned</em> — and divides by the head count, and its
-	 * own comment at :160 says why in as many words ("The dish is costed at what was planned, not at
-	 * what the returned job card said was cooked… a period of days must add up to the days in it").
-	 * A correction moves {@code actual_servings}; it moves neither of the columns this report reads.
+	 * <p>This test used to pin the opposite. Costing priced every dish at what was planned, so a
+	 * correction moved the store room and left the cost where it was, and the test was written to make
+	 * anyone changing that notice. Rajeev then ruled that costing follows actuals ("Costing follows
+	 * actuals, option 1"): a recorded meal is costed at what its job card says was cooked. Stock was
+	 * already drawn on that figure, so the cost and the store room now agree about the same meal, and
+	 * when a correction re-draws the stock it moves the cost with it.
 	 *
-	 * <p>So this pins the behaviour rather than changing it. If somebody later decides the report
-	 * should follow the recorded figure, that is a deliberate change to a documented decision in a
-	 * file outside this task's contract — and this test is what will make them notice they are making
-	 * it, instead of finding out from a temple whose costs moved overnight.
+	 * <p>Khichdi is 1 Kg of rice per 100 and rice is ₹60 a Kg, for 400 people. Planned at 500 it is
+	 * ₹300, ₹0.75 a serving. Recorded at 400 it is ₹240, ₹0.60. Corrected to 640 it is ₹384, ₹0.96.
+	 * Both screens are checked, the report per serving and the day's figure, because they are one rule.
 	 */
 	@Test
-	@DisplayName("cost per serving is computed from the plan, so a corrected figure does not move it")
-	void costPerServingIsUnmovedByACorrection() throws Exception {
+	@DisplayName("a correction changes the meal's cost, because it changes what was cooked")
+	void aCorrectionMovesTheCost() throws Exception {
 		UUID dish = plan("Lunch", khichdi, 500, 400, 0, 0);
 		price(rice, "60");
-		record400(dish);
 
-		BigDecimal before = costPerServing();
-		assertThat(before).isNotNull();
+		assertThat(costPerServing()).isEqualByComparingTo("0.75");
+		assertThat(dayCost()).isEqualByComparingTo("300");
+
+		record400(dish);
+		assertThat(costPerServing()).isEqualByComparingTo("0.60");
+		assertThat(dayCost()).isEqualByComparingTo("240");
 
 		mvc.perform(correct(mealId(), """
 				{"note":"640 went out","dishes":[{"dishId":"%s","actualServings":640,
@@ -565,8 +567,11 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 				""".formatted(dish)))
 				.andExpect(status().isOk());
 
-		assertThat(costPerServing()).isEqualByComparingTo(before);
+		assertThat(costPerServing()).isEqualByComparingTo("0.96");
+		assertThat(dayCost()).isEqualByComparingTo("384");
 	}
+
+	// ---- What a correction gives back ---------------------------------------
 
 	/**
 	 * <strong>A shortfall booked at recording is given back when the meal is corrected (T-087).</strong>
@@ -857,6 +862,15 @@ class MealCorrectionIT extends AbstractIntegrationTest {
 		assertThat(rows).isNotNull();
 		assertThat(rows.size()).isEqualTo(1);
 		return rows.get(0).get("costPerServing").decimalValue();
+	}
+
+	/** The daily figure for the day every meal in this class is on. */
+	private BigDecimal dayCost() throws Exception {
+		String body = mvc.perform(authed(get("/api/v1/materials-cost").param("date", "2025-03-17")))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		return new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).get("estimatedTotal")
+				.decimalValue();
 	}
 
 	private int auditCount(String action) {

@@ -153,7 +153,6 @@ function ReusePlanScreen() {
     return () => {
       live = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceStart, window, targetStart, kinds, events]);
 
   const sourceEnd = addDays(sourceStart, window - 1);

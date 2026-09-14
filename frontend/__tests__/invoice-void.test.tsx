@@ -294,6 +294,9 @@ describe("reversing a payment", () => {
  * question alone.
  */
 describe("a blank correction (T-162)", () => {
+  // The negative amount's sentence changed with T-203: the box's floor is exclusive now
+  // (`data-more-than="0"`), and one rule for one box reads better than "at least 0" for -50 and
+  // "more than 0" for 0 on the next press.
   it("names both blank boxes on a credit note, then a negative amount, and sends nothing", () => {
     render(<InvoiceDetailPage />);
     fireEvent.click(screen.getByRole("button", { name: /record a credit note/i }));
@@ -308,7 +311,7 @@ describe("a blank correction (T-162)", () => {
     fireEvent.change(within(panel).getByRole("spinbutton"), { target: { value: "-50" } });
     fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "Short by two sacks." } });
     fireEvent.click(commit);
-    expect(within(panel).getByText("How much is being credited? must be at least 0")).toBeInTheDocument();
+    expect(within(panel).getByText("How much is being credited? must be more than 0")).toBeInTheDocument();
     expect(creditMock).not.toHaveBeenCalled();
   });
 
@@ -340,14 +343,13 @@ describe("a blank correction (T-162)", () => {
   });
 
   /**
-   * T-172. Two entries get past `Form` on these dialogs: a reason of only spaces, which passes
-   * `required`, and a credit of exactly 0, which passes `min="0"`. The buttons used to stay disabled
-   * for both. They are pressable now, and each dialog's own check stops the send. Neither has a
-   * sentence of its own yet (the wording is Rajeev's to choose, see T-172's proof), so what is asserted
-   * is that nothing is sent — and then that a proper entry, pressed once, sends once, which is what
-   * shows the button was live all along rather than the absence being a dead button.
+   * T-172, then T-203. Two entries used to get past `Form` on these dialogs in silence: a reason of
+   * only spaces, which passes `required`, and a credit of exactly 0, which passes `min="0"`. Since
+   * T-203 `Form` names both in red beside the box — spaces as blank, and 0 against the amount box's
+   * `data-more-than="0"` — and each dialog's own check stays behind it. Then a proper entry, pressed
+   * once, sends once, which shows the button was live all along.
    */
-  it("sends no credit for a reason of only spaces or an amount of 0, then a proper one once (T-172)", async () => {
+  it("names a reason of only spaces and an amount of 0, sends no credit, then a proper one once (T-172, T-203)", async () => {
     render(<InvoiceDetailPage />);
     fireEvent.click(screen.getByRole("button", { name: /record a credit note/i }));
     const panel = screen.getByRole("form", { name: /record a credit note/i });
@@ -358,10 +360,20 @@ describe("a blank correction (T-162)", () => {
     fireEvent.change(amount, { target: { value: "400" } });
     fireEvent.change(reason, { target: { value: "   " } });
     fireEvent.click(commit);
+    const blank = within(panel).getByText("What is the credit for? is required");
+    expect(blank).toHaveClass("text-danger");
+    expect(reason).toHaveAttribute("aria-invalid", "true");
+    expect(within(panel).queryByText(/how much is being credited\?/i, { selector: ".text-danger" }))
+      .not.toBeInTheDocument();
 
     fireEvent.change(amount, { target: { value: "0" } });
     fireEvent.change(reason, { target: { value: "Short by two sacks." } });
     fireEvent.click(commit);
+    const zero = within(panel).getByText("How much is being credited? must be more than 0");
+    expect(zero).toHaveClass("text-danger");
+    expect(amount).toHaveAttribute("aria-invalid", "true");
+    expect(amount).toHaveAccessibleDescription("How much is being credited? must be more than 0");
+    expect(within(panel).queryByText("What is the credit for? is required")).not.toBeInTheDocument();
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(creditMock).not.toHaveBeenCalled();
@@ -371,13 +383,15 @@ describe("a blank correction (T-162)", () => {
     await waitFor(() => expect(creditMock).toHaveBeenCalledTimes(1));
   });
 
-  it("strikes and reverses nothing for a reason of only spaces, then each sends once (T-172)", async () => {
+  it("names a reason of only spaces on a void and a reversal, sends neither, then each sends once (T-172, T-203)", async () => {
     paymentsRef.current = [payment()];
     const { unmount } = render(<InvoiceDetailPage />);
     fireEvent.click(screen.getByRole("button", { name: /void this bill/i }));
     let panel = screen.getByRole("form", { name: /void this invoice/i });
     fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "   " } });
     fireEvent.click(within(panel).getByRole("button", { name: /void this bill/i }));
+    expect(within(panel).getByText("Why was this bill never owed? is required")).toHaveClass("text-danger");
+    expect(within(panel).getByRole("textbox")).toHaveAttribute("aria-invalid", "true");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(voidMock).not.toHaveBeenCalled();
     fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "Billed twice." } });
@@ -390,6 +404,8 @@ describe("a blank correction (T-162)", () => {
     panel = screen.getByRole("form", { name: /reverse this payment/i });
     fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "   " } });
     fireEvent.click(within(panel).getByRole("button", { name: /reverse this payment/i }));
+    expect(within(panel).getByText("What happened? is required")).toHaveClass("text-danger");
+    expect(within(panel).getByRole("textbox")).toHaveAttribute("aria-invalid", "true");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(reverseMock).not.toHaveBeenCalled();
     fireEvent.change(within(panel).getByRole("textbox"), { target: { value: "The cheque bounced." } });

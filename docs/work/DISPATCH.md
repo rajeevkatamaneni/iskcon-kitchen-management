@@ -139,11 +139,22 @@ After D27-2 and D27-4 the work manager runs the merged-tree check, including eve
 2. Re-establish the highest `V` from `ls` and the highest `KMS-4001nn` from `ErrorCode.java`. If Phase A fixes took any of the numbers reserved here, shift every reservation up in order and edit these rows.
 3. Grep the Phase A fix proofs for `MealComposer.tsx`, `MealServices.tsx`, `JobCardService.java`, `MealKindCostService.java`, `MaterialsCostService.java`, `TodayService.java`, `today/page.tsx` and `lib/api.ts`, and read what changed there before briefing T-203, T-208, T-209, T-210 and T-212.
 
+**Re-checked at dispatch, 2026-09-14, on `HEAD` `8d15ace`** (Phase A fixes T-213–T-215 released in `6dd436c`):
+- Every path in T-200–T-212 still exists.
+- Highest migration is still `V137`, and the highest code is still `KMS-400153`, so every reservation stands.
+- The fixes changed `MealComposer.tsx`, `meal-composer.test.tsx`, `today/page.tsx`, `today.test.tsx`, `lib/api.ts`, `volunteers/shift-form.tsx` and `planner-shift.test.tsx`, and added `MealCrewController.java`, `MealCrewService.java` and `MealCrewIT.java`.
+  - None of these is in PB-1's contracts.
+  - T-210's `MealComposer.tsx` comment is now at line 478.
+  - T-208 and T-212 re-read their files at their wave.
+- `KMS-400154` has been written into `ErrorCode.java` for T-206.
+- A browser retest of the Phase A fixes is running. A fix from it touching `MealComposer.tsx` or the shift files must wait for PB-3 to finish, or go into a wave where T-208 and T-210 are not live.
+
 ### Waves
 
 Paths within a wave are disjoint.
 
-- **PB-1:** T-203, T-205, T-206, T-209.
+- **PB-1:** T-203, T-205, T-206, T-209, T-216.
+  - T-216 was added at the coordinator's request. Its two files are held by no other task.
   - T-203 is the only frontend builder, on purpose. Its whitespace rule goes into `Form.tsx` and reaches every form, so any other frontend test that turns red is the work manager's to widen, and no one else holds it.
 - **PB-2:** T-200, T-201, T-207, T-210.
   - T-201 needs `blank-submit-slice-c.test.tsx` after T-203.
@@ -167,8 +178,47 @@ Paths within a wave are disjoint.
 - Gives a negative control.
 - Reports its browser role, and writes nothing to the browser. The main session's agent drives the browser test after release.
 
+**✅ PHASE B COMPLETE, 2026-09-14.** T-200 to T-212 and T-216 are all proven. No builder is in the tree.
+- **Merged-tree run over PB-2 and PB-3,** after T-200's rework, the `api.ts` fields made required, and T-211:
+  - Backend: `./gradlew test --rerun-tasks`, `BUILD SUCCESSFUL in 4m 9s`. Being the full suite, it includes the README lesson 3a guards.
+  - Frontend: tsc clean, vitest 139 files / 1,900 tests, lint clean (including `rules-of-hooks` over source), `next build` compiled.
+  - Logs: `scratchpad/merged-pb23-backend.log`, `scratchpad/merged-pb23-frontend.log`. Tree: `scratchpad/merged-pb23.tree.txt`.
+  - PB-1's merged run is recorded above.
+- **Nothing is committed or released.** The release agent stages named paths only:
+  - V141 and V142 are new.
+  - `KMS-400154` and `KMS-400155` are new.
+  - `frontend/package.json` and `package-lock.json` changed.
+  - Staging needs the backend and frontend together.
+- **For the main session:**
+  - The browser tests use the roles in each row.
+  - Staging checks for T-200: the upload token, the document field names, and the templates button reading "1 template changed".
+  - T-208 needs an occasion given default servings first.
+  - T-216 is a repeat of the staging call.
+
 ### T-200 — The purchase order PDF goes with the vendor's WhatsApp message (item 1, carries T-182)
-- **id:** T-200 · **wave:** PB-2 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-200.md`
+- **id:** T-200 · **wave:** PB-2 · **state:** **proven** 2026-09-14, after one return · **proof:** `docs/work/proof/T-200.md`
+- **rework result:**
+  - Option 1 was built. When Send on WhatsApp finds no READY sheet, it renders one on the spot, in the vendor's language, before the message is queued.
+  - If the render fails, the press is refused with 409 `KMS-400155`, the transaction rolls back, and nothing is queued. The test runs on a sent order, because test data cannot make a draft's render fail; the draft rollback rests on the transaction.
+  - The adapter still refuses any sheet that is not READY.
+  - Negative control: without the render, 7 tests went red; restored and checked with `cmp`.
+  - Full backend 2,721 tests, 0 failed. Full frontend 1,900; tsc clean with `appId` required, lint and build clean.
+  - A press with no READY sheet now waits for one render.
+- **first result:**
+  - Full backend 2,714 tests, 0 failed. Full frontend 1,900 tests; tsc, lint and build clean.
+  - Negative control: 2 send tests went red; restored and checked with `cmp`.
+  - V141 `whatsapp_app_id`. V142 rewrites stored "Press Reload" reasons per tenant.
+  - A temple with no App ID gets a stored reason naming the box, and no upload.
+  - A translated order sends the translated sheet.
+- **sent back because:**
+  - Pressing Send on WhatsApp on a draft queues its sheet, and the notification job can run first. The adapter then refuses the channel, the cascade falls to SMS or email, and the send usually ends FAILED with nothing shown to the person who pressed it.
+  - That meets "never send without it" but not the brief's "generate one or refuse clearly".
+  - Work manager's call: generate the sheet synchronously. If that is not workable, or the render fails, refuse at press time with **`KMS-400155` `PO_SHEET_NOT_READY`**, now written into `ErrorCode.java`.
+  - Contract widened to `document/DocumentGenerationService.java` and `document/PurchaseOrderDocumentController.java`. `orders/[id]/page.tsx` and `order-detail.test.tsx` are granted only if the screen must change. Grepped: no live builder holds them.
+- **still for the main session on staging:**
+  - Whether `/<APP_ID>/uploads` accepts the stored System User token. If it does not, the stored reason wrongly blames the App ID.
+  - The send's document field names (`id`, `filename`).
+  - After deploy, every connected temple's templates button reads "1 template changed". Registering a header at Meta is hard to reverse once approved.
 - **source:** NEXT-SESSION.md Phase B item 1 ("MUST"), and the T-182 row below, which holds the Meta docs findings and the app id analysis.
 - **what:**
   - Add a Meta **App ID** box to Settings → WhatsApp.
@@ -239,7 +289,11 @@ Paths within a wave are disjoint.
 - **browser test role:** Temple Admin (`MANAGE_TEMPLE_SETTINGS`), Settings → WhatsApp, App ID box only. **No Reload, no send, no Test message.** The upload-token question belongs to the main session afterwards.
 
 ### T-201 — "Why" becomes "Reason" on two forms (item 2)
-- **id:** T-201 · **wave:** PB-2 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-201.md`
+- **id:** T-201 · **wave:** PB-2 · **state:** **proven** 2026-09-14 · **proof:** `docs/work/proof/T-201.md`
+- **result:**
+  - Both labels now read "Reason"; the optional one reads "Reason, if you want to say".
+  - Negative control: 15 tests went red in 4 files. Pages restored and checked with `cmp`.
+  - Full frontend run: tsc clean, 1,880/1,880 tests, lint clean, build compiled.
 - **source:** NEXT-SESSION.md Phase B item 2.
 - **what:** Change two labels so the message reads *"Reason is required"*.
   - Closing a part-delivered purchase order: `frontend/app/orders/[id]/page.tsx` ~1342, where `closeNeedsASentence` shows "Why".
@@ -262,7 +316,13 @@ Paths within a wave are disjoint.
 - **browser test role:** Kitchen Manager (`MANAGE_PURCHASE_ORDERS`, `MANAGE_INVENTORY`). Close a part-delivered order short with the box blank. Change a machine's condition with the box blank.
 
 ### T-202 — "Save and preview" refuses a blank subject (item 3)
-- **id:** T-202 · **wave:** PB-3 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-202.md`
+- **id:** T-202 · **wave:** PB-3 · **state:** **proven** 2026-09-14, full-suite evidence from the PB-2/PB-3 merged run below · **proof:** `docs/work/proof/T-202.md`
+- **result:**
+  - "Save and preview" is now a `form=` submit. A blank or spaces-only subject shows "Subject is required" and makes no save or preview call.
+  - Side effect: Enter in Subject now saves and previews, as on other forms. It never sends.
+  - 20 tests. Negative control: 4 went red; restored and checked with `cmp`.
+  - tsc, lint and build are green.
+  - Full vitest was 1,887 passed and 1 failed, twice. The failure was only in T-200's in-flight `settings-edit-mode.test.tsx`. The merged run decides.
 - **source:** NEXT-SESSION.md Phase B item 3; `docs/work/proof/T-165.md` lines 70 and 183.
 - **what:**
   - Messages composer (`frontend/app/communications/composer.tsx`, button ~153). "Save and preview" with a blank or spaces-only subject shows *"Subject is required"* beside the Subject box and saves nothing.
@@ -280,7 +340,12 @@ Paths within a wave are disjoint.
 - **browser test role:** Temple Admin (`MANAGE_COMMUNICATIONS`).
 
 ### T-203 — A reason of only spaces, or a credit of 0, shows the red message (item 4)
-- **id:** T-203 · **wave:** PB-1 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-203.md`
+- **id:** T-203 · **wave:** PB-1 · **state:** **proven** 2026-09-14 · **proof:** `docs/work/proof/T-203.md`
+- **result:**
+  - Full frontend run: tsc clean, vitest 139 files / 1,880 tests, lint clean, `next build` compiled.
+  - Negative control: with the spaces rule removed, 10 tests in 8 files went red. `Form.tsx` restored, checked with `cmp`.
+  - Credit box uses `data-more-than="0"`, and reads "How much is being credited? must be more than 0".
+  - Change beyond the brief: a negative credit now also says "must be more than 0", not "must be at least 0". The one test for it was updated.
 - **source:** NEXT-SESSION.md Phase B item 4; `docs/work/proof/T-172.md`, "Rules that are not a plain blank box".
 - **what:** Every place T-172 lists as stopped silently now names the box in red. The sites:
   - Void a gift: `app/donations/page.tsx`.
@@ -320,7 +385,12 @@ Paths within a wave are disjoint.
 - **browser test role:** Temple Admin for the gift void, bill void, credit, reverse, conduct note and meal correction (`VOID_DONATION`, `MANAGE_VENDOR_PAYMENTS`, `MANAGE_STAFF_CONDUCT_NOTES`, `CORRECT_RECORDED_MEAL`). Kitchen Manager for dropping a vendor (`MANAGE_VENDORS`).
 
 ### T-204 — No up/down arrows on the public Give amount box (item 5)
-- **id:** T-204 · **wave:** PB-3 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-204.md`
+- **id:** T-204 · **wave:** PB-3 · **state:** **proven** 2026-09-14, full-suite evidence from the PB-2/PB-3 merged run below · **proof:** `docs/work/proof/T-204.md`
+- **result:**
+  - Three utility classes hide the spinners in WebKit and Firefox; `-moz-appearance:textfield` was confirmed in the built CSS. Attributes are unchanged.
+  - 21 Give tests pass. Negative control went red; restored and checked with `cmp`.
+  - tsc, lint and build are green.
+  - Full vitest failed only in other live builders' files: `communications` (T-202), `planner-shift` (T-208, before its mock was granted) and `settings-edit-mode` (T-200). The merged run decides.
 - **source:** NEXT-SESSION.md Phase B item 5.
 - **what:**
   - Hide the spinner arrows on "Or another amount" in `frontend/components/give/DonatePage.tsx` (~284).
@@ -338,7 +408,12 @@ Paths within a wave are disjoint.
 - **browser test role:** a signed-out visitor on the temple's public Give page, desktop Chrome (where the arrows showed). Then a signed-in Volunteer.
 
 ### T-205 — Voiding the gift behind a fulfilled wish reopens the wish (item 6)
-- **id:** T-205 · **wave:** PB-1 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-205.md`
+- **id:** T-205 · **wave:** PB-1 · **state:** **proven** 2026-09-14 · **proof:** `docs/work/proof/T-205.md`
+- **result:**
+  - Full backend suite: 2,691 tests, 0 failed, 7 skipped.
+  - Negative control: with the reopen removed, only the reopen test went red. The file was restored and checked with `cmp`.
+  - Two old tests asserted "stays FULFILLED": the one in `WishlistSponsorshipIT` was removed, and the one in `WishlistIT` was rewritten.
+  - **Browser note:** the wish-list giving list needs sign-in, so the main session tests it as a signed-in devotee (Volunteer), not a signed-out visitor.
 - **source:** NEXT-SESSION.md Phase B item 6; `docs/work/proof/T-069.md`, "Deferred to Rajeev" (option B is what was ruled); this ledger, "T-069's deferred half".
 - **what:**
   - In `DonationVoidService.voidDonation`, in the same transaction: when the voided gift names a wish-list item whose status is `FULFILLED`, and what still stands towards it is below its cost, the item returns to `ACTIVE` and needs the amount again.
@@ -367,7 +442,12 @@ Paths within a wave are disjoint.
 - **browser test role:** Temple Admin voids the gift. Then a signed-out visitor on the giving page sees the item asking for money and can press Give.
 
 ### T-206 — A bill with unreversed payments cannot be voided (item 7)
-- **id:** T-206 · **wave:** PB-1 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-206.md`
+- **id:** T-206 · **wave:** PB-1 · **state:** **proven** 2026-09-14 · **proof:** `docs/work/proof/T-206.md`
+- **result:**
+  - Full backend suite: 2,684 of 2,691 passed, 0 failed, 7 skipped.
+  - Paid and part-paid bills are refused with 409 `KMS-400154`, and the row and its payments are unchanged. After the payments are reversed, the void succeeds.
+  - Negative control: 2 tests went red, and the file was restored and checked with `cmp`. Its automatic restore missed, so the check was out of the tree for a minute or two while other builders ran.
+  - The invoice screen already shows the server's sentence.
 - **source:** NEXT-SESSION.md Phase B item 7.
 - **what:**
   - `VendorInvoiceService.voidInvoice` (~139) refuses, before it changes anything, when the bill's payments net above zero after reversals. It refuses with the new code below.
@@ -389,7 +469,13 @@ Paths within a wave are disjoint.
 - **browser test role:** Temple Admin (`MANAGE_VENDOR_PAYMENTS`). Pay a bill, try Void (refused with the sentence), reverse the payment, void.
 
 ### T-207 — Two money rows that never clear (item 8)
-- **id:** T-207 · **wave:** PB-2 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-207.md`
+- **id:** T-207 · **wave:** PB-2 · **state:** **proven** 2026-09-14 · **proof:** `docs/work/proof/T-207.md`
+- **result:**
+  - Full backend suite: 2,693 tests, 0 failed, 7 skipped.
+  - Cash gifts (no `provider_payment_id`) are skipped, and the gateway is not called for them. An unconfirmed card or UPI gift is still reported.
+  - A voided bill's `expectedValue` and `variance` are null. (`expectedValue` is the JSON name; the brief's `expectedReceivedValue` is the private method.)
+  - Both negative controls went red; files restored and checked with `cmp`.
+  - No test held T-072's old line.
 - **source:** NEXT-SESSION.md Phase B item 8. Rajeev's ruling overrides T-072's old acceptance line.
 - **what:**
   - `DonationReconciliationService.reconcile` skips gifts with no `provider_payment_id`. Counter cash never reaches the gateway, so it is never a mismatch, and the gateway is not called for it.
@@ -409,7 +495,15 @@ Paths within a wave are disjoint.
 - **browser test role:** Temple Admin, the vendor bills list with a voided bill. Super Admin (`VIEW_PLATFORM_OPERATIONS`) for the reconciliation view, which is in `PaymentOpsController`.
 
 ### T-208 — A new meal on a festival day starts with the occasion's servings (item 9)
-- **id:** T-208 · **wave:** PB-3 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-208.md`
+- **id:** T-208 · **wave:** PB-3 · **state:** **proven** 2026-09-14, full-suite evidence from the PB-2/PB-3 merged run below · **proof:** `docs/work/proof/T-208.md`
+- **result:**
+  - A new meal on a festival day, of any kind, opens Adults at the occasion's default servings. Typed adults and existing meals are untouched.
+  - 5 new tests, plus the granted mock in `planner-shift`.
+  - Negative control went red; restored and checked with `cmp`.
+  - tsc, lint and build are green.
+  - Full vitest was 1,892/1,893, twice. The one failure was only in T-200's in-flight `settings-edit-mode.test.tsx` (the App ID box).
+- **widened 2026-09-14:** `frontend/__tests__/planner-shift.test.tsx`, for the `mealDayContext` mock only. The composer now fetches the day context for every new meal, and that test fails on any unmocked call. Grepped against T-200, T-202, T-204 and T-212: none holds it.
+- **browser note:** no seeded occasion has default servings, so the Temple Admin must set one under Settings → Occasions before the Kitchen Manager's test.
 - **source:** NEXT-SESSION.md Phase B item 9.
 - **what:**
   - `MealComposer.tsx` opens `adults` at 0 (~186).
@@ -429,7 +523,12 @@ Paths within a wave are disjoint.
 - **browser test role:** Kitchen Manager (`MANAGE_MEAL_PLANS`). Plan a new meal on a festival date whose occasion has default servings set.
 
 ### T-209 — Equipment comes off the job card entirely (item 10)
-- **id:** T-209 · **wave:** PB-1 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-209.md`
+- **id:** T-209 · **wave:** PB-1 · **state:** **proven** 2026-09-14 · **proof:** `docs/work/proof/T-209.md`
+- **result:**
+  - `JobCardIT` 28/28. Forced full backend run: 0 failed, 7 skipped.
+  - Negative control: with the legacy match dropped, the reprint test went red. File restored.
+  - The legacy match was checked against a fingerprint captured from the unchanged code before any edit.
+  - **Accepted deviation:** a `legacyEquipment()` query stays. It runs only when the new fingerprint does not match, so a card printed before the change keeps its version, which the brief also required. The After-UAT line records when it can be deleted.
 - **source:** NEXT-SESSION.md Phase B item 10. Rajeev: *"It does not belong there. The Kitchen staff know about their equipment better than ANY APP or Job card will ever know."*
 - **what:**
   - Remove equipment from the job card screen, print and PDF. All three render from `JobCardTemplate` (`<h2>Equipment</h2>` ~349). The frontend shows the card through the print endpoint and the document, and has no equipment field.
@@ -450,7 +549,13 @@ Paths within a wave are disjoint.
 - **browser test role:** Kitchen Manager (`MANAGE_MEAL_PLANS`) prints a job card and opens its PDF. Kitchen Staff views the same card.
 
 ### T-210 — eslint-plugin-react-hooks, rules-of-hooks only (item 11)
-- **id:** T-210 · **wave:** PB-2 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-210.md`
+- **id:** T-210 · **wave:** PB-2 · **state:** **proven** 2026-09-14 · **proof:** `docs/work/proof/T-210.md`
+- **result:**
+  - `eslint-plugin-react-hooks` 7.1.1, pinned exactly. Its peer range includes eslint 10, so no `--legacy-peer-deps`.
+  - `rules-of-hooks` is an error over `app/`, `components/` and `lib/`. `exhaustive-deps` is off.
+  - The rule flagged 0 errors in existing code. The two stale disable comments were removed.
+  - Negative control: a scratch conditional-hook component was reported, then removed.
+  - Full frontend run: tsc, 1,880 tests in 139 files, lint silent, `next build` 74 pages.
 - **source:** NEXT-SESSION.md Phase B item 11; `frontend/eslint.config.mjs` closing note; `docs/work/proof/T-076.md`.
 - **what:**
   - Add `eslint-plugin-react-hooks` at an exact version to devDependencies.
@@ -478,7 +583,18 @@ Paths within a wave are disjoint.
 - **browser test role:** none (tooling). The main session confirms lint in CI.
 
 ### T-211 — TRACEABILITY.md section 1 catches up (item 12)
-- **id:** T-211 · **wave:** PB-4 · **state:** planned, waiting for Phase A fixes to release, and for PB-1 to PB-3 to be proven · **proof:** `docs/work/proof/T-211.md`
+- **id:** T-211 · **wave:** PB-4 · **state:** **proven** 2026-09-14 · **proof:** `docs/work/proof/T-211.md`
+- **result:**
+  - Section 1 now has a row for every story and every task T-000 to T-216.
+    - 23 missing built stories added, plus an E12 "design only" row.
+    - Tasks grouped in rows keyed by task id, with a one-line note under the table; untagged work from 08-20 to 09-06 is keyed by commit.
+  - Seven old rows now say their script predates a later change.
+  - The "table is behind" note was removed.
+  - Checks:
+    - Every id was found in section 1.
+    - Sections 2–4 are byte-identical to HEAD.
+    - Of 85 UAT references, only UAT-054 has no file, in the old row that says it was deleted.
+  - No code changed, so no suites; the merged run below covers the tree.
 - **source:** NEXT-SESSION.md Phase B item 12.
 - **what:**
   - Update `docs/uat/TRACEABILITY.md` section 1 ("Every technical story, and what covers it") for everything built since it was written (complete to 2026-08-20), including Phase A (D-27, T-195–T-199 and its fixes) and T-200–T-210 and T-212.
@@ -494,7 +610,15 @@ Paths within a wave are disjoint.
 - **browser test role:** none (document).
 
 ### T-212 — Cost per serving follows what was actually cooked (item 13)
-- **id:** T-212 · **wave:** PB-3 · **state:** planned, waiting for Phase A fixes to release · **proof:** `docs/work/proof/T-212.md`
+- **id:** T-212 · **wave:** PB-3 · **state:** **proven** 2026-09-14 · **proof:** `docs/work/proof/T-212.md`
+- **result:**
+  - A recorded meal is costed at its dishes' `actual_servings`, and an unrecorded one at the plan. Both apply to the report and the Today tile.
+  - Report rows, the report total and Today carry `mealsCostedAsCooked` and `mealsCostedAsPlanned`. The screens read, for example, "1 meal from what was cooked, 1 from the plan".
+  - The `MealCorrectionIT` rule test was rewritten.
+  - Full backend: 2,707 passed, 0 failed, 7 skipped. `BaseQuantityIT` 7/7.
+  - Full frontend: tsc and lint silent, 1,900/1,900 tests, build green.
+  - Negative control: the two cooked-cost tests went red; restored.
+- **widened 2026-09-14:** `backend/src/main/java/org/iskcon/kms/costing/CostByMealKind.java`, the report total, which needs the two counts. It is built only in `MealKindCostService`. Grepped against T-200, T-202, T-204 and T-208: none holds it.
 - **source:** NEXT-SESSION.md Phase B item 13. Rajeev: *"Costing follows actuals, option 1."*
 - **what:**
   - A meal that has been recorded is costed at what the job card says was cooked. A meal not yet recorded is costed at what was planned.
@@ -535,6 +659,56 @@ Paths within a wave are disjoint.
   - Both screens say how many meals are from what was cooked and how many from the plan.
   - Negative control: revert `dishesIn` to planned and the cooked test fails.
 - **browser test role:** Kitchen Manager (`MANAGE_MEAL_PLANS`) on Cost per serving, over a range with a recorded and an unrecorded meal. Temple Admin on Today's food cost tile.
+
+### T-216 — A missing query value is a plain refusal, not a server error (from the Phase A fixes release)
+- **id:** T-216 · **wave:** PB-1 · **state:** **proven** 2026-09-14 · **proof:** `docs/work/proof/T-216.md`
+- **result:**
+  - A missing required query value now answers 400 `KMS-400001`, with the field error "This can't be left empty." The Java type name stays out of the reply and the log.
+  - Tests in `MealCrewIT`, `ErrorResponseIT` and `GlobalExceptionHandlerTest`.
+  - Negative control: both ITs saw 500 again. File restored and checked with `cmp`.
+  - The full-suite evidence is another builder's clean run over the tree with its change (2,691 tests, 7 skipped). The work manager's merged run confirms it.
+- **source:** the coordinator, 2026-09-14; `docs/work/proof/RELEASE-phase-A-fixes.md` line 43. `GET /api/v1/meal-crew/at?date=…` with no `readyBy` returns HTTP 500.
+- **what:**
+  - `GlobalExceptionHandler` has a handler for a query value that will not convert (`MethodArgumentTypeMismatchException` → `KMS-400001`, naming the parameter). It has none for a query value that is missing (`MissingServletRequestParameterException`), so every endpoint with a required `@RequestParam` answers `KMS-500001`.
+  - Add that handler, modelled on the type-mismatch one: 400 `VALIDATION_FAILED` (`KMS-400001`), with a field error naming the parameter in plain words, logged with the reference.
+  - This fixes the crew-count endpoint and every other endpoint of the same shape.
+  - It uses an existing permanent code, so nothing is reserved. It is the work manager's call over a one-endpoint code, because the defect is the handler's gap, not the endpoint's.
+- **paths:**
+  - `backend/src/main/java/org/iskcon/kms/error/GlobalExceptionHandler.java`
+  - `backend/src/test/java/org/iskcon/kms/error/GlobalExceptionHandlerTest.java`
+  - `backend/src/test/java/org/iskcon/kms/error/ErrorResponseIT.java`
+  - `backend/src/test/java/org/iskcon/kms/meal/MealCrewIT.java`
+- **reservations:** none (`KMS-400001` exists).
+- **acceptance:**
+  - `GET /api/v1/meal-crew/at?date=2026-09-21` as a Kitchen Manager answers 400 `KMS-400001` with a field error on `readyBy`, and no incident id for a server fault.
+  - The same holds for one other endpoint with a required query parameter.
+  - `ErrorCodeTest` and `FieldErrorMessageTest` green.
+  - Negative control: remove the handler and the test sees 500.
+- **browser test role:** none on screen (no screen calls it without Ready by). The main session repeats the staging call as a Temple Admin after release.
+
+**PB-1 proven 2026-09-14.** The work manager's merged-tree run, after every builder was out and after the `api.ts` stub for T-200:
+- Backend: `./gradlew test --rerun-tasks`, `BUILD SUCCESSFUL in 3m 59s`. Being the full suite, it includes every guard in README lesson 3a.
+- Frontend: tsc clean, vitest 139 files / 1,880 tests, lint clean, `next build` compiled.
+- Logs: `scratchpad/merged-pb1-backend.log`, `scratchpad/merged-pb1-frontend.log`.
+- Eight After-UAT lines were copied to `docs/work/AFTER-UAT.md`.
+
+**PB-2 reservations made 2026-09-14:**
+- `frontend/lib/api.ts`: `WhatsAppSettingsView.appId?: string | null`. It is optional so that no mock breaks; the work manager makes it required once T-200's mocks carry it. `SaveWhatsAppSettingsInput.appId?: string` is also still to add, and is written with T-200's dispatch.
+- Migrations `V141` and `V142` are free, since the highest on disk is still `V137`.
+
+**PB-2 dispatched 2026-09-14:** T-200, T-201, T-207 and T-210 are building.
+
+**`api.ts` reservations made required, 2026-09-14,** after T-200 and T-212 reported their mocks carry the fields:
+- `WhatsAppSettingsView.appId: string | null`
+- `mealsCostedAsCooked: number` and `mealsCostedAsPlanned: number` on all four cost types.
+The merged run proves it.
+
+**PB-3 dispatched early, 2026-09-14, while T-200 was still building.**
+- T-201, T-207 and T-210 were proven. PB-3's paths (T-202, T-204, T-208, T-212) were grepped against T-200's contract, and none is shared.
+- PB-3 does not read anything T-200 adds.
+- T-210's `MealComposer.tsx` comment edit is finished, so T-208 has the file alone.
+- The PB-2 merged-tree check is folded into one merged check over PB-2 and PB-3, once T-200 and PB-3 are out of the tree.
+- **`api.ts` reservation for T-212:** `mealsCostedAsCooked?: number` and `mealsCostedAsPlanned?: number` on `TodayMaterialsCost`, `MaterialsCost`, `MealKindCost` and `CostByMealKind`. They are optional so no mock breaks, and made required at merge.
 
 ### Nothing here is unbuildable as written. Three things the dispatcher must carry
 - **Item 1:** the brief's `purchase_order` template is `po_delivery` in code. Whether the stored token works for `/uploads` stays unknown until the main session tries it on staging. T-200 can be proven only against a stub.

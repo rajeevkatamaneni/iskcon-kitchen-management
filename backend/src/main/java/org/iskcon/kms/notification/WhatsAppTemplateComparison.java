@@ -115,14 +115,15 @@ public class WhatsAppTemplateComparison {
 
 		// Counts only, never a body and never the token: the report itself is the place to read wording.
 		log.info("Compared {} WhatsApp templates with Meta for temple {}: {} identical, {} identical only after "
-						+ "trimming, {} worded differently, {} not held, {} not answered",
+						+ "trimming, {} worded differently, {} not held, {} not answered, {} with a different header",
 				entries.size(), tenantId,
 				entries.stream().filter(e -> Boolean.TRUE.equals(e.bodyMatchesExactly())).count(),
 				entries.stream().filter(e -> Boolean.FALSE.equals(e.bodyMatchesExactly())
 						&& Boolean.TRUE.equals(e.bodyMatchesAfterTrim())).count(),
 				entries.stream().filter(e -> Boolean.FALSE.equals(e.bodyMatchesAfterTrim())).count(),
 				entries.stream().filter(e -> Boolean.FALSE.equals(e.held())).count(),
-				entries.stream().filter(e -> e.held() == null).count());
+				entries.stream().filter(e -> e.held() == null).count(),
+				entries.stream().filter(e -> Boolean.FALSE.equals(e.headerMatches())).count());
 		return new Report(account.wabaId(), TEMPLATE_LANGUAGE, entries);
 	}
 
@@ -146,16 +147,21 @@ public class WhatsAppTemplateComparison {
 			log.warn("Meta would not describe template {} for the comparison: {}", name, e.getMessage());
 			return Entry.notAnswered(name, ourCategory, META_ANSWERED_WITH_AN_ERROR);
 		}
+		String ourHeader = template.whatsappHeaderFormat();
 		if (found.isEmpty()) {
-			return new Entry(name, ourCategory, null, null, false, null, null, null, null, null, null);
+			return new Entry(name, ourCategory, null, null, false, null, null, null, null, null, null,
+					ourHeader, null, null);
 		}
 		MetaWhatsAppClient.HeldTemplate held = found.get();
 		String ours = template.whatsappBodyText();
 		String theirs = held.bodyText();
 		boolean exact = ours.equals(theirs);
 		boolean afterTrim = theirs != null && ours.strip().equals(theirs.strip());
+		// T-200: the same test bringUpToDate makes on the header before it decides a template is current.
+		boolean headerMatches = java.util.Objects.equals(ourHeader, held.headerFormat());
 		return new Entry(name, ourCategory, held.category(), held.status(), true, exact, afterTrim,
-				exact ? null : theirs, exact ? null : ours, null, held.rejectedReason());
+				exact ? null : theirs, exact ? null : ours, null, held.rejectedReason(),
+				ourHeader, held.headerFormat(), headerMatches);
 	}
 
 	private record Account(String phoneNumberId, String wabaId) {
@@ -193,13 +199,22 @@ public class WhatsAppTemplateComparison {
 	 * @param metaRejectedReason   Meta's {@code rejected_reason} exactly as sent, e.g. {@code INVALID_FORMAT};
 	 *                             null unless held and Meta sent one (T-178, which stores it to tell a
 	 *                             formatting refusal from any other)
+	 * @param ourHeaderFormat      the header format this release registers, e.g. {@code DOCUMENT}; null for a
+	 *                             template with no header (T-200)
+	 * @param metaHeaderFormat     the header format Meta lists, upper-cased; null unless held and Meta lists a
+	 *                             header
+	 * @param headerMatches        the two formats are the same, both null included; null unless held. With
+	 *                             {@code bodyMatchesAfterTrim}, this is the whole of Reload's test: a template
+	 *                             where either is false is one Reload would edit
 	 */
 	public record Entry(String name, String ourCategory, String metaCategory, String metaStatus, Boolean held,
 			Boolean bodyMatchesExactly, Boolean bodyMatchesAfterTrim, String metaBody, String ourBody,
-			String lookupProblem, String metaRejectedReason) {
+			String lookupProblem, String metaRejectedReason, String ourHeaderFormat, String metaHeaderFormat,
+			Boolean headerMatches) {
 
 		static Entry notAnswered(String name, String ourCategory, String problem) {
-			return new Entry(name, ourCategory, null, null, null, null, null, null, null, problem, null);
+			return new Entry(name, ourCategory, null, null, null, null, null, null, null, problem, null,
+					null, null, null);
 		}
 	}
 }

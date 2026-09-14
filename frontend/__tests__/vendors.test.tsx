@@ -114,6 +114,10 @@ describe("vendors", () => {
     fireEvent.click(commit);
     expect(within(dialog).getByText("Why are they being dropped? is required")).toBeInTheDocument();
 
+    // Spaces are not a reason either, and since T-203 the box says so rather than the press going dead.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "   " } });
+    expect(within(dialog).getByText("Why are they being dropped? is required")).toBeInTheDocument();
+
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "Short-weighed three deliveries" },
     });

@@ -9,6 +9,7 @@ const WHATSAPP_NONE: WhatsAppSettingsView = {
   connected: false,
   phoneNumberId: null,
   wabaId: null,
+  appId: null,
   displayNumber: null,
   webhookUrl: null,
   verifiedAt: null,

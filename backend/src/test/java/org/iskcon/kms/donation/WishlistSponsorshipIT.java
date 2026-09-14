@@ -187,36 +187,13 @@ class WishlistSponsorshipIT extends AbstractIntegrationTest {
 				.isEqualTo(item);
 	}
 
-	@Test
-	@DisplayName("an item already FULFILLED still refuses a new gift after its own gift is struck")
-	void anAlreadyFulfilledItemStaysClosedToGiving() throws Exception {
-		// Recorded rather than fixed. Nothing re-evaluates an item once it is FULFILLED, and a
-		// checkout is refused on the item's status before the sum is ever consulted
-		// (MonetaryDonationService:105). So striking the gift behind a fulfilled item empties its
-		// progress figure and leaves the door shut: the giving page shows the item at ₹0 of ₹15,000
-		// and a devotee who presses Give is turned away. Whether such an item should reopen is
-		// Rajeev's to decide — see docs/work/proof/T-069.md.
-		UUID item = item("New mixer", 15000, 1);
-		String orderId = sponsor(item, 15000);
-		captured(orderId, "pay_stub_f", "evt-f");
-		assertThat(statusOf(item)).isEqualTo("FULFILLED");
-
-		strike(donationFor(orderId), "Chargeback: the payment was reversed by the bank.");
-
-		mvc.perform(post("/api/v1/donations/wishlist/{id}", item)
-						.header("Authorization", "Bearer valid-token")
-						.contentType("application/json").content("{\"amountInr\":15000}"))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-400068"));
-
-		assertThat(statusOf(item)).isEqualTo("FULFILLED");
-		assertThat(admin.queryForObject("""
-				SELECT COALESCE(SUM(amount_inr), 0) FROM donations
-				WHERE wishlist_item_id = ? AND status = 'COMPLETED' AND voided_at IS NULL
-				""", java.math.BigDecimal.class, item))
-				.as("nothing stands towards it any more, yet it reads as fulfilled")
-				.isEqualByComparingTo("0");
-	}
+	// A fifth test stood here until T-205: "an item already FULFILLED still refuses a new gift after its
+	// own gift is struck". It pinned what happened while that question was open (T-069) — the item
+	// stayed FULFILLED at ₹0 and checkout refused it with KMS-400068. Rajeev ruled that such an item
+	// reopens, and the reopening is the void's act, so a test that strikes the row directly (as
+	// strike() below does, to stay about the sums) could no longer say anything true about it. The
+	// ruling's behaviour, including the checkout that is no longer refused, is tested through the real
+	// void endpoint in DonationVoidIT.
 
 	// ---------------------------------------------------------------------
 

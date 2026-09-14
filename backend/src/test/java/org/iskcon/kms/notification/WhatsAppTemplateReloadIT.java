@@ -99,6 +99,9 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
  */
 class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 
+	/** Every save here carries the temple's Meta App ID, so po_delivery registers with its PDF header (T-200). */
+	private static final String APP_ID = "1234567890123456";
+
 	private static final OffsetDateTime LONG_AGO = OffsetDateTime.of(2026, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
 
 	/**
@@ -219,7 +222,7 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		return mvc.perform(put("/api/v1/settings/whatsapp")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of(
-						"phoneNumberId", phoneNumberId, "wabaId", wabaId,
+						"phoneNumberId", phoneNumberId, "wabaId", wabaId, "appId", APP_ID,
 						"accessToken", "token-govinda", "appSecret", "secret-govinda"))));
 	}
 
@@ -788,6 +791,87 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 				Integer.class, govinda)).as("the temple's own Reload entry").isEqualTo(1);
 	}
 
+	// ---- T-200: the purchase order's PDF header ---------------------------------------------------------
+
+	/** A fingerprint as every template had it before T-200: name, category, language and body, nothing else. */
+	private static String fingerprintWithoutAHeader(NotificationTemplate template) throws Exception {
+		return "sha256:" + java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+				.digest(String.join("\u001F", template.whatsappTemplateName(), template.whatsappCategory(), "en",
+						template.whatsappBodyText()).getBytes(StandardCharsets.UTF_8)));
+	}
+
+	/**
+	 * What every connected temple is the morning T-200 deploys: its fingerprints were recorded before
+	 * po_delivery had a header, and Meta holds po_delivery with this wording and no header. Exactly one
+	 * template may read as changed, and the Reload must change exactly that one, by edit, with the header.
+	 */
+	@Test
+	@DisplayName("a temple whose Meta holds po_delivery without its PDF header: only po_delivery reads changed, and Reload edits only it, with a DOCUMENT header from the App ID's upload")
+	void onlyThePurchaseOrderReadsChangedByItsHeader() throws Exception {
+		meta.holdEveryTemplateAsReleased();
+		save().andExpect(status().isOk());
+		// Before T-200: Meta held po_delivery without a header, and every fingerprint had no header in it.
+		meta.hold("po_delivery", "UTILITY", "APPROVED", template("po_delivery").whatsappBodyText());
+		Map<String, String> recordedBeforeT200 = new TreeMap<>();
+		for (NotificationTemplate t : NotificationTemplate.values()) {
+			recordedBeforeT200.put(t.whatsappTemplateName(), fingerprintWithoutAHeader(t));
+		}
+		jdbc.update("""
+				UPDATE tenant_settings SET whatsapp_template_fingerprints = ?::jsonb
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", objectMapper.writeValueAsString(recordedBeforeT200));
+		meta.resetCounts();
+
+		assertThat(view().get("templatesPending").toString())
+				.as("po_delivery alone, and as a known change")
+				.isEqualTo("{\"changed\":1,\"refused\":0,\"accountChanged\":false,\"unchecked\":0}");
+		// Every other template's recorded fingerprint is still today's: the header touched none of them.
+		Map<String, String> today = everyFingerprintAsReleased();
+		recordedBeforeT200.forEach((name, recorded) -> {
+			if (!"po_delivery".equals(name)) {
+				assertThat(recorded).as(name).isEqualTo(today.get(name));
+			}
+		});
+
+		reload().andExpect(status().isOk());
+
+		assertThat(meta.editedTemplateIds).containsExactly("id-po_delivery");
+		assertThat(meta.lookups.get()).as("only po_delivery was not known to be current").isEqualTo(1 + STATUS_COPY_LOOKUPS);
+		assertThat(meta.uploadPaths).as("one sample, uploaded to the App ID").containsExactly("/" + APP_ID + "/uploads");
+		JsonNode edit = objectMapper.readTree(meta.lastEditBody);
+		assertThat(edit.path("components").get(0).path("type").asText()).isEqualTo("HEADER");
+		assertThat(edit.path("components").get(0).path("format").asText()).isEqualTo("DOCUMENT");
+		assertThat(edit.path("components").get(0).path("example").path("header_handle").get(0).asText())
+				.isEqualTo(FakeMeta.SAMPLE_HANDLE);
+		assertThat(edit.path("components").get(1).path("text").asText()).isEqualTo(template("po_delivery").whatsappBodyText());
+		assertThat(meta.held("po_delivery").headerFormat()).isEqualTo("DOCUMENT");
+
+		assertThat(storedFingerprints()).isEqualTo(everyFingerprintAsReleased());
+		assertThat(storedList()).isEmpty();
+		assertThat(view().get("templatesPending").toString())
+				.isEqualTo("{\"changed\":0,\"refused\":0,\"accountChanged\":false,\"unchecked\":0}");
+	}
+
+	@Test
+	@DisplayName("a Reload on a temple with no App ID stores po_delivery's reason naming the box, uploads nothing, and sends everything else")
+	void aReloadWithNoAppIdNamesTheBox() throws Exception {
+		mvc.perform(put("/api/v1/settings/whatsapp")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(Map.of(
+						"phoneNumberId", "phone-govinda", "wabaId", "waba-govinda",
+						"accessToken", "token-govinda", "appSecret", "secret-govinda"))))
+				.andExpect(status().isOk());
+		meta.resetCounts();
+
+		reload().andExpect(status().isOk());
+
+		assertThat(meta.uploads.get()).isZero();
+		assertThat(meta.creates.get()).isEqualTo(NotificationTemplate.values().length - 1);
+		assertThat(storedList()).containsOnlyKeys("po_delivery");
+		assertThat(storedList().get("po_delivery").get("reason").asText()).isEqualTo(TenantWhatsAppSettingsService.NEEDS_APP_ID);
+		assertThat(storedFingerprints().get("po_delivery")).isEqualTo("null");
+	}
+
 	// ---- Meta, played by a local server that keeps what it holds -------------------------------------
 
 	/** One answer from Meta. */
@@ -818,8 +902,12 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 				"error_user_msg":"There is already English content for this template. You can create a new template and try again."}}
 				""";
 
-		record Held(String id, String name, String category, String status, String body) {
+		/** T-200: {@code headerFormat} is the format of the HEADER component Meta lists, or null for none. */
+		record Held(String id, String name, String category, String status, String body, String headerFormat) {
 		}
+
+		/** The handle the fake's upload answers with. */
+		static final String SAMPLE_HANDLE = "4::YXBwbGljYXRpb24vcGRmT200";
 
 		private final ObjectMapper json;
 		private final HttpServer server;
@@ -831,6 +919,8 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 		final AtomicInteger creates = new AtomicInteger();
 		final AtomicInteger lookups = new AtomicInteger();
 		final AtomicInteger edits = new AtomicInteger();
+		final AtomicInteger uploads = new AtomicInteger();
+		final List<String> uploadPaths = Collections.synchronizedList(new ArrayList<>());
 		final List<String> createPaths = Collections.synchronizedList(new ArrayList<>());
 		final List<String> editedTemplateIds = Collections.synchronizedList(new ArrayList<>());
 		volatile String lastEditBody;
@@ -855,17 +945,26 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 			creates.set(0);
 			lookups.set(0);
 			edits.set(0);
+			uploads.set(0);
+			uploadPaths.clear();
 			createPaths.clear();
 			editedTemplateIds.clear();
 		}
 
+		/** A template with no header, as every template was held before T-200. */
 		void hold(String name, String category, String status, String body) {
-			holds.put(name, new Held("id-" + name, name, category, status, body));
+			hold(name, category, status, body, null);
 		}
 
+		void hold(String name, String category, String status, String body, String headerFormat) {
+			holds.put(name, new Held("id-" + name, name, category, status, body, headerFormat));
+		}
+
+		/** Every template exactly as this release registers it, po_delivery's PDF header included. */
 		void holdEveryTemplateAsReleased() {
 			for (NotificationTemplate template : NotificationTemplate.values()) {
-				hold(template.whatsappTemplateName(), template.whatsappCategory(), "APPROVED", template.whatsappBodyText());
+				hold(template.whatsappTemplateName(), template.whatsappCategory(), "APPROVED", template.whatsappBodyText(),
+						template.whatsappHeaderFormat());
 			}
 		}
 
@@ -899,6 +998,13 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 			} else if ("GET".equals(method)) {
 				phoneChecks.incrementAndGet();
 				answer = new MetaAnswer(200, "{\"display_phone_number\":\"+1 555-010-0169\",\"verified_name\":\"Temple Kitchen\"}");
+			} else if (path.endsWith("/uploads")) {
+				// T-200: Meta's Resumable Upload API, first the session, then the bytes.
+				uploads.incrementAndGet();
+				uploadPaths.add(path);
+				answer = new MetaAnswer(200, "{\"id\":\"upload:T200SESSION\"}");
+			} else if (path.startsWith("/upload:")) {
+				answer = new MetaAnswer(200, "{\"h\":\"" + SAMPLE_HANDLE + "\"}");
 			} else if (path.endsWith("/message_templates")) {
 				answer = create(path, json.readTree(request));
 			} else {
@@ -930,7 +1036,8 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 			if (held != null) {
 				return new MetaAnswer(400, ALREADY_EXISTS);
 			}
-			hold(name, category, "PENDING", request.path("components").get(0).path("text").asText());
+			hold(name, category, "PENDING", component(request, "BODY").path("text").asText(),
+					component(request, "HEADER").path("format").asText(null));
 			return new MetaAnswer(200, "{\"id\":\"id-" + name + "\",\"status\":\"PENDING\",\"category\":\"" + category + "\"}");
 		}
 
@@ -953,7 +1060,12 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 							entry.put("status", h.status());
 						}
 						entry.put("category", h.category());
-						entry.put("components", List.of(Map.of("type", "BODY", "text", h.body())));
+						List<Map<String, Object>> components = new ArrayList<>();
+						if (h.headerFormat() != null) {
+							components.add(Map.of("type", "HEADER", "format", h.headerFormat()));
+						}
+						components.add(Map.of("type", "BODY", "text", h.body()));
+						entry.put("components", components);
 						return entry;
 					})
 					.collect(Collectors.toList());
@@ -971,9 +1083,21 @@ class WhatsAppTemplateReloadIT extends AbstractIntegrationTest {
 			if (held == null) {
 				return new MetaAnswer(400, "{\"error\":{\"message\":\"Unsupported post request.\",\"code\":100}}");
 			}
-			String body = json.readTree(request).path("components").get(0).path("text").asText();
-			holds.put(held.name(), new Held(held.id(), held.name(), held.category(), "PENDING", body));
+			JsonNode edit = json.readTree(request);
+			// "The API replaces all components with the components in the edit request payload."
+			holds.put(held.name(), new Held(held.id(), held.name(), held.category(), "PENDING",
+					component(edit, "BODY").path("text").asText(), component(edit, "HEADER").path("format").asText(null)));
 			return new MetaAnswer(200, "{\"success\":true}");
+		}
+
+		/** The component of this type in a create or edit request, found by type rather than position. */
+		private static JsonNode component(JsonNode request, String type) {
+			for (JsonNode component : request.path("components")) {
+				if (type.equals(component.path("type").asText())) {
+					return component;
+				}
+			}
+			return com.fasterxml.jackson.databind.node.MissingNode.getInstance();
 		}
 	}
 }

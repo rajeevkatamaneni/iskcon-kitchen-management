@@ -134,44 +134,79 @@ class WishlistIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an item already FULFILLED keeps that status when its gift is struck, and reads short")
-	void anAlreadyFulfilledItemIsLeftContradictory() throws Exception {
-		// The behaviour this test exists to pin down is not a bug being fixed but a consequence being
-		// recorded: markFulfilledIfComplete only ever runs ACTIVE -> FULFILLED, and nothing anywhere
-		// re-evaluates an item once it is fulfilled. So striking the gift behind a fulfilled item
-		// moves its progress figure and leaves its status alone, and the row then says FULFILLED
-		// beside ₹0 of ₹15,000. Whether that row should reopen is a product question (see the
-		// T-069 proof file); what it does today is written down here so nobody has to guess.
+	@DisplayName("a FULFILLED item whose gift is struck reopens, stays off the sweep, and can be fulfilled again")
+	void aFulfilledItemReopensWhenItsMoneyIsStruck() throws Exception {
+		// This test used to pin the opposite: markFulfilledIfComplete only ever ran ACTIVE -> FULFILLED
+		// and nothing looked at an item again, so striking the gift behind a fulfilled mixer left it
+		// FULFILLED at ₹0 of ₹15,000 until the sweep archived it. Rajeev ruled (T-069's open question,
+		// built in T-205) that such an item reopens. The void calls reopenIfNoLongerCovered in its own
+		// transaction; DonationVoidIT drives that end to end, and this drives the wish-list half.
 		UUID item = create("New mixer", 15000, 1);
 		UUID gift = give(item, 15000);
 		within(() -> service.markFulfilledIfComplete(item));
 		assertThat(statusOf(item)).isEqualTo("FULFILLED");
 
 		strike(gift, "Recorded against the wrong temple.");
+		var reopening = withinGet(() -> service.reopenIfNoLongerCovered(item));
 
-		// Re-running the flip changes nothing: the guard is `status = 'ACTIVE'`, and it is not.
-		within(() -> service.markFulfilledIfComplete(item));
+		assertThat(reopening).isPresent();
+		assertThat(statusOf(item)).isEqualTo("ACTIVE");
+		assertThat(admin.queryForObject(
+				"SELECT fulfilled_at FROM wishlist_items WHERE id = ?", java.sql.Timestamp.class, item)).isNull();
+		assertThat(reopening.get().before()).containsEntry("status", "FULFILLED").containsEntry("standingInr", "0");
+		assertThat(reopening.get().before().get("fulfilledAt")).isNotNull();
+		assertThat(reopening.get().after()).containsEntry("status", "ACTIVE")
+				// At the precision the column keeps (numeric(12,2)), because the trail reports what was stored.
+				.containsEntry("costInr", "15000.00");
+		assertThat(reopening.get().after().get("fulfilledAt")).isNull();
 
-		WishlistItemView after = view(item);
-		assertThat(after.status()).isEqualTo("FULFILLED");
-		assertThat(after.paidInr())
-				.as("the progress figure follows the money, so it drops below the price")
-				.isEqualByComparingTo("0");
+		// Asked again, nothing further happens: it is ACTIVE, and only FULFILLED reopens.
+		assertThat(withinGet(() -> service.reopenIfNoLongerCovered(item))).isEmpty();
 
-		// And a devotee can see the contradiction: the giving list admits FULFILLED items for the
-		// tenant's visibility window, so the row appears on the page people give from, not only on
-		// an admin screen.
-		assertThat(withinGet(() -> service.forGiving()).stream().map(WishlistItemView::id))
-				.contains(item);
+		// Still on the giving list, now as something asking for money.
+		assertThat(withinGet(() -> service.forGiving()).stream().map(WishlistItemView::id)).contains(item);
 
-		// It does self-limit, though: the daily sweep archives fulfilled items past the window
-		// (7 days by default) whatever their progress figure says, and archived items leave the
-		// giving list. The contradiction is bounded by that window, not permanent.
-		admin.update("UPDATE wishlist_items SET fulfilled_at = now() - interval '10 days' WHERE id = ?", item);
+		// And off the sweep's schedule: the sweep only takes FULFILLED items, counted from fulfilled_at,
+		// and this one is neither. Without clearing fulfilled_at it would still have been skipped on
+		// status, but a re-fulfilment would then have inherited the old date.
 		within(() -> service.archiveFulfilledForCurrentTenant());
-		assertThat(statusOf(item)).isEqualTo("ARCHIVED");
-		assertThat(withinGet(() -> service.forGiving()).stream().map(WishlistItemView::id))
-				.doesNotContain(item);
+		assertThat(statusOf(item)).isEqualTo("ACTIVE");
+
+		// A new gift covering it goes through the ordinary flip, with a fresh fulfilled_at.
+		give(item, 15000);
+		within(() -> service.markFulfilledIfComplete(item));
+		assertThat(statusOf(item)).isEqualTo("FULFILLED");
+		assertThat(admin.queryForObject(
+				"SELECT fulfilled_at FROM wishlist_items WHERE id = ?", java.sql.Timestamp.class, item)).isNotNull();
+	}
+
+	@Test
+	@DisplayName("an item still covered, an ACTIVE item, and an ARCHIVED item are none of them reopened")
+	void onlyAnUncoveredFulfilledItemReopens() throws Exception {
+		// Jointly funded, over-covered: ₹20,000 towards ₹15,000. Striking ₹5,000 leaves ₹15,000.
+		UUID joint = create("Commercial wet grinder", 15000, 1);
+		give(joint, 10000);
+		give(joint, 5000);
+		UUID extra = give(joint, 5000);
+		within(() -> service.markFulfilledIfComplete(joint));
+		strike(extra, "Entered twice at the gate.");
+		assertThat(withinGet(() -> service.reopenIfNoLongerCovered(joint))).isEmpty();
+		assertThat(statusOf(joint)).isEqualTo("FULFILLED");
+
+		// Archived: the temple has stopped hoping for it, so struck money does not bring it back.
+		UUID archived = create("Old tandoor", 8000, 1);
+		UUID gift = give(archived, 8000);
+		within(() -> service.markFulfilledIfComplete(archived));
+		within(() -> service.archive(archived));
+		strike(gift, "Chargeback.");
+		assertThat(withinGet(() -> service.reopenIfNoLongerCovered(archived))).isEmpty();
+		assertThat(statusOf(archived)).isEqualTo("ARCHIVED");
+
+		// Never fulfilled: already asking for money.
+		UUID active = create("Rice sacks", 1000, 10);
+		give(active, 3000);
+		assertThat(withinGet(() -> service.reopenIfNoLongerCovered(active))).isEmpty();
+		assertThat(statusOf(active)).isEqualTo("ACTIVE");
 	}
 
 	@Test

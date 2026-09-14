@@ -475,7 +475,6 @@ export function MealComposer({
     // only stop the next reply from overwriting what the person just typed. And `getToken`, which is
     // a new function on every render: naming it here makes the effect re-run on every render, and
     // since the effect sets state, that is an infinite loop rather than a slow screen.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEventKind, isOutside, handover, guestsEatAt, placed, date]);
   const [eventSuggestions, setEventSuggestions] = useState<EventNameSuggestion[]>([]);
   const eventQuery = isEventKind ? eventName.trim() : "";
@@ -516,17 +515,51 @@ export function MealComposer({
     };
   }, [kind?.needsOccasion]);
 
-  // What the calendar says this date is for, which is what the occasion opens on. Only ever a
-  // default: the planner may be cooking a feast the calendar has never heard of.
+  /**
+   * What the calendar says this date is, which two boxes open on: the occasion a feast is for, and
+   * the adults a new meal on a festival day expects (Phase B item 9, T-208).
+   *
+   * <p>Both are only ever defaults. The planner may be cooking a feast the calendar has never heard
+   * of, and a festival's usual crowd is the temple's estimate, not this year's count. So each has a
+   * touched ref, and once somebody has typed in the box the answer that arrives afterwards is thrown
+   * away rather than written over them — the request is slow enough on a phone that a planner can
+   * type 350 before it lands, and a 500 replacing it would be the application overruling a person.
+   *
+   * <p><strong>The servings default reaches every kind, not only a feast.</strong> The build brief
+   * records Rajeev's decision as applying to a new meal on a festival day, not to a feast alone, and
+   * on a festival the temple serves its ordinary breakfast and lunch to the same crowd the feast is
+   * cooked for. So the day is asked about whenever the adults are still untouched, whatever the kind;
+   * the occasion name is still written only on a kind that asks for one, as before.
+   *
+   * <p><strong>Never on a meal being corrected.</strong> Its adults are a number somebody chose and
+   * saved, so `adultsTouched` starts true for it and the default never applies — correcting Tuesday's
+   * lunch must not quietly swap its 180 for the festival's usual 500.
+   *
+   * <p>Applied through `suggestAdults` rather than `setAdults`: the preparations already ticked have
+   * to rescale to the new head count exactly as if it had been typed, and that arithmetic reads the
+   * latest recipes and counters, which a closure captured when this effect started would not have.
+   * It does not mark the form changed — a default is not a change anybody made, so leaving the screen
+   * straight afterwards asks nothing.
+   */
   const occasionTouched = useRef(Boolean(existing?.occasionName));
+  const adultsTouched = useRef(editing);
+  const suggestAdults = useRef(applyCount);
+  suggestAdults.current = applyCount;
   useEffect(() => {
-    if (!kind?.needsOccasion || occasionTouched.current) return;
+    const wantsOccasion = Boolean(kind?.needsOccasion) && !occasionTouched.current;
+    if (!wantsOccasion && adultsTouched.current) return;
     let live = true;
     tokenRef
       .current()
       .then((t) => api.mealDayContext(date, t))
       .then((ctx) => {
-        if (live && !occasionTouched.current && ctx.occasionName) setOccasionName(ctx.occasionName);
+        if (!live) return;
+        if (kind?.needsOccasion && !occasionTouched.current && ctx.occasionName) {
+          setOccasionName(ctx.occasionName);
+        }
+        if (!adultsTouched.current && ctx.suggestedServings != null) {
+          suggestAdults.current("adults", ctx.suggestedServings);
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -717,9 +750,22 @@ export function MealComposer({
   /** Allowed, but with nothing left over to carry it out and load it. */
   const loadingSqueeze = timing?.warning ?? null;
 
-  /** A head count everyone follows, except the preparations someone has deliberately set. */
+  /**
+   * A head count the planner typed. Marks the form changed, and marks Adults as the planner's own so
+   * a festival's usual crowd arriving late from the day's context never writes over it.
+   */
   function setCount(which: "adults" | "children" | "seniors", value: number) {
     setDirty(true);
+    if (which === "adults") adultsTouched.current = true;
+    applyCount(which, value);
+  }
+
+  /**
+   * A head count everyone follows, except the preparations someone has deliberately set. Split from
+   * `setCount` so the day's suggested servings can go through the same rescaling without claiming
+   * the planner changed anything.
+   */
+  function applyCount(which: "adults" | "children" | "seniors", value: number) {
     const v = Math.max(0, value);
     const next = {
       adults: which === "adults" ? v : adults,

@@ -1,4 +1,4 @@
-// ESLint for the frontend test suite (T-076).
+// ESLint for the frontend test suite (T-076), and for hook order in the application source (T-210).
 //
 // WHY THIS EXISTS, AND WHY IT IS THIS SMALL
 //
@@ -21,10 +21,11 @@
 // the plugin ships, turned on at once against the tree. That run reported 2,261 problems, of which
 // 2,257 came from the preference rules listed at the bottom. Four came from the rules enabled here.
 //
-// SCOPE: test files only. Every rule below is a Testing Library rule and has no meaning outside a
-// test, so `app/`, `components/` and `lib/` deliberately match no config block and are not linted.
-// That is not an oversight — see the note on eslint-plugin-react-hooks at the bottom of this file
-// for the one thing that decision leaves on the table.
+// SCOPE: two blocks, and each one lints only what its rules have an opinion about. The Testing
+// Library block covers `__tests__/` and nothing else, because those rules have no meaning outside a
+// test. The React hooks block (T-210) covers `app/`, `components/` and `lib/` with exactly one rule,
+// rules-of-hooks, under the same "no style rules" ruling. See the note at the bottom of this file for
+// what that block covers and why exhaustive-deps, its better-known sibling, stays off.
 //
 // Run it with `npm run lint`, which is `eslint . --max-warnings=0`. NOT `next lint`: Next 14's
 // wrapper expects an `.eslintrc*` file and does not read flat config, so pointing the script at it
@@ -33,6 +34,7 @@
 
 import tsParser from "@typescript-eslint/parser";
 import testingLibrary from "eslint-plugin-testing-library";
+import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
   {
@@ -156,16 +158,60 @@ export default [
       //   prefer-user-event-setup         (0) follows prefer-user-event, which is off.
     },
   },
+  {
+    // The application source. One rule, and the note at the bottom of this file says why only one.
+    files: [
+      "app/**/*.ts",
+      "app/**/*.tsx",
+      "components/**/*.ts",
+      "components/**/*.tsx",
+      "lib/**/*.ts",
+      "lib/**/*.tsx",
+    ],
+    languageOptions: {
+      // The same parser, still without type information, for the same reason as the test block:
+      // rules-of-hooks reads call sites and control flow, never types.
+      parser: tsParser,
+      ecmaVersion: 2022,
+      sourceType: "module",
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: { "react-hooks": reactHooks },
+    rules: {
+      // A hook called inside an `if`, a loop, after an early `return`, or from a function that is
+      // not a component or another hook. React matches hooks to their state by call order, so the
+      // render that takes the other branch hands every later hook the wrong state, or throws
+      // "Rendered fewer hooks than expected". That is a crash on a real screen, not a style
+      // question, and it only happens on the branch nobody clicked while testing.
+      "react-hooks/rules-of-hooks": "error",
+    },
+  },
 ];
 
-// ONE THING THIS CONFIG DOES NOT COVER, recorded so it is not rediscovered.
+// WHAT THE REACT HOOKS BLOCK COVERS, AND WHY exhaustive-deps STAYS OFF (T-210, Rajeev's decision).
 //
-// app/planner/reuse/page.tsx:156 and components/planner/MealComposer.tsx:376 each carry an
-// `// eslint-disable-next-line react-hooks/exhaustive-deps` comment, written when there was no
-// ESLint in the project at all. Nothing defines that rule, so linting those directories reports
-// "Definition for rule 'react-hooks/exhaustive-deps' was not found" — an error about the comment,
-// not about the code. Fixing it properly means adding eslint-plugin-react-hooks and enabling
-// rules-of-hooks, which is worth doing (a conditionally-called hook is a crash, not a style
-// question) but adds a plugin this task was not scoped to add and forces a separate decision about
-// what to do with exhaustive-deps' own findings. Left for a task of its own; see
-// docs/work/proof/T-076.md.
+// Covered: rules-of-hooks, over app/, components/ and lib/. On the day it was added it reported no
+// errors, so it is a guard for new code rather than a sweep of old code. Plugin 7.1.1 ships 29
+// rules, most of them React Compiler checks; none but rules-of-hooks is enabled, and do not reach
+// for the plugin's "recommended" preset to get it — that preset turns the compiler rules and
+// exhaustive-deps on as well.
+//
+// Off: exhaustive-deps. It flags an effect whose dependency list leaves out something the effect
+// reads, and its fix is always "add it". In this codebase that fix is often the bug. The clearest
+// case is `getToken` from the auth context, which is a new function on every render: naming it in
+// a dependency list makes the effect run on every render, and because these effects set state, the
+// screen loops instead of loading. MealComposer's travel-estimate effect carries a comment saying
+// exactly that. So each finding is a judgement about one effect, the rule cannot tell a deliberate
+// omission from a forgotten one, and turning it on means a disable comment at every deliberate site
+// or a diff of "fixes" that re-run effects nobody meant to re-run. That is a review of each effect
+// by someone who knows the screen, not a lint pass.
+//
+// The two `// eslint-disable-next-line react-hooks/exhaustive-deps` comments that used to sit in
+// app/planner/reuse/page.tsx and components/planner/MealComposer.tsx were removed with this block.
+// They were written before the project had ESLint. With the plugin loaded and the rule off, ESLint
+// reports each one as an "Unused eslint-disable directive" warning, which fails --max-warnings=0.
+// The prose comment explaining MealComposer's omissions was kept, because it is the reason, and the
+// reason still holds. For whoever reconsiders this: forcing exhaustive-deps on for one run
+// (2026-09-14) found 5 sites, in app/donations/page.tsx, app/inventory/[id]/page.tsx,
+// app/inventory/page.tsx, components/planner/MealComposer.tsx and lib/auth-context.tsx. The
+// planner reuse page was not one of them, so its old disable comment was covering nothing.

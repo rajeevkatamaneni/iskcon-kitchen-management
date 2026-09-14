@@ -42,6 +42,8 @@ function kind(overrides: Partial<MealKindCost> = {}): MealKindCost {
     ingredientsPriced: 22,
     ingredientsWithoutPrice: 0,
     unpriced: [],
+    mealsCostedAsCooked: 30,
+    mealsCostedAsPlanned: 0,
     ...overrides,
   };
 }
@@ -57,6 +59,8 @@ function report(overrides: Partial<CostByMealKind> = {}): CostByMealKind {
     ingredientsWithoutPrice: 0,
     unpriced: [],
     kinds: [kind()],
+    mealsCostedAsCooked: 30,
+    mealsCostedAsPlanned: 4,
     ...overrides,
   };
 }
@@ -133,6 +137,8 @@ describe("Cost per serving", () => {
       servings: 0,
       mealsWithoutServings: 4,
       estimatedTotal: 3720,
+      mealsCostedAsCooked: 4,
+      mealsCostedAsPlanned: 0,
       kinds: [
         kind({
           mealKind: "Deity Offering",
@@ -141,6 +147,8 @@ describe("Cost per serving", () => {
           mealsWithoutServings: 4,
           estimatedTotal: 3720,
           costPerServing: null,
+          mealsCostedAsCooked: 4,
+          mealsCostedAsPlanned: 0,
         }),
       ],
     });
@@ -187,11 +195,66 @@ describe("Cost per serving", () => {
   });
 
   it("says nothing was cooked rather than showing a table of zeroes", () => {
-    queryRef.current.data = report({ meals: 0, servings: 0, estimatedTotal: 0, kinds: [] });
+    queryRef.current.data = report({
+      meals: 0,
+      servings: 0,
+      estimatedTotal: 0,
+      kinds: [],
+      mealsCostedAsCooked: 0,
+      mealsCostedAsPlanned: 0,
+    });
     render(<CostPerServingPage />);
 
     expect(screen.getByText("Nothing was cooked in this period")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  /**
+   * T-212: a recorded meal is costed at what was cooked and the rest at the plan, and a row over a
+   * month holds both. Each row and the total say how many of each, in the words Rajeev gave.
+   */
+  describe("says what each figure was worked out from (T-212)", () => {
+    it("says beneath each row and the total how many meals are from what was cooked and how many from the plan", () => {
+      queryRef.current.data = report({
+        meals: 3,
+        mealsCostedAsCooked: 1,
+        mealsCostedAsPlanned: 2,
+        kinds: [
+          kind({ mealKind: "Lunch", meals: 2, mealsCostedAsCooked: 1, mealsCostedAsPlanned: 1 }),
+          kind({
+            mealKind: "Breakfast",
+            meals: 1,
+            costPerServing: 3,
+            mealsCostedAsCooked: 0,
+            mealsCostedAsPlanned: 1,
+          }),
+        ],
+      });
+      render(<CostPerServingPage />);
+
+      expect(within(rowFor("Lunch")).getByText("1 meal from what was cooked, 1 from the plan")).toBeInTheDocument();
+      // Only the half that has meals is said: no "0 from what was cooked".
+      expect(within(rowFor("Breakfast")).getByText("1 meal from the plan")).toBeInTheDocument();
+      expect(within(rowFor("Breakfast")).queryByText(/from what was cooked/)).not.toBeInTheDocument();
+      expect(within(rowFor("All meals")).getByText("1 meal from what was cooked, 2 from the plan")).toBeInTheDocument();
+    });
+
+    it("counts a month of recorded meals in the plural, with no plan half", () => {
+      queryRef.current.data = report({ mealsCostedAsCooked: 34, mealsCostedAsPlanned: 0 });
+      render(<CostPerServingPage />);
+
+      expect(within(rowFor("Lunch")).getByText("30 meals from what was cooked")).toBeInTheDocument();
+      expect(within(rowFor("All meals")).getByText("34 meals from what was cooked")).toBeInTheDocument();
+      expect(screen.queryByText(/from the plan/)).not.toBeInTheDocument();
+    });
+
+    it("says the rule once, in words, with the other caveats", () => {
+      queryRef.current.data = report();
+      render(<CostPerServingPage />);
+
+      expect(screen.getByText(/Recorded meals are costed at what was cooked, the rest at the plan\./))
+        .toBeInTheDocument();
+    });
   });
 
   it("is not offered to a volunteer", () => {

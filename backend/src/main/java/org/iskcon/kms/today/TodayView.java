@@ -161,11 +161,17 @@ public record TodayView(
 	/**
 	 * What today's food is costing, estimated (B2, §9).
 	 *
-	 * @param withoutPrice how many ingredients in today's basket have no known price. Named rather
-	 *                     than swallowed: a total that silently omits a third of the basket is worse
-	 *                     than one that admits the gap.
+	 * @param withoutPrice         how many ingredients in today's basket have no known price. Named
+	 *                             rather than swallowed: a total that silently omits a third of the
+	 *                             basket is worse than one that admits the gap.
+	 * @param mealsCostedAsCooked  today's meals already recorded, costed at what their job card says
+	 *                             was cooked (T-212)
+	 * @param mealsCostedAsPlanned today's meals not yet recorded, costed at what was planned. By
+	 *                             evening the first count grows as the office types the cards in, and
+	 *                             the tile says which figure it is showing.
 	 */
-	public record MaterialsCost(BigDecimal estimatedTotal, int withoutPrice) {
+	public record MaterialsCost(
+			BigDecimal estimatedTotal, int withoutPrice, int mealsCostedAsCooked, int mealsCostedAsPlanned) {
 	}
 
 	/**

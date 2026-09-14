@@ -159,6 +159,43 @@ class NotificationTemplateTest {
 		}
 	}
 
+	@Test
+	@DisplayName("only the purchase order has a header, a DOCUMENT filled from its sheet, and its body is still the approved one (T-200)")
+	void onlyThePurchaseOrderHasADocumentHeader() {
+		for (NotificationTemplate template : NotificationTemplate.values()) {
+			if (template == NotificationTemplate.PO_DELIVERY) {
+				assertThat(template.whatsappHeaderFormat()).isEqualTo("DOCUMENT");
+				assertThat(template.whatsappHeaderParameter()).isEqualTo("documentId");
+				// The header fills no body placeholder, so the body's numbering is untouched by it.
+				assertThat(template.parameterOrder()).doesNotContain("documentId");
+			} else {
+				assertThat(template.whatsappHeaderFormat()).as("%s", template).isNull();
+				assertThat(template.whatsappHeaderParameter()).as("%s", template).isNull();
+			}
+		}
+		// Word for word as approved: the header is the only change.
+		assertThat(NotificationTemplate.PO_DELIVERY.whatsappBodyText()).isEqualTo(
+				"Purchase order {{1}} for {{2}} is ready: {{3}}. It was raised on {{4}}, and the items are needed by "
+						+ "{{5}} at the latest.");
+	}
+
+	@Test
+	@DisplayName("the header changes the purchase order's fingerprint and no other template's (T-200)")
+	void theHeaderChangesOnlyThePurchaseOrdersFingerprint() throws Exception {
+		for (NotificationTemplate template : NotificationTemplate.values()) {
+			// The four-part fingerprint every template had before T-200, computed here independently.
+			String before = "sha256:" + java.util.HexFormat.of().formatHex(java.security.MessageDigest
+					.getInstance("SHA-256").digest(String.join("", template.whatsappTemplateName(),
+							template.whatsappCategory(), "en", template.whatsappBodyText())
+							.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+			if (template == NotificationTemplate.PO_DELIVERY) {
+				assertThat(template.whatsappFingerprint("en")).as("po_delivery gained a header").isNotEqualTo(before);
+			} else {
+				assertThat(template.whatsappFingerprint("en")).as("%s is unchanged", template).isEqualTo(before);
+			}
+		}
+	}
+
 	private static List<Integer> placeholdersIn(String body) {
 		List<Integer> numbers = new java.util.ArrayList<>();
 		Matcher matcher = PLACEHOLDER.matcher(body);

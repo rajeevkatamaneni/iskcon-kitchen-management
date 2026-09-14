@@ -878,6 +878,8 @@ function MessagingSection({
 }) {
   const [phoneNumberId, setPhoneNumberId] = useState(settings.phoneNumberId ?? "");
   const [wabaId, setWabaId] = useState(settings.wabaId ?? "");
+  // The Meta App ID (T-200). Not a secret, so it is shown in full and edited like the two ids.
+  const [appId, setAppId] = useState(settings.appId ?? "");
   const [accessToken, setAccessToken] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [replacing, setReplacing] = useState(!settings.connected);
@@ -898,9 +900,10 @@ function MessagingSection({
   const [reloaded, setReloaded] = useState(false);
   const reloading = useRef(false);
 
-  const edit = useEditMode({ phoneNumberId, wabaId, accessToken, appSecret, replacing }, (before) => {
+  const edit = useEditMode({ phoneNumberId, wabaId, appId, accessToken, appSecret, replacing }, (before) => {
     setPhoneNumberId(before.phoneNumberId);
     setWabaId(before.wabaId);
+    setAppId(before.appId);
     setAccessToken(before.accessToken);
     setAppSecret(before.appSecret);
     setReplacing(before.replacing);
@@ -931,12 +934,16 @@ function MessagingSection({
         {
           phoneNumberId: phoneNumberId.trim(),
           wabaId: wabaId.trim(),
+          // Always sent, blank included: the server stores what is sent, and blank clears it.
+          appId: appId.trim(),
           accessToken: accessToken.trim() || undefined,
           appSecret: appSecret.trim() || undefined,
         },
         await getToken()
       );
       onChanged(next);
+      // The box shows what was stored, not what was typed: the server trims it, and blank clears it.
+      setAppId(next.appId ?? "");
       setAccessToken("");
       setAppSecret("");
       setReplacing(false);
@@ -1092,6 +1099,27 @@ function MessagingSection({
                 onChange={(e) => setWabaId(e.target.value)}
                 readOnly={readOnly}
                 required
+                className={`min-h-touch w-full rounded-control border border-hairline px-3 text-ink ${READ_ONLY_BOX}`}
+              />
+            )}
+          </HintedField>
+
+          {/* The Meta App ID (T-200). Registering the purchase-order message with its PDF is addressed to
+              the app, so a temple without it cannot send orders as a PDF; every other message is unaffected,
+              which is why it is not required. Not a secret, so it is an ordinary box shown in full. */}
+          <HintedField
+            label="App ID"
+            hint="Meta dashboard → your app → App settings → Basic, at the top. Needed to send purchase orders as a PDF."
+          >
+            {(id) => (
+              <input
+                id={id}
+                value={appId}
+                onChange={(e) => setAppId(e.target.value)}
+                readOnly={readOnly}
+                // No `pattern`: a pasted id often carries a space either side, which the save trims, and
+                // whether what is left is digits is the server's rule, said beside the box if it refuses.
+                inputMode="numeric"
                 className={`min-h-touch w-full rounded-control border border-hairline px-3 text-ink ${READ_ONLY_BOX}`}
               />
             )}

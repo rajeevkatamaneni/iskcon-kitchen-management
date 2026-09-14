@@ -315,7 +315,6 @@ public class JobCardService {
 				meal.kitchenNotes(),
 				meal.serverNotes(),
 				preparations,
-				equipment(),
 				plannedCrewText(meal),
 				staffOn(meal.planDate()),
 				volunteersOn(meal.planDate()),
@@ -365,6 +364,21 @@ public class JobCardService {
 			// the printer later.
 			return version(model, current);
 		}
+		if (stored != null && current > 0
+				&& stored.equals(fingerprint(model, legacyEquipment()))) {
+			// The same meal, fingerprinted the old way. Until 2026-09-14 the hash also covered the
+			// temple's equipment list, and taking equipment off the card changed every stored value at
+			// once. Without this, every card in every kitchen would have moved to a new version on its
+			// next print while its cooking instructions stayed word for word the same, and the rule on
+			// the sheet — the higher number wins — would have sent people hunting for a change that is
+			// not there. So the old value is recognised, and quietly replaced with the new one, so this
+			// meal never takes this path again.
+			//
+			// updated_at is left alone on purpose: nothing about the meal changed, only how its
+			// fingerprint is written down.
+			jdbc.update("UPDATE meals SET card_fingerprint = ? WHERE id = ?", fingerprint, mealId);
+			return version(model, current);
+		}
 		int next = current + 1;
 		jdbc.update("""
 				UPDATE meals SET card_version = ?, card_fingerprint = ?, updated_at = now()
@@ -378,7 +392,7 @@ public class JobCardService {
 				m.templeName(), m.cardNumber(), version, m.mealKindLabel(), m.eventName(),
 				m.dateText(), m.readyByText(), m.headCountText(), m.headCountDetail(),
 				m.warnings(), m.kitchenNotes(),
-				m.serverNotes(), m.preparations(), m.equipment(), m.plannedCrewText(), m.staff(),
+				m.serverNotes(), m.preparations(), m.plannedCrewText(), m.staff(),
 				m.volunteers(), m.delivery(), m.recipes(), m.recipeLanguageLabel(), m.generatedOn(),
 				m.footerInDocument(), m.labels());
 	}
@@ -397,8 +411,31 @@ public class JobCardService {
 	 *   <li><strong>The print timestamp.</strong> Including it would bump the version on every
 	 *       press of the button, which is the behaviour this design exists to avoid.</li>
 	 * </ul>
+	 *
+	 * <p>So what it covers is: the meal's kind and event name, its date, ready-by time and head count,
+	 * both sets of notes, the planned crew, the day's warnings, each preparation with its planned
+	 * quantity, and the delivery details where food leaves by van. Every one of those is printed on
+	 * the card, which is what makes the version trustworthy.
+	 *
+	 * <p><strong>Equipment used to be in here too, and the legacy form still exists.</strong> Until
+	 * 2026-09-14 the card listed the temple's equipment, so the hash covered it. When the list came off
+	 * the card it had to come out of the hash, or a change to the register would move the version of a
+	 * sheet that no longer mentions it; and that changed every value already stored in
+	 * {@code meals.card_fingerprint}. Passing {@code legacyEquipment} rebuilds the old material exactly,
+	 * with the equipment segment where it used to sit, so {@link #withVersion} can recognise a card
+	 * printed before the change and keep its version. Null means the current form, which leaves the
+	 * segment out altogether (not an empty one: an empty list still wrote a separator).
+	 *
+	 * <p>The legacy form can be deleted once every meal printed before 2026-09-14 has been reprinted or
+	 * is in the past. Until then it costs one small query, and only when the current fingerprint does
+	 * not already match.
 	 */
 	private static String fingerprint(JobCardTemplate.CardModel m) {
+		return fingerprint(m, null);
+	}
+
+	/** See {@link #fingerprint(JobCardTemplate.CardModel)}. Package-private for the reprint test. */
+	static String fingerprint(JobCardTemplate.CardModel m, List<String> legacyEquipment) {
 		StringBuilder material = new StringBuilder()
 				.append(m.mealKindLabel()).append('\u001f')
 				.append(nullSafe(m.eventName())).append('\u001f')
@@ -409,8 +446,10 @@ public class JobCardService {
 				.append(nullSafe(m.kitchenNotes())).append('\u001f')
 				.append(nullSafe(m.serverNotes())).append('\u001f')
 				.append(nullSafe(m.plannedCrewText())).append('\u001f')
-				.append(String.join(",", m.warnings())).append('\u001f')
-				.append(String.join(",", m.equipment())).append('\u001f');
+				.append(String.join(",", m.warnings())).append('\u001f');
+		if (legacyEquipment != null) {
+			material.append(String.join(",", legacyEquipment)).append('\u001f');
+		}
 		for (JobCardTemplate.Preparation p : m.preparations()) {
 			material.append(p.name()).append('=').append(nullSafe(p.plannedText())).append(';');
 		}
@@ -610,21 +649,17 @@ public class JobCardService {
 
 
 	/**
-	 * The temple's machines and tools, with anything that is not in good order marked.
+	 * The temple's equipment list, worded exactly as the card used to print it — used only to
+	 * recognise a fingerprint stored before equipment came off the card on 2026-09-14.
 	 *
-	 * <p>Nothing in the schema links a recipe to the equipment it needs, so the card cannot say "you
-	 * will need the wet grinder for this one". What it can truthfully say is what the temple has and
-	 * which of it is out of action — which is the thing a head cook checks before starting, and the
-	 * reason the section is worth its space at all. Broken first, because that is the news.
-	 *
-	 * <p>This used to leave furniture off, on the grounds that nobody plans a meal around a trestle
-	 * table. It cannot any more: the register lost its category on 2026-09-04 (V91) and there is no
-	 * longer anything on a row that says a trestle table is a trestle table. So the card lists
-	 * everything not scrapped. The honest trade — a line that is slightly longer, rather than a
-	 * filter that guesses from the name — and the section is ordered so the broken things a cook
-	 * actually needs to see are still first.
+	 * <p>Nothing prints this any more. It is the old query and the old wording, unchanged, because the
+	 * legacy fingerprint only matches if the material is byte for byte what the old code hashed:
+	 * everything not scrapped, broken first, then by name, with any condition other than good in
+	 * brackets. Read at the moment of the print rather than remembered, so a register that changed
+	 * since the last print simply fails to match and the card moves on once, which is what the old
+	 * code would have done too. See {@link #fingerprint(JobCardTemplate.CardModel)} for when it can go.
 	 */
-	private List<String> equipment() {
+	private List<String> legacyEquipment() {
 		return jdbc.query("""
 				SELECT name, condition FROM equipment_items
 				WHERE condition <> 'SCRAPPED'

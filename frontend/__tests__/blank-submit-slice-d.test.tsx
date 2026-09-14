@@ -414,6 +414,18 @@ describe("a conduct note (ConductNotes)", () => {
     await refused(form, 'textarea[name="body"]', "Add a note is required");
     expect(mocks.addStaffConductNote).not.toHaveBeenCalled();
   });
+
+  // T-203. A note of only spaces used to pass `required` and stop in silence. It is named as blank,
+  // the same sentence as an empty box, on a press with no sentence already showing.
+  it("names a note of only spaces as blank, and saves nothing (T-203)", async () => {
+    render(<ConductNotes staffId="s1" />);
+    const form = screen.getByRole("form", { name: /add a conduct note/i });
+    type(form, 'textarea[name="body"]', "   ");
+    fireEvent.click(within(form).getByRole("button", { name: "Save note" }));
+
+    await refused(form, 'textarea[name="body"]', "Add a note is required");
+    expect(mocks.addStaffConductNote).not.toHaveBeenCalled();
+  });
 });
 
 describe("a day on the staff schedule (three forms in one cell)", () => {

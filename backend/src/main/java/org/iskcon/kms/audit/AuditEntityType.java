@@ -109,4 +109,10 @@ public enum AuditEntityType {
 
 	/** One kitchen's request to the store for ingredients (E10-S5). */
 	INGREDIENT_REQUEST,
+
+	/**
+	 * An item on the temple's wish list (E7-S5). Added with its first audited act, a reopening
+	 * (T-205): until then nothing done to a wish-list item was audited, so no entity type named one.
+	 */
+	WISHLIST_ITEM,
 }

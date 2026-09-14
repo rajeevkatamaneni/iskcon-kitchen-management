@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.meal.MealFixture;
@@ -157,7 +158,7 @@ class JobCardIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("the printed card carries the meal, its scaled quantities, the equipment and the recipes")
+	@DisplayName("the printed card carries the meal, its scaled quantities and the recipes")
 	void theCardCarriesTheMeal() throws Exception {
 		plan("Lunch", 200, 200, 0, 0);
 
@@ -173,8 +174,7 @@ class JobCardIT extends AbstractIntegrationTest {
 				.contains("10 Kg")
 				.doesNotContain("6 Kg")
 				.contains("200 adults")
-				.contains("Wash the rice.")
-				.contains("Wet grinder (needs repair)");
+				.contains("Wash the rice.");
 	}
 
 	@Test
@@ -721,6 +721,66 @@ class JobCardIT extends AbstractIntegrationTest {
 		assertThat(print(null))
 				.contains("Papamocani Ekadasi")
 				.contains("No grains, dal or beans");
+	}
+
+	@Test
+	@DisplayName("equipment is on neither the print view nor the PDF, even when the temple has some")
+	void equipmentIsNotOnTheCard() throws Exception {
+		// The fixture registers a wet grinder that needs repair and a steam cauldron in good order, so
+		// the temple has equipment and the old section would have printed. Rajeev, 2026-09-14: "The
+		// Kitchen staff know about their equipment better than ANY APP or Job card will ever know."
+		plan("Lunch", 100, 100, 0, 0);
+
+		assertThat(print(null))
+				.doesNotContain("Equipment")
+				.doesNotContain("Wet grinder")
+				.doesNotContain("Steam cauldron");
+
+		// The PDF is rendered from the same template by a different entry point, so it is asserted on
+		// its own rather than taken on trust.
+		JobCardService.RenderedCard card = asTenant(() ->
+				jobCardService.renderForPdf(mealIdFor("Lunch"), null));
+		assertThat(card.html())
+				.doesNotContain("Equipment")
+				.doesNotContain("Wet grinder")
+				.doesNotContain("Steam cauldron");
+	}
+
+	@Test
+	@DisplayName("a card printed before equipment left the fingerprint keeps its version; a changed meal still moves")
+	void aCardPrintedBeforeEquipmentLeftKeepsItsVersion() throws Exception {
+		plan("Lunch", 100, 100, 0, 0);
+		assertThat(print(null)).contains("v1 · printed");
+		UUID meal = mealIdFor("Lunch");
+
+		// Put the meal back the way the code before 2026-09-14 left it: its stored fingerprint in the
+		// old format, which hashed the temple's equipment list in beside the facts about the meal.
+		// The list is spelled out rather than read from the service, because the old wording and
+		// order — broken first, condition in brackets — is exactly what the legacy match has to agree
+		// with.
+		String legacy = JobCardService.fingerprint(
+				asTenant(() -> jobCardService.build(meal, null, true)),
+				List.of("Wet grinder (needs repair)", "Steam cauldron"));
+		admin.update("UPDATE meals SET card_fingerprint = ? WHERE id = ?", legacy, meal);
+
+		// Nothing about the meal changed, only how its fingerprint is worked out, so the kitchen's v1
+		// sheet is still the current one.
+		assertThat(print(null)).contains("v1 · printed");
+
+		// And the stored value was moved to the new format as it was matched, so the legacy path is
+		// not taken again for this meal.
+		String stored = admin.queryForObject(
+				"SELECT card_fingerprint FROM meals WHERE id = ?", String.class, meal);
+		assertThat(stored).isNotEqualTo(legacy);
+		assertThat(admin.queryForObject("SELECT card_version FROM meals WHERE id = ?", Integer.class, meal))
+				.isEqualTo(1);
+		assertThat(print(null)).contains("v1 · printed");
+
+		// A meal that really changed while its card was in the old format still moves on: the legacy
+		// fingerprint is taken of the meal as it is now, so it no longer matches either.
+		admin.update("UPDATE meals SET card_fingerprint = ? WHERE id = ?", legacy, meal);
+		admin.update("UPDATE meals SET kitchen_notes = 'Less chilli' WHERE id = ?", meal);
+		assertThat(print(null)).contains("v2 · printed");
 	}
 
 	// ---------------------------------------------------------------------

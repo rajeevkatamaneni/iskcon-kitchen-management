@@ -63,7 +63,7 @@ public class WhatsAppSettingsController {
 	public TenantWhatsAppSettings save(
 			@Valid @RequestBody SaveWhatsAppSettingsRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
-		return settings.save(actor, request.phoneNumberId(), request.wabaId(),
+		return settings.save(actor, request.phoneNumberId(), request.wabaId(), request.appId(),
 				request.accessToken(), request.appSecret());
 	}
 

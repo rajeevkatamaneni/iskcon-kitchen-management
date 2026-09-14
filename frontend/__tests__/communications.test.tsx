@@ -319,16 +319,18 @@ describe("writing to the community", () => {
 });
 
 /**
- * T-165: the composer's form is a `Form`, and it never submits, on purpose. Its `onSubmit` only
- * stops the page reloading, and every action is a plain button in the screen's header, outside the
- * form and not a submit. So the one way a submit reaches this form is the browser's own: Enter in the
- * Subject box, which with no submit button in the form submits it implicitly. jsdom does not
- * implement implicit submission, so these tests fire the submit event that Enter would.
+ * The composer's form, and what reaches it (T-165, then T-202).
  *
- * <p>What changed: a blank Subject used to get the browser's grey bubble on Enter. It now gets
- * "Subject is required" in red beside the box. Nothing is saved either way.
+ * <p>T-165 made it a `Form`, so a blank Subject gets "Subject is required" in red beside the box
+ * rather than the browser's grey bubble. T-202, on Rajeev's ruling that nothing is saved without a
+ * subject, made "Save and preview" the form's submit (`form=` from the header), so the press goes
+ * through `Form`'s check first. A subject of only spaces counts as blank there (T-203).
+ *
+ * <p>Blank-subject tests click the button rather than firing `submit`, because the click is what
+ * runs through `Form` the way a press does. The Enter tests fire the submit event Enter would, since
+ * jsdom has no implicit submission; with a submit button on the form, Enter now presses it.
  */
-describe("the composer's form, which never submits (T-165)", () => {
+describe("the composer's form: Save and preview needs a subject (T-165, T-202)", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     listRef.current = { data: [], error: null, loading: false };
@@ -344,42 +346,100 @@ describe("the composer's form, which never submits (T-165)", () => {
     pushMock.mockReset();
   });
 
+  /** The sentence in red, right beside the Subject box, and the box described by it. */
+  function expectSubjectRefused(form: HTMLElement) {
+    const box = form.querySelector("input")!;
+    const said = screen.getByText("Subject is required");
+    expect(said).toHaveClass("text-danger");
+    expect((box.closest("label") ?? box).nextElementSibling).toContainElement(said);
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box).toHaveAccessibleDescription("Subject is required");
+    expect(screen.getAllByText(/ is required$/)).toHaveLength(1);
+  }
+
+  /** Nothing saved, previewed, sent or navigated to. */
+  function expectNothingDone() {
+    expect(createMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(previewMock).not.toHaveBeenCalled();
+    expect(testMock).not.toHaveBeenCalled();
+    expect(audienceMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(screen.queryByTitle("Email preview")).not.toBeInTheDocument();
+  }
+
+  it("says Subject is required in red beside the box when Save and preview is pressed blank, and saves nothing", async () => {
+    render(<NewCommunicationPage />);
+    const form = screen.getByRole("form", { name: /write a communication/i });
+    fireEvent.click(screen.getByRole("button", { name: /save and preview/i }));
+
+    await screen.findByText("Subject is required");
+    expectSubjectRefused(form);
+    expectNothingDone();
+  });
+
+  it("treats a subject of only spaces as blank when Save and preview is pressed", async () => {
+    render(<NewCommunicationPage />);
+    const form = screen.getByRole("form", { name: /write a communication/i });
+    fireEvent.change(form.querySelector("input")!, { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: /save and preview/i }));
+
+    await screen.findByText("Subject is required");
+    expectSubjectRefused(form);
+    expectNothingDone();
+  });
+
+  it("with a subject, saves the draft once and shows the preview", async () => {
+    render(<NewCommunicationPage />);
+    const form = screen.getByRole("form", { name: /write a communication/i });
+    fireEvent.change(form.querySelector("input")!, { target: { value: "Janmashtami" } });
+    fireEvent.click(screen.getByRole("button", { name: /save and preview/i }));
+
+    expect(await screen.findByTitle("Email preview")).toBeInTheDocument();
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(createMock.mock.calls[0][0]).toMatchObject({ subject: "Janmashtami" });
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(previewMock).toHaveBeenCalledTimes(1);
+    expect(previewMock).toHaveBeenCalledWith("new-1", "test-token");
+    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
   it("names a blank subject beside its box when Enter submits the form, and saves nothing", async () => {
     render(<NewCommunicationPage />);
     const form = screen.getByRole("form", { name: /write a communication/i });
     fireEvent.submit(form);
 
-    const said = await screen.findByText("Subject is required");
-    expect(form.querySelector("input")!.getAttribute("aria-describedby")).toContain(said.id);
-    expect(screen.getAllByText(/ is required$/)).toHaveLength(1);
-    expect(createMock).not.toHaveBeenCalled();
-    expect(updateMock).not.toHaveBeenCalled();
-    expect(pushMock).not.toHaveBeenCalled();
+    await screen.findByText("Subject is required");
+    expectSubjectRefused(form);
+    expectNothingDone();
   });
 
-  it("does nothing at all when Enter submits it with a subject", () => {
+  it("with a subject, Enter does what Save and preview does, and sends nothing", async () => {
     render(<NewCommunicationPage />);
     const form = screen.getByRole("form", { name: /write a communication/i });
     fireEvent.change(form.querySelector("input")!, { target: { value: "Janmashtami" } });
     fireEvent.submit(form);
 
-    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
-    expect(createMock).not.toHaveBeenCalled();
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(await screen.findByTitle("Email preview")).toBeInTheDocument();
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();
   });
 
-  it("leaves the header's buttons alone: two wait for a subject, and Save and preview does not", async () => {
+  it("leaves the other two header buttons as they were: plain buttons that wait for a subject", () => {
     render(<NewCommunicationPage />);
-    // Disabled on a blank subject by the screen's own check. T-172 changes disabled buttons; not this.
-    expect(screen.getByRole("button", { name: /send myself a copy/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /send to everyone/i })).toBeDisabled();
-
-    // Not a submit, so `Form` never sees it: a blank subject is saved as a draft and no sentence
-    // shows. Pinned as today's behaviour and raised in T-165's proof, not ruled on here.
-    fireEvent.click(screen.getByRole("button", { name: /save and preview/i }));
-    await waitFor(() => expect(createMock).toHaveBeenCalled());
-    expect(createMock.mock.calls[0][0]).toMatchObject({ subject: "" });
-    expect(screen.queryByText(/ is required$/)).not.toBeInTheDocument();
+    // Disabled on a blank subject by the screen's own check. Not part of T-202.
+    const copy = screen.getByRole("button", { name: /send myself a copy/i });
+    const everyone = screen.getByRole("button", { name: /send to everyone/i });
+    expect(copy).toBeDisabled();
+    expect(everyone).toBeDisabled();
+    expect(copy).toHaveAttribute("type", "button");
+    expect(everyone).toHaveAttribute("type", "button");
+    // Save and preview is the form's submit, from outside it.
+    const save = screen.getByRole("button", { name: /save and preview/i });
+    expect(save).toHaveAttribute("type", "submit");
+    expect(save).toHaveAttribute("form", screen.getByRole("form", { name: /write a communication/i }).id);
   });
 });

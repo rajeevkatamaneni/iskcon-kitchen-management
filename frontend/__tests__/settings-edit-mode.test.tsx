@@ -115,6 +115,7 @@ const CONNECTED: WhatsAppSettingsView = {
   connected: true,
   phoneNumberId: "pn-123",
   wabaId: "waba-456",
+  appId: "1234567890123456",
   displayNumber: "Temple Kitchen (+91 80 1234 5678)",
   webhookUrl: "https://kms.example/api/v1/public/webhooks/whatsapp/wa-token",
   verifiedAt: "2026-08-16T10:00:00Z",
@@ -128,6 +129,7 @@ const NOT_CONNECTED: WhatsAppSettingsView = {
   connected: false,
   phoneNumberId: null,
   wabaId: null,
+  appId: null,
   displayNumber: null,
   webhookUrl: null,
   verifiedAt: null,
@@ -291,7 +293,7 @@ const EDITS: {
     before: "waba-456",
     call: () => saveWhatsAppSettings,
     sent: [
-      { phoneNumberId: "pn-123", wabaId: "waba-789", accessToken: undefined, appSecret: undefined },
+      { phoneNumberId: "pn-123", wabaId: "waba-789", appId: "1234567890123456", accessToken: undefined, appSecret: undefined },
       "token-abc",
     ],
   },
@@ -392,6 +394,82 @@ describe("Save and Cancel", () => {
     await waitFor(() => expect(saveWhatsAppSettings).toHaveBeenCalledTimes(1));
     await settle();
     expect(reloadWhatsAppTemplates).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The Meta App ID box (T-200). The purchase-order message is registered with a sample PDF, and Meta issues
+ * that sample's handle to an app, so each temple enters its App ID. It is not a secret, so it is an ordinary
+ * box, shown in full and read-only until Edit, like the two ids beside it.
+ */
+describe("the WhatsApp App ID box", () => {
+  const appIdBox = (section: HTMLElement) => within(section).getByLabelText("App ID", { selector: "input" });
+
+  it("shows the stored App ID in full, read-only, until Edit", async () => {
+    render(<SettingsRoute />);
+    const section = await regionLoaded("WhatsApp");
+
+    const box = appIdBox(section);
+    expect(box).toHaveValue("1234567890123456");
+    expect(box).toHaveAttribute("readonly");
+    expect(box).not.toHaveAttribute("type", "password");
+
+    fireEvent.click(within(section).getByRole("button", { name: "Edit" }));
+    expect(appIdBox(section)).not.toHaveAttribute("readonly");
+  });
+
+  it("Cancel puts the stored App ID back and sends nothing", async () => {
+    render(<SettingsRoute />);
+    const section = await regionLoaded("WhatsApp");
+
+    fireEvent.click(within(section).getByRole("button", { name: "Edit" }));
+    fireEvent.change(appIdBox(section), { target: { value: "999" } });
+    expect(appIdBox(section)).toHaveValue("999");
+    fireEvent.click(within(section).getByRole("button", { name: "Cancel" }));
+
+    expect(appIdBox(section)).toHaveValue("1234567890123456");
+    expect(appIdBox(section)).toHaveAttribute("readonly");
+    await settle();
+    expect(saveWhatsAppSettings).not.toHaveBeenCalled();
+  });
+
+  it("Save sends the App ID typed, and the saved answer is what the box shows, now and after a reload", async () => {
+    const stored = { ...CONNECTED, appId: "7654321098765432" };
+    saveWhatsAppSettings.mockResolvedValue(stored);
+    const { unmount } = render(<SettingsRoute />);
+    const section = await regionLoaded("WhatsApp");
+
+    fireEvent.click(within(section).getByRole("button", { name: "Edit" }));
+    fireEvent.change(appIdBox(section), { target: { value: " 7654321098765432 " } });
+    fireEvent.click(within(section).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(saveWhatsAppSettings).toHaveBeenCalledTimes(1));
+    expect(saveWhatsAppSettings).toHaveBeenCalledWith(
+      { phoneNumberId: "pn-123", wabaId: "waba-456", appId: "7654321098765432", accessToken: undefined, appSecret: undefined },
+      "token-abc"
+    );
+    expect(await within(section).findByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(appIdBox(section)).toHaveValue("7654321098765432");
+    expect(appIdBox(section)).toHaveAttribute("readonly");
+
+    // A reload reads the settings again, and the server now answers with what was stored.
+    unmount();
+    whatsappSettings.mockResolvedValue(stored);
+    render(<SettingsRoute />);
+    expect(appIdBox(await regionLoaded("WhatsApp"))).toHaveValue("7654321098765432");
+  });
+
+  it("is empty, and not required, on a temple that has none yet", async () => {
+    whatsappSettings.mockResolvedValue({ ...CONNECTED, appId: null });
+    render(<SettingsRoute />);
+    const section = await regionLoaded("WhatsApp");
+
+    expect(appIdBox(section)).toHaveValue("");
+    fireEvent.click(within(section).getByRole("button", { name: "Edit" }));
+    expect(appIdBox(section)).not.toBeRequired();
+    fireEvent.click(within(section).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saveWhatsAppSettings).toHaveBeenCalledTimes(1));
+    expect(saveWhatsAppSettings.mock.calls[0][0]).toMatchObject({ appId: "" });
   });
 });
 

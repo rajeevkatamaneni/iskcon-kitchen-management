@@ -480,7 +480,7 @@ const TODAY: TodayView = {
   itemsBelowThreshold: 0,
   itemsTracked: 0,
   workforce: { staffIn: 2, volunteers: 1, meals: [] },
-  materialsCost: { estimatedTotal: 0, withoutPrice: 0 },
+  materialsCost: { estimatedTotal: 0, withoutPrice: 0, mealsCostedAsCooked: 0, mealsCostedAsPlanned: 0 },
   unrecordedMeals: 0,
   approvals: { ingredientRequests: 0, ingredientRequestsSoon: 0, leaveRequests: 0, leaveRequestsSoon: 0 },
   deliveries: [],

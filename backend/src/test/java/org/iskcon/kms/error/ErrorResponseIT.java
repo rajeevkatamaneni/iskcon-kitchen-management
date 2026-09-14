@@ -154,6 +154,23 @@ class ErrorResponseIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a required query value left out is answered as a bad field, not as our fault")
+	void aMissingRequiredValueIsAFourHundredOverRealHttp() {
+		// T-216, end to end: proves Spring routes a missing @RequestParam to
+		// handleMissingRequestValue rather than the catch-all, which answered KMS-500001 for it.
+		ResponseEntity<String> response = get("/api/v1/public/webhooks/test-errors/filter");
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(response.getBody())
+				.contains("KMS-400001")
+				.contains("\"field\":\"unit\"")
+				.contains("This can't be left empty.")
+				.doesNotContain("KMS-500001")
+				.doesNotContain("Unit")
+				.doesNotContain("Required request parameter");
+	}
+
+	@Test
 	@DisplayName("the code is always present, whatever failed")
 	void everyFailureCarriesACode() {
 		// Without this, a user's screenshot is undiagnosable — which is the entire reason the

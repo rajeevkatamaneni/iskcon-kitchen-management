@@ -159,6 +159,96 @@ public class WishlistService {
 				""", itemId);
 	}
 
+	/**
+	 * The item's state either side of a reopening, both read from the stored row. Returned rather than
+	 * audited here because the audit entry needs the person who struck the gift and why, and this
+	 * service has neither: it is called from a void, which does.
+	 */
+	public record Reopening(Map<String, Object> before, Map<String, Object> after) {
+	}
+
+	/**
+	 * Puts a FULFILLED item back to ACTIVE if the money still standing towards it no longer covers its
+	 * cost, and says what changed; empty if nothing did (T-205).
+	 *
+	 * <p>Rajeev's ruling on the question T-069 left open: a struck gift behind a fulfilled wish
+	 * reopens the wish. Before this, nothing looked at an item once it was FULFILLED, so striking the
+	 * only gift behind a ₹15,000 mixer left it reading "fulfilled, ₹0 of ₹15,000", refused every
+	 * devotee who tried to give towards it (checkout refuses on status before it looks at money), and
+	 * let the daily sweep archive it a week later. The temple lost the wish without anybody deciding
+	 * to drop it.
+	 *
+	 * <p><strong>"Still standing" is the giving page's own figure, not a second sum.</strong> The
+	 * item is read through {@link #findItem}, whose {@code paid_inr} already leaves out struck gifts
+	 * and counts a split gift for only the part it gave. A copy of that sum here would be one more
+	 * place for the next change to the rule (there have been two) to miss, and the item would then
+	 * reopen on one figure while the page showed another.
+	 *
+	 * <p>Called inside the void's transaction, after the donation is marked, so the struck gift is
+	 * already out of the figure this reads. The row is taken {@code FOR UPDATE} first, and that is
+	 * what makes the read and the write one decision: a gateway payment settling for the same item
+	 * takes the same row lock before it counts what is owed ({@code MonetaryDonationService}'s
+	 * {@code owedOnHeldItem}), so the two cannot both judge the item on a figure the other is about
+	 * to change.
+	 *
+	 * <p><strong>Only FULFILLED reopens.</strong> An ACTIVE item is already asking for money, and an
+	 * ARCHIVED one is an item the temple has stopped hoping for; reopening that would take gifts for
+	 * something nobody means to buy, which is the reason {@link #forGiving} hides it.
+	 *
+	 * <p>{@code fulfilled_at} is cleared, not kept. It is what the archive sweep counts the visibility
+	 * window from, and a reopened item that kept it would be archived on the old schedule while it was
+	 * still asking for money. When a later gift covers it again, {@link #markFulfilledIfComplete}
+	 * sets a fresh one and the window starts from then.
+	 */
+	@Transactional
+	public Optional<Reopening> reopenIfNoLongerCovered(UUID itemId) {
+		Optional<Map<String, Object>> locked = jdbc.queryForList(
+				"SELECT status, fulfilled_at, updated_at FROM wishlist_items WHERE id = ? FOR UPDATE", itemId)
+				.stream().findFirst();
+		if (locked.isEmpty() || !"FULFILLED".equals(locked.get().get("status"))) {
+			return Optional.empty();
+		}
+		WishlistItemView item = findItem(itemId).orElseThrow(() -> notFound(itemId));
+		java.math.BigDecimal cost = item.priceInr().multiply(java.math.BigDecimal.valueOf(item.quantityWanted()));
+		if (item.paidInr().compareTo(cost) >= 0) {
+			return Optional.empty();
+		}
+
+		jdbc.update("""
+				UPDATE wishlist_items SET status = 'ACTIVE', fulfilled_at = NULL, updated_at = now()
+				WHERE id = ? AND status = 'FULFILLED'
+				""", itemId);
+
+		return Optional.of(new Reopening(
+				itemState(locked.get(), cost, item.paidInr()),
+				itemState(jdbc.queryForMap(
+						"SELECT status, fulfilled_at, updated_at FROM wishlist_items WHERE id = ?", itemId),
+						cost, findItem(itemId).orElseThrow(() -> notFound(itemId)).paidInr())));
+	}
+
+	/**
+	 * One side of a reopening for the audit trail, from a row the database returned. The money is the
+	 * same figure on both sides — the reopening is a consequence of it, not a change to it — and is
+	 * written on both so either entry reads whole on its own.
+	 */
+	private static Map<String, Object> itemState(Map<String, Object> row, java.math.BigDecimal cost,
+			java.math.BigDecimal standing) {
+		Map<String, Object> s = new java.util.LinkedHashMap<>();
+		s.put("status", row.get("status"));
+		s.put("fulfilledAt", timestamp(row.get("fulfilled_at")));
+		s.put("updatedAt", timestamp(row.get("updated_at")));
+		s.put("costInr", cost.toPlainString());
+		s.put("standingInr", standing.toPlainString());
+		return s;
+	}
+
+	private static String timestamp(Object value) {
+		if (value == null) {
+			return null;
+		}
+		return String.valueOf(value instanceof OffsetDateTime t ? t.toInstant() : value);
+	}
+
 	/** Archives FULFILLED items past the tenant's visibility window (E7-S5 sweep). */
 	@Transactional
 	public int archiveFulfilledForCurrentTenant() {

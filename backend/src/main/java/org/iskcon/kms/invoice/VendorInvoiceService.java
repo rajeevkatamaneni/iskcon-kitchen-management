@@ -131,15 +131,39 @@ public class VendorInvoiceService {
 	 * literally a double-click; this one carries a reason, and a second reason is a second act that
 	 * must not be swallowed.
 	 *
-	 * <p>Payments already recorded against the bill are left exactly as they are. Striking the
-	 * invoice does not un-spend money that left the temple's account, and the audit entry below
-	 * records what had been paid at the moment it was struck so that a reader is not left to wonder.
+	 * <p>Refused with {@code KMS-400154} while money still stands paid against the bill (T-206,
+	 * Rajeev's decision for Phase B item 7). Before this the void went through and left the payments
+	 * where they were, which made the one bill say two contradictory things: struck, so never owed,
+	 * and paid, so owed and settled. The status could not show both, and every screen that sums
+	 * payments went on counting money against a bill that every screen that filters on status had
+	 * dropped. Refusing puts the two acts in the order that keeps the record honest: reverse each
+	 * payment first — itself a recorded act with a reason, under the same MANAGE_VENDOR_PAYMENTS
+	 * permission voiding needs — and then strike a bill that nothing is paid against.
+	 *
+	 * <p>"Still paid" is the <em>net</em> of {@code invoice_payments}, not a count of positive rows.
+	 * That table is append-only, so a reversal is a second, negative row naming the first rather than
+	 * a mark on it, and a hand-entered negative correction (which V40 has allowed since 2025) is the
+	 * same shape without the link. Summing is the one reading that treats both correctly, and it is
+	 * the same {@link #paidToDate} that {@link #restateStatus} uses to decide PAID, so the question
+	 * "is anything paid on this bill" cannot get two answers. A bill whose payments were all reversed
+	 * nets to zero and voids as it always did.
+	 *
+	 * <p>The check runs before anything is written, so a refused void changes neither the bill nor
+	 * its payments, and leaves no audit entry for an act that did not happen. The audit entry on a
+	 * successful void still records paid-to-date, which is now always zero there; it is kept because
+	 * bills struck before T-206 can carry a non-zero figure, and a reader comparing the two eras
+	 * should find the field in both.
 	 */
 	@Transactional
 	public void voidInvoice(AuthenticatedUser actor, UUID id, VoidInvoiceRequest request) {
 		Map<String, Object> before = invoiceRow(id);
 		if ("VOIDED".equals(before.get("status"))) {
 			throw new ApplicationException(ErrorCode.INVOICE_ALREADY_VOIDED, Map.of("invoiceId", id));
+		}
+		BigDecimal paid = paidToDate(id);
+		if (paid.signum() > 0) {
+			throw new ApplicationException(ErrorCode.INVOICE_HAS_UNREVERSED_PAYMENTS,
+					Map.of("invoiceId", id, "paidToDate", paid.toPlainString()));
 		}
 
 		jdbc.update("""
@@ -155,7 +179,7 @@ public class VendorInvoiceService {
 		auditService.record(actor, AuditAction.INVOICE_VOIDED, AuditEntityType.VENDOR_INVOICE, id,
 				Map.of("status", String.valueOf(before.get("status")),
 						"amount", ((BigDecimal) before.get("amount")).toPlainString(),
-						"paidToDate", paidToDate(id).toPlainString()),
+						"paidToDate", paid.toPlainString()),
 				Map.of("status", String.valueOf(after.get("status")),
 						"voidReason", String.valueOf(after.get("void_reason"))),
 				request.reason().trim());
@@ -278,11 +302,22 @@ public class VendorInvoiceService {
 	 * change. The credit changes what the temple is being asked to pay, which is the other side of the
 	 * subtraction. Both operands stay on the view alongside {@code creditedAmount}, so a screen that
 	 * ever wants the gross figure back can still work it out.
+	 *
+	 * <p><strong>A voided bill has neither figure (T-207, Rajeev's decision for Phase B item 8).</strong>
+	 * A voided bill is the record of one that should never have been recorded, so it is owed nothing
+	 * and has nothing to be out by. Computed as before, a struck bill against a priced order went on
+	 * showing a variance for ever — often the very discrepancy it was struck over — and nothing an
+	 * admin could do would clear it, because {@link #creditInvoice} refuses a voided bill. That is the
+	 * same reading {@link #countByVendorAndNumber} already takes of a voided bill: "a voided bill is
+	 * not a bill". Both are left null rather than zero: zero would claim the bill matched its
+	 * delivery, which is a statement about a bill the temple has said does not exist. The PO link,
+	 * amount and credits stay on the view, so the record of what was struck is untouched.
 	 */
 	private List<VendorInvoiceView> withVariance(List<VendorInvoiceView> rows) {
 		List<VendorInvoiceView> out = new ArrayList<>(rows.size());
 		for (VendorInvoiceView v : rows) {
-			BigDecimal expected = v.purchaseOrderId() == null ? null : expectedReceivedValue(v.purchaseOrderId());
+			BigDecimal expected = v.purchaseOrderId() == null || v.status() == InvoiceStatus.VOIDED ? null
+					: expectedReceivedValue(v.purchaseOrderId());
 			// credited_amount is NOT NULL DEFAULT 0 (V103), so this never needs a null guard — and
 			// "no credits" reads as zero rather than as absent for exactly that reason.
 			BigDecimal variance = expected == null ? null

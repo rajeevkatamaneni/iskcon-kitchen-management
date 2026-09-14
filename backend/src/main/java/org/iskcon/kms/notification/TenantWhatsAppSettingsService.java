@@ -125,7 +125,7 @@ public class TenantWhatsAppSettingsService {
 	@Transactional(readOnly = true)
 	public TenantWhatsAppSettings read() {
 		return jdbc.query("""
-				SELECT whatsapp_phone_number_id, whatsapp_waba_id, whatsapp_webhook_token,
+				SELECT whatsapp_phone_number_id, whatsapp_waba_id, whatsapp_app_id, whatsapp_webhook_token,
 					   whatsapp_display_number, whatsapp_verified_at, whatsapp_webhook_seen_at,
 					   whatsapp_templates_submitted_at, whatsapp_refused_templates::text AS refused_templates,
 					   whatsapp_template_fingerprints::text AS fingerprints, whatsapp_templates_sent_waba_id,
@@ -138,6 +138,7 @@ public class TenantWhatsAppSettingsService {
 								true,
 								rs.getString("whatsapp_phone_number_id"),
 								rs.getString("whatsapp_waba_id"),
+								rs.getString("whatsapp_app_id"),
 								rs.getString("whatsapp_display_number"),
 								webhookUrl(rs.getString("whatsapp_webhook_token")),
 								instant(rs, "whatsapp_verified_at"),
@@ -172,9 +173,33 @@ public class TenantWhatsAppSettingsService {
 	@Transactional
 	public TenantWhatsAppSettings save(AuthenticatedUser actor, String phoneNumberId, String wabaId,
 			String accessToken, String appSecret) {
+		return save(actor, phoneNumberId, wabaId, null, accessToken, appSecret);
+	}
+
+	/**
+	 * Save, with the temple's Meta App ID (T-200).
+	 *
+	 * <p>The App ID behaves like the two ids beside it rather than like the secrets, because it is not one:
+	 * what is sent is stored, and blank clears it. {@code null} keeps what is stored, which is what the
+	 * five-argument form passes, so a caller that predates the box cannot wipe it.
+	 *
+	 * <p>Saving it sends nothing to Meta. The App ID is only needed when the purchase-order template is
+	 * registered, and since T-169a that happens on a first connection or through the templates button.
+	 */
+	@Transactional
+	public TenantWhatsAppSettings save(AuthenticatedUser actor, String phoneNumberId, String wabaId, String appId,
+			String accessToken, String appSecret) {
 
 		UUID tenantId = TenantContext.get().orElseThrow(
 				() -> new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "tenant")));
+
+		boolean appIdGiven = appId != null;
+		String appIdToStore = appIdGiven && !appId.isBlank() ? appId.trim() : null;
+		// The request already refuses anything but digits; this is the same rule for any other caller, and
+		// V141's CHECK is the last word.
+		if (appIdToStore != null && !appIdToStore.matches("[0-9]{1,32}")) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "appId"));
+		}
 
 		String tokenToUse = keep(accessToken, tenantId, TenantSecretStore.Kind.WHATSAPP_ACCESS_TOKEN, "accessToken");
 		String secretToUse = keep(appSecret, tenantId, TenantSecretStore.Kind.WHATSAPP_APP_SECRET, "appSecret");
@@ -200,22 +225,29 @@ public class TenantWhatsAppSettingsService {
 
 		jdbc.update("""
 				INSERT INTO tenant_settings (tenant_id, whatsapp_phone_number_id, whatsapp_waba_id,
-						whatsapp_webhook_token, whatsapp_display_number, whatsapp_verified_at, updated_at)
-				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, now(), now())
+						whatsapp_webhook_token, whatsapp_display_number, whatsapp_app_id, whatsapp_verified_at, updated_at)
+				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, now(), now())
 				ON CONFLICT (tenant_id) DO UPDATE SET
 					whatsapp_phone_number_id = EXCLUDED.whatsapp_phone_number_id,
 					whatsapp_waba_id = EXCLUDED.whatsapp_waba_id,
 					whatsapp_webhook_token =
 						COALESCE(tenant_settings.whatsapp_webhook_token, EXCLUDED.whatsapp_webhook_token),
 					whatsapp_display_number = EXCLUDED.whatsapp_display_number,
+					whatsapp_app_id = CASE WHEN ? THEN EXCLUDED.whatsapp_app_id ELSE tenant_settings.whatsapp_app_id END,
 					whatsapp_verified_at = now(),
 					updated_at = now()
-				""", phoneNumberId.trim(), wabaId.trim(), webhookToken, displayNumber);
+				""", phoneNumberId.trim(), wabaId.trim(), webhookToken, displayNumber, appIdToStore, appIdGiven);
 
-		// The ids are recorded; neither secret is, not even as having-a-length.
+		// The ids are recorded; neither secret is, not even as having-a-length. The App ID is an id, so it is
+		// recorded when this save set it, as an empty string when it was cleared.
+		Map<String, Object> recorded = new LinkedHashMap<>();
+		recorded.put("whatsappPhoneNumberId", phoneNumberId.trim());
+		recorded.put("whatsappWabaId", wabaId.trim());
+		if (appIdGiven) {
+			recorded.put("whatsappAppId", appIdToStore == null ? "" : appIdToStore);
+		}
 		auditService.record(actor, AuditAction.SETTINGS_UPDATED, AuditEntityType.TENANT, tenantId,
-				null, Map.of("whatsappPhoneNumberId", phoneNumberId.trim(), "whatsappWabaId", wabaId.trim()),
-				"WhatsApp account connected.");
+				null, recorded, "WhatsApp account connected.");
 
 		boolean firstConnection = templatesNeverSent();
 		if (firstConnection) {
@@ -569,6 +601,7 @@ public class TenantWhatsAppSettingsService {
 	private void submitTemplates(String wabaId, String phoneNumberId, String accessToken, boolean compareWithMeta) {
 		UUID tenantId = TenantContext.get().orElse(null);
 		LastSend before = lastSend();
+		SampleHandle sample = new SampleHandle(storedAppId(), accessToken);
 		boolean sameAccount = wabaId.equals(before.wabaId()) && phoneNumberId.equals(before.phoneNumberId());
 		Map<String, String> fingerprints = new LinkedHashMap<>();
 		int submittedNew = 0;
@@ -581,10 +614,33 @@ public class TenantWhatsAppSettingsService {
 		for (NotificationTemplate template : NotificationTemplate.values()) {
 			String name = template.whatsappTemplateName();
 			String fingerprint = template.whatsappFingerprint(TEMPLATE_LANGUAGE);
+			// T-200: a template with a header is registered with a sample, which needs the temple's App ID. With
+			// none, Meta is not asked at all, nothing is uploaded, and the entry says which box to fill in.
+			if (template.whatsappHeaderFormat() != null && sample.appId() == null) {
+				notRegistered++;
+				fingerprints.put(name, null);
+				needsAttention.add(new TenantWhatsAppSettings.RefusedTemplate(name, NEEDS_APP_ID,
+						TenantWhatsAppSettings.Kind.REFUSED));
+				continue;
+			}
 			try {
-				MetaWhatsAppClient.TemplateSubmission result = meta.createTemplate(
-						wabaId, accessToken, name, template.whatsappCategory(),
-						TEMPLATE_LANGUAGE, template.whatsappBodyText(), template.whatsappExampleValues());
+				MetaWhatsAppClient.TemplateHeader header;
+				try {
+					header = headerFor(template, sample);
+				} catch (MetaWhatsAppClient.WhatsAppSendFailed refused) {
+					log.warn("Meta would not take the sample for template {} for temple {}: {}", name, tenantId,
+							refused.getMessage());
+					notRegistered++;
+					fingerprints.put(name, null);
+					needsAttention.add(new TenantWhatsAppSettings.RefusedTemplate(name, SAMPLE_NOT_TAKEN,
+							TenantWhatsAppSettings.Kind.REFUSED));
+					continue;
+				}
+				MetaWhatsAppClient.TemplateSubmission result = header == null
+						? meta.createTemplate(wabaId, accessToken, name, template.whatsappCategory(),
+								TEMPLATE_LANGUAGE, template.whatsappBodyText(), template.whatsappExampleValues())
+						: meta.createTemplate(wabaId, accessToken, name, template.whatsappCategory(),
+								TEMPLATE_LANGUAGE, template.whatsappBodyText(), template.whatsappExampleValues(), header);
 				switch (result.outcome()) {
 					case SUBMITTED -> {
 						submittedNew++;
@@ -608,7 +664,7 @@ public class TenantWhatsAppSettingsService {
 								? HeldWording.UNKNOWN
 								: sameAccount && fingerprint.equals(before.fingerprints().get(name))
 										? HeldWording.CURRENT
-										: bringUpToDate(wabaId, accessToken, template);
+										: bringUpToDate(wabaId, accessToken, template, sample);
 						// For a template Meta holds under a category of its own, a fingerprint here says the
 						// wording is ours; the category is not something a Reload can move, and it stays on
 						// the list as its own kind rather than being counted as changed forever.
@@ -692,7 +748,8 @@ public class TenantWhatsAppSettingsService {
 	 * <p>Each outcome that leaves Meta holding other wording is stored on the list with its own plain
 	 * sentence, and records no fingerprint, so a later Reload tries again.
 	 */
-	private HeldWording bringUpToDate(String wabaId, String accessToken, NotificationTemplate template) {
+	private HeldWording bringUpToDate(String wabaId, String accessToken, NotificationTemplate template,
+			SampleHandle sample) {
 		String name = template.whatsappTemplateName();
 		Optional<MetaWhatsAppClient.HeldTemplate> found;
 		try {
@@ -707,7 +764,11 @@ public class TenantWhatsAppSettingsService {
 		}
 		MetaWhatsAppClient.HeldTemplate held = found.get();
 		String ours = template.whatsappBodyText();
-		if (held.bodyText() != null && ours.strip().equals(held.bodyText().strip())) {
+		// T-200: the header is part of what Meta holds. A template Meta holds with our body but not our header
+		// (po_delivery registered before it carried the PDF) is not current, and is edited like changed wording.
+		// For every template without a header both sides are null, so nothing else reads as changed.
+		boolean headerMatches = Objects.equals(template.whatsappHeaderFormat(), held.headerFormat());
+		if (headerMatches && held.bodyText() != null && ours.strip().equals(held.bodyText().strip())) {
 			return HeldWording.CURRENT;
 		}
 
@@ -721,7 +782,16 @@ public class TenantWhatsAppSettingsService {
 
 		MetaWhatsAppClient.TemplateEdit edit;
 		try {
-			edit = meta.editTemplate(held.id(), accessToken, name, ours, template.whatsappExampleValues());
+			MetaWhatsAppClient.TemplateHeader header;
+			try {
+				header = headerFor(template, sample);
+			} catch (MetaWhatsAppClient.WhatsAppSendFailed refused) {
+				log.warn("Meta would not take the sample for template {}: {}", name, refused.getMessage());
+				return HeldWording.problem(name, SAMPLE_NOT_TAKEN, TenantWhatsAppSettings.Kind.REFUSED);
+			}
+			edit = header == null
+					? meta.editTemplate(held.id(), accessToken, name, ours, template.whatsappExampleValues())
+					: meta.editTemplate(held.id(), accessToken, name, ours, template.whatsappExampleValues(), header);
 		} catch (RuntimeException e) {
 			log.warn("Could not send new wording for template {}: {}", name, e.toString());
 			return HeldWording.problem(name, NOT_REACHED, TenantWhatsAppSettings.Kind.NOT_REACHED);
@@ -770,6 +840,130 @@ public class TenantWhatsAppSettingsService {
 
 	static final String CANNOT_BE_REWORDED =
 			"Meta holds this message in a state that cannot be reworded. Report it with the message name shown here.";
+
+	/**
+	 * A template with a PDF header, on a temple with no App ID (T-200). Names the box, as the brief asked, and
+	 * the button, as every reason since T-188 does.
+	 */
+	static final String NEEDS_APP_ID =
+			"This message sends the order as a PDF, which needs your Meta App ID. Enter it in the App ID box in "
+					+ "the WhatsApp section of Settings, then use " + TEMPLATES_BUTTON + ".";
+
+	/**
+	 * Meta refused the sample PDF a header template is registered with (T-200). The App ID is the likeliest
+	 * cause an administrator can check; Meta's own sentence is in the log.
+	 */
+	static final String SAMPLE_NOT_TAKEN =
+			"Meta would not take the sample PDF this message is registered with. Check the App ID in the WhatsApp "
+					+ "section of Settings, then try again with " + TEMPLATES_BUTTON + ".";
+
+	/** The file name the sample PDF is uploaded under, which Meta's reviewer sees. */
+	static final String SAMPLE_FILE_NAME = "sample-purchase-order.pdf";
+
+	/**
+	 * The header a template is registered or edited with, or null for a template that has none (T-200).
+	 *
+	 * @throws MetaWhatsAppClient.WhatsAppSendFailed when Meta would not take the sample
+	 * @throws MetaWhatsAppClient.WhatsAppCredentialsRejected when Meta could not be reached
+	 */
+	private MetaWhatsAppClient.TemplateHeader headerFor(NotificationTemplate template, SampleHandle sample) {
+		if (template.whatsappHeaderFormat() == null) {
+			return null;
+		}
+		return new MetaWhatsAppClient.TemplateHeader(template.whatsappHeaderFormat(), sample.handle());
+	}
+
+	/**
+	 * The sample's handle, uploaded at most once per send of the templates and only if a template needs it
+	 * (T-200). A registration and the edit that may follow it on Reload use the same handle, so one press
+	 * uploads one sample.
+	 */
+	private final class SampleHandle {
+
+		private final String appId;
+		private final String accessToken;
+		private String handle;
+
+		SampleHandle(String appId, String accessToken) {
+			this.appId = appId;
+			this.accessToken = accessToken;
+		}
+
+		String appId() {
+			return appId;
+		}
+
+		String handle() {
+			if (handle == null) {
+				if (appId == null) {
+					throw new MetaWhatsAppClient.WhatsAppSendFailed("No App ID is stored for this temple.");
+				}
+				String uploaded = meta.uploadTemplateSample(appId, accessToken, samplePurchaseOrderPdf(),
+						SAMPLE_FILE_NAME, "application/pdf");
+				if (uploaded == null || uploaded.isBlank()) {
+					throw new MetaWhatsAppClient.WhatsAppSendFailed("Meta named no handle for the sample.");
+				}
+				handle = uploaded;
+			}
+			return handle;
+		}
+	}
+
+	private String storedAppId() {
+		return jdbc.query("""
+				SELECT whatsapp_app_id FROM tenant_settings
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""", (rs, n) -> rs.getString("whatsapp_app_id")).stream().filter(Objects::nonNull).findFirst().orElse(null);
+	}
+
+	/**
+	 * A one-page PDF showing a purchase order made of the example values Meta's reviewer already sees in the
+	 * body, for the sample a document header is registered with (T-200).
+	 *
+	 * <p>Written out by hand rather than rendered through the application's sheet template, on purpose. The
+	 * real sheet needs a real order in a real temple, with translation and a stored document behind it, and
+	 * a sample for a reviewer needs none of that. A PDF this small is plain text: a catalogue, one page, one
+	 * built-in font, one content stream, and a cross-reference table whose byte offsets are counted below
+	 * rather than typed, so it stays valid if a line changes.
+	 */
+	static byte[] samplePurchaseOrderPdf() {
+		List<String> example = NotificationTemplate.PO_DELIVERY.whatsappExampleValues();
+		List<String> lines = List.of(
+				"Sample purchase order " + example.get(0),
+				"Vendor: " + example.get(1),
+				"Items: " + example.get(2),
+				"Raised on " + example.get(3) + ", needed by " + example.get(4));
+		StringBuilder text = new StringBuilder("BT /F1 16 Tf 72 770 Td 22 TL");
+		for (String line : lines) {
+			text.append(" (").append(line.replaceAll("[^\\x20-\\x7E]", "")
+					.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")).append(") Tj T*");
+		}
+		text.append(" ET");
+		byte[] stream = text.toString().getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+
+		List<String> objects = List.of(
+				"<< /Type /Catalog /Pages 2 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> "
+						+ "/Contents 5 0 R >>",
+				"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+				"<< /Length " + stream.length + " >>\nstream\n" + new String(stream, java.nio.charset.StandardCharsets.US_ASCII)
+						+ "\nendstream");
+		StringBuilder pdf = new StringBuilder("%PDF-1.4\n");
+		List<Integer> offsets = new ArrayList<>();
+		for (int i = 0; i < objects.size(); i++) {
+			offsets.add(pdf.length());
+			pdf.append(i + 1).append(" 0 obj\n").append(objects.get(i)).append("\nendobj\n");
+		}
+		int xref = pdf.length();
+		pdf.append("xref\n0 ").append(objects.size() + 1).append("\n0000000000 65535 f \n");
+		for (int offset : offsets) {
+			pdf.append(String.format(Locale.ROOT, "%010d 00000 n \n", offset));
+		}
+		pdf.append("trailer\n<< /Size ").append(objects.size() + 1).append(" /Root 1 0 R >>\nstartxref\n")
+				.append(xref).append("\n%%EOF\n");
+		return pdf.toString().getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+	}
 
 	/**
 	 * What became of one template Meta already held.

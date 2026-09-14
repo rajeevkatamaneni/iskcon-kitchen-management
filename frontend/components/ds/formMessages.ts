@@ -15,8 +15,9 @@ import { dateWithYear } from "@/lib/format";
  * nowhere, so they have no sentence of their own — they fall to {@link notValid}, which exists only
  * so that a check added later refuses out loud rather than blocking the button in silence.
  *
- * <p>Nothing here decides *whether* a box is wrong. That is the browser's `ValidityState`, read as it
- * stands. This file only decides what to say about it.
+ * <p>Nothing here decides *whether* a box is wrong. That is the browser's `ValidityState`, with the
+ * two refusals `Form` adds to it (T-203: a required box of only spaces is blank, and a number at or
+ * below `data-more-than` is under its floor). This file only decides what to say about it.
  */
 
 /** The name used when a control has no aria-label, no label and no name. Nothing today reaches it. */
@@ -42,12 +43,24 @@ export interface ControlFacts {
   step: string;
   /** -1 where absent, which is what the DOM reports. */
   maxLength: number;
+  /**
+   * The box's `data-more-than`, or "" / absent where it has none (T-203). HTML has no exclusive
+   * lower bound — `min="0"` lets exactly 0 through — so a box whose floor is "above zero" carries this
+   * attribute, and `Form` reports a value at or below it as a `rangeUnderflow` of its own. Optional so
+   * that a facts object written before it existed still describes a box correctly.
+   */
+  moreThan?: string;
 }
 
 /** A box left empty. */
 export const required = (name: string) => `${name} is required`;
 /** A number below `min`. Rajeev's own example: "Quantity must be at least 1". */
 export const atLeast = (name: string, min: string) => `${name} must be at least ${min}`;
+/**
+ * A number at or below a `data-more-than` floor (T-203): "Amount must be more than 0". The credit on
+ * a bill is the case that needed it — a credit of 0 is not "at least 0" wrong, it is not a credit.
+ */
+export const moreThan = (name: string, min: string) => `${name} must be more than ${min}`;
 /** A number above `max`. Rajeev's own example: "Quantity can be at most 500". */
 export const atMost = (name: string, max: string) => `${name} can be at most ${max}`;
 /**
@@ -113,6 +126,10 @@ export function messageFor(name: string, facts: ControlFacts): string {
   if (validity.typeMismatch && type === "email") return EMAIL_ADDRESS;
 
   if (validity.rangeUnderflow) {
+    // A box with an exclusive floor says so whichever bound refused it. The credit box carries
+    // `min="0"` as well, and "-50 must be at least 0" followed by "0 must be more than 0" on the next
+    // press would be two rules for one box; "more than 0" is the true one and covers both.
+    if (facts.moreThan) return moreThan(name, facts.moreThan);
     if (type === "date") return onOrAfter(name, facts.min);
     if (type === "time") return orLater(name, facts.min);
     return atLeast(name, facts.min);

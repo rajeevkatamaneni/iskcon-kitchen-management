@@ -27,6 +27,10 @@ import { TABLE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR } from "@/components
  * <p>Everything the daily figure says about itself is said here with the same force. It is an
  * estimate; it covers materials and nothing else; and where an ingredient has no known price it is
  * counted out loud rather than quietly costed at zero.
+ *
+ * <p>It also says what each figure was worked out from (T-212). A recorded meal is costed at what its
+ * job card says was cooked, and a meal not yet recorded at what was planned. A month's row mixes the
+ * two, so every row and the total say how many meals are of each, beneath the meal count.
  */
 
 type View = "week" | "month" | "year";
@@ -141,7 +145,10 @@ function KindTable({ report }: { report: CostByMealKind }) {
                   <span className="mt-1 block text-xs text-ink-muted">{noPriceNote(kind)}</span>
                 )}
               </th>
-              <td className={TD_NUM}>{kind.meals.toLocaleString("en-IN")}</td>
+              <td className={TD_NUM}>
+                {kind.meals.toLocaleString("en-IN")}
+                <BasisNote cost={kind} />
+              </td>
               <td className={TD_NUM}>
                 {kind.servings.toLocaleString("en-IN")}
                 {/* The figure above refuses to wrap; its note is a sentence and must be allowed to. */}
@@ -170,7 +177,10 @@ function KindTable({ report }: { report: CostByMealKind }) {
             <th scope="row" className={`${TD_TEXT} font-medium text-ink`}>
               All meals
             </th>
-            <td className={TD_NUM}>{report.meals.toLocaleString("en-IN")}</td>
+            <td className={TD_NUM}>
+              {report.meals.toLocaleString("en-IN")}
+              <BasisNote cost={report} />
+            </td>
             <td className={TD_NUM}>
               {report.servings.toLocaleString("en-IN")}
             </td>
@@ -210,6 +220,8 @@ function caveatTitle(report: CostByMealKind): string {
 function caveatDetail(report: CostByMealKind): string {
   const parts = [
     "Labour, fuel and the rest of what a meal costs are not in these figures.",
+    // The rule, once, in words (T-212). The rows say how many meals each half applies to.
+    "Recorded meals are costed at what was cooked, the rest at the plan.",
   ];
   if (report.ingredientsWithoutPrice > 0) {
     parts.push(
@@ -231,6 +243,39 @@ function caveatDetail(report: CostByMealKind): string {
     );
   }
   return parts.join(" ");
+}
+
+/**
+ * How many of a figure's meals are costed at what was cooked and how many at the plan, beneath the
+ * meal count (T-212). Allowed to wrap, like the head-count note beside it, because it is a phrase.
+ */
+function BasisNote({ cost }: { cost: Pick<CostByMealKind, "mealsCostedAsCooked" | "mealsCostedAsPlanned"> }) {
+  const text = costBasis(cost);
+  if (!text) return null;
+  return (
+    <span className="mt-1 block max-w-[10rem] whitespace-normal text-xs text-ink-muted">{text}</span>
+  );
+}
+
+/**
+ * "2 meals from what was cooked, 1 from the plan" — the wording Rajeev gave (T-212), said the same
+ * way on Today's tile. Only the half that has meals is said, and nothing at all when neither does.
+ * The same few lines live in `app/today/page.tsx`: a page file may export nothing but its page, and
+ * the shared formatting module is outside this change, so the two copies are kept word for word.
+ */
+function costBasis(cost: {
+  mealsCostedAsCooked?: number;
+  mealsCostedAsPlanned?: number;
+}): string {
+  const cooked = cost.mealsCostedAsCooked ?? 0;
+  const planned = cost.mealsCostedAsPlanned ?? 0;
+  const meals = (n: number) => `${n.toLocaleString("en-IN")} ${n === 1 ? "meal" : "meals"}`;
+  if (cooked > 0 && planned > 0) {
+    return `${meals(cooked)} from what was cooked, ${planned.toLocaleString("en-IN")} from the plan`;
+  }
+  if (cooked > 0) return `${meals(cooked)} from what was cooked`;
+  if (planned > 0) return `${meals(planned)} from the plan`;
+  return "";
 }
 
 function noPriceNote(kind: MealKindCost): string {

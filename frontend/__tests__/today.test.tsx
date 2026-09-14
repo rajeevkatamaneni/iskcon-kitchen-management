@@ -116,7 +116,8 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
     itemsBelowThreshold: 6,
     itemsTracked: 40,
     workforce: { staffIn: 4, volunteers: 3, meals: [] },
-    materialsCost: { estimatedTotal: 18400, withoutPrice: 0 },
+    // Dinner below is recorded and Lunch is not, so one of each (T-212).
+    materialsCost: { estimatedTotal: 18400, withoutPrice: 0, mealsCostedAsCooked: 1, mealsCostedAsPlanned: 1 },
     unrecordedMeals: 0,
     // Null rather than zero, because they say different things: null is a reader who does not book
     // the engineer, zero is a temple with nothing late. The cases below state whichever they mean.
@@ -269,7 +270,9 @@ describe("today", () => {
 
   it("names how many ingredients had no price rather than quietly under-reporting", () => {
     queryRef.current = {
-      data: today({ materialsCost: { estimatedTotal: 18400, withoutPrice: 6 } }),
+      data: today({
+        materialsCost: { estimatedTotal: 18400, withoutPrice: 6, mealsCostedAsCooked: 1, mealsCostedAsPlanned: 1 },
+      }),
       error: null,
       loading: false,
     };
@@ -278,6 +281,69 @@ describe("today", () => {
     const tile = screen.getByRole("link", { name: /cost of materials/i });
     expect(tile).toHaveTextContent("₹18,400");
     expect(tile).toHaveTextContent(/6 ingredients have no known price/i);
+  });
+
+  describe("the cost tile says what its figure was worked out from (T-212)", () => {
+    function tile() {
+      return screen.getByRole("link", { name: /cost of materials/i });
+    }
+
+    it("says how many meals are from what was cooked and how many from the plan", () => {
+      queryRef.current = { data: today(), error: null, loading: false };
+      callRef.i = 0;
+      render(<TodayPage />);
+
+      expect(tile()).toHaveTextContent("1 meal from what was cooked, 1 from the plan");
+      // Beside, not instead of, what the estimate leaves out.
+      expect(tile()).toHaveTextContent(/Estimated from vendors’ last-known prices/);
+    });
+
+    it("in the morning, before any card is typed in, says it is all the plan", () => {
+      queryRef.current = {
+        data: today({
+          materialsCost: { estimatedTotal: 18400, withoutPrice: 2, mealsCostedAsCooked: 0, mealsCostedAsPlanned: 3 },
+        }),
+        error: null,
+        loading: false,
+      };
+      callRef.i = 0;
+      render(<TodayPage />);
+
+      expect(tile()).toHaveTextContent("3 meals from the plan");
+      expect(tile()).not.toHaveTextContent(/from what was cooked/);
+      expect(tile()).toHaveTextContent(/2 ingredients have no known price/);
+    });
+
+    it("by evening, with every card in, says it is all what was cooked", () => {
+      queryRef.current = {
+        data: today({
+          materialsCost: { estimatedTotal: 18400, withoutPrice: 0, mealsCostedAsCooked: 2, mealsCostedAsPlanned: 0 },
+        }),
+        error: null,
+        loading: false,
+      };
+      callRef.i = 0;
+      render(<TodayPage />);
+
+      expect(tile()).toHaveTextContent("2 meals from what was cooked");
+      expect(tile()).not.toHaveTextContent(/from the plan/);
+    });
+
+    it("says nothing about a basis on a day with no meals to cost", () => {
+      queryRef.current = {
+        data: today({
+          meals: [],
+          materialsCost: { estimatedTotal: 0, withoutPrice: 0, mealsCostedAsCooked: 0, mealsCostedAsPlanned: 0 },
+        }),
+        error: null,
+        loading: false,
+      };
+      callRef.i = 0;
+      render(<TodayPage />);
+
+      expect(tile()).toHaveTextContent(/Nothing planned to cost yet/);
+      expect(tile()).not.toHaveTextContent(/from the plan|from what was cooked/);
+    });
   });
 
   it("counts plates per meal, never by summing the dishes of one", () => {
@@ -474,7 +540,7 @@ describe("today", () => {
         itemsBelowThreshold: 0,
         itemsTracked: 0,
         workforce: { staffIn: 0, volunteers: 0, meals: [] },
-        materialsCost: { estimatedTotal: 0, withoutPrice: 0 },
+        materialsCost: { estimatedTotal: 0, withoutPrice: 0, mealsCostedAsCooked: 0, mealsCostedAsPlanned: 0 },
       }),
       error: null,
       loading: false,

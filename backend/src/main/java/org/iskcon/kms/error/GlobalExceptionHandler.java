@@ -20,6 +20,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -427,6 +428,59 @@ public class GlobalExceptionHandler {
 	private boolean isPartOfTheAddress(MethodArgumentTypeMismatchException e) {
 		MethodParameter parameter = e.getParameter();
 		return parameter != null && parameter.hasParameterAnnotation(PathVariable.class);
+	}
+
+	/**
+	 * A value the request was required to carry and did not — {@code /meal-crew/at?date=2026-09-21}
+	 * with no {@code readyBy}.
+	 *
+	 * <p>The missing sibling of {@link #handleUnusableRequestValue} above, and found on staging
+	 * after the Phase A release (T-216): that handler answers a value that is <em>there</em> but will
+	 * not convert, and nothing answered a value that is not there at all. So every endpoint in the
+	 * product with a required {@code @RequestParam} fell through to {@link #handleUnexpected} and
+	 * told the caller KMS-500001, "Something went wrong at our end", with an incident id and an
+	 * error-level log line — for a request whose only fault was its own, and in code that never ran.
+	 * A 500 is also what a monitoring alert counts, so every such call was a false page as well as a
+	 * false statement.
+	 *
+	 * <p>It is the same answer the type mismatch gives a query value, and on purpose: KMS-400001 and
+	 * a 400, with the parameter named. A value left out and a value misspelt are the same mistake to
+	 * the person making it, and a screen that highlights the box for one should highlight it for the
+	 * other. The field is named by {@code getParameterName()}, which is the name the caller would
+	 * have typed in the query string, so it is their vocabulary and not ours.
+	 *
+	 * <p><strong>What is deliberately not said.</strong> Spring's own message is "Required request
+	 * parameter 'readyBy' for method parameter type LocalTime is not present", and the type name in
+	 * it is the inside of the machine: it is neither shown nor logged. The sentence is also the same
+	 * whether the parameter was absent or sent empty ({@code ?readyBy=}), because Spring raises this
+	 * one exception for both once conversion turns the empty string into nothing, and "left empty"
+	 * is true of either. Advice about the format is left out for the reason
+	 * {@link #whatThisFieldWillAccept} gives: it is a fact about each field's configuration, and a
+	 * sentence here would be guessing on behalf of every endpoint at once.
+	 *
+	 * <p><strong>Why only this exception and not its parent.</strong> {@code MissingRequestValueException}
+	 * also covers {@code MissingPathVariableException}, and Spring raises that when a controller
+	 * declares a path variable its mapping does not have — a mistake in our code, which is exactly
+	 * what KMS-500001 is for. Catching the parent would turn our bug into the caller's fault, the
+	 * mirror image of the defect this fixes. Missing headers and cookies are left alone for the
+	 * narrower reason that no endpoint in the tree requires one a caller could omit.
+	 *
+	 * <p>Logged at {@code warn} like the other caller mistakes, not {@code error}: nothing here is a
+	 * bug, and an incident id would send support looking for one.
+	 */
+	@ExceptionHandler(MissingServletRequestParameterException.class)
+	public ResponseEntity<ErrorResponse> handleMissingRequestValue(
+			MissingServletRequestParameterException e, HttpServletRequest request) {
+
+		ErrorCode code = ErrorCode.VALIDATION_FAILED;
+		List<ErrorResponse.FieldError> fieldErrors = e.getParameterName() == null || e.getParameterName().isBlank()
+				? List.of()
+				: List.of(new ErrorResponse.FieldError(e.getParameterName(), "This can't be left empty."));
+
+		log.warn("{} method={} path={} missingParameter={}",
+				code.reference(), request.getMethod(), request.getRequestURI(), e.getParameterName());
+
+		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code, fieldErrors));
 	}
 
 	/**

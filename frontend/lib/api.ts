@@ -1478,6 +1478,10 @@ export interface TodayMaterialsCost {
   estimatedTotal: number;
   /** How many ingredients in today's basket have no known price. Named rather than swallowed. */
   withoutPrice: number;
+  /** Meals in this figure that were recorded, costed at what the job card says was cooked (T-212). */
+  mealsCostedAsCooked: number;
+  /** Meals in this figure not yet recorded, costed at what was planned (T-212). */
+  mealsCostedAsPlanned: number;
 }
 
 /** What today and tomorrow ask of the kitchen. Null on a temple with no calendar computed yet. */
@@ -1848,6 +1852,10 @@ export interface MaterialsCost {
   ingredientsPriced: number;
   ingredientsWithoutPrice: number;
   unpriced: UnpricedIngredient[];
+  /** Meals in this figure that were recorded, costed at what the job card says was cooked (T-212). */
+  mealsCostedAsCooked: number;
+  /** Meals in this figure not yet recorded, costed at what was planned (T-212). */
+  mealsCostedAsPlanned: number;
 }
 
 /**
@@ -1870,6 +1878,10 @@ export interface MealKindCost {
   ingredientsPriced: number;
   ingredientsWithoutPrice: number;
   unpriced: UnpricedIngredient[];
+  /** Meals in this figure that were recorded, costed at what the job card says was cooked (T-212). */
+  mealsCostedAsCooked: number;
+  /** Meals in this figure not yet recorded, costed at what was planned (T-212). */
+  mealsCostedAsPlanned: number;
 }
 
 /**
@@ -1889,6 +1901,10 @@ export interface CostByMealKind {
   estimatedTotal: number;
   ingredientsWithoutPrice: number;
   unpriced: UnpricedIngredient[];
+  /** Meals in this figure that were recorded, costed at what the job card says was cooked (T-212). */
+  mealsCostedAsCooked: number;
+  /** Meals in this figure not yet recorded, costed at what was planned (T-212). */
+  mealsCostedAsPlanned: number;
   /** Dearest per serving first; a kind with no head count anywhere sits at the foot. */
   kinds: MealKindCost[];
 }
@@ -3749,6 +3765,12 @@ export interface WhatsAppSettingsView {
   refusedTemplates: WhatsAppRefusedTemplate[];
   /** What the WhatsApp templates button is waiting to send (T-169). The backend always sends it. */
   templatesPending: WhatsAppTemplatesPending;
+  /**
+   * The Meta app id (T-200). Not a secret: it is shown on Meta's app page, and the resumable upload
+   * that registers the purchase order's PDF header is addressed to it. Null until the temple enters
+   * it.
+   */
+  appId: string | null;
 }
 
 /** How Meta answered for one template on the last send (T-168). */
@@ -3788,6 +3810,8 @@ export interface SaveWhatsAppSettingsInput {
   /** Omitted to keep the stored one — it is never sent back to the screen. */
   accessToken?: string;
   appSecret?: string;
+  /** The Meta app id (T-200). Not a secret. Omitted to keep the stored one. */
+  appId?: string;
 }
 
 export interface WebhookSubscriptionGroup {

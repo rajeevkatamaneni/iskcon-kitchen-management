@@ -37,6 +37,13 @@ const { authRef, api } = vi.hoisted(() => ({
     mealCrewAt: vi.fn(async (_date: string, _readyBy: string, _t?: string) =>
       ({ planDate: "", readyBy: "", staffIn: 0, volunteers: 0, rostered: 0 })),
     suggestedCrew: vi.fn(async (_kind: string, _t?: string) => ({ crewRequired: null as number | null })),
+    // What the calendar says the date is (T-208). A new meal of any kind now asks, because a festival
+    // day's usual crowd opens as its adults. A plain day here, read-only, so no meal in this file
+    // opens on anything but the nought it always did — and nothing reaches the network unmocked.
+    mealDayContext: vi.fn(async (_date: string, _t?: string) => ({
+      suggestedDayType: "REGULAR", occasionName: null as string | null,
+      suggestedServings: null as number | null, isEkadashi: false,
+    })),
     jobCardLanguages: vi.fn(async () => ({ languages: ["en"], defaultLanguage: "en" })),
     eventNameSuggestions: vi.fn(async () => [] as unknown[]),
     placesAvailable: vi.fn(async () => ({ available: false })),

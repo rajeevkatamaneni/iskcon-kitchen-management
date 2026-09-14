@@ -39,6 +39,20 @@ import {
 
 const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
+/**
+ * The form's id, so "Save and preview" in the header can submit it from outside (T-202).
+ *
+ * <p>Rajeev ruled that a message is not saved without a subject. "Save and preview" used to be a
+ * plain button, which `Form` never saw, so a blank subject went into a draft with no sentence at all.
+ * As the form's submit it goes through `Form`'s check first, which names a blank subject — or one of
+ * only spaces — in red beside the box and never calls `onSubmit`. That is the same pattern every other
+ * header save in the app uses, rather than a second, hand-rolled check here.
+ *
+ * <p>One consequence, accepted with it: the form now has a submit button, so Enter in Subject presses
+ * it, as Enter does on every other form. That saves and previews; it never sends.
+ */
+const FORM = "write-communication";
+
 export function Composer({ existing }: { existing: CommunicationView | null }) {
   const { getToken } = useAuth();
   const router = useRouter();
@@ -149,7 +163,9 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
           <Button variant="secondary" onClick={sendTest} disabled={busy || !subject.trim()}>
             Send myself a copy
           </Button>
-          <Button variant="secondary" onClick={saveAndPreview} disabled={busy}>
+          {/* The form's one submit, so `Form` checks the subject before anything is saved. The two
+              buttons either side stay plain buttons that wait for a subject: not part of T-202. */}
+          <Button type="submit" form={FORM} variant="secondary" disabled={busy}>
             Save and preview
           </Button>
           <Button onClick={askToSend} disabled={busy || !subject.trim()}>
@@ -161,7 +177,15 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
       {error && <ErrorNotice error={error} />}
       {notice && <InlineNotice tone="success" autoDismiss>{notice}</InlineNotice>}
 
-      <Form className="grid gap-4" aria-label="Write a communication" onSubmit={(e) => e.preventDefault()}>
+      <Form
+        id={FORM}
+        className="grid gap-4"
+        aria-label="Write a communication"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void saveAndPreview();
+        }}
+      >
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">What kind of message is this?</span>

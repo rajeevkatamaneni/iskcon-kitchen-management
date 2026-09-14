@@ -212,7 +212,7 @@ describe("what the scrapping confirmation is now allowed to claim", () => {
     render(<EquipmentItemPage />);
     fireEvent.click(screen.getByRole("button", { name: /change condition/i }));
     fireEvent.change(screen.getByLabelText(/new condition/i), { target: { value: "SCRAPPED" } });
-    fireEvent.change(screen.getByLabelText(/^why$/i), { target: { value: "Motor burnt out" } });
+    fireEvent.change(screen.getByLabelText(/^reason$/i), { target: { value: "Motor burnt out" } });
     fireEvent.click(screen.getByRole("button", { name: /record the change/i }));
     return screen.getByRole("dialog");
   }

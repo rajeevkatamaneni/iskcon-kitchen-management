@@ -9,6 +9,8 @@ import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
 import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.document.DocumentGenerationService;
+import org.iskcon.kms.document.DocumentService;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.notification.NotificationRecipient;
@@ -44,14 +46,19 @@ public class PurchaseOrderDeliveryService {
 	private final PurchaseOrderService purchaseOrders;
 	private final NotificationService notificationService;
 	private final AuditService auditService;
+	private final DocumentService documentService;
+	private final DocumentGenerationService documentGeneration;
 
 	public PurchaseOrderDeliveryService(
 			JdbcTemplate jdbc, PurchaseOrderService purchaseOrders,
-			NotificationService notificationService, AuditService auditService) {
+			NotificationService notificationService, AuditService auditService,
+			DocumentService documentService, DocumentGenerationService documentGeneration) {
 		this.jdbc = jdbc;
 		this.purchaseOrders = purchaseOrders;
 		this.notificationService = notificationService;
 		this.auditService = auditService;
+		this.documentService = documentService;
+		this.documentGeneration = documentGeneration;
 	}
 
 	/**
@@ -87,9 +94,10 @@ public class PurchaseOrderDeliveryService {
 		}
 
 		Map<String, Object> vendor = jdbc.queryForMap(
-				"SELECT name, phone FROM vendors WHERE id = ?", po.order().vendorId());
+				"SELECT name, phone, preferred_language FROM vendors WHERE id = ?", po.order().vendorId());
 		String vendorName = (String) vendor.get("name");
 		String phone = (String) vendor.get("phone");
+		String vendorLanguage = (String) vendor.get("preferred_language");
 		if (phone == null) {
 			// A vendor with no number is not a broken record — it is the hardware shop somebody walks
 			// into, and `vendors.phone` is nullable for exactly that (V101, T-025). There is nowhere
@@ -123,7 +131,8 @@ public class PurchaseOrderDeliveryService {
 		params.put("raised", WHEN.format(po.order().orderDate()));
 		params.put("neededBy", po.order().neededBy() == null
 				? "no fixed date" : WHEN.format(po.order().neededBy()));
-		latestReadySheet(poId).ifPresent(docId -> params.put("documentId", docId.toString()));
+		// T-200: the sheet goes with the message as a PDF, so a message always names one. See sheetToSend.
+		params.put("documentId", sheetToSend(poId, vendorLanguage).toString());
 
 		UUID notificationId = notificationService.notify(
 				NotificationRecipient.vendor(phone, null),
@@ -148,13 +157,102 @@ public class PurchaseOrderDeliveryService {
 		}
 	}
 
-	private java.util.Optional<UUID> latestReadySheet(UUID poId) {
-		List<UUID> ids = jdbc.queryForList("""
-				SELECT id FROM documents
-				WHERE po_id = ? AND kind = 'PURCHASE_ORDER_PDF' AND status = 'READY'
-				ORDER BY version DESC LIMIT 1
-				""", UUID.class, poId);
-		return ids.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(ids.get(0));
+	/**
+	 * The order sheet the vendor is sent on WhatsApp (T-200), as the id of a {@code documents} row.
+	 *
+	 * <p><strong>Which sheet, and why not simply the latest.</strong> A sheet is rendered in one language and
+	 * stored with it, one row per version: the vendor's preferred language when nobody chose (E5-S1, which is
+	 * how an order is translated), or a language picked on the order's screen for printing. So one order can
+	 * hold a Kannada sheet for the vendor and, a version later, an English one somebody printed for the store
+	 * room. The latest READY version would send the vendor the store room's English copy, which is what the
+	 * lookup here did before. The brief for this: send the translated sheet if the order was translated,
+	 * otherwise the English original. In order:
+	 * <ol>
+	 *   <li>the newest READY sheet in the vendor's preferred language: the translated sheet for a vendor who
+	 *       reads another language, the English one for a vendor who reads English;</li>
+	 *   <li>otherwise the newest READY English sheet, the original;</li>
+	 *   <li>otherwise the newest READY sheet in any language, since a sheet the temple made is still the order;</li>
+	 *   <li>otherwise no sheet is READY, and one is made now, while the person waits: see below.</li>
+	 * </ol>
+	 *
+	 * <p><strong>Made now, not left to the worker, and why.</strong> A draft sent straight to WhatsApp has no
+	 * READY sheet: sending it has only just asked for one, and the worker renders it in its own time. Naming
+	 * that PENDING sheet and letting the message go meant the message job often ran before the sheet was
+	 * READY, and the WhatsApp adapter, which never sends without the PDF, then failed it in the background
+	 * with nothing said to the person who pressed the button. The brief was "generate one or refuse clearly".
+	 * So the sheet is rendered here, synchronously, through the same {@link DocumentGenerationService#generate}
+	 * the worker calls: the newest PENDING sheet, preferring the vendor's language, or a new one asked for in
+	 * the vendor's language when there is none. The press takes as long as one render, which the order's own
+	 * Generate PDF button already asks of the worker.
+	 *
+	 * <p><strong>Inside this transaction, and what that costs.</strong> The PENDING row the draft transition
+	 * just inserted is not committed, so only this transaction can see it, and rendering it here is the only
+	 * way to render it before the message is queued. {@code generate} is written to run outside a
+	 * transaction, because a read that throws inside a surrounding one marks it rollback-only. Here that is
+	 * exactly the wanted outcome: whenever the sheet does not come out READY, this throws
+	 * {@link ErrorCode#PO_SHEET_NOT_READY} and the whole send rolls back, the DRAFT transition, the queued
+	 * sheet and everything else with it. Nothing is changed or queued, and the person is told at the press.
+	 * The worker's own job for the same row later finds it READY and does nothing, as it always has.
+	 *
+	 * <p>The WhatsApp adapter still refuses any sheet that is not READY when the message goes, as the second
+	 * line of defence. A FAILED sheet is never chosen.
+	 */
+	private UUID sheetToSend(UUID poId, String vendorLanguage) {
+		List<Sheet> sheets = sheetsOf(poId);
+		String wanted = isEnglish(vendorLanguage) ? "en" : vendorLanguage.trim();
+		java.util.Optional<UUID> ready = first(sheets, s -> s.ready() && sameLanguage(s.language(), wanted))
+				.or(() -> first(sheets, s -> s.ready() && isEnglish(s.language())))
+				.or(() -> first(sheets, Sheet::ready));
+		if (ready.isPresent()) {
+			return ready.get();
+		}
+
+		UUID toRender;
+		try {
+			toRender = first(sheets, s -> sameLanguage(s.language(), wanted))
+					.or(() -> first(sheets, s -> true))
+					.orElseGet(() -> documentService.requestPurchaseOrderPdf(poId, null));
+			documentGeneration.generate(toRender);
+		} catch (RuntimeException e) {
+			// No scheduler to queue a sheet with, or a render that threw past generate's own catch. Either way
+			// there is no PDF, and the answer is the same refusal.
+			throw new ApplicationException(ErrorCode.PO_SHEET_NOT_READY, Map.of("purchaseOrderId", poId), e);
+		}
+		boolean readyNow = sheetsOf(poId).stream().anyMatch(s -> s.id().equals(toRender) && s.ready());
+		if (!readyNow) {
+			throw new ApplicationException(ErrorCode.PO_SHEET_NOT_READY,
+					Map.of("purchaseOrderId", poId, "documentId", toRender));
+		}
+		return toRender;
+	}
+
+	private List<Sheet> sheetsOf(UUID poId) {
+		return jdbc.query("""
+				SELECT id, language, status FROM documents
+				WHERE po_id = ? AND kind = 'PURCHASE_ORDER_PDF' AND status IN ('READY', 'PENDING')
+				ORDER BY version DESC
+				""", (rs, n) -> new Sheet(rs.getObject("id", UUID.class), rs.getString("language"),
+						rs.getString("status")), poId);
+	}
+
+	private record Sheet(UUID id, String language, String status) {
+
+		boolean ready() {
+			return "READY".equals(status);
+		}
+	}
+
+	private static java.util.Optional<UUID> first(List<Sheet> sheets, java.util.function.Predicate<Sheet> test) {
+		return sheets.stream().filter(test).map(Sheet::id).findFirst();
+	}
+
+	/** As the sheet renderer reads a language: absent, blank or {@code en} is English. */
+	private static boolean isEnglish(String language) {
+		return language == null || language.isBlank() || "en".equalsIgnoreCase(language.trim());
+	}
+
+	private static boolean sameLanguage(String language, String wanted) {
+		return isEnglish(language) ? isEnglish(wanted) : language.trim().equalsIgnoreCase(wanted);
 	}
 
 	/**

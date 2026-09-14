@@ -203,6 +203,21 @@ public enum AuditAction {
 	 */
 	DONATION_VOIDED,
 
+	/**
+	 * A FULFILLED wish-list item went back to ACTIVE because a gift behind it was voided (T-205).
+	 *
+	 * <p>Rajeev ruled it on the T-069 question: when the money that completed a wish is struck, the
+	 * wish is owed that money again and devotees may give towards it, rather than the item sitting
+	 * FULFILLED at ₹0 until the sweep quietly archives it. Audited as its own entry, filed against the
+	 * item and not the donation, because it answers a question the {@link #DONATION_VOIDED} entry does
+	 * not — why is this item asking for money it was once given? — and whoever asks it will be looking
+	 * at the wish list, not the donation ledger.
+	 *
+	 * <p>Only the void writes it. A later gift that covers the item again is an ordinary fulfilment and
+	 * is not audited, as fulfilment never has been.
+	 */
+	WISHLIST_ITEM_REOPENED,
+
 	/** A festival occasion was added to the catalog (E4-S2). */
 	OCCASION_ADDED,
 

@@ -2,6 +2,7 @@ package org.iskcon.kms.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -24,6 +25,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.stream.Collectors;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.audit.AuditService;
@@ -205,30 +209,38 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 		return new MetaWhatsAppClient.TemplateSubmission(MetaWhatsAppClient.TemplateOutcome.SUBMITTED, null);
 	}
 
+	/**
+	 * Every registration, answered by name, in both the forms the service calls: the seven-argument one for
+	 * a template with no header, and the one with a header for po_delivery (T-200). Stubbing only the first
+	 * would leave po_delivery's registration answering null from the mock. The sample upload the header needs
+	 * is answered too, with a handle shaped like Meta's.
+	 */
+	private void metaAnswersRegistrations(org.mockito.stubbing.Answer<MetaWhatsAppClient.TemplateSubmission> answer) {
+		when(meta.uploadTemplateSample(anyString(), anyString(), any(), anyString(), anyString())).thenReturn("4::t200-sample");
+		when(meta.createTemplate(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(),
+				anyList())).thenAnswer(answer);
+		when(meta.createTemplate(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(),
+				anyList(), any())).thenAnswer(answer);
+	}
+
 	/** Meta accepting everything except the six it refused on staging, refusing those in its own words. */
 	private void metaRefusesWhatItRefusedOnStaging() {
-		when(meta.createTemplate(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(),
-				anyList()))
-				.thenAnswer(call -> {
-					String name = call.getArgument(2);
-					return REFUSED_ON_STAGING.contains(name)
-							? new MetaWhatsAppClient.TemplateSubmission(
-									MetaWhatsAppClient.TemplateOutcome.REFUSED, META_SAID.get(name))
-							: accepted();
-				});
+		metaAnswersRegistrations(call -> {
+			String name = call.getArgument(2);
+			return REFUSED_ON_STAGING.contains(name)
+					? new MetaWhatsAppClient.TemplateSubmission(
+							MetaWhatsAppClient.TemplateOutcome.REFUSED, META_SAID.get(name))
+					: accepted();
+		});
 	}
 
 	private void metaRefusesEverything() {
-		when(meta.createTemplate(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(),
-				anyList()))
-				.thenReturn(new MetaWhatsAppClient.TemplateSubmission(
-						MetaWhatsAppClient.TemplateOutcome.REFUSED, "Something Meta has never said before."));
+		metaAnswersRegistrations(call -> new MetaWhatsAppClient.TemplateSubmission(
+				MetaWhatsAppClient.TemplateOutcome.REFUSED, "Something Meta has never said before."));
 	}
 
 	private void metaAcceptsEverything() {
-		when(meta.createTemplate(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(),
-				anyList()))
-				.thenReturn(accepted());
+		metaAnswersRegistrations(call -> accepted());
 	}
 
 	// ---- T-168: the real client against Meta's real answers ------------------------------------------
@@ -263,9 +275,20 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 	private void realMetaAnswering(Function<String, MetaAnswer> answerFor) throws Exception {
 		metaServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		metaServer.createContext("/", exchange -> {
-			String request = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+			byte[] raw = exchange.getRequestBody().readAllBytes();
+			String request = new String(raw, StandardCharsets.UTF_8);
+			String path = exchange.getRequestURI().getPath();
+			received.add(new Received(exchange.getRequestMethod(), path, exchange.getRequestURI().getRawQuery(),
+					exchange.getRequestHeaders().getFirst("Authorization"),
+					exchange.getRequestHeaders().getFirst("file_offset"), raw));
+			// T-200: Meta's Resumable Upload API, as its guide describes it. The session id carries a query of
+			// its own, as Meta's does, so the client must follow it without encoding it.
 			MetaAnswer answer = "GET".equals(exchange.getRequestMethod())
 					? new MetaAnswer(200, "{\"display_phone_number\":\"+1 555-010-0159\",\"verified_name\":\"Temple Kitchen\"}")
+					: path.endsWith("/uploads")
+							? new MetaAnswer(200, "{\"id\":\"upload:MTphdHRhY2htZW50T200?sig=ARZt200\"}")
+					: path.startsWith("/upload:")
+							? new MetaAnswer(200, "{\"h\":\"" + SAMPLE_HANDLE + "\"}")
 					: answerFor.apply(objectMapper.readTree(request).path("name").asText());
 			byte[] out = answer.body().getBytes(StandardCharsets.UTF_8);
 			exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -277,6 +300,16 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 		metaServer.start();
 		useMeta(new MetaWhatsAppClient(objectMapper, "http://127.0.0.1:" + metaServer.getAddress().getPort()));
 	}
+
+	/** The handle the stub's upload answers with, as Meta's guide shows one. */
+	private static final String SAMPLE_HANDLE = "4::YXBwbGljYXRpb24vcGRmT200";
+
+	/** One request the local Meta received. */
+	private record Received(String method, String path, String query, String authorization, String fileOffset,
+			byte[] body) {
+	}
+
+	private final List<Received> received = Collections.synchronizedList(new ArrayList<>());
 
 	/** Meta as staging's second Save found it: six new, eleven already held, two held as marketing. */
 	private MetaAnswer asOnStagingsSecondSave(String name) {
@@ -311,12 +344,24 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 		return mvc.perform(post("/api/v1/settings/whatsapp/templates/reload"));
 	}
 
+	/** The App ID every save in this class carries unless a test says otherwise (T-200). */
+	private static final String APP_ID = "1234567890123456";
+
 	private ResultActions saveSettings() throws Exception {
+		return saveSettings(APP_ID);
+	}
+
+	/** A save with this App ID, or with no App ID field at all when it is null. */
+	private ResultActions saveSettings(String appId) throws Exception {
+		Map<String, Object> body = new java.util.LinkedHashMap<>(Map.of(
+				"phoneNumberId", "phone-govinda", "wabaId", "waba-govinda",
+				"accessToken", "token-govinda", "appSecret", "secret-govinda"));
+		if (appId != null) {
+			body.put("appId", appId);
+		}
 		return mvc.perform(put("/api/v1/settings/whatsapp")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(Map.of(
-						"phoneNumberId", "phone-govinda", "wabaId", "waba-govinda",
-						"accessToken", "token-govinda", "appSecret", "secret-govinda"))));
+				.content(objectMapper.writeValueAsString(body)));
 	}
 
 	/**
@@ -433,14 +478,12 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a template Meta could not be asked about is kept too, with its own reason")
 	void anUnreachableMetaIsRecorded() throws Exception {
-		when(meta.createTemplate(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(),
-				anyList()))
-				.thenAnswer(call -> {
-					if ("shift_cancelled".equals(call.getArgument(2))) {
-						throw new MetaWhatsAppClient.WhatsAppCredentialsRejected("Could not reach Meta just now.");
-					}
-					return accepted();
-				});
+		metaAnswersRegistrations(call -> {
+			if ("shift_cancelled".equals(call.getArgument(2))) {
+				throw new MetaWhatsAppClient.WhatsAppCredentialsRejected("Could not reach Meta just now.");
+			}
+			return accepted();
+		});
 
 		saveSettings().andExpect(status().isOk());
 
@@ -592,5 +635,111 @@ class WhatsAppTemplateSubmissionIT extends AbstractIntegrationTest {
 		assertThat(storedRefusals()).containsOnlyKeys(HELD_AS_MARKETING_ON_STAGING);
 		mvc.perform(get("/api/v1/settings/whatsapp"))
 				.andExpect(jsonPath("$.refusedTemplates.length()").value(2));
+	}
+
+	// ---- T-200: the purchase order registered with its PDF header ----------------------------------------
+
+	@Test
+	@DisplayName("po_delivery is registered with a DOCUMENT header whose example handle came from Meta's upload to the App ID; no other template has a header")
+	void thePurchaseOrderIsRegisteredWithADocumentHeader() throws Exception {
+		realMetaAnswering(name -> CREATED);
+
+		saveSettings().andExpect(status().isOk());
+
+		assertThat(storedRefusals()).isEmpty();
+		// One upload session, addressed to the App ID, and the bytes that followed it.
+		List<Received> uploads = received.stream().filter(r -> r.path().endsWith("/uploads")).toList();
+		assertThat(uploads).hasSize(1);
+		Received start = uploads.get(0);
+		assertThat(start.method()).isEqualTo("POST");
+		assertThat(start.path()).isEqualTo("/" + APP_ID + "/uploads");
+		byte[] sample = TenantWhatsAppSettingsService.samplePurchaseOrderPdf();
+		assertThat(start.query()).isEqualTo("file_name=sample-purchase-order.pdf&file_length=" + sample.length
+				+ "&file_type=application%2Fpdf");
+		assertThat(start.authorization()).as("the stored token, as Meta's guide asks, never in the URL")
+				.isEqualTo("OAuth token-govinda");
+		assertThat(start.query()).doesNotContain("token-govinda");
+
+		List<Received> bytes = received.stream().filter(r -> r.path().startsWith("/upload:")).toList();
+		assertThat(bytes).hasSize(1);
+		assertThat(bytes.get(0).path()).isEqualTo("/upload:MTphdHRhY2htZW50T200");
+		assertThat(bytes.get(0).query()).as("Meta's session id followed exactly, its own query included").isEqualTo("sig=ARZt200");
+		assertThat(bytes.get(0).fileOffset()).isEqualTo("0");
+		assertThat(bytes.get(0).authorization()).isEqualTo("OAuth token-govinda");
+		assertThat(bytes.get(0).body()).isEqualTo(sample);
+		assertThat(new String(sample, StandardCharsets.US_ASCII)).startsWith("%PDF-1.4").endsWith("%%EOF\n");
+
+		// The registration itself.
+		Map<String, com.fasterxml.jackson.databind.JsonNode> creates = new java.util.TreeMap<>();
+		for (Received r : received) {
+			if (r.path().endsWith("/message_templates") && "POST".equals(r.method())) {
+				com.fasterxml.jackson.databind.JsonNode body = objectMapper.readTree(r.body());
+				creates.put(body.path("name").asText(), body);
+			}
+		}
+		assertThat(creates).hasSize(NotificationTemplate.values().length);
+		com.fasterxml.jackson.databind.JsonNode components = creates.get("po_delivery").path("components");
+		assertThat(components).hasSize(2);
+		assertThat(components.get(0).path("type").asText()).isEqualTo("HEADER");
+		assertThat(components.get(0).path("format").asText()).isEqualTo("DOCUMENT");
+		assertThat(components.get(0).path("example").path("header_handle")).hasSize(1);
+		assertThat(components.get(0).path("example").path("header_handle").get(0).asText()).isEqualTo(SAMPLE_HANDLE);
+		assertThat(components.get(1).path("type").asText()).isEqualTo("BODY");
+		assertThat(components.get(1).path("text").asText())
+				.as("the approved wording, unchanged").isEqualTo(NotificationTemplate.PO_DELIVERY.whatsappBodyText());
+		creates.forEach((name, body) -> {
+			if (!"po_delivery".equals(name)) {
+				assertThat(body.path("components")).as(name).hasSize(1);
+				assertThat(body.path("components").get(0).path("type").asText()).as(name).isEqualTo("BODY");
+			}
+		});
+		// Upload first, then registration: the handle must exist before it is named.
+		assertThat(received.indexOf(bytes.get(0))).isLessThan(received.stream()
+				.filter(r -> r.path().endsWith("/message_templates") && new String(r.body(), StandardCharsets.UTF_8).contains("po_delivery"))
+				.findFirst().map(received::indexOf).orElseThrow());
+
+		// And the App ID comes back on the screen's answer.
+		mvc.perform(get("/api/v1/settings/whatsapp")).andExpect(jsonPath("$.appId").value(APP_ID));
+	}
+
+	@Test
+	@DisplayName("a temple with no App ID gets a stored reason for po_delivery naming the App ID box, and nothing is uploaded or registered for it")
+	void noAppIdStoresAReasonNamingTheBoxAndUploadsNothing() throws Exception {
+		realMetaAnswering(name -> CREATED);
+
+		saveSettings(null).andExpect(status().isOk());
+
+		assertThat(storedRefusals()).containsOnlyKeys("po_delivery");
+		assertThat(storedRefusals().get("po_delivery"))
+				.isEqualTo(TenantWhatsAppSettingsService.NEEDS_APP_ID)
+				.contains("App ID box in the WhatsApp section of Settings")
+				.contains(TenantWhatsAppSettingsService.TEMPLATES_BUTTON);
+		assertThat(storedKinds()).containsEntry("po_delivery", "REFUSED");
+		assertThat(received).as("no upload of any kind").noneMatch(r -> r.path().contains("upload"));
+		assertThat(received).as("po_delivery not registered")
+				.noneMatch(r -> new String(r.body(), StandardCharsets.UTF_8).contains("\"po_delivery\""));
+		assertThat(received.stream().filter(r -> r.path().endsWith("/message_templates")).count())
+				.as("every other template still registered").isEqualTo(NotificationTemplate.values().length - 1);
+
+		mvc.perform(get("/api/v1/settings/whatsapp"))
+				.andExpect(jsonPath("$.appId").doesNotExist())
+				.andExpect(jsonPath("$.templatesPending.refused").value(1));
+	}
+
+	@Test
+	@DisplayName("the App ID is saved, kept by a save that does not send it, cleared by a blank one, and refused when it is not digits")
+	void theAppIdIsSavedKeptClearedAndChecked() throws Exception {
+		metaAcceptsEverything();
+
+		saveSettings().andExpect(status().isOk()).andExpect(jsonPath("$.appId").value(APP_ID));
+		assertThat(jdbc.queryForObject("SELECT whatsapp_app_id FROM tenant_settings", String.class)).isEqualTo(APP_ID);
+
+		saveSettings(null).andExpect(status().isOk()).andExpect(jsonPath("$.appId").value(APP_ID));
+
+		saveSettings("not-digits").andExpect(status().isBadRequest());
+		assertThat(jdbc.queryForObject("SELECT whatsapp_app_id FROM tenant_settings", String.class)).isEqualTo(APP_ID);
+
+		saveSettings("").andExpect(status().isOk()).andExpect(jsonPath("$.appId").doesNotExist());
+		assertThat(jdbc.queryForObject("SELECT whatsapp_app_id FROM tenant_settings", String.class)).isNull();
 	}
 }

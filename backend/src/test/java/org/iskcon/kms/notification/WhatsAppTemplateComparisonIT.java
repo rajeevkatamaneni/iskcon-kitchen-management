@@ -115,7 +115,9 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 	private static final Set<String> ENTRY_FIELDS = Set.of("name", "ourCategory", "metaCategory", "metaStatus",
 			"held", "bodyMatchesExactly", "bodyMatchesAfterTrim", "metaBody", "ourBody", "lookupProblem",
 			// T-178: Meta's rejected_reason, carried for the operator's stored copy.
-			"metaRejectedReason");
+			"metaRejectedReason",
+			// T-200: the header, ours beside Meta's, and whether they match.
+			"ourHeaderFormat", "metaHeaderFormat", "headerMatches");
 
 	@Autowired
 	private JdbcTemplate jdbc;
@@ -369,6 +371,15 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 			assertThat(entry.get("metaStatus").asText()).isEqualTo("APPROVED");
 			assertThat(entry.get("metaCategory").asText()).isEqualTo(entry.get("ourCategory").asText())
 					.isEqualTo(template(name).whatsappCategory());
+			// T-200: every header matches, po_delivery's DOCUMENT and everyone else's none.
+			assertThat(entry.get("headerMatches").asBoolean()).as(name + " header").isTrue();
+			if ("po_delivery".equals(name)) {
+				assertThat(entry.get("ourHeaderFormat").asText()).isEqualTo("DOCUMENT");
+				assertThat(entry.get("metaHeaderFormat").asText()).isEqualTo("DOCUMENT");
+			} else {
+				assertThat(entry.get("ourHeaderFormat").isNull()).as(name).isTrue();
+				assertThat(entry.get("metaHeaderFormat").isNull()).as(name).isTrue();
+			}
 		}
 
 		// The stub counts, and the token was in use: without these the zero-POST and never-logged checks
@@ -436,7 +447,8 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 		assertThat(entry.get("held").isBoolean()).isTrue();
 		assertThat(entry.get("held").asBoolean()).isFalse();
 		for (String absent : List.of("metaCategory", "metaStatus", "bodyMatchesExactly", "bodyMatchesAfterTrim",
-				"metaBody", "ourBody", "lookupProblem", "metaRejectedReason")) {
+				"metaBody", "ourBody", "lookupProblem", "metaRejectedReason", "ourHeaderFormat", "metaHeaderFormat",
+				"headerMatches")) {
 			assertThat(entry.get(absent).isNull()).as(absent).isTrue();
 		}
 	}
@@ -478,6 +490,33 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 
 		assertThat(entries.values().stream().filter(e -> e.get("lookupProblem").isNull()
 				&& e.get("bodyMatchesExactly").asBoolean()).count()).as("the other nineteen").isEqualTo(19);
+	}
+
+	/**
+	 * T-200, the morning after it deploys: Meta holds po_delivery with this release's body but without the PDF
+	 * header it now has. Exactly that one entry reads its header as different, its body still matches, and
+	 * the other twenty read as they did before the header existed.
+	 */
+	@Test
+	@DisplayName("po_delivery held without its PDF header is the only entry whose header does not match, and its body still does")
+	void onlyThePurchaseOrderHeaderDiffers() throws Exception {
+		aConnectedTemple();
+		meta.holdEveryTemplateAsReleased();
+		meta.hold("po_delivery", "UTILITY", "APPROVED", body("po_delivery"));
+
+		Map<String, JsonNode> entries = byName(compared());
+
+		JsonNode po = entries.get("po_delivery");
+		assertThat(po.get("headerMatches").asBoolean()).isFalse();
+		assertThat(po.get("ourHeaderFormat").asText()).isEqualTo("DOCUMENT");
+		assertThat(po.get("metaHeaderFormat").isNull()).isTrue();
+		assertThat(po.get("bodyMatchesExactly").asBoolean()).isTrue();
+		assertThat(entries.values().stream().filter(e -> !e.get("headerMatches").asBoolean()).map(e -> e.get("name").asText()))
+				.containsExactly("po_delivery");
+		assertThat(entries.values().stream().filter(e -> e.get("bodyMatchesExactly").asBoolean()).count()).isEqualTo(21);
+		assertThat(logs.list.stream().map(ILoggingEvent::getFormattedMessage))
+				.anyMatch(line -> line.startsWith("Compared 21 WhatsApp templates with Meta for temple " + govinda)
+						&& line.endsWith("0 not answered, 1 with a different header"));
 	}
 
 	// ---- when it cannot answer -----------------------------------------------------------------------
@@ -611,7 +650,8 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 				"type":"OAuthException","is_transient":true,"code":2,"fbtrace_id":"AQt173aaaa"}}
 				""");
 
-		record Held(String id, String name, String category, String status, String body) {
+		/** T-200: {@code headerFormat} is the format of the HEADER component Meta lists, or null for none. */
+		record Held(String id, String name, String category, String status, String body, String headerFormat) {
 		}
 
 		private final ObjectMapper json;
@@ -642,13 +682,20 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 			server.stop(0);
 		}
 
+		/** A template with no header, as every template was held before T-200. */
 		void hold(String name, String category, String status, String body) {
-			holds.put(name, new Held("id-" + name, name, category, status, body));
+			hold(name, category, status, body, null);
 		}
 
+		void hold(String name, String category, String status, String body, String headerFormat) {
+			holds.put(name, new Held("id-" + name, name, category, status, body, headerFormat));
+		}
+
+		/** Every template exactly as this release registers it, po_delivery's PDF header included. */
 		void holdEveryTemplateAsReleased() {
 			for (NotificationTemplate template : NotificationTemplate.values()) {
-				hold(template.whatsappTemplateName(), template.whatsappCategory(), "APPROVED", template.whatsappBodyText());
+				hold(template.whatsappTemplateName(), template.whatsappCategory(), "APPROVED", template.whatsappBodyText(),
+						template.whatsappHeaderFormat());
 			}
 		}
 
@@ -712,7 +759,12 @@ class WhatsAppTemplateComparisonIT extends AbstractIntegrationTest {
 						entry.put("language", "en");
 						entry.put("status", h.status());
 						entry.put("category", h.category());
-						entry.put("components", List.of(Map.of("type", "BODY", "text", h.body())));
+						List<Map<String, Object>> components = new ArrayList<>();
+						if (h.headerFormat() != null) {
+							components.add(Map.of("type", "HEADER", "format", h.headerFormat()));
+						}
+						components.add(Map.of("type", "BODY", "text", h.body()));
+						entry.put("components", components);
 						return entry;
 					})
 					.collect(Collectors.toList());

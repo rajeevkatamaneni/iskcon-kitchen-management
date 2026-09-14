@@ -215,7 +215,7 @@ function todayView(): TodayView {
     itemsBelowThreshold: 0,
     itemsTracked: 40,
     workforce: { staffIn: 4, volunteers: 3, meals: [] },
-    materialsCost: { estimatedTotal: 18400, withoutPrice: 0 },
+    materialsCost: { estimatedTotal: 18400, withoutPrice: 0, mealsCostedAsCooked: 0, mealsCostedAsPlanned: 0 },
     unrecordedMeals: 0,
     equipmentOverdue: null,
     approvals: {

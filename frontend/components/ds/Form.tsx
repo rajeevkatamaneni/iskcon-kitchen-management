@@ -71,9 +71,9 @@ import { messageFor, UNNAMED_FIELD, type ControlFacts } from "@/components/ds/fo
  *       `form="…"`, since a submit event fires on the form either way — every control belonging to
  *       the form is read: `form.elements`, which includes controls outside the tag that name it.</li>
  *   <li>A control is refused when `willValidate && !validity.valid`, which is exactly what
- *       `checkValidity()` computes, read without firing `invalid` events. Disabled, read-only and
- *       hidden controls have `willValidate` false and are skipped by the browser, not by a rule of
- *       ours.</li>
+ *       `checkValidity()` computes, read without firing `invalid` events — plus the two refusals
+ *       below that the browser has no attribute for. Disabled, read-only and hidden controls have
+ *       `willValidate` false and are skipped by the browser, not by a rule of ours.</li>
  *   <li>Anything refused: `preventDefault`, the caller's `onSubmit` is **not** called, a sentence
  *       appears beside each refused box, and focus moves to the first of them once its sentence is on
  *       the page, so a screen reader reads the box and its problem together.</li>
@@ -84,6 +84,32 @@ import { messageFor, UNNAMED_FIELD, type ControlFacts } from "@/components/ds/fo
  *       "must be at least 1") gets the new sentence. Boxes without a sentence gain none until the
  *       next submit — nobody is told off mid-word.</li>
  * </ol>
+ *
+ * <h3>The two checks the browser does not make (T-203)</h3>
+ *
+ * <p>"It does not reimplement a single check" above is still true; these are not reimplementations
+ * but two rules HTML has no attribute for, and both used to end in a press that did nothing and said
+ * nothing (T-172's proof lists the six dialogs). Rajeev decided they must say so in red, like any
+ * other refusal, and the work manager decided there would be one rule for every form rather than a
+ * sentence per dialog:
+ *
+ * <ul>
+ *   <li><b>A required text box holding only spaces is blank.</b> The browser counts "   " as filled
+ *       in, so `required` passes; every server column behind these boxes refuses it. The box gets
+ *       "&lt;name&gt; is required", the same words as an empty box, because to the person it is the same
+ *       mistake. Only `<textarea>` and the free-text `<input>` types — a select or a number box has no
+ *       value of only spaces to have.</li>
+ *   <li><b>`data-more-than="0"` is an exclusive floor.</b> `min="0"` lets exactly 0 through, and a
+ *       credit of 0 is not a credit. A value at or below the attribute is reported as a
+ *       `rangeUnderflow`, and `formMessages` words it "&lt;name&gt; must be more than 0". A data attribute
+ *       rather than a prop because every other fact this component reads — `required`, `min`, `step` —
+ *       is read off the element, and a box outside a `Field` has no props to give.</li>
+ * </ul>
+ *
+ * <p>Both are folded into the validity this component reads, so everything downstream — the
+ * sentence, re-checking as the person types, clearing when put right — treats them exactly as it
+ * treats the browser's own refusals. The pages keep their own trim and amount checks as well, as the
+ * twin guard: `Form` is how a refusal is said, not the only thing between a press and the server.
  */
 
 type Control = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -118,8 +144,54 @@ function isControl(el: Element | EventTarget | null): el is Control {
   return el instanceof Element && CONTROL_TAGS.has(el.tagName);
 }
 
+/** Input types whose value is free text a person types, where a value of only spaces can arise. */
+const TEXT_INPUT_TYPES = new Set(["text", "search", "tel", "url", "email", "password"]);
+/** The exclusive lower bound a number box can carry (T-203); see the class comment. */
+const MORE_THAN_ATTRIBUTE = "data-more-than";
+
+/** A required text box whose value is spaces and nothing else: filled in to the browser, blank to us. */
+function onlySpaces(control: Control): boolean {
+  const textual =
+    control.tagName === "TEXTAREA" || (control.tagName === "INPUT" && TEXT_INPUT_TYPES.has(control.type));
+  return textual && control.required && control.value !== "" && control.value.trim() === "";
+}
+
+/**
+ * A box holding a number at or below its `data-more-than`. An empty box is left to `required` and a
+ * half-typed one to `badInput`, so neither is also told it is under the floor.
+ */
+function atOrBelowFloor(control: Control): boolean {
+  if (control.tagName !== "INPUT" || control.validity.badInput) return false;
+  const floor = control.getAttribute(MORE_THAN_ATTRIBUTE)?.trim();
+  if (!floor || control.value.trim() === "") return false;
+  const value = Number(control.value);
+  const limit = Number(floor);
+  return Number.isFinite(value) && Number.isFinite(limit) && value <= limit;
+}
+
+/**
+ * The browser's verdict on a control with this component's two additions folded in: spaces count as
+ * `valueMissing` and a value at or below the floor as `rangeUnderflow`. Read fresh every time, never
+ * cached, because the value is what changes between one press and the next.
+ */
+function verdictOf(control: Control): ControlFacts["validity"] & { valid: boolean } {
+  const native = control.validity;
+  const blank = onlySpaces(control);
+  const underFloor = atOrBelowFloor(control);
+  return {
+    valid: native.valid && !blank && !underFloor,
+    valueMissing: native.valueMissing || blank,
+    typeMismatch: native.typeMismatch,
+    badInput: native.badInput,
+    rangeUnderflow: native.rangeUnderflow || underFloor,
+    rangeOverflow: native.rangeOverflow,
+    stepMismatch: native.stepMismatch,
+    tooLong: native.tooLong,
+  };
+}
+
 function isRefused(control: Control): boolean {
-  return control.willValidate && !control.validity.valid;
+  return control.willValidate && !verdictOf(control).valid;
 }
 
 /** A node's text on one line, with `Field`'s "(required)" taken off the end. */
@@ -173,11 +245,12 @@ function nameOf(control: Control): string {
 function factsOf(control: Control): ControlFacts {
   return {
     type: control.type,
-    validity: control.validity,
+    validity: verdictOf(control),
     min: control.getAttribute("min") ?? "",
     max: control.getAttribute("max") ?? "",
     step: control.getAttribute("step") ?? "",
     maxLength: "maxLength" in control ? control.maxLength : -1,
+    moreThan: control.getAttribute(MORE_THAN_ATTRIBUTE)?.trim() ?? "",
   };
 }
 

@@ -11,8 +11,12 @@ import java.util.List;
  * is a comparison between categories, and a daily total can never answer it. This is that comparison
  * and nothing more: the same estimate as the Today tile, kept split by kind instead of summed.
  *
- * @param kinds  one row per kind of meal the temple actually cooked in the period, dearest per
- *               serving first, so the comparison reads top to bottom.
+ * @param kinds                one row per kind of meal the temple actually cooked in the period,
+ *                             dearest per serving first, so the comparison reads top to bottom.
+ * @param mealsCostedAsCooked  of {@code meals}, how many were recorded and are costed at what was
+ *                             cooked (T-212). The sum of the rows' own counts.
+ * @param mealsCostedAsPlanned of {@code meals}, how many were not yet recorded and are costed at
+ *                             what was planned.
  */
 public record CostByMealKind(
 		LocalDate from,
@@ -23,5 +27,7 @@ public record CostByMealKind(
 		BigDecimal estimatedTotal,
 		int ingredientsWithoutPrice,
 		List<UnpricedIngredient> unpriced,
-		List<MealKindCost> kinds) {
+		List<MealKindCost> kinds,
+		int mealsCostedAsCooked,
+		int mealsCostedAsPlanned) {
 }

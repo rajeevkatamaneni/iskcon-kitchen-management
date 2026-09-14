@@ -397,6 +397,93 @@ describe("a label's name, without its hint, error or note", () => {
   });
 });
 
+/**
+ * The two refusals HTML has no attribute for (T-203). Both used to end in a press that did nothing and
+ * said nothing: the page's own check stopped the send, and the browser saw no problem to name.
+ */
+describe("spaces and exclusive floors (T-203)", () => {
+  it("names a required textarea and text box holding only spaces as blank, and does not submit", () => {
+    const { onSubmit, save } = renderOne(
+      <>
+        <textarea aria-label="Reason" required defaultValue="   " />
+        <label>
+          Note
+          <input type="text" required defaultValue={"  \t "} />
+        </label>
+      </>
+    );
+    save();
+    expectSentence(screen.getByRole("textbox", { name: "Reason" }), "Reason is required");
+    const note = screen.getByRole("textbox", { name: "Note" });
+    expectSentence(note, "Note is required", note.closest("label")!);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("lets spaces through a box that is not required, and words with spaces round them through a required one", () => {
+    const { onSubmit, save } = renderOne(
+      <>
+        <textarea aria-label="Optional" defaultValue="   " />
+        <textarea aria-label="Reason" required defaultValue="  Billed twice  " />
+      </>
+    );
+    save();
+    expect(screen.queryByText(/is required/)).not.toBeInTheDocument();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the sentence once words are typed over the spaces", () => {
+    function Controlled() {
+      const [value, setValue] = useState("   ");
+      return (
+        <Form aria-label="Test form" onSubmit={(e) => e.preventDefault()}>
+          <textarea aria-label="Reason" required value={value} onChange={(e) => setValue(e.target.value)} />
+          <button type="submit">Save</button>
+        </Form>
+      );
+    }
+    render(<Controlled />);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const box = screen.getByRole("textbox", { name: "Reason" });
+    expect(screen.getByText("Reason is required")).toBeInTheDocument();
+
+    fireEvent.change(box, { target: { value: "    " } });
+    expect(screen.getByText("Reason is required")).toBeInTheDocument();
+
+    fireEvent.change(box, { target: { value: "Short by two sacks" } });
+    expect(screen.queryByText("Reason is required")).not.toBeInTheDocument();
+    expect(box).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("says a 0 against data-more-than=0 must be more than 0, and does not submit", () => {
+    const { onSubmit, save } = renderOne(
+      <input type="number" aria-label="Amount" min="0" step="any" data-more-than="0" required defaultValue="0" />
+    );
+    save();
+    expectSentence(screen.getByRole("spinbutton"), "Amount must be more than 0");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("says the same for a number below the floor, rather than min's at least", () => {
+    const { save } = renderOne(
+      <input type="number" aria-label="Amount" min="0" step="any" data-more-than="0" defaultValue="-5" />
+    );
+    save();
+    expectSentence(screen.getByRole("spinbutton"), "Amount must be more than 0");
+  });
+
+  it("lets anything above the floor through, and leaves a blank box to required", () => {
+    const { onSubmit, save } = renderOne(
+      <>
+        <input type="number" aria-label="Amount" step="any" data-more-than="0" defaultValue="0.5" />
+        <input type="number" aria-label="Optional amount" step="any" data-more-than="0" />
+      </>
+    );
+    save();
+    expect(screen.queryByText(/must be more than/)).not.toBeInTheDocument();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("form sentences", () => {
   const facts = (over: Omit<Partial<ControlFacts>, "validity"> & { validity?: Partial<ValidityState> }): ControlFacts => ({
     type: "text",
@@ -419,6 +506,8 @@ describe("form sentences", () => {
     ["step 1", facts({ type: "number", step: "1", validity: { stepMismatch: true } }), "Quantity must be a whole number"],
     ["unused step", facts({ type: "number", step: "5", validity: { stepMismatch: true } }), "Quantity must go up in steps of 5"],
     ["unmapped refusal", facts({ validity: { patternMismatch: true } }), "Quantity is not valid"],
+    ["more than", facts({ type: "number", min: "0", moreThan: "0", validity: { rangeUnderflow: true } }), "Quantity must be more than 0"],
+    ["at least, with no floor", facts({ type: "number", min: "0", moreThan: "", validity: { rangeUnderflow: true } }), "Quantity must be at least 0"],
   ])("%s", (_kind, f, sentence) => {
     expect(messageFor("Quantity", f)).toBe(sentence);
   });

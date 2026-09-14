@@ -398,6 +398,26 @@ class MealCrewIT extends AbstractIntegrationTest {
 				.andExpect(status().isForbidden());
 	}
 
+	@Test
+	@DisplayName("asking for a meal's count with no ready-by is a field to fill in, not our fault")
+	void aMissingReadyByIsAFieldErrorNotAServerFault() throws Exception {
+		// T-216, the staging call verbatim: the ready-by is required on purpose (see crewAt's
+		// Javadoc), and leaving it out used to answer KMS-500001 and a 500.
+		String body = mvc.perform(authed(get("/api/v1/meal-crew/at").param("date", "2026-09-21")))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				.andExpect(jsonPath("$.fieldErrors.length()").value(1))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("readyBy"))
+				.andExpect(jsonPath("$.fieldErrors[0].message").value("This can't be left empty."))
+				.andReturn().getResponse().getContentAsString();
+
+		assertThat(body)
+				.as("no server-fault answer, and nothing from inside the machine")
+				.doesNotContain("KMS-500001")
+				.doesNotContain("LocalTime")
+				.doesNotContain("Exception");
+	}
+
 	// ---- helpers ----------------------------------------------------------
 
 	/** Rows in a table across every temple, read as the owner — for "nothing was written". */

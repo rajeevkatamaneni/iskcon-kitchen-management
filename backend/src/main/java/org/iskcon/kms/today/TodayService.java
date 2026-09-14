@@ -199,10 +199,15 @@ public class TodayService {
 	 * <p>Perfect costing was rejected on its merits: a true figure needs inventory valuation, and the
 	 * store room holds donated goods, which have an estimated value and no purchase price at all — so
 	 * a "perfect" number would be part fiction the moment a gift in kind is cooked.
+	 *
+	 * <p>A meal already recorded is in it at what its job card says was cooked, and the rest at what
+	 * was planned (T-212), because that is what the store room was drawn down by. The two counts come
+	 * through unchanged so the tile can say which the figure is made of.
 	 */
 	private TodayView.MaterialsCost materialsCost(LocalDate today) {
 		var cost = materialsCostService.costFor(today);
-		return new TodayView.MaterialsCost(cost.estimatedTotal(), cost.ingredientsWithoutPrice());
+		return new TodayView.MaterialsCost(cost.estimatedTotal(), cost.ingredientsWithoutPrice(),
+				cost.mealsCostedAsCooked(), cost.mealsCostedAsPlanned());
 	}
 
 	// ---- What is arriving -----------------------------------------------

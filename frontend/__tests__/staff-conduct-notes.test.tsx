@@ -117,9 +117,12 @@ describe("conduct notes on a staff record", () => {
     expect(screen.getByText("Add a note is required")).toBeInTheDocument();
     expect(box).toHaveAttribute("aria-invalid", "true");
 
-    // Spaces pass `required`; the panel's own trim check stops them, and nothing permanent lands.
+    // Spaces are blank too (T-203): the same sentence stays beside the box, and nothing permanent
+    // lands. The panel's own trim check is still behind it.
     fireEvent.change(box, { target: { value: "   " } });
     fireEvent.click(save);
+    expect(screen.getByText("Add a note is required")).toHaveClass("text-danger");
+    expect(box).toHaveAttribute("aria-invalid", "true");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(addMock).not.toHaveBeenCalled();
 

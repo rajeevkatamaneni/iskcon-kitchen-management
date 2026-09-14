@@ -192,6 +192,53 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a voided bill against an order shows no expected value and no variance; a live one is unchanged")
+	void aVoidedBillHasNoVariance() throws Exception {
+		// T-207, Rajeev's decision for Phase B item 8. A struck bill is owed nothing, so it has nothing
+		// to be out by; computed as before, it went on showing the discrepancy for ever and a voided
+		// bill cannot be credited to clear it. Two bills against two identically priced orders: one
+		// struck, one left standing, so the live figure is proved unchanged in the same run.
+		UUID struckPo = receivedPo("PO-2026-0071", "30", "45.00", "30"); // expected 1350
+		UUID livePo = receivedPo("PO-2026-0072", "30", "45.00", "30");   // expected 1350
+		String struck = recordAndReturnId("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + struckPo
+				+ "\",\"invoiceNumber\":\"GW-V1\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}");
+		recordAndReturnId("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + livePo
+				+ "\",\"invoiceNumber\":\"GW-V2\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}");
+
+		// Before the void it carries the variance, so the assertion after it cannot pass on a bill
+		// that never had one.
+		mvc.perform(authed(get("/api/v1/vendor-invoices/{id}", UUID.fromString(struck))))
+				.andExpect(jsonPath("$.variance").value(50.0));
+
+		signIn("uid-admin-a"); // striking a bill is MANAGE_VENDOR_PAYMENTS
+		mvc.perform(authed(post("/api/v1/vendor-invoices/{id}/void", UUID.fromString(struck)))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"reason\":\"Keyed against the wrong delivery.\"}"))
+				.andExpect(status().isNoContent());
+
+		// get(): both figures gone, while the order link and amount stay on the record.
+		mvc.perform(authed(get("/api/v1/vendor-invoices/{id}", UUID.fromString(struck))))
+				.andExpect(jsonPath("$.status").value("VOIDED"))
+				.andExpect(jsonPath("$.purchaseOrderId").value(struckPo.toString()))
+				.andExpect(jsonPath("$.amount").value(1400.0))
+				.andExpect(jsonPath("$.expectedValue").doesNotExist())
+				.andExpect(jsonPath("$.variance").doesNotExist());
+
+		// list(): the other read path, which has its own call to withVariance.
+		mvc.perform(authed(get("/api/v1/vendor-invoices?status=VOIDED")))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].expectedValue").doesNotExist())
+				.andExpect(jsonPath("$[0].variance").doesNotExist());
+
+		// The live bill beside it: exactly the figures it always had.
+		mvc.perform(authed(get("/api/v1/vendor-invoices?status=PENDING")))
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].invoiceNumber").value("GW-V2"))
+				.andExpect(jsonPath("$[0].expectedValue").value(1350.0))
+				.andExpect(jsonPath("$[0].variance").value(50.0));
+	}
+
+	@Test
 	@DisplayName("a direct (no-PO) invoice is recordable with a description and has no variance")
 	void directInvoiceHasNoVariance() throws Exception {
 		mvc.perform(invoice("{\"vendorId\":\"" + vendor

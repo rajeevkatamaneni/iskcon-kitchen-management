@@ -65,6 +65,25 @@ public enum NotificationTemplate {
 		public List<String> parameterOrder() {
 			return List.of("poNumber", "vendor", "summary", "raised", "neededBy");
 		}
+
+		/**
+		 * The order sheet itself travels with the message, as a PDF in the header (T-200).
+		 *
+		 * <p>Rajeev, on why a PDF: <em>"PDF's survue transmission and different devices better than
+		 * anything else."</em> The body above stays word for word as approved; only the header is new.
+		 * {@code PurchaseOrderDeliveryService} puts the sheet's document id in the parameters under
+		 * {@link #whatsappHeaderParameter()}, and {@link WhatsAppChannelAdapter} uploads that sheet and
+		 * sends it as the header's document.
+		 */
+		@Override
+		public String whatsappHeaderFormat() {
+			return HEADER_DOCUMENT;
+		}
+
+		@Override
+		public String whatsappHeaderParameter() {
+			return "documentId";
+		}
 	},
 
 	/**
@@ -801,6 +820,12 @@ public enum NotificationTemplate {
 	public String whatsappFingerprint(String languageCode) {
 		String canonical = String.join("\u001F",
 				whatsappTemplateName(), whatsappCategory(), languageCode, whatsappBodyText());
+		// T-200: a header is part of what Meta holds, so it is part of the fingerprint. Appended only when a
+		// template has one, so every template without a header keeps exactly the fingerprint it had, and no
+		// temple's screen reads twenty templates as changed because one of them gained a PDF.
+		if (whatsappHeaderFormat() != null) {
+			canonical = canonical + "\u001F" + "HEADER:" + whatsappHeaderFormat();
+		}
 		try {
 			byte[] digest = MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8));
 			return "sha256:" + HexFormat.of().formatHex(digest);
@@ -818,6 +843,31 @@ public enum NotificationTemplate {
 	 */
 	public String whatsappCategory() {
 		return "UTILITY";
+	}
+
+	/** Meta's header format for a template whose header carries a document. */
+	public static final String HEADER_DOCUMENT = "DOCUMENT";
+
+	/**
+	 * The format of this template's header as Meta registers it, or null for a template with no header
+	 * (T-200). Only {@link #PO_DELIVERY} has one, {@link #HEADER_DOCUMENT}.
+	 *
+	 * <p>Meta's template components guide: a media header is {@code {"type": "HEADER", "format":
+	 * "DOCUMENT", "example": {"header_handle": ["4::YX..."]}}}, where the handle is an "Uploaded media
+	 * asset handle. Use the Resumable Upload API to generate an asset handle."
+	 * https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/components
+	 */
+	public String whatsappHeaderFormat() {
+		return null;
+	}
+
+	/**
+	 * The parameter that names what fills the header at send time, or null where there is no header
+	 * (T-200). For {@link #PO_DELIVERY} it is {@code documentId}, the purchase-order sheet. It is not in
+	 * {@link #parameterOrder()}, which is the body's placeholders and nothing else.
+	 */
+	public String whatsappHeaderParameter() {
+		return null;
 	}
 
 	/**

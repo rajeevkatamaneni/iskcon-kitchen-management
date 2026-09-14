@@ -91,7 +91,9 @@ class DonationVoidIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM equipment_state_changes");
 		admin.execute("DELETE FROM equipment_items");
+		admin.execute("DELETE FROM payment_events");
 		admin.execute("DELETE FROM donations");
+		admin.execute("DELETE FROM wishlist_items");
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM ingredients");
@@ -296,7 +298,97 @@ class DonationVoidIT extends AbstractIntegrationTest {
 				""", Integer.class, donation)).isEqualTo(1);
 	}
 
+	/**
+	 * T-205, Rajeev's ruling on the question T-069 left open: striking the gift behind a FULFILLED
+	 * wish reopens the wish.
+	 *
+	 * <p>Before it, this mixer read "fulfilled, ₹0 of ₹15,000" after the void, a devotee pressing Give
+	 * was refused with KMS-400068 because checkout refuses on status before it looks at money, and the
+	 * daily sweep archived it a week later. The last assertion is that door, opened.
+	 */
+	@Test
+	@DisplayName("voiding the gift that fulfilled a wish reopens it, audits it once, and lets a devotee give again")
+	void voidingTheGiftBehindAFulfilledWishReopensIt() throws Exception {
+		UUID item = wishlistItem("New mixer", 15000);
+		UUID gift = recordCashTowards(item, 15000);
+		assertThat(wishStatus(item)).isEqualTo("FULFILLED");
+
+		mvc.perform(voidRequest(gift, "Chargeback: the payment was reversed by the bank."))
+				.andExpect(status().isNoContent());
+
+		assertThat(wishStatus(item)).isEqualTo("ACTIVE");
+		assertThat(admin.queryForObject(
+				"SELECT fulfilled_at FROM wishlist_items WHERE id = ?", java.sql.Timestamp.class, item)).isNull();
+
+		assertThat(auditCount("WISHLIST_ITEM_REOPENED")).isEqualTo(1);
+		Map<String, Object> entry = admin.queryForMap("""
+				SELECT entity_type, entity_id, reason,
+					   before_state->>'status' AS before_status, before_state->>'fulfilledAt' AS before_fulfilled,
+					   after_state->>'status' AS after_status, after_state->>'fulfilledAt' AS after_fulfilled,
+					   after_state->>'standingInr' AS standing, after_state->>'voidedDonationId' AS donation
+				FROM audit_events WHERE action = 'WISHLIST_ITEM_REOPENED'
+				""");
+		assertThat(entry.get("entity_type")).isEqualTo("WISHLIST_ITEM");
+		assertThat(entry.get("entity_id")).isEqualTo(item);
+		assertThat(entry.get("before_status")).isEqualTo("FULFILLED");
+		assertThat(entry.get("before_fulfilled")).isNotNull();
+		assertThat(entry.get("after_status")).isEqualTo("ACTIVE");
+		assertThat(entry.get("after_fulfilled")).isNull();
+		assertThat(entry.get("standing")).isEqualTo("0");
+		assertThat(entry.get("donation")).isEqualTo(gift.toString());
+		assertThat((String) entry.get("reason")).contains("Chargeback: the payment was reversed by the bank.");
+		// The void's own entry is still there beside it: one act, two questions, two entries.
+		assertThat(auditCount("DONATION_VOIDED")).isEqualTo(1);
+
+		// And the door is open: the same checkout that KMS-400068 refused is taken.
+		mvc.perform(authed(post("/api/v1/donations/wishlist/{id}", item))
+						.contentType(MediaType.APPLICATION_JSON).content("{\"amountInr\":15000}"))
+				.andExpect(status().isCreated());
+	}
+
+	/**
+	 * T-205's other half. A wish funded by several gifts is still a fulfilled wish if striking one of
+	 * them leaves enough standing, and the void must not reopen it or write anything about it.
+	 */
+	@Test
+	@DisplayName("voiding one gift of a jointly funded wish that is still covered leaves it FULFILLED, unaudited")
+	void aJointlyFundedWishStillCoveredStaysFulfilled() throws Exception {
+		UUID item = wishlistItem("Commercial wet grinder", 15000);
+		recordCashTowards(item, 5000);
+		UUID duplicate = recordCashTowards(item, 5000);
+		recordCashTowards(item, 10000); // ₹20,000 towards ₹15,000: hand-recorded cash is not capped
+		assertThat(wishStatus(item)).isEqualTo("FULFILLED");
+
+		mvc.perform(voidRequest(duplicate, "Entered twice at the gate."))
+				.andExpect(status().isNoContent());
+
+		assertThat(wishStatus(item)).isEqualTo("FULFILLED");
+		assertThat(admin.queryForObject(
+				"SELECT fulfilled_at FROM wishlist_items WHERE id = ?", java.sql.Timestamp.class, item)).isNotNull();
+		assertThat(auditCount("WISHLIST_ITEM_REOPENED")).isZero();
+		assertThat(auditCount("DONATION_VOIDED")).isEqualTo(1);
+	}
+
 	// ---------------------------------------------------------------------
+
+	private UUID wishlistItem(String title, int priceInr) {
+		return admin.queryForObject("""
+				INSERT INTO wishlist_items (tenant_id, title, price_inr, category, quantity_wanted, status)
+				VALUES (?, ?, ?::numeric, 'EQUIPMENT', 1, 'ACTIVE') RETURNING id
+				""", UUID.class, tenant, title, priceInr);
+	}
+
+	/** Cash handed over at the office towards the item, recorded the way the office records it. */
+	private UUID recordCashTowards(UUID item, int amountInr) throws Exception {
+		return record("""
+				{"anonymous":false,"donorName":"Govind Das","cashAmountInr":%d,"donatedOn":"%s",
+				 "wishlistItemId":"%s"}
+				""".formatted(amountInr, today, item));
+	}
+
+	private String wishStatus(UUID item) {
+		return admin.queryForObject("SELECT status FROM wishlist_items WHERE id = ?", String.class, item);
+	}
 
 	private UUID recordFood(BigDecimal kilos) throws Exception {
 		return record("""

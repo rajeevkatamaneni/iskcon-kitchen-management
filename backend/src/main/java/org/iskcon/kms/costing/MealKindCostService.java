@@ -49,6 +49,15 @@ import org.springframework.transaction.annotation.Transactional;
  * kind blank would throw away the comparison the report exists for. So the per-serving figure is the
  * honest one it can compute — the meals that were counted, divided by the people they fed — and the
  * count of meals it had to leave out travels beside it, exactly as the unpriced ingredients do.
+ *
+ * <p><strong>What a meal is costed at: what was cooked, once anybody knows (T-212).</strong> A meal
+ * whose job card has been recorded is costed at what the card says each dish came to; a meal not yet
+ * recorded is costed at what was planned, because that is all anybody knows about it. Rajeev ruled it
+ * ("Costing follows actuals, option 1"). The reason is agreement: recording draws the store room down
+ * by what was cooked ({@code ServedMealService.record}), so a report that went on costing the plan
+ * would price food the kitchen never took off the shelf, and disagree with the stock ledger about
+ * the same lunch. A row over a month mixes both kinds of meal, so each row and the total carry how
+ * many meals are of each, and the screen says so rather than presenting one number as one thing.
  */
 @Service
 public class MealKindCostService {
@@ -85,8 +94,12 @@ public class MealKindCostService {
 		for (DishRow dish : dishesIn(from, to)) {
 			MealTotals totals = meals.computeIfAbsent(new Meal(dish.mealId(), dish.mealKind()),
 					k -> new MealTotals());
-			totals.basket.addAll(costing.scaledBasket(dish.recipeId(), dish.targetYield()));
+			// Scaled through the recipe exactly as stock is drawn, so a recorded dish costs the same
+			// ingredients the ledger took out for it, and no unit is converted here by hand.
+			totals.basket.addAll(costing.scaledBasket(dish.recipeId(), dish.costedYield()));
 			totals.servings = headCountOf(dish);
+			// Recording is per meal, so every dish of one meal says the same thing here.
+			totals.recorded = dish.recorded();
 		}
 
 		// Meals into kinds.
@@ -112,13 +125,19 @@ public class MealKindCostService {
 		CostedBasket total = costing.cost(everything.all);
 		return new CostByMealKind(from, to, everything.meals, everything.servings,
 				everything.mealsWithoutServings, total.estimatedTotal(), total.ingredientsWithoutPrice(),
-				total.unpriced(), List.copyOf(rows));
+				total.unpriced(), List.copyOf(rows), everything.mealsCostedAsCooked,
+				everything.mealsCostedAsPlanned);
 	}
 
 	// ---------------------------------------------------------------------
 
 	private void accumulate(KindTotals kind, MealTotals meal) {
 		kind.meals++;
+		if (meal.recorded) {
+			kind.mealsCostedAsCooked++;
+		} else {
+			kind.mealsCostedAsPlanned++;
+		}
 		kind.all.addAll(meal.basket);
 		if (meal.servings == null) {
 			kind.mealsWithoutServings++;
@@ -146,23 +165,34 @@ public class MealKindCostService {
 	}
 
 	/**
-	 * Every dish planned in the period, cancelled ones excluded.
+	 * Every dish in the period, cancelled ones excluded, each with the amount it is to be costed at.
 	 *
 	 * <p>The same filter the daily figure uses, and for the same reason: marking a meal cooked moves
 	 * it out of PLANNED, and a report that filtered on PLANNED would show a month of cooking as having
 	 * cost nothing. A dish called off at the stove is recorded as CANCELLED, so "not made" leaves the
 	 * figure through this filter too.
 	 *
-	 * <p>The dish is costed at what was <em>planned</em>, not at what the returned job card said was
-	 * cooked. That keeps this report and the Today tile one calculation of one thing — a period of
-	 * days must add up to the days in it — and what was actually cooked against what was planned is a
-	 * different report with a different name.
+	 * <p><strong>The amount is what was cooked where the meal has been recorded, and what was planned
+	 * where it has not</strong> (T-212). This used to cost every dish at what was planned, on the
+	 * argument that it kept this report and the Today tile one calculation. They still are one
+	 * calculation — {@code MaterialsCostService} applies exactly this rule — and what changed is which
+	 * figure that calculation trusts. Stock already draws on what was cooked, so costing the plan made
+	 * this report disagree with the store room about the same meal; now the two agree, and a
+	 * correction to a recorded meal moves the cost because it moves what was cooked.
+	 *
+	 * <p>Recording is the switch, not a dish's status. {@code recorded_at} is set once for the whole
+	 * meal, in the same transaction that writes {@code actual_servings} on every dish it cooked and
+	 * refuses a dish without one; a dish it did not cook is CANCELLED and already filtered out. So a
+	 * recorded meal has a cooked figure on every dish this query returns.
 	 */
 	private List<DishRow> dishesIn(LocalDate from, LocalDate to) {
 		// The kind is grouped by its name as the temple spells it today, read through the meal's kind
 		// id, so a kind renamed mid-period is one row under its new name rather than two.
 		return jdbc.query("""
-				SELECT d.meal_id, k.name AS meal_kind, d.recipe_id, d.target_yield,
+				SELECT d.meal_id, k.name AS meal_kind, d.recipe_id,
+					   CASE WHEN m.recorded_at IS NOT NULL THEN d.actual_servings
+							ELSE d.target_yield END AS costed_yield,
+					   m.recorded_at IS NOT NULL AS recorded,
 					   m.adults, m.children, m.seniors
 				FROM meal_dishes d
 				JOIN meals m ON m.id = d.meal_id
@@ -175,7 +205,8 @@ public class MealKindCostService {
 				rs.getObject("meal_id", UUID.class),
 				rs.getString("meal_kind"),
 				rs.getObject("recipe_id", UUID.class),
-				rs.getBigDecimal("target_yield"),
+				rs.getBigDecimal("costed_yield"),
+				rs.getBoolean("recorded"),
 				(Integer) rs.getObject("adults"),
 				(Integer) rs.getObject("children"),
 				(Integer) rs.getObject("seniors")), from, to);
@@ -185,14 +216,20 @@ public class MealKindCostService {
 	private record Meal(UUID mealId, String mealKind) {
 	}
 
+	/**
+	 * @param costedYield what the dish is costed at: what was cooked if its meal is recorded, else what
+	 *                    was planned
+	 * @param recorded    whether the dish's meal has been recorded
+	 */
 	private record DishRow(
-			UUID mealId, String mealKind, UUID recipeId, BigDecimal targetYield,
+			UUID mealId, String mealKind, UUID recipeId, BigDecimal costedYield, boolean recorded,
 			Integer adults, Integer children, Integer seniors) {
 	}
 
 	private static final class MealTotals {
 		private final IngredientBasket basket = new IngredientBasket();
 		private Integer servings;
+		private boolean recorded;
 	}
 
 	private final class KindTotals {
@@ -203,6 +240,9 @@ public class MealKindCostService {
 		private int meals;
 		private int servings;
 		private int mealsWithoutServings;
+		/** Meals costed at what their job card says was cooked, and those costed at the plan. */
+		private int mealsCostedAsCooked;
+		private int mealsCostedAsPlanned;
 
 		private MealKindCost asRow(String kind) {
 			CostedBasket total = costing.cost(all);
@@ -212,7 +252,8 @@ public class MealKindCostService {
 							.divide(BigDecimal.valueOf(servings), 2, RoundingMode.HALF_UP);
 			return new MealKindCost(kind, meals, servings, mealsWithoutServings,
 					total.estimatedTotal(), perServing, total.ingredientsPriced(),
-					total.ingredientsWithoutPrice(), total.unpriced());
+					total.ingredientsWithoutPrice(), total.unpriced(), mealsCostedAsCooked,
+					mealsCostedAsPlanned);
 		}
 	}
 }

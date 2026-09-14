@@ -12,6 +12,7 @@ const WHATSAPP_NONE: WhatsAppSettingsView = {
   connected: false,
   phoneNumberId: null,
   wabaId: null,
+  appId: null,
   displayNumber: null,
   webhookUrl: null,
   verifiedAt: null,
@@ -293,6 +294,7 @@ describe("the WhatsApp connection", () => {
     connected: true,
     phoneNumberId: "pn-123",
     wabaId: "waba-456",
+    appId: "1234567890123456",
     displayNumber: "Temple Kitchen (+91 80 1234 5678)",
     webhookUrl: "https://kms.example/api/v1/public/webhooks/whatsapp/wa-token",
     verifiedAt: "2026-08-16T10:00:00Z",
@@ -355,7 +357,7 @@ describe("the WhatsApp connection", () => {
 
     await waitFor(() =>
       expect(saveWhatsAppSettings).toHaveBeenCalledWith(
-        { phoneNumberId: "pn-123", wabaId: "waba-456", accessToken: "tok", appSecret: "sec" },
+        { phoneNumberId: "pn-123", wabaId: "waba-456", appId: "", accessToken: "tok", appSecret: "sec" },
         "token-abc"
       )
     );

@@ -116,10 +116,13 @@ class TodayIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM donations");
 		admin.execute("DELETE FROM purchase_order_lines");
 		admin.execute("DELETE FROM purchase_orders");
+		admin.execute("DELETE FROM vendor_supplies");
 		admin.execute("DELETE FROM vendors");
+		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM meal_kinds");
 		admin.execute("DELETE FROM occasions");
+		admin.execute("DELETE FROM recipe_ingredients");
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM audit_events");
@@ -206,7 +209,61 @@ class TodayIT extends AbstractIntegrationTest {
 
 		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.materialsCost.estimatedTotal").isNumber())
-				.andExpect(jsonPath("$.materialsCost.withoutPrice").isNumber());
+				.andExpect(jsonPath("$.materialsCost.withoutPrice").isNumber())
+				.andExpect(jsonPath("$.materialsCost.mealsCostedAsCooked").value(0))
+				.andExpect(jsonPath("$.materialsCost.mealsCostedAsPlanned").value(1));
+	}
+
+	/**
+	 * The tile follows the job card once there is one (T-212). Khichdi takes 10 Kg of rice per 100, and
+	 * rice is ₹50 a Kg, so each meal planned for 100 is ₹500. Lunch is then recorded at 60, which drew
+	 * 6 Kg from the store room and so costs ₹300. Dinner is not recorded and stays at its plan.
+	 */
+	@Test
+	@DisplayName("a recorded meal is in today's cost at what was cooked, and the tile says how many are")
+	void materialsCostFollowsTheJobCard() throws Exception {
+		UUID rice = admin.queryForObject(
+				"SELECT id FROM ingredients WHERE tenant_id = ? AND name = 'Rice'", UUID.class, tenant);
+		admin.update("""
+				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
+				VALUES (?, ?, ?, 10, 'KG', 0)
+				""", tenant, khichdi, rice);
+		UUID vendor = admin.queryForObject("""
+				INSERT INTO vendors (tenant_id, name, phone) VALUES (?, 'Govind Wholesale', '+919812345678')
+				RETURNING id
+				""", UUID.class, tenant);
+		admin.update("""
+				INSERT INTO vendor_supplies (tenant_id, vendor_id, ingredient_id, last_price, preferred)
+				VALUES (?, ?, ?, 50, true)
+				""", tenant, vendor, rice);
+
+		planMeal("Lunch", 100);
+		planMeal("Dinner", 100);
+
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(jsonPath("$.materialsCost.estimatedTotal").value(1000.00))
+				.andExpect(jsonPath("$.materialsCost.mealsCostedAsCooked").value(0))
+				.andExpect(jsonPath("$.materialsCost.mealsCostedAsPlanned").value(2));
+
+		UUID lunch = admin.queryForObject("""
+				SELECT m.id FROM meals m JOIN meal_kinds k ON k.id = m.meal_kind_id
+				WHERE m.tenant_id = ? AND k.name = 'Lunch'
+				""", UUID.class, tenant);
+		UUID dish = admin.queryForObject("SELECT id FROM meal_dishes WHERE meal_id = ?", UUID.class, lunch);
+		mvc.perform(post("/api/v1/meals/{id}/record", lunch).header("Authorization", "Bearer valid-token")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"note":"As read off the card",
+								 "dishes":[{"dishId":"%s","actualServings":60,"notMade":false}]}
+								""".formatted(dish)))
+				.andExpect(status().isOk());
+
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.materialsCost.estimatedTotal").value(800.00))
+				.andExpect(jsonPath("$.materialsCost.withoutPrice").value(0))
+				.andExpect(jsonPath("$.materialsCost.mealsCostedAsCooked").value(1))
+				.andExpect(jsonPath("$.materialsCost.mealsCostedAsPlanned").value(1));
 	}
 
 	@Test
@@ -326,6 +383,8 @@ class TodayIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.workforce.staffIn").value(0))
 				.andExpect(jsonPath("$.workforce.volunteers").value(0))
 				.andExpect(jsonPath("$.materialsCost.estimatedTotal").value(0))
+				.andExpect(jsonPath("$.materialsCost.mealsCostedAsCooked").value(0))
+				.andExpect(jsonPath("$.materialsCost.mealsCostedAsPlanned").value(0))
 				.andExpect(jsonPath("$.unrecordedMeals").value(0))
 				.andExpect(jsonPath("$.deliveries.length()").value(0))
 				// No calendar computed for this temple, so the screen says nothing about fasting

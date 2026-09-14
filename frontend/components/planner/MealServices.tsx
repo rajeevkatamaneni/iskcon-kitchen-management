@@ -985,9 +985,8 @@ function CorrectMeal({
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // `Form` has named a blank reason before this runs. A reason of only spaces passes `required`, and
-    // the button used to stay disabled for it; now that the button is pressable (T-172) the same
-    // check stops the send here.
+    // `Form` has named a blank reason, or one of only spaces, before this runs (T-203). This check
+    // stays as the twin guard, so nothing is sent for spaces.
     if (written === "") return;
     setBusy(true);
     setRefusal(null);

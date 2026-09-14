@@ -34,6 +34,21 @@ import org.springframework.stereotype.Service;
  * which is precisely what striking them recorded. Every figure the temple actually quotes already
  * reads the same way ({@code DonationLedgerService:186}, {@code MonetaryDonationService:379} and
  * {@code :463}); this reader was the one that did not.
+ *
+ * <p><strong>Nor is a gift that never went through a gateway (T-207, Rajeev's decision for Phase B
+ * item 8).</strong> Cash taken at the counter is recorded by {@code DonationRecorder} as a COMPLETED
+ * ONE_TIME gift with no {@code provider} and no {@code provider_payment_id}, because a person wrote
+ * it and no provider ever saw it. Put to the gateway, a null payment id can only come back as not
+ * captured, so every cash gift in the range was reported as a mismatch on every run — the same
+ * permanent, unclearable noise the struck-gift clause above removed, only commoner, since cash at the
+ * counter is the ordinary way a temple is given money. T-072's acceptance had kept these rows in; the
+ * ruling overrides that line. There is nothing for the provider to confirm about money it never
+ * handled, so the row is not asked about at all, which also saves the live API call per gift.
+ *
+ * <p>The test is the payment id itself rather than {@code payment_mode = 'CASH'} or
+ * {@code provider IS NULL}, because the payment id is exactly the thing the gateway is asked about:
+ * a row without one has no question to put. A card or UPI gift completed by a webhook always carries
+ * one, so a gateway gift the provider does not show as captured is still reported as before.
  */
 @Service
 public class DonationReconciliationService {
@@ -53,6 +68,7 @@ public class DonationReconciliationService {
 			List<Row> rows = jdbc.query("""
 					SELECT id, provider_payment_id, amount_inr FROM donations
 					WHERE status = 'COMPLETED' AND voided_at IS NULL AND type <> 'IN_KIND'
+					  AND provider_payment_id IS NOT NULL
 					  AND created_at::date BETWEEN ? AND ?
 					""", (rs, n) -> new Row(rs.getObject("id", UUID.class),
 					rs.getString("provider_payment_id"), rs.getBigDecimal("amount_inr")), from, to);

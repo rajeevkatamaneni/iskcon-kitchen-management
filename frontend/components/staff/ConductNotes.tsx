@@ -66,6 +66,8 @@ function ConductNotesPanel({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = draft.trim();
+    // `Form` has already said "Add a note is required" for a blank note or one of only spaces (T-203).
+    // This stays as the twin guard, because a note cannot be taken back once saved.
     if (body === "") return;
 
     setBusy(true);
@@ -124,7 +126,7 @@ function ConductNotesPanel({
 
         <div className="mt-4">
           {/* Pressable while the box is blank (T-172), so a press has `Form` say "Add a note is
-              required". A note of only spaces passes `required` and is stopped in `submit`. */}
+              required". A note of only spaces gets the same sentence (T-203). */}
           <Button type="submit" busy={busy} disabled={busy}>
             Save note
           </Button>

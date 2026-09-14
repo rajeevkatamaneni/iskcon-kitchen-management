@@ -55,12 +55,15 @@ public class DonationVoidService {
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final StockMovementService stockMovementService;
+	private final org.iskcon.kms.wishlist.WishlistService wishlistService;
 
 	public DonationVoidService(
-			JdbcTemplate jdbc, AuditService auditService, StockMovementService stockMovementService) {
+			JdbcTemplate jdbc, AuditService auditService, StockMovementService stockMovementService,
+			org.iskcon.kms.wishlist.WishlistService wishlistService) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.stockMovementService = stockMovementService;
+		this.wishlistService = wishlistService;
 	}
 
 	/**
@@ -84,7 +87,7 @@ public class DonationVoidService {
 		// and the second reversal is the one nobody would ever go looking for.
 		Map<String, Object> donation = jdbc.queryForList("""
 				SELECT id, type, donor_name, is_anonymous, amount_inr, estimated_value_inr,
-					   donated_on, status, voided_at
+					   donated_on, status, voided_at, wishlist_item_id
 				FROM donations WHERE id = ? FOR UPDATE
 				""", donationId).stream().findFirst()
 				.orElseThrow(() -> new ApplicationException(
@@ -103,6 +106,44 @@ public class DonationVoidService {
 
 		auditService.record(actor, AuditAction.DONATION_VOIDED, AuditEntityType.DONATION, donationId,
 				before(donation), after(donationId, reversed), written);
+
+		reopenTheWishItFunded(actor, donationId, (UUID) donation.get("wishlist_item_id"), written);
+	}
+
+	/**
+	 * Reopens the wish-list item this gift was given towards, if striking it leaves that item FULFILLED
+	 * without the money to be (T-205).
+	 *
+	 * <p>Rajeev ruled this on the question T-069 left open, choosing to reopen over leaving the item
+	 * fulfilled, flagging it to admins, or refusing the void. Left alone, a mixer whose only gift was a
+	 * chargeback read "fulfilled, ₹0 of ₹15,000", turned away every devotee who tried to give towards
+	 * it, and was archived by the sweep a week later: the kitchen lost the wish without anyone deciding
+	 * to. Reopened, the books say what is true — the item is owed its money again — and a devotee can
+	 * give. The cost, accepted with the ruling, is that a donor thanked for completing an item may see
+	 * it asking for money again after somebody else's gift is struck.
+	 *
+	 * <p>Here, in the same transaction and after the mark, so the struck gift is already out of the
+	 * figure the wish list reads and a failure anywhere rolls back the void with it. The decision is
+	 * {@link org.iskcon.kms.wishlist.WishlistService#reopenIfNoLongerCovered}'s, on the giving page's
+	 * own "still standing" figure; this method adds only who did it and why, which that service does
+	 * not know.
+	 *
+	 * <p>A gift converted to general funds had its {@code wishlist_item_id} cleared when it was
+	 * converted, so it names no item and never reaches this. A jointly funded item whose other gifts
+	 * still cover it stays FULFILLED and nothing is written.
+	 */
+	private void reopenTheWishItFunded(AuthenticatedUser actor, UUID donationId, UUID itemId, String reason) {
+		if (itemId == null) {
+			return;
+		}
+		wishlistService.reopenIfNoLongerCovered(itemId).ifPresent(reopening -> {
+			Map<String, Object> after = new LinkedHashMap<>(reopening.after());
+			// Not item state, so not part of what was read back from the row: the gift whose void did
+			// this, so the item's entry leads to the donation's without searching by timestamp.
+			after.put("voidedDonationId", donationId.toString());
+			auditService.record(actor, AuditAction.WISHLIST_ITEM_REOPENED, AuditEntityType.WISHLIST_ITEM,
+					itemId, reopening.before(), after, "A gift towards it was voided: " + reason);
+		});
 	}
 
 	// ---------------------------------------------------------------------

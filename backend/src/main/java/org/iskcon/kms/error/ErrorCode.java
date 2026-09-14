@@ -1019,6 +1019,20 @@ public enum ErrorCode {
 			"If it is no longer for this meal, cancel it and ask for volunteers from the right meal "
 					+ "in the planner."),
 
+	// Phase B item 7 (T-206): a bill that still has money paid against it is not voided, because
+	// voiding says it was never owed while the payment says it was paid. The payments are reversed
+	// first, which needs MANAGE_VENDOR_PAYMENTS, the same permission as voiding.
+	INVOICE_HAS_UNREVERSED_PAYMENTS(400154, 409,
+			"This bill has payments that have not been reversed.",
+			"Reverse the payments on this bill before voiding it."),
+
+	// Phase B item 1 (T-200): a purchase order goes to its vendor on WhatsApp with its PDF attached,
+	// and never without it. When the sheet cannot be produced at the moment Send is pressed, the
+	// person pressing it is told then, rather than the message failing quietly in the background.
+	PO_SHEET_NOT_READY(400155, 409,
+			"The purchase order sheet isn't ready yet, so it can't go on WhatsApp.",
+			"Wait a minute, then press Send on WhatsApp again."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

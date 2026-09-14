@@ -1,6 +1,7 @@
 package org.iskcon.kms.costing;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -35,6 +37,11 @@ import org.springframework.test.web.servlet.MockMvc;
  * <p>which is 16 Kg of rice at the preferred vendor's ₹45 and 4 Kg of dal at ₹120 (the dearest of
  * two unpreferred vendors), or ₹1,200 — with the rock salt, which no vendor supplies, left out and
  * declared.
+ *
+ * <p>A recorded meal is costed at what its job card says was cooked, and a meal not yet recorded at
+ * what was planned (T-212). Meals here are recorded through the real endpoint rather than by writing
+ * {@code recorded_at} into the row, so the figure is tested against what recording actually leaves
+ * behind — the same {@code actual_servings} the stock ledger was drawn down by.
  */
 @AutoConfigureMockMvc
 class MaterialsCostIT extends AbstractIntegrationTest {
@@ -105,6 +112,8 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM vendor_supplies");
 		admin.execute("DELETE FROM vendors");
 		admin.execute("DELETE FROM audit_events");
+		// Recording draws stock, so a recorded meal leaves ledger rows that hold the ingredient down.
+		admin.execute("DELETE FROM stock_movements");
 		// Anything that moved through the stock ledger is tracked now, so the item rows exist
 		// even where the test never asked for them, and they hold the ingredient down.
 		admin.execute("DELETE FROM inventory_items");
@@ -122,7 +131,10 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 		cost().andExpect(status().isOk())
 				.andExpect(jsonPath("$.date").value(day.toString()))
 				.andExpect(jsonPath("$.estimatedTotal").value(1200.00))
-				.andExpect(jsonPath("$.ingredientsPriced").value(2));
+				.andExpect(jsonPath("$.ingredientsPriced").value(2))
+				// Two dishes of one Lunch are one meal, and nobody has recorded it, so it is the plan.
+				.andExpect(jsonPath("$.mealsCostedAsCooked").value(0))
+				.andExpect(jsonPath("$.mealsCostedAsPlanned").value(1));
 	}
 
 	@Test
@@ -148,13 +160,46 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 		cost().andExpect(jsonPath("$.estimatedTotal").value(1200.00));
 	}
 
+	/**
+	 * Recording moves every dish out of PLANNED. A figure that filtered on PLANNED would drain to zero
+	 * as the office typed the cards in; this one keeps the recorded meal, at what was cooked, which
+	 * here is exactly what was planned.
+	 */
 	@Test
-	@DisplayName("a meal that has been cooked still counts — the figure must not drain through the day")
+	@DisplayName("a meal that has been recorded still counts — the figure must not drain through the day")
 	void cookedMealStillCounts() throws Exception {
-		plan(khichdi, "200", "COOKED");
-		plan(payasam, "100", "PLANNED");
+		UUID lunch = plan(day, "Lunch", khichdi, "200", "PLANNED", null);
+		plan(day, "Breakfast", payasam, "100", "PLANNED", null);
+		record(lunch, "200");
 
-		cost().andExpect(jsonPath("$.estimatedTotal").value(1200.00));
+		cost().andExpect(jsonPath("$.estimatedTotal").value(1200.00))
+				.andExpect(jsonPath("$.mealsCostedAsCooked").value(1))
+				.andExpect(jsonPath("$.mealsCostedAsPlanned").value(1));
+	}
+
+	/**
+	 * The rule itself (T-212), on the daily figure. Khichdi planned for 200 and recorded at 100 is
+	 * 5 Kg of rice at ₹45 and 2 Kg of dal at ₹120, ₹465, where its plan was ₹930. The payasam nobody
+	 * has recorded stays at its plan, ₹270.
+	 */
+	@Test
+	@DisplayName("a recorded meal costs what its job card says was cooked, and an unrecorded one its plan")
+	void aRecordedMealCostsWhatWasCooked() throws Exception {
+		UUID lunch = plan(day, "Lunch", khichdi, "200", "PLANNED", null);
+		plan(day, "Breakfast", payasam, "100", "PLANNED", null);
+
+		cost().andExpect(jsonPath("$.estimatedTotal").value(1200.00))
+				.andExpect(jsonPath("$.mealsCostedAsCooked").value(0))
+				.andExpect(jsonPath("$.mealsCostedAsPlanned").value(2));
+
+		record(lunch, "100");
+
+		cost().andExpect(jsonPath("$.estimatedTotal").value(735.00))
+				// Salt is unpriced at either amount, and is still declared.
+				.andExpect(jsonPath("$.ingredientsWithoutPrice").value(1))
+				.andExpect(jsonPath("$.unpriced[0].quantity").value(0.2))
+				.andExpect(jsonPath("$.mealsCostedAsCooked").value(1))
+				.andExpect(jsonPath("$.mealsCostedAsPlanned").value(1));
 	}
 
 	@Test
@@ -162,7 +207,9 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 	void emptyDay() throws Exception {
 		cost().andExpect(jsonPath("$.estimatedTotal").value(0.00))
 				.andExpect(jsonPath("$.ingredientsPriced").value(0))
-				.andExpect(jsonPath("$.ingredientsWithoutPrice").value(0));
+				.andExpect(jsonPath("$.ingredientsWithoutPrice").value(0))
+				.andExpect(jsonPath("$.mealsCostedAsCooked").value(0))
+				.andExpect(jsonPath("$.mealsCostedAsPlanned").value(0));
 	}
 
 	@Test
@@ -197,7 +244,44 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.kinds.length()").value(2))
 				// 930 for the lunch (10 Kg rice, 4 Kg dal) and 270 for the breakfast (6 Kg rice).
 				.andExpect(jsonPath("$.kinds[0].estimatedTotal").value(930.00))
-				.andExpect(jsonPath("$.kinds[1].estimatedTotal").value(270.00));
+				.andExpect(jsonPath("$.kinds[1].estimatedTotal").value(270.00))
+				.andExpect(jsonPath("$.mealsCostedAsCooked").value(0))
+				.andExpect(jsonPath("$.mealsCostedAsPlanned").value(2));
+	}
+
+	/**
+	 * The rule on the report (T-212), where a row can hold both kinds of meal. Lunch is two meals: one
+	 * recorded at 100 of its planned 200 (₹465) and one not yet recorded (₹930), so ₹1,395 over the
+	 * 200 people of both, ₹6.98 a serving. Costed at the plan it would have been ₹1,860 and ₹9.30.
+	 * Breakfast is one unrecorded meal at its plan.
+	 */
+	@Test
+	@DisplayName("the report costs recorded meals at what was cooked, and says how many of each a row holds")
+	void theReportCostsRecordedMealsAtWhatWasCooked() throws Exception {
+		UUID recordedLunch = plan(day, "Lunch", khichdi, "200", "PLANNED", 100);
+		plan(day.plusDays(1), "Lunch", khichdi, "200", "PLANNED", 100);
+		plan(day, "Breakfast", payasam, "100", "PLANNED", 90);
+		record(recordedLunch, "100");
+
+		byMealKind(day, day.plusDays(1)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.kinds[0].mealKind").value("Lunch"))
+				.andExpect(jsonPath("$.kinds[0].meals").value(2))
+				.andExpect(jsonPath("$.kinds[0].estimatedTotal").value(1395.00))
+				.andExpect(jsonPath("$.kinds[0].costPerServing").value(6.98))
+				.andExpect(jsonPath("$.kinds[0].mealsCostedAsCooked").value(1))
+				.andExpect(jsonPath("$.kinds[0].mealsCostedAsPlanned").value(1))
+				.andExpect(jsonPath("$.kinds[1].mealKind").value("Breakfast"))
+				.andExpect(jsonPath("$.kinds[1].estimatedTotal").value(270.00))
+				.andExpect(jsonPath("$.kinds[1].mealsCostedAsCooked").value(0))
+				.andExpect(jsonPath("$.kinds[1].mealsCostedAsPlanned").value(1))
+				.andExpect(jsonPath("$.meals").value(3))
+				.andExpect(jsonPath("$.estimatedTotal").value(1665.00))
+				.andExpect(jsonPath("$.mealsCostedAsCooked").value(1))
+				.andExpect(jsonPath("$.mealsCostedAsPlanned").value(2));
+
+		// And the day of the recorded lunch reads the same ₹465 on the daily figure: one rule, two
+		// questions.
+		cost().andExpect(jsonPath("$.estimatedTotal").value(735.00));
 	}
 
 	@Test
@@ -296,7 +380,9 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 		byMealKind(day, day)
 				.andExpect(jsonPath("$.kinds.length()").value(0))
 				.andExpect(jsonPath("$.meals").value(0))
-				.andExpect(jsonPath("$.estimatedTotal").value(0.00));
+				.andExpect(jsonPath("$.estimatedTotal").value(0.00))
+				.andExpect(jsonPath("$.mealsCostedAsCooked").value(0))
+				.andExpect(jsonPath("$.mealsCostedAsPlanned").value(0));
 	}
 
 	@Test
@@ -343,10 +429,26 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 	}
 
 	/**
-	 * One dish of one meal. {@code adults} is the head count the planner recorded, and null means
-	 * nobody recorded one — the case the per-serving figure has to decline to divide by.
+	 * Records the meal this dish belongs to through the endpoint the office uses, with the dish going
+	 * out at {@code cooked}. The meal's only dish, in every test that records.
 	 */
-	private void plan(
+	private void record(UUID dishId, String cooked) throws Exception {
+		mvc.perform(post("/api/v1/meals/{id}/record", MealFixture.mealOf(admin, dishId))
+						.header("Authorization", "Bearer valid-token")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"note":"As read off the card",
+								 "dishes":[{"dishId":"%s","actualServings":%s,"notMade":false}]}
+								""".formatted(dishId, cooked)))
+				.andExpect(status().isOk());
+	}
+
+	/**
+	 * One dish of one meal. {@code adults} is the head count the planner recorded, and null means
+	 * nobody recorded one — the case the per-serving figure has to decline to divide by. Answers with
+	 * the dish's id.
+	 */
+	private UUID plan(
 			LocalDate date, String mealKind, UUID recipeId, String yield, String status, Integer adults) {
 		// The head count is the meal's (D-27): dishes of one meal on one day share it, and a dish added
 		// with a head count sets it for the meal it joins.
@@ -354,7 +456,7 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 		if (adults != null) {
 			MealFixture.headCount(admin, meal, adults, null, null);
 		}
-		MealFixture.dish(admin, tenant, meal, recipeId, new java.math.BigDecimal(yield), status,
+		return MealFixture.dish(admin, tenant, meal, recipeId, new java.math.BigDecimal(yield), status,
 				admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'", UUID.class));
 	}
 

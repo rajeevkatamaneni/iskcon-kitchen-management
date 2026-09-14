@@ -230,4 +230,29 @@ describe("the amount, under Form (T-166)", () => {
     await waitFor(() => expect(giveOnce).toHaveBeenCalledTimes(1));
     expect(giveOnce.mock.calls[0][0]).toBe(250);
   });
+
+  /**
+   * T-204. The box shows no up/down spinner arrows. jsdom draws nothing and applies no Tailwind, so
+   * what can be proved here is that the box carries the three classes that remove them: one per
+   * WebKit pseudo-element, and `appearance: textfield` for Firefox. `next build` is what proves the
+   * classes compile to real CSS. The point of asserting type, min, step and inputMode alongside is
+   * that the easy way to lose the arrows is to stop being a number box, and that would silently undo
+   * T-172's "at least 1".
+   */
+  it("hides the spinner arrows without giving up the number box (T-204)", async () => {
+    render(<DonatePage />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Give/ })).toBeInTheDocument());
+    const other = screen.getByLabelText(/or another amount/i);
+
+    expect(other).toHaveClass(
+      "[&::-webkit-inner-spin-button]:appearance-none",
+      "[&::-webkit-outer-spin-button]:appearance-none",
+      "[appearance:textfield]",
+    );
+
+    expect(other).toHaveAttribute("type", "number");
+    expect(other).toHaveAttribute("min", "1");
+    expect(other).toHaveAttribute("step", "1");
+    expect(other).toHaveAttribute("inputMode", "numeric");
+  });
 });

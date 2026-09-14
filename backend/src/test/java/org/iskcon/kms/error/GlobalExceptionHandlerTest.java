@@ -20,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -259,6 +260,72 @@ class GlobalExceptionHandlerTest {
 	}
 
 	// ---------------------------------------------------------------------------------------
+	// A value the request was required to carry and did not (T-216).
+	// ---------------------------------------------------------------------------------------
+
+	@Test
+	@DisplayName("a required query value left out is a bad field, not our fault")
+	void aMissingRequiredValueIsAValidationFailureNamingTheParameter() {
+		// The staging defect: /meal-crew/at?date=2026-09-21 with no readyBy answered KMS-500001.
+		// Built through the constructor Spring's own resolver uses, pointed at a parameter declared
+		// the way the real controller declares it.
+		ResponseEntity<ErrorResponse> response = handler.handleMissingRequestValue(
+				missing("readyBy", "aRequiredTime"),
+				new MockHttpServletRequest("GET", "/api/v1/meal-crew/at"));
+
+		assertThat(response.getStatusCode())
+				.as("the caller left something out; nothing went wrong at our end")
+				.isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().code()).isEqualTo(ErrorCode.VALIDATION_FAILED.reference());
+		assertThat(response.getBody().fieldErrors())
+				.containsExactly(new ErrorResponse.FieldError("readyBy", "This can't be left empty."));
+	}
+
+	@Test
+	@DisplayName("a required value sent empty gets the same answer as one left out")
+	void anEmptyRequiredValueGetsTheSameAnswer() {
+		// ?readyBy= reaches the handler as this same exception with missingAfterConversion set.
+		ResponseEntity<ErrorResponse> response = handler.handleMissingRequestValue(
+				new MissingServletRequestParameterException(
+						"readyBy", aTimeParameter("aRequiredTime"), true),
+				new MockHttpServletRequest("GET", "/api/v1/meal-crew/at"));
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().fieldErrors())
+				.containsExactly(new ErrorResponse.FieldError("readyBy", "This can't be left empty."));
+	}
+
+	@Test
+	@DisplayName("the missing-value answer says nothing about types and reads like the product")
+	void theMissingValueAnswerLeaksNothing() {
+		// Spring's own sentence names the Java type; the body must not.
+		ErrorResponse body = handler.handleMissingRequestValue(
+				missing("readyBy", "aRequiredTime"),
+				new MockHttpServletRequest("GET", "/api/v1/meal-crew/at")).getBody();
+		assertThat(body).isNotNull();
+		String everythingSaid = body.code() + " " + body.message() + " " + body.action() + " "
+				+ body.fieldErrors();
+
+		assertThat(everythingSaid)
+				.doesNotContain("LocalTime")
+				.doesNotContain("java.")
+				.doesNotContain("Required request parameter")
+				.doesNotContain("Exception");
+		assertThat(everythingSaid.toLowerCase(Locale.ROOT))
+				.doesNotContain("parameter")
+				.doesNotContain("server")
+				.doesNotContain("null");
+
+		// FieldErrorMessageTest cannot see a generated sentence, so its rules are held here.
+		String message = body.fieldErrors().get(0).message();
+		assertThat(Character.isUpperCase(message.charAt(0))).isTrue();
+		assertThat(message).endsWith(".").doesNotContain("!");
+		assertThat(message.toLowerCase(Locale.ROOT)).doesNotContain("must not be");
+	}
+
+	// ---------------------------------------------------------------------------------------
 	// Fixtures.
 	// ---------------------------------------------------------------------------------------
 
@@ -329,6 +396,25 @@ class GlobalExceptionHandlerTest {
 			throw new IllegalStateException("the fixture method " + fixtureMethod + " was renamed", e);
 		}
 		return new MethodParameter(method, 0);
+	}
+
+	private static MissingServletRequestParameterException missing(String name, String declaredBy) {
+		return new MissingServletRequestParameterException(name, aTimeParameter(declaredBy), false);
+	}
+
+	private static MethodParameter aTimeParameter(String fixtureMethod) {
+		try {
+			return new MethodParameter(GlobalExceptionHandlerTest.class.getDeclaredMethod(
+					fixtureMethod, java.time.LocalTime.class), 0);
+		}
+		catch (NoSuchMethodException e) {
+			throw new IllegalStateException("the fixture method " + fixtureMethod + " was renamed", e);
+		}
+	}
+
+	/** A required time, declared as {@code MealCrewController.crewAt} declares its ready-by. */
+	@SuppressWarnings("unused")
+	private static void aRequiredTime(@RequestParam java.time.LocalTime readyBy) {
 	}
 
 	/** Part of the address: {@code /api/v1/stock/{unit}}. */

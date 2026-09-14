@@ -20,7 +20,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E1-S2 | GCP infrastructure baseline | *Automated / deployment — no manual surface* |
 | E1-S3 | Tenant model and row-level security | UAT-002, **UAT-006** |
 | E1-S4 | Firebase authentication | UAT-001, UAT-007, **UAT-012** |
-| E1-S5 | Role-based access control | UAT-001, **UAT-005**, UAT-006 |
+| E1-S5 | Role-based access control | UAT-001, **UAT-005**, UAT-006. *UAT-005 step 5 was written before T-031 took My shifts away from kitchen staff, so it now expects the wrong menu* |
 | E1-S6 | Tenant provisioning | **UAT-002**, UAT-003, UAT-007 |
 | E1-S7 | Audit log framework | UAT-009, **UAT-011**, UAT-014, UAT-025 |
 | E1-S8 | Contact channels and communication preference | **UAT-010** |
@@ -33,7 +33,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E1-S15 | Temple detail, data export, permanent deletion | **UAT-003**; D13 (deletion takes the schedule with it) in **UAT-082** |
 | E1-S16 | Signing out, and idle sign-out | **UAT-063** |
 | E1-S17 | Registering yourself at a temple | **UAT-008**, UAT-012 |
-| E4-S8 | Today — the temple's morning screen | **UAT-062** |
+| E4-S8 | Today — the temple's morning screen | **UAT-062**. *The script predates E4-S14's rewrite of this screen and the D-27 meal rebuild* |
 | E2-S1 | Ingredient master | **UAT-013**; ~~UAT-014~~ *(withdrawn 2026-09-08 with the sattvic flag — D-18. See gap G12: nothing now tests that only a Temple Admin may change the surviving **Ekadashi** flag.)* |
 | E2-S2 | Recipe CRUD | **UAT-015**, UAT-016 |
 | E2-S3 | Recipe scaling | **UAT-017** |
@@ -41,23 +41,40 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E2-S5 | Recipe PDF and print | **UAT-019** |
 | E2-S6 | Recipe translation and glossary | **UAT-020**, UAT-021 |
 | E2-S7 | Recipe browse and search | **UAT-016** |
+| E2-S8 | Removing a recipe: delete one never cooked, archive and restore one that was | *Automated only — `RecipeIT` and `recipe-detail.test.tsx`. The story itself says "UAT to be written"; none has been* |
+| E2-S9 | The shared recipe library table and its loader | *Automated only — no manual surface* |
+| E2-S10 | Searching the library | *No UAT test.* UAT-016 predates the library and searches the temple's own recipes only |
+| E2-S11 | Widening the yield vocabulary | UAT-074 steps 33–34 (a library recipe measured in litres keeps its per-head portion) |
+| E2-S12 | Adding a library recipe to a temple | *No UAT test* |
+| E2-S13 | The Recipes page rebuilt over both kinds | *No UAT test.* UAT-016 predates it |
+| E2-S14 | Full screen for a temple recipe and a library recipe | UAT-074 step 34 opens a library recipe; nothing tests the screen itself |
+| E2-S15 | The super-admin's library | *No UAT test* |
+| E2-S16 | A head count is not a yield | *No UAT test* |
+| E2-S17 | No preparation leaves without a quantity | *No UAT test* |
 | E3-S1 | Consumable inventory and stock view | **UAT-022**; the expiry warning horizon in **UAT-080** |
 | E3-S2 | Stock movements ledger | **UAT-026** |
 | E3-S3 | Reorder thresholds and low-stock alerts | **UAT-023** |
 | E3-S4 | Equipment inventory | **UAT-027** |
 | E3-S5 | In-kind donation intake | **UAT-028** |
-| E3-S6 | Consumption on meal production | **UAT-035** |
+| E3-S6 | Consumption on meal production | **UAT-035**. *The script still presses a per-dish Cook; it predates E4-S10 (recording a meal), T-087 (recording never refuses on stock) and D-27* |
 | E3-S7 | Manual stock adjustment | **UAT-024**, UAT-025 |
+| E3-S8 | What the day's food is costing (the materials figure on Today) | UAT-075 checks only that its own figures do not change this one. *No test of the figure itself* |
 | E3-S9 | What a serving costs, by kind of meal | **UAT-075** |
 | E3-S10 | Equipment servicing, and the record of it | **UAT-084**; the screen it is read on in UAT-085 |
 | E3-S11 | The equipment screen | **UAT-085**; the rules it shows in UAT-084 |
 | E4-S1 | Calendar engine | **UAT-029** |
 | E4-S2 | Festival occasion catalogue | **UAT-030** |
 | E4-S3 | Admin calendar override | **UAT-031** |
-| E4-S4 | Meal plan across four contexts | **UAT-032**, UAT-035; the outside-event half of it now in **UAT-086** |
-| E4-S7 | The planner redesigned: meal kinds, ready-by times, the day view | **UAT-032** (including the head-count rule and duplicating a week), UAT-086 |
+| E4-S4 | Meal plan across four contexts | **UAT-032**, UAT-035; the outside-event half of it now in **UAT-086**. *Both scripts predate the D-27 meal rebuild — see the T-195 row* |
+| E4-S7 | The planner redesigned: meal kinds, ready-by times, the day view | **UAT-032** (including the head-count rule and duplicating a week), UAT-086. *UAT-032 predates Reuse a plan and the D-27 meal rebuild* |
 | E4-S5 | Ingredient sufficiency and shortfalls | **UAT-034** |
 | E4-S6 | Ekadashi violation flagging | **UAT-036** |
+| E4-S9 | The Vaishnava calendar as its own screen | *No UAT test.* UAT-029 (2026-08-11) predates the screen |
+| E4-S10 | Recording a meal, not a dish | *No UAT test.* UAT-035 still describes the per-dish Cook this replaced |
+| E4-S11 | The job card; since made a worksheet the kitchen fills in (`bf506c5`), a pack of four sheets (`6db8fb8`), and stripped of equipment (T-209) | UAT-086 step 10 (an event gets its own card). *No test of the card itself* |
+| E4-S12 | Swapping or editing a planned dish | *No UAT test* |
+| E4-S13 | What an outside event is for | *Superseded by E4-S15* — **UAT-086** |
+| E4-S14 | Today, rewritten around the meal, including what is waiting for you (`fb52eba`) | *No UAT test.* UAT-062 (2026-08-14) predates it |
 | E4-S15 | Events, and the end of catering | **UAT-086**; the meal-kind picker it changes in UAT-032 |
 | E4-S16 | Travel time for a delivered event | **UAT-086** §travel |
 | E5-S1 | Vendor management | **UAT-037**; D2, the contract-end horizon as a temple setting, in **UAT-080** |
@@ -68,8 +85,8 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E5-S6 | Receiving | **UAT-044** |
 | E5-S7 | WhatsApp PO delivery | **UAT-043** |
 | E5-S8 | Vendor invoice capture | **UAT-045** |
-| E5-S9 | Vendor performance | **UAT-077**; D6, an order with no needed-by date, also in UAT-083 |
-| E6-S1 | Staff profiles and weekly schedule | **UAT-047** |
+| E5-S9 | Vendor performance | **UAT-077**; D6, an order with no needed-by date, also in UAT-083. *UAT-077 still says on-time is scored per order; T-124 made it per item* |
+| E6-S1 | Staff profiles and weekly schedule | **UAT-047**. *Its step 16 asks whether staff can see their own schedule; T-006 built that answer after the script was written* |
 | E6-S2 | Volunteer shift posting | **UAT-048** |
 | E6-S3 | Volunteer signup | **UAT-049** |
 | E6-S4 | Signup release | **UAT-050** |
@@ -78,6 +95,11 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E6-S7 | One-off reminder broadcast | **UAT-053** |
 | E6-S8 | Hiring, employment records, letting go | **UAT-064**, UAT-008 |
 | E6-S9 | Is this Aadhaar card real? | *Specified, not built — needs a real Aadhaar QR to verify against* |
+| E6-S10 | Leave: time off, sick and unpaid | *No UAT test* |
+| E6-S11 | The week grid, edited where it is read | UAT-078 works on the grid as it now is. *UAT-047 (2026-08-19) still describes the per-date exceptions this replaced* |
+| E6-S12 | A fifth role: Kitchen Manager | UAT-064 (the hire form offers it), **UAT-069**, UAT-070 step 25 |
+| E6-S13 | Staff pay: salary, payments, advances and docking | *No UAT test* |
+| E6-S14 | Workforce: how much of a kitchen there is today | *No UAT test* |
 | E6-S15 | Where the schedule is short of hands | **UAT-078**, and the grid it changes in UAT-047 |
 | E6-S16 | Conduct notes on an employment record | **UAT-079** |
 | E8-S1 | Communication categories and devotee preferences | **UAT-065** |
@@ -93,6 +115,9 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E7-S7 | Donations ledger | **UAT-059** — *amended 2026-09-10, not withdrawn: the ledger aggregates three kinds of gift, not four, and step 6 (the Recurring filter) is struck out* |
 | E7-S8 | Vendor invoice payment recording | **UAT-046** |
 | E7-S9 | Payment webhook infrastructure | UAT-055 (replay/idempotency), UAT-058 |
+| E7-S10 | The donations ledger by period, against the same point last year | *No UAT test.* UAT-059 has no step for periods or the comparison |
+| E9-S1 | A notice board that spans the platform | *No UAT test* |
+| E9-S2 | The record raised at a dismissal, and the check run at a hire | *No UAT test.* UAT-064's dismissal steps do not raise the record or run the check |
 | E10-S1 | Requirements amendment: a temple has kitchens | *Documents only — no manual surface* |
 | E10-S2 | The kitchens register | **UAT-067** |
 | E10-S3 | The kitchens page | **UAT-067** |
@@ -112,15 +137,90 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E11-S4 | Every screen says it the same way | **UAT-074** (steps 28–34) |
 | E11-S5 | Documents and emails say it the same way | **UAT-074** (steps 35–41) |
 | E11-S6 | Every dropdown offers the one list | **UAT-074** (steps 42–51) |
+| E12 | Which kitchen is cooking | *Design only, awaiting Rajeev — nothing built, no stories numbered* |
+| Brief 2026-08-21, groups 1, 2, 7 (`42982bb`, `b84dcd0`, `0a7d6c9`) | The kit every form and table is built from, the focus screen, and one voice for the site's words | UAT-073 uses the focus-screen add. *No test of the kit as such* |
+| Brief 2026-08-21, group 3 (`6839960`) | The staff register, and a record for people who have left (E6-S8) | **UAT-064** step 17 (Former staff) |
+| Brief 2026-08-21, groups 4, 5 (`858b867`, `6df10ca`) | How many hands a meal takes; the planner plans meals, moves through time, and can name a feast (E4-S7) | **UAT-032**, UAT-078 |
+| Review of 2026-08-23 (`d192168`, `21eef91`, `b9af9e7`, `111e85f`, `a40da63`, `f395989`, `55ba323`) | What the deadline reached of Rajeev's review list: inventory on one page that asks what is on the shelf, a date span that cannot run backwards, the sign-in picture, a recipe on its own screen that remembers the search, yield and per-head portion shown | UAT-022 (amended 2026-08-30) and UAT-073 (written 2026-08-30) cover the inventory add. The rest are tracked in `docs/OUTSTANDING_BUILD_LIST.md`, *not by UAT scripts* |
+| Themes (`56d369c` to `f6654fc`, `0639c75`, `4926054`, `691b07f`, `074e153`, `d714fce`, `121d545`) | A temple chooses its own colours from fifteen theme packs, with depth, lift and materials (DESIGN_SYSTEM v1.5, v1.6) | *No UAT test* |
+| `9e39bac`, `cc28eb0` | The sub-text under a form control moves into an "i" beside its label | *No UAT test* |
+| `433407e`, `660a6cb`, `ab801c0`, `743b4ff` | Reuse a plan (copy any stretch of days); planning and correcting a meal are one screen; the planner marks the current period; one month grid (E4-S7) | *No UAT step.* UAT-032 steps 32–35 test *Duplicate last week*, written before Reuse a plan |
+| `610ee60` | A purchase order carries all three of its dates everywhere it appears (E5-S3) | UAT-083 covers the needed-by date only |
+| `64a9cce`, `89777ec` | Every date written in the temple's own clock, one clock per temple | *No UAT test* |
+| `701e582` | The Kannada word-order reversal fixed in our own catalogue; the language picker opens quiet (E2-S6, E10-S11) | *No UAT step.* UAT-020 and UAT-071 translate, but neither checks Kannada word order |
+| `5f3d177`, `5f06b2f`, `4afcac0`, `5a3d7f5`, `057e270` | A Settings screen for the number an error sends people to; recipe lists ordered state then name; the library browse error; one message per dot on the Operations pulse; the wish list counts money only | *No UAT step* |
+| `229a36a`, `7493f0e`, `fa7d07b`, `b38e920`, `9f3af90` | The deploy pipeline (25 minutes to 5m49s), a CI guard against ignored source files, and the agent roles | *Automated / deployment — no manual surface* |
+| T-000 | Every error code renumbered to six digits | Every script's codes were renumbered with it (`ad509f7`); **UAT-060** reads them |
+| T-003, T-021, T-095, T-098, T-105, T-116, T-216 | Refusals speak plainly: a 401 says which 401 it is; a malformed phone is `KMS-400003`; a next step never names a door its reader cannot open; field errors are written for a person; an unreadable body names its field; the words written for a refusal reach the person; a required query value left out is `KMS-400001` naming the field (T-216) | UAT-060 covers the principle; *no step exercises these cases.* T-095, T-098, T-116 and T-216 are held by automated guards |
+| T-002, T-035 | Four screens stop offering what the server refuses; a refused page keeps the menu and a way out | *No UAT step.* UAT-005 predates both |
+| T-029 | Continue with Google always asks which Google account (E1-S4) | *No UAT step.* UAT-012 and UAT-063 predate it |
+| T-037, T-114, T-118 | Registration remembers the credential it made, stops giving one answer to two different people, and keeps the temple somebody chose (E1-S17) | *No UAT step.* UAT-008 predates all three |
+| T-030, T-031 | Giving is for volunteers only; My shifts is the volunteer's seva board and staff no longer get it (D-8, D-10, D-16) | *No UAT step.* UAT-005 step 5 now expects the wrong menu for kitchen staff |
+| T-006, T-032 | A cook, a manager and an admin each see their own rostered days, with the leave they were given (E6-S1, E6-S10) | **UAT-047 step 16** asks the question this answers; *no step for the leave on it* |
+| T-039, T-040, T-046 | A refused attempt to change your own access or end your own employment is recorded; the unused role-change endpoint is deleted (E1-S12, E6-S8) | UAT-064 checks you cannot end your own employment. *No step reads the audit entry* |
+| T-014 | Reinstating someone whose employment was ended (E6-S8) | *No UAT test* |
+| T-184, T-194 | Staff withdraw their own leave before it begins and their manager is told; leave rows read "3 to 4 September" (E6-S10) | *No UAT test* — E6-S10 has none |
+| T-190, T-191 | A person's own accounts at other temples stop showing in this temple; an unused lookup removed (E1-S12) | *No UAT step.* UAT-006 covers one temple against another, not this case. T-191 automated only |
+| T-192, T-193 | The platform audit log refuses an entry that names someone other than its author (E1-S14) | *Automated only — no manual surface (gap G9)* |
+| T-008, T-041 | A temple's profile can be corrected and 80G approval recorded; the edit narrows to name, address and 80G (D-17) (E1-S15) | *No UAT step.* UAT-003 reads the profile but predates editing |
+| T-042, T-044, T-048, T-053, T-054, T-059, T-176 | Places: provisioning picks the temple from Google Places, OpenStreetMap removed, a coordinate cut to six decimals, 0,0 refused; editing a delivery event no longer re-pins it to 0,0, and the events already pinned there are unpinned (D-17, D-19) (E1-S6, E4-S16) | *No UAT step.* UAT-002 predates Places; UAT-086 §travel predates the fixes |
+| T-052, T-057, T-115, T-117 | Terraform describes the variables the services carry, and the example file is checked against them (E1-S2) | *Automated / deployment — no manual surface* |
+| T-004 | A Temple Admin screen to add, rename and remove the temple's own festival occasions (E4-S2) | **UAT-030 step 7**, written for "if a screen exists" |
+| T-005, T-038, T-047 | The meal-kinds screen; renaming a kind carries its meals with it; deleting one in use is refused; a duplicate name is refused plainly (E4-S7) | *No UAT step.* UAT-032 uses meal kinds but never renames or deletes one |
+| T-049 | The planner's Today control (E4-S7) | UAT-032 steps 1–2 |
+| T-208 | A new meal on a festival day opens with the occasion's default servings as Adults (E4-S2, E4-S7) | UAT-030 step 7 asks whether the default is visible when planning. *No step checks the prefill* |
+| T-050, T-051, T-055, T-056 | The sattvic flag, its seed and its controls deleted; the documents withdrawn in place; its permission renamed (D-18, D-20, D-21) | **UAT-013**, UAT-002, UAT-007, UAT-011, UAT-015, UAT-016, UAT-038, UAT-073 amended with it (`02b0b88`); UAT-014 and UAT-018 withdrawn. T-056 automated only |
+| T-045, T-119, T-121 | Ekadashi-prohibited set from the list and the create form; ingredients a recipe import created are marked, filterable and counted (E2-S1, E2-S12) | UAT-013 says the flag is set by hand. *No step for the import marking; who may set the flag is gap G12* |
+| T-001, T-036 | A stock movement can be corrected and an item can stop being tracked; the dialog reads the unit and month back (E3-S2, E3-S7) | *No UAT step.* UAT-024 and UAT-026 predate it |
+| T-023, T-024, T-089 | Supplies are a flag on the ingredient catalogue with a menu item of their own; a purchase-order line can name something not in the catalogue (D-1) | *No UAT test* |
+| T-086, T-087, T-122 | Inventory shows on hand, committed and available; recording a meal never refuses on stock; on hand stops at zero and the shortfall is recorded (E3-S1, E3-S6) | *No UAT step.* UAT-022 and UAT-035 predate them |
+| T-009, T-033, T-120 | An equipment record can be edited; scrapping asks first and can be undone once, by name, with a reason; a machine can say it never needs servicing (D-15) (E3-S4, E3-S10, E3-S11) | *No UAT step.* UAT-027, UAT-084 and UAT-085 predate them |
+| T-150, T-154 | Stock adjustment, gift of goods and ingredient request refuse a unit the ingredient cannot be measured in, and name the ingredient (E11-S2) | **UAT-081** for the adjustment. *No step for the gift or the request* |
+| T-108 (with T-077, T-143), T-125, T-127, T-128, T-144, T-148, T-179b | "1 piece" not "1 pieces" on screens and printed sheets; "0 L" on both; the never-serviced tick on the registration form; the language picker; movement labels, donation screens and an invoice fix found by driving (T-125); the backend copies of the unit rule removed (E11-S3 to E11-S5) | UAT-074 covers how quantities read. *No step for these cases* |
+| T-007, T-043, T-083, T-088 | A recorded meal can be corrected, reversing every dish before any is re-drawn; an event meal can be recorded again and a refusal is shown; the planner badge belongs to the meal (E4-S10, E3-S6) | *No UAT test* — E4-S10 has none |
+| T-019, T-034, T-147, T-155, T-158 | A shift says which meal it is for; the planner asks for volunteers through the real shift form; editing a shift keeps its meal; the crew breakdown moves into an "i" (D-14) (E6-S2, E6-S15) | *No UAT step.* UAT-048 and UAT-078 predate them, and D-27 has since changed the link |
+| T-146 | A shift can run past midnight (E6-S2) | *No UAT test* |
+| T-016, T-079, T-080, T-085, T-099, T-106, T-149, T-175 | A roster records who turned up and can take a named volunteer off; a mark can be corrected, only after the shift, only by a Temple Admin or Kitchen Manager, and the roster shows who changed it; a volunteer taken off is told and sees it on My shifts (E6-S2, E6-S4) | *No UAT test* |
+| T-015, T-084, T-094, T-096, T-097 (with T-063), T-100, T-102, T-104 | A sent message can be sent again to the addresses it failed for; a send that reached nobody says so; a refused retry is explained; a letter is sent once (E8-S3, E6-S7) | UAT-066 step 21 reads each recipient's status. *No step for sending again.* T-096, T-097, T-102, T-104 automated only |
+| T-151, T-159, T-168, T-169 (T-169a, T-169b), T-173, T-177, T-178, T-180, T-185, T-188 | WhatsApp settings and templates: the Test button sends a real message to a number; refused templates reworded and refusals stored truthfully; templates go to Meta only when something changed; Settings and Language open read-only with Edit, Cancel and Save; Super Admins read every template and Meta's status per temple (E1-S10) | *No UAT test.* No script covers WhatsApp settings or templates |
+| T-200 (with T-182) | The purchase order PDF goes with the vendor's WhatsApp message; Settings → WhatsApp gains an App ID box (E5-S7) | UAT-043 step 4 expects the sheet "as a document or a link". *No step for the App ID box* |
+| T-202 | Save and preview with a blank subject is refused in red (E8-S2) | *No UAT step* |
+| T-157, T-186, T-187 | A phone typed with spaces is accepted; a counter gift's phone is saved as +91; a donor's old and new phone forms group together (E1-S8, E7-S7) | *No UAT test* |
+| T-156, T-160, T-161, T-162, T-163, T-164, T-165, T-166, T-167, T-170, T-171, T-172, T-174, T-201, T-203 | Every form names a refused box in red, by its label; a button no longer submits by accident; a "(required)" box is really required; buttons greyed by a blank box now press; "Why" becomes "Reason" on the close-order and change-condition forms; a reason of only spaces or a credit of 0 is refused in red | UAT-060 covers errors in general. *No step for the red naming.* T-167 is an automated guard |
+| T-204 | The Give page's other-amount box has no spinner arrows (E7-S2) | *No UAT step* |
+| T-025, T-060, T-061 | A vendor needs no phone and a WhatsApp send without one is refused; a described line stops dragging fill rate down; the operator's temple list shows the true number of people (E5-S1, E5-S9) | *No UAT step.* UAT-037 predates the optional phone |
+| T-026, T-027, T-028, T-132 (with T-133), T-134, T-135 (with T-136), T-139, T-140, T-141, T-153 | Ordering: an order raised by hand, vendor first; a shopping-list line added by hand; editing a line keeps its vendor; the shopping list worked out on every read; a tile per vendor with the order written in a panel; the order screen's buttons, with WhatsApp only where it works; the generate endpoint retired (D-7, D-24) (E5-S2, E5-S3) | **UAT-039**, UAT-040, UAT-077, UAT-081, UAT-083 amended for T-134 and T-153 (`dd0d765`); UAT-039 step 10 asks for an order by hand. *No step for a hand-added shopping-list line.* T-139 to T-141 automated only |
+| T-090, T-130, T-131, T-137 | A vendor's lead time is recorded per supply, is one promise enforced on Mark sent, and a shortage says the day it must be ordered (D-25) (E5-S1, E5-S2) | *No UAT test* |
+| T-013, T-066, T-103, T-107, T-124, T-126, T-129, T-142 | Goods can go back to a vendor; described lines can be acknowledged so an order can close; on-time scored per item; a cancelled, sent order can name the vendor who never came; closing a part-delivered order releases the rest, and the score is shown but never edited (D-26) (E5-S6, E5-S9) | *No UAT step.* UAT-077 still says on-time is per order |
+| T-082 | The invoice form picks the vendor, then that vendor's own open order (E5-S8) | *No UAT step.* UAT-045 predates it |
+| T-010, T-071, T-206, T-207 | A bill can be voided or credited and a payment reversed; a credit note settles its variance; a bill with unreversed payments cannot be voided; counter cash and voided bills stop showing as mismatches (E5-S8, E7-S8) | *No UAT test* |
+| T-012, T-068, T-069, T-070 (with T-072), T-081, T-205, `0337924` | A hand-recorded donation can be voided with its stock reversed; struck bills and struck gifts stop counting; a wish-list gift that no longer fits is split; voiding the gift behind a fulfilled wish reopens it; a draft order nobody sent is not money spent (E3-S5, E7-S5, E7-S6) | *No UAT test* |
+| T-110 (with T-020, T-073) | A donation opens on its own page with its 80G receipt and the donor's other gifts (E7-S4, E7-S7) | *No UAT test.* UAT-059 predates it |
+| T-179 | My donations: a volunteer lists their own gifts and downloads each receipt (E7-S2) | *No UAT test* |
+| T-111, T-112, T-113 | Recurring donations leave Phase 1 (D-23) (E7-S3) | **UAT-059** step 2 checks the Recurring filter is gone (`9458969`); UAT-056 withdrawn |
+| T-212 | Costing follows what was cooked: a recorded meal is costed at its actuals, the rest at the plan, on Cost per serving and Today, with counts of each (E3-S8, E3-S9) | *No UAT step.* UAT-075 predates it |
+| T-195, T-196, T-197, T-198, T-199 | The D-27 meal rebuild: a meal is a row of its own with its volunteer shift saved alongside it; the planner, recording, job cards, Today and Volunteer shifts moved onto it; the old meal data reset (E4-S7, E4-S10, E4-S11, E4-S14, E6-S2) | *No UAT test.* UAT-032, UAT-035, UAT-048, UAT-062, UAT-078 and UAT-086 were written for the old model. T-195's reset automated only |
+| T-213, T-214, T-215 | Phase A fixes: every shift form box named by its label; Today names an event meal by its own name; a new, unsaved meal counts who is rostered so Volunteers requested prefills | *No UAT test* |
+| T-209 | Equipment taken off the job card, on screen, print and PDF (E4-S11) | *No UAT test* — E4-S11 has none |
+| T-022, T-062, T-064 (with T-065), T-075, T-076, T-078, T-092, T-093, T-145, T-152, T-189, T-210 | Tests for five screens that had none; CI heap and Spring context counts; flaky tests fixed; the linter, and rules-of-hooks linting; local development migrates as `kms_migration` | *Automated tests only — no manual surface* |
+| T-058 | Held cleanups: four fixed, five dropped, three sent back to Rajeev | *No UAT step* |
+| T-017, T-018, T-091 | Stopped before building; nothing shipped | *Nothing built — no test* |
+| T-011, T-067, T-074, T-101, T-109, T-123, T-138, T-181, T-183, T-211 | Ids with no work of their own: T-067, T-074 and T-123 dropped; T-101 built as T-106; T-109 dissolved by T-124; T-138 folded into T-137; T-011, T-181 and T-183 never used. T-211 is this table | *Nothing to cover* |
 
 Bold marks the test that covers the story most directly. Every story with a user-facing surface is
 covered by at least one test; the ones with none are marked as such and were accepted on automated
-tests alone, per Commandment 6.
+tests alone, per Commandment 6. **That sentence held to 2026-08-20 and no longer does:** most rows
+added since say *No UAT test* or *No UAT step*, which means a surface nobody has scripted, not one
+accepted on automated tests.
 
-> **This table is behind.** It is complete up to **2026-08-20**, and since then it has only been
-> updated for the stories a new test was written against — the rows touched on 2026-08-31 and
-> 2026-09-01. Stories built between those dates that nobody amended a row for are missing from it.
-> Catching it up is a job of its own and has not been done.
+Complete to 2026-09-14: every story in `docs/stories/`, every task from T-000 to T-216 (Phase B's
+T-200 to T-210, T-212 and T-216 are in the working tree, not yet committed), and the work between 2026-08-20 and 2026-09-06 that
+had no task id. Commits in that stretch that only fixed a defect in a story already listed have no row
+of their own.
+
+Work done by task id has no story of its own, and the table's only precedent (a decision added to its
+story's row) does not scale to two hundred tasks, so tasks are rows keyed by task id, naming the story
+each changes. Work with neither a story nor a task id is keyed by its commit or the brief it came from.
 
 Cross-cutting tests: **UAT-060** (error presentation) and **UAT-061** (phone usability) apply to every
 epic and belong to no single story.

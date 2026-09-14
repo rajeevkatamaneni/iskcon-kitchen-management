@@ -11,11 +11,25 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
+import java.io.ByteArrayInputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import org.iskcon.kms.document.DocumentService;
+import org.iskcon.kms.document.DocumentView;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,7 +38,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mail.javamail.JavaMailSender;
 
 /**
- * When "this temple's WhatsApp actually works" gets written down, and when it does not (T-136).
+ * When "this temple's WhatsApp actually works" gets written down, and when it does not (T-136), and the
+ * purchase order's PDF going with its message (T-200).
  *
  * <p>Rajeev's ruling of 2026-09-10 is that the Send on WhatsApp button appears "only after a message
  * has actually gone through it successfully", not merely configured. The whole of that ruling rests
@@ -37,6 +52,15 @@ import org.springframework.mail.javamail.JavaMailSender;
  * two mocks answer (see the note on context caching in {@code AbstractIntegrationTest}). The
  * database side of the same feature — the column, its RLS, and what NULL means — is
  * {@link WhatsAppLastSentIT}, which does need a real PostgreSQL.
+ *
+ * <p><strong>The T-136 tests use a shift reminder, not a purchase order, since T-200.</strong> They were
+ * written with {@code po_delivery} and no sheet. Since T-200 a purchase order is never sent without its
+ * PDF, so that message would now stop before Meta for want of a sheet and the tests would prove nothing
+ * about the stamp. Their question is about any message, so they ask it of one with no header.
+ *
+ * <p><strong>The T-200 tests use the real {@link MetaWhatsAppClient}</strong>, pointed at a JDK
+ * {@link HttpServer} on 127.0.0.1 that plays Meta's media upload and messages endpoints, so the multipart
+ * body and the header component on the wire are the ones production builds. Nothing reaches Meta.
  */
 class WhatsAppChannelAdapterTest {
 
@@ -44,20 +68,27 @@ class WhatsAppChannelAdapterTest {
 	private MetaWhatsAppClient meta;
 	private WhatsAppChannelAdapter adapter;
 	private OutboundMessage message;
+	private ObjectProvider<DocumentService> documents;
+	private HttpServer metaServer;
 
 	@BeforeEach
+	@SuppressWarnings("unchecked")
 	void setUp() {
 		settings = mock(TenantWhatsAppSettingsService.class);
 		meta = mock(MetaWhatsAppClient.class);
-		adapter = new WhatsAppChannelAdapter(settings, meta, "en");
-		message = new OutboundMessage(
-				NotificationTemplate.PO_DELIVERY,
-				Map.of("poNumber", "PO-2026-0042", "vendor", "Govind Wholesale",
-						"summary", "1 item(s): Rice", "raised", "1 Aug 2026", "neededBy", "20 Aug 2026"),
-				NotificationTemplate.PO_DELIVERY.render(
-						Map.of("poNumber", "PO-2026-0042", "vendor", "Govind Wholesale",
-								"summary", "1 item(s): Rice", "raised", "1 Aug 2026",
-								"neededBy", "20 Aug 2026")));
+		documents = mock(ObjectProvider.class);
+		adapter = new WhatsAppChannelAdapter(settings, meta, documents, "en");
+		Map<String, Object> params = Map.of("title", "Kitchen seva", "date", "Sunday", "time", "9am",
+				"location", "Main kitchen");
+		message = new OutboundMessage(NotificationTemplate.VOLUNTEER_SHIFT_REMINDER, params,
+				NotificationTemplate.VOLUNTEER_SHIFT_REMINDER.render(params));
+	}
+
+	@AfterEach
+	void tearDown() {
+		if (metaServer != null) {
+			metaServer.stop(0);
+		}
 	}
 
 	private void givenAConnectedTemple() {
@@ -209,5 +240,156 @@ class WhatsAppChannelAdapterTest {
 	@DisplayName("a value with no line break or double space goes to Meta exactly as it is")
 	void anOrdinaryValueIsUnchanged() {
 		assertThat(WhatsAppChannelAdapter.whatsappParameters(message)).isEqualTo(message.orderedParameters());
+	}
+
+	// ---- the purchase order's PDF (T-200) ---------------------------------------------------------------
+
+	/** Bytes shaped like a PDF and unique enough that finding them in the upload means they were sent as stored. */
+	private static final byte[] SHEET = ("%PDF-1.4\n% T-200 Kannada sheet for PO-2026-0042 "
+			+ UUID.randomUUID() + "\n%%EOF\n").getBytes(StandardCharsets.US_ASCII);
+
+	private static final UUID SHEET_ID = UUID.fromString("00000000-0000-0000-0000-000000000200");
+
+	/** One request the stub received. */
+	private record Received(String method, String path, String contentType, String authorization, byte[] body) {
+	}
+
+	private final List<Received> received = Collections.synchronizedList(new ArrayList<>());
+
+	/** Meta's media and messages endpoints on 127.0.0.1, answering as Meta documents. */
+	private MetaWhatsAppClient realClientAgainstAStub() throws Exception {
+		metaServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		metaServer.createContext("/", exchange -> {
+			String path = exchange.getRequestURI().getPath();
+			received.add(new Received(exchange.getRequestMethod(), path,
+					exchange.getRequestHeaders().getFirst("Content-Type"),
+					exchange.getRequestHeaders().getFirst("Authorization"),
+					exchange.getRequestBody().readAllBytes()));
+			String answer = path.endsWith("/media") ? "{\"id\":\"media-t200\"}"
+					: path.endsWith("/messages") ? "{\"messaging_product\":\"whatsapp\",\"messages\":[{\"id\":\"wamid.T200\"}]}"
+					: "{\"error\":{\"message\":\"Unsupported post request.\",\"code\":100}}";
+			int status = path.endsWith("/media") || path.endsWith("/messages") ? 200 : 400;
+			byte[] out = answer.getBytes(StandardCharsets.UTF_8);
+			exchange.getResponseHeaders().add("Content-Type", "application/json");
+			exchange.sendResponseHeaders(status, out.length);
+			try (OutputStream os = exchange.getResponseBody()) {
+				os.write(out);
+			}
+		});
+		metaServer.start();
+		return new MetaWhatsAppClient(new ObjectMapper(), "http://127.0.0.1:" + metaServer.getAddress().getPort());
+	}
+
+	private static OutboundMessage purchaseOrder(Object documentId) {
+		Map<String, Object> params = new java.util.HashMap<>(Map.of("poNumber", "PO-2026-0042",
+				"vendor", "Govind Wholesale", "summary", "1 item(s): Rice", "raised", "1 Aug 2026",
+				"neededBy", "20 Aug 2026"));
+		if (documentId != null) {
+			params.put("documentId", documentId.toString());
+		}
+		return new OutboundMessage(NotificationTemplate.PO_DELIVERY, params, NotificationTemplate.PO_DELIVERY.render(params));
+	}
+
+	private DocumentService aSheetThatIs(String status) {
+		DocumentService service = mock(DocumentService.class);
+		when(documents.getIfAvailable()).thenReturn(service);
+		when(service.get(SHEET_ID)).thenReturn(new DocumentView(SHEET_ID, "PURCHASE_ORDER_PDF", null,
+				UUID.randomUUID(), 2, "kn", null, status, null, Instant.now(), "READY".equals(status) ? Instant.now() : null));
+		when(service.openForDownload(SHEET_ID)).thenAnswer(i -> new ByteArrayInputStream(SHEET));
+		return service;
+	}
+
+	static int indexOf(byte[] haystack, byte[] needle) {
+		outer:
+		for (int i = 0; i <= haystack.length - needle.length; i++) {
+			for (int j = 0; j < needle.length; j++) {
+				if (haystack[i + j] != needle[j]) {
+					continue outer;
+				}
+			}
+			return i;
+		}
+		return -1;
+	}
+
+	@Test
+	@DisplayName("a purchase order uploads its sheet to the temple's number, then sends it as the header's document")
+	void aPurchaseOrderSendsItsSheetAsTheHeaderDocument() throws Exception {
+		adapter = new WhatsAppChannelAdapter(settings, realClientAgainstAStub(), documents, "en");
+		givenAConnectedTemple();
+		aSheetThatIs("READY");
+
+		SendResult result = adapter.send("+919812345678", purchaseOrder(SHEET_ID));
+
+		assertThat(result.sent()).as(String.valueOf(result.detail())).isTrue();
+		assertThat(result.providerMessageId()).isEqualTo("wamid.T200");
+		assertThat(received).extracting(Received::path).containsExactly("/phone-1/media", "/phone-1/messages");
+
+		// The upload: multipart, to the phone number, carrying the stored bytes exactly.
+		Received upload = received.get(0);
+		assertThat(upload.contentType()).startsWith("multipart/form-data; boundary=");
+		assertThat(indexOf(upload.body(), SHEET)).as("the stored sheet's bytes, unchanged, in the upload").isNotNegative();
+		String form = new String(upload.body(), StandardCharsets.ISO_8859_1);
+		assertThat(form).contains("name=\"messaging_product\"\r\n\r\nwhatsapp\r\n")
+				.contains("name=\"type\"\r\n\r\napplication/pdf\r\n")
+				.contains("name=\"file\"; filename=\"PO-2026-0042.pdf\"\r\nContent-Type: application/pdf\r\n");
+
+		// The send: the header names that upload, and the body is the five approved values.
+		JsonNode sent = new ObjectMapper().readTree(received.get(1).body());
+		JsonNode components = sent.path("template").path("components");
+		assertThat(sent.path("template").path("name").asText()).isEqualTo("po_delivery");
+		assertThat(components.get(0).path("type").asText()).isEqualTo("header");
+		JsonNode document = components.get(0).path("parameters").get(0);
+		assertThat(document.path("type").asText()).isEqualTo("document");
+		assertThat(document.path("document").path("id").asText()).isEqualTo("media-t200");
+		assertThat(document.path("document").path("filename").asText()).isEqualTo("PO-2026-0042.pdf");
+		assertThat(components.get(1).path("type").asText()).isEqualTo("body");
+		List<String> bodyValues = new ArrayList<>();
+		components.get(1).path("parameters").forEach(p -> bodyValues.add(p.path("text").asText()));
+		assertThat(bodyValues).containsExactly("PO-2026-0042", "Govind Wholesale", "1 item(s): Rice", "1 Aug 2026", "20 Aug 2026");
+		verify(settings).markMessageSent();
+	}
+
+	@Test
+	@DisplayName("a purchase order whose sheet is still being made is not sent at all, and says why")
+	void aSheetNotReadyIsNeverSentWithout() throws Exception {
+		adapter = new WhatsAppChannelAdapter(settings, realClientAgainstAStub(), documents, "en");
+		givenAConnectedTemple();
+		aSheetThatIs("PENDING");
+
+		SendResult result = adapter.send("+919812345678", purchaseOrder(SHEET_ID));
+
+		assertThat(result.sent()).isFalse();
+		assertThat(result.detail()).isEqualTo(WhatsAppChannelAdapter.SHEET_NOT_READY);
+		assertThat(received).as("nothing uploaded, nothing sent").isEmpty();
+		verify(settings, never()).markMessageSent();
+	}
+
+	@Test
+	@DisplayName("a purchase order that names no sheet is not sent at all, and says why")
+	void noSheetIsNeverSentWithout() throws Exception {
+		adapter = new WhatsAppChannelAdapter(settings, realClientAgainstAStub(), documents, "en");
+		givenAConnectedTemple();
+
+		SendResult result = adapter.send("+919812345678", purchaseOrder(null));
+
+		assertThat(result.sent()).isFalse();
+		assertThat(result.detail()).isEqualTo(WhatsAppChannelAdapter.NO_SHEET);
+		assertThat(received).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Meta refusing the upload is a refused send: no message goes, and nothing is stamped")
+	void aRefusedUploadIsARefusedSend() {
+		givenAConnectedTemple();
+		aSheetThatIs("READY");
+		when(meta.uploadMedia(anyString(), anyString(), any(), anyString(), anyString()))
+				.thenThrow(new MetaWhatsAppClient.WhatsAppSendFailed("(#131053) Media upload error"));
+
+		SendResult result = adapter.send("+919812345678", purchaseOrder(SHEET_ID));
+
+		assertThat(result.sent()).isFalse();
+		verify(meta, never()).sendTemplate(any(), any(), any(), any(), any(), any(), any());
+		verify(settings, never()).markMessageSent();
 	}
 }
