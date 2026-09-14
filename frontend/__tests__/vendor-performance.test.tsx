@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import type { ApiError, VendorPerformance, VendorPerformanceRow } from "@/lib/api";
 
@@ -101,6 +101,20 @@ describe("Vendor performance", () => {
       appUser: { role: "TEMPLE_ADMIN", fullName: "Radha Devi", tenantName: "ISKCON Bengaluru" },
     };
     queryRef.current = { data: null, error: null, loading: false };
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("names the period in the table's caption the way the screen writes a date, not as ISO (T-194)", () => {
+    // The caption is the table's accessible name, so it is what a screen reader says first. Pinned to
+    // 2026 because the days carry a year only outside the temple's current one; only Date is faked.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-13T06:00:00Z"));
+    queryRef.current.data = report();
+    render(<VendorPerformancePage />);
+
+    expect(screen.getByRole("table", { name: /1 to 31 August/ })).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: /2026-08-01/ })).not.toBeInTheDocument();
   });
 
   it("never shows an on-time percentage without the counts behind it", () => {

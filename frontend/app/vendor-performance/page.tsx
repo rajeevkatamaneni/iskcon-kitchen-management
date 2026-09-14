@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/ds/PageHeader";
 import { PeriodNav, periodHeading, stepPeriod } from "@/components/ds/PeriodNav";
 import { Screen } from "@/components/ds/Screen";
 import { api, type VendorPerformance, type VendorPerformanceRow } from "@/lib/api";
-import { todayIso } from "@/lib/format";
+import { dayRange, todayIso } from "@/lib/format";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, WRAP } from "@/components/ds/table";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
@@ -130,7 +130,8 @@ function VendorTable({ report }: { report: VendorPerformance }) {
     <div className="table-wrap overflow-x-auto">
       <table className={TABLE}>
         <caption className="sr-only">
-          Supplier delivery record for orders placed {report.from} to {report.to}, with what is open
+          {/* Read aloud as the table's name, so it is said the way the screen writes a date (T-194). */}
+          Supplier delivery record for orders placed {dayRange(report.from, report.to, false)}, with what is open
           with each of them today
         </caption>
         {/* Fixed shares rather than letting the browser size to content.

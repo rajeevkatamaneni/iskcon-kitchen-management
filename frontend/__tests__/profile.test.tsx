@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ApiError, Profile } from "@/lib/api";
 
@@ -207,6 +207,28 @@ describe("your leave (T-184)", () => {
       loading: false,
     };
     withdrawLeaveMock.mockReset().mockResolvedValue(undefined);
+    // T-194: the days carry a year only outside the temple's current year, so the clock is pinned to
+    // 2026 here. Without it the dialog's "12 to 14 August" would become "12 to 14 August 2026" on the
+    // first run in 2027. Only Date is faked, so findBy and waitFor keep their real timers.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-08-01T06:00:00Z"));
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("writes each row's days the way the question says them, not as ISO (T-194)", async () => {
+    myLeaveMock.mockReset().mockResolvedValue([
+      row({ id: "ahead", status: "APPROVED" }),
+      row({ id: "half", status: "PENDING", fromDate: "2026-10-05", toDate: "2026-10-05", halfDay: true }),
+      row({ id: "old", status: "APPROVED", fromDate: "2025-12-30", toDate: "2026-01-02" }),
+    ]);
+    render(<ProfilePage />);
+
+    const section = await screen.findByRole("region", { name: "Your leave" });
+    expect(await within(section).findByText("Time off · 20 to 21 September")).toBeInTheDocument();
+    expect(within(section).getByText("Time off · 5 October (half day)")).toBeInTheDocument();
+    expect(within(section).getByText("Time off · 30 December 2025 to 2 January 2026")).toBeInTheDocument();
+    expect(section).not.toHaveTextContent(/\d{4}-\d{2}-\d{2}/);
   });
 
   it("offers Withdraw only on the rows the server says can still be withdrawn", async () => {

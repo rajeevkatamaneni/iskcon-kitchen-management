@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { LeaveView, MealCrewView, WeekScheduleView } from "@/lib/api";
 
@@ -99,10 +99,18 @@ describe("leave queue", () => {
     impactRef.current = { data: [], error: null, loading: false };
   });
 
+  afterEach(() => vi.useRealTimers());
+
   it("lists what is waiting, with who asked and for what", () => {
+    // T-194: pinned to 2026, because the days carry a year only outside the temple's current one.
+    // Only Date is faked; nothing else on this screen waits on a timer.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-01T06:00:00Z"));
     render(<LeavePage />);
     expect(screen.getByRole("heading", { name: "Leave" })).toBeInTheDocument();
-    expect(screen.getByText(/Sick leave · 2026-09-03 to 2026-09-04/)).toBeInTheDocument();
+    // Day first with the month named, as the person's own My profile row and its question say it.
+    expect(screen.getByText(/Sick leave · 3 to 4 September/)).toBeInTheDocument();
+    expect(screen.queryByText(/2026-09-03/)).not.toBeInTheDocument();
     expect(screen.getByText("Asked for by Head Cook A")).toBeInTheDocument();
     expect(screen.getByText("Fever")).toBeInTheDocument();
     // Twice on purpose: the filter this screen opens on, and the badge on the row itself.

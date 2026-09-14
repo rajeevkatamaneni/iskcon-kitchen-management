@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/ds/PageHeader";
 import { PeriodNav, periodHeading, periodRange, stepPeriod } from "@/components/ds/PeriodNav";
 import { Screen } from "@/components/ds/Screen";
 import { api, type IssuedFromStore, type KitchenIssueCost } from "@/lib/api";
-import { money, todayIso } from "@/lib/format";
+import { dayRange, money, todayIso } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, WRAP } from "@/components/ds/table";
 
@@ -114,8 +114,9 @@ function KitchenTable({ report }: { report: IssuedFromStore }) {
     <div className="table-wrap overflow-x-auto">
       <table className={TABLE}>
         <caption className="sr-only">
-          Estimated materials cost of what the temple store issued to each kitchen, {report.from} to{" "}
-          {report.to}
+          {/* Read aloud as the table's name, so it is said the way the screen writes a date (T-194). */}
+          Estimated materials cost of what the temple store issued to each kitchen,{" "}
+          {dayRange(report.from, report.to, false)}
         </caption>
         <thead className={THEAD}>
           <tr>

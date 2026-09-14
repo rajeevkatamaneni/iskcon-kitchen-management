@@ -1208,6 +1208,31 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-13 — Leave rows read "3 to 4 September" instead of ISO dates, and the unused single-row uid lookup is removed (tasks T-194, T-191)
+
+**No migration**; staging stays at `V134`. No new error code, no new permission. **Not driven in a
+browser, and not seen working by Rajeev.**
+
+**Leave dates are written the way a person says them (T-194).** The leave rows on My profile and on the
+Leave screen used to print *"2026-09-03 to 2026-09-04"* while the Withdraw question beside them said
+*"3 to 4 September"*. Rows and question now come from one formatter, `dayRange` in `lib/format.ts`:
+
+- *"3 to 4 September"*, *"30 September to 2 October"*, *"12 August"*, *"12 August (half day)"*;
+- the year appears only when a day falls outside the temple's current year: *"12 to 14 August 2025"*,
+  and on both days across a year end, *"30 December 2026 to 2 January 2027"*;
+- dates are read as calendar dates, so a manager in another time zone sees the same days.
+
+The same formatter fixes the report period in the screen-reader caption of three report tables:
+Issued from store, Cost per serving, and Vendor performance.
+
+**The unused single-row uid lookup is removed (T-191).** `UserRepository.findByFirebaseUid` would have
+thrown for a person with accounts at two temples. Nothing in the application called it; the tests that
+did now choose the account by temple or by id. Comments in `TenantContext` and `build.gradle.kts` that
+no longer matched the code are corrected. No behaviour change.
+
+**Not done:** `V2`'s comment still says the uid escape exposes one row, because editing an applied
+migration breaks its checksum. Proofs are in `docs/work/proof/T-194.md` and `T-191.md`.
+
 ### 2026-09-13 — Staff withdraw their own leave before it begins, and the platform audit log refuses entries that name the wrong author (tasks T-184, T-192, T-193)
 
 **Migrations `V132`, `V133` and `V134`.** New error code `KMS-400151`. Two new message templates, so

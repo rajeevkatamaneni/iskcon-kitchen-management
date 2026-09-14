@@ -491,6 +491,74 @@ export function templeDay(iso: string): string {
   });
 }
 
+/**
+ * A span of days the way a person says it — "12 to 14 August", "30 September to 2 October",
+ * "12 August", "12 August (half day)" (T-194).
+ *
+ * <p>The one copy. Before this the leave rows on My profile and on the approver's Leave screen printed
+ * "2026-08-12 to 2026-08-14", while the question T-184 put in front of the same person, one click
+ * later, asked about "12 to 14 August" from a helper private to the profile page. Two ways of writing
+ * one fortnight on one screen is the drift this file exists to stop, so the question and the rows now
+ * both come from here. Day first, month spelled out, as everywhere else in the application. The month
+ * is said once when both days share it, because that is how it is said aloud.
+ *
+ * <p>**The year rule.** The year is written only when either day falls outside the temple's current
+ * year. When both days share a year it is written once, at the end — "12 to 14 August 2025". When they
+ * do not, each day carries its own — "30 December 2026 to 2 January 2027" — because "30 December to 2
+ * January 2027" reads as though both were in 2027. T-184's helper never wrote a year, and that was
+ * right for what it described: leave that can still be withdrawn has not begun, so it is always about
+ * the weeks ahead. A leave list is not. It holds last year's leave too, and "12 to 14 August" under a
+ * row from 2025 names a week that has not happened yet. A range inside this year keeps the short form,
+ * which is still what nearly every row on either screen is.
+ *
+ * <p>"The current year" is the **temple's**, from {@link todayIso}, never the device's: on the evening
+ * of 31 December in California it is already the new year in the kitchen, and the rows should read the
+ * way the people there would read them.
+ *
+ * <p>**The days are calendar dates, never instants.** They are split out of the "YYYY-MM-DD" by hand
+ * and named in UTC, so no reader's zone takes part at any point. `new Date("2026-08-01")` is UTC
+ * midnight, which is still 31 July for anybody west of Greenwich, and a leave list is exactly the place
+ * a manager reads from somewhere else.
+ *
+ * <p>`halfDay` is required rather than defaulted, for the reason {@link leadTimeWarning} gives: a
+ * default is what the next caller forgets, and a forgotten half day reads as a whole one. A half day is
+ * one day, so only `fromDate` is named, as T-184 wrote it. Anything that is not a date comes back as it
+ * arrived, rather than as "Invalid Date".
+ */
+export function dayRange(fromIso: string, toIso: string, halfDay: boolean, today = todayIso()): string {
+  const from = calendarDay(fromIso);
+  const to = calendarDay(toIso);
+  if (!from || !to) return fromIso === toIso || halfDay ? fromIso : `${fromIso} to ${toIso}`;
+
+  const thisYear = today.slice(0, 4);
+  const withYear = from.year !== thisYear || to.year !== thisYear;
+  const whole = (d: CalendarDay) => (withYear ? `${d.day} ${d.month} ${d.year}` : `${d.day} ${d.month}`);
+
+  if (halfDay) return `${whole(from)} (half day)`;
+  if (fromIso === toIso) return whole(from);
+  if (from.year !== to.year) return `${whole(from)} to ${whole(to)}`;
+  if (from.month === to.month) return `${from.day} to ${whole(to)}`;
+  return `${from.day} ${from.month} to ${whole(to)}`;
+}
+
+type CalendarDay = { day: number; month: string; year: string };
+
+/**
+ * "2026-08-01" → its day, its month's name and its year, with no time zone anywhere in the working.
+ * The name comes from `Intl` in UTC, over a moment built in UTC, so it is the same month wherever it
+ * runs; en-GB for the reason {@link longDate} gives.
+ */
+function calendarDay(iso: string): CalendarDay | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? "");
+  if (!m) return null;
+  const at = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return {
+    day: Number(m[3]),
+    month: new Intl.DateTimeFormat("en-GB", { month: "long", timeZone: "UTC" }).format(at),
+    year: m[1],
+  };
+}
+
 /** Calendar days from one "YYYY-MM-DD" to another, counted in UTC so no time zone can shift one. */
 export function wholeDaysBetween(fromIso: string, toIso: string): number {
   const day = 24 * 60 * 60 * 1000;

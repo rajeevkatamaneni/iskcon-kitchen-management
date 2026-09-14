@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   crossesMidnight,
+  dayRange,
   leadTimeWarning,
   moment,
   money,
@@ -168,5 +169,73 @@ describe("a shift that runs through midnight", () => {
     // would put "(next day)" under a box somebody has not finished typing in.
     expect(crossesMidnight(null, "02:00")).toBe(false);
     expect(crossesMidnight("20:00", undefined)).toBe(false);
+  });
+});
+
+describe("a span of days (T-194)", () => {
+  // Every case but one names its own today, so the year rule is tested against a fixed year rather
+  // than against whenever the suite happens to run.
+  const THIS_YEAR = "2026-09-13";
+  const zoneWas = process.env.TZ;
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (zoneWas === undefined) delete process.env.TZ;
+    else process.env.TZ = zoneWas;
+  });
+
+  it("says the month once when both days share it", () => {
+    expect(dayRange("2026-08-12", "2026-08-14", false, THIS_YEAR)).toBe("12 to 14 August");
+  });
+
+  it("names both months when the span crosses from one into the next", () => {
+    expect(dayRange("2026-09-30", "2026-10-02", false, THIS_YEAR)).toBe("30 September to 2 October");
+  });
+
+  it("is one day when it starts and ends on the same day", () => {
+    expect(dayRange("2026-08-12", "2026-08-12", false, THIS_YEAR)).toBe("12 August");
+  });
+
+  it("keeps T-184's wording for a half day", () => {
+    expect(dayRange("2026-08-12", "2026-08-12", true, THIS_YEAR)).toBe("12 August (half day)");
+  });
+
+  it("gives each day its own year when the span crosses a year end", () => {
+    // "30 December to 2 January 2027" would read as though both days were in 2027.
+    expect(dayRange("2026-12-30", "2027-01-02", false, THIS_YEAR)).toBe("30 December 2026 to 2 January 2027");
+  });
+
+  it("writes the year once for a span wholly in another year, past or ahead", () => {
+    // Last August's leave, on a list that still holds it. Without the year it names a week to come.
+    expect(dayRange("2025-08-12", "2025-08-14", false, THIS_YEAR)).toBe("12 to 14 August 2025");
+    expect(dayRange("2025-09-30", "2025-10-02", false, THIS_YEAR)).toBe("30 September to 2 October 2025");
+    expect(dayRange("2025-08-12", "2025-08-12", false, THIS_YEAR)).toBe("12 August 2025");
+    expect(dayRange("2025-08-12", "2025-08-12", true, THIS_YEAR)).toBe("12 August 2025 (half day)");
+    expect(dayRange("2027-01-04", "2027-01-06", false, THIS_YEAR)).toBe("4 to 6 January 2027");
+  });
+
+  it("reads the current year off the temple's clock, not the device's", () => {
+    // 20:00 UTC on 31 December is already New Year's morning in a temple kitchen in India, so the
+    // first week of January is this year there and last year's last days need their year.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-12-31T20:00:00Z"));
+
+    expect(dayRange("2027-01-04", "2027-01-06", false)).toBe("4 to 6 January");
+    expect(dayRange("2026-12-30", "2026-12-31", false)).toBe("30 to 31 December 2026");
+  });
+
+  it("never moves a day for a reader west of Greenwich", () => {
+    process.env.TZ = "America/Los_Angeles";
+    // The trap itself, shown live first, so this test cannot pass merely because the machine running
+    // it is in India: parsed as an instant, the first of August is the last of July in California.
+    expect(new Date("2026-08-01").toLocaleDateString("en-GB", { day: "numeric", month: "long" })).toBe("31 July");
+
+    expect(dayRange("2026-08-01", "2026-08-01", false, THIS_YEAR)).toBe("1 August");
+    expect(dayRange("2026-07-31", "2026-08-01", false, THIS_YEAR)).toBe("31 July to 1 August");
+    expect(dayRange("2026-01-01", "2026-01-01", false, "2026-01-01")).toBe("1 January");
+  });
+
+  it("hands back what it was given when it is not a date, rather than Invalid Date", () => {
+    expect(dayRange("soon", "later", false, THIS_YEAR)).toBe("soon to later");
   });
 });

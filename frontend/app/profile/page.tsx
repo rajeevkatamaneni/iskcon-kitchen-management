@@ -17,7 +17,7 @@ import {
   type NotificationChannel,
   type Profile,
 } from "@/lib/api";
-import { templeDay } from "@/lib/format";
+import { dayRange, templeDay } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
@@ -359,7 +359,7 @@ function MyLeave() {
           {leave.map((row) => (
             <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded border border-hairline px-4 py-3 text-sm">
               <span className="tabular-nums">
-                {row.leaveTypeLabel} · {row.halfDay ? `${row.fromDate} (half day)` : row.fromDate === row.toDate ? row.fromDate : `${row.fromDate} to ${row.toDate}`}
+                {row.leaveTypeLabel} · {dayRange(row.fromDate, row.toDate, row.halfDay)}
                 {row.decisionNote ? ` — ${row.decisionNote}` : ""}
               </span>
               <span className="flex items-center gap-3">
@@ -412,26 +412,19 @@ function MyLeave() {
  * "Withdraw your approved leave for 12 to 14 August? Your manager will be told." (T-184 rework,
  * wording from the main session's review). Approved leave has a manager who approved it; a request
  * still waiting goes to whoever approves leave, which is who the server tells in each case.
+ *
+ * <p>The days come from the shared `dayRange` (T-194), the same words as the row the person just
+ * pressed Withdraw on. T-184 wrote them with a helper private to this page while the row above it still
+ * printed ISO, so the question and the row named one week two ways. Withdrawable leave has not begun, so
+ * it is nearly always this year and reads exactly as T-184 wrote it; leave asked for in December for
+ * the first week of January now says "2 to 4 January 2027", which is the one case the old helper got
+ * wrong.
  */
 function withdrawQuestion(row: LeaveView): string {
+  const days = dayRange(row.fromDate, row.toDate, row.halfDay);
   return row.status === "APPROVED"
-    ? `Withdraw your approved leave for ${spokenRange(row)}? Your manager will be told.`
-    : `Withdraw your leave request for ${spokenRange(row)}? Whoever approves leave will be told.`;
-}
-
-/**
- * "12 August", "12 to 14 August", "30 September to 2 October", or "12 August (half day)". The month is
- * said once when both days share it, as a person would say it. No year: withdrawable leave has not yet
- * begun, so it is always about the weeks ahead.
- */
-function spokenRange(row: LeaveView): string {
-  const dayMonth = (iso: string) =>
-    new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
-  if (row.halfDay) return `${dayMonth(row.fromDate)} (half day)`;
-  if (row.fromDate === row.toDate) return dayMonth(row.fromDate);
-  const sameMonth = row.fromDate.slice(0, 7) === row.toDate.slice(0, 7);
-  const firstDay = new Date(`${row.fromDate}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric" });
-  return sameMonth ? `${firstDay} to ${dayMonth(row.toDate)}` : `${dayMonth(row.fromDate)} to ${dayMonth(row.toDate)}`;
+    ? `Withdraw your approved leave for ${days}? Your manager will be told.`
+    : `Withdraw your leave request for ${days}? Whoever approves leave will be told.`;
 }
 
 /**

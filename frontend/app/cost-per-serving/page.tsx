@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/ds/PageHeader";
 import { PeriodNav, periodHeading, periodRange, stepPeriod } from "@/components/ds/PeriodNav";
 import { Screen } from "@/components/ds/Screen";
 import { api, type CostByMealKind, type MealKindCost } from "@/lib/api";
-import { money, todayIso } from "@/lib/format";
+import { dayRange, money, todayIso } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { TABLE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR } from "@/components/ds/table";
 
@@ -110,7 +110,8 @@ function KindTable({ report }: { report: CostByMealKind }) {
     <div className="table-wrap overflow-x-auto">
       <table className={TABLE}>
         <caption className="sr-only">
-          Estimated materials cost per serving by kind of meal, {report.from} to {report.to}
+          {/* Read aloud as the table's name, so it is said the way the screen writes a date (T-194). */}
+          Estimated materials cost per serving by kind of meal, {dayRange(report.from, report.to, false)}
         </caption>
         <thead className={THEAD}>
           <tr>

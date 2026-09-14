@@ -9,7 +9,7 @@ import { Loading } from "@/components/Loading";
 import { api, toApiError, type ApiError, type LeaveView, type MealCrewView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { shortDate } from "@/lib/format";
+import { dayRange, shortDate } from "@/lib/format";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
@@ -147,7 +147,7 @@ function LeaveQueueView() {
                         {leave.staffName} <span className="text-ink-muted">· {leave.jobTitleLabel}</span>
                       </p>
                       <p className="mt-1 text-sm text-ink-secondary tabular-nums">
-                        {leave.leaveTypeLabel} · {dateRange(leave)}
+                        {leave.leaveTypeLabel} · {dayRange(leave.fromDate, leave.toDate, leave.halfDay)}
                       </p>
                       {leave.reason && <p className="mt-1 max-w-prose text-sm text-ink-secondary">{leave.reason}</p>}
                       <p className="mt-1 text-xs text-ink-muted">
@@ -226,9 +226,4 @@ function StatusBadge({ status }: { status: LeaveView["status"] }) {
   // it, because one was the temple's decision and the other was theirs. It shows only under Everything.
   if (status === "WITHDRAWN") return <Badge tone="neutral">Withdrawn</Badge>;
   return <Badge tone="warning">Waiting</Badge>;
-}
-
-function dateRange(leave: LeaveView): string {
-  if (leave.halfDay) return `${leave.fromDate} (half day)`;
-  return leave.fromDate === leave.toDate ? leave.fromDate : `${leave.fromDate} to ${leave.toDate}`;
 }

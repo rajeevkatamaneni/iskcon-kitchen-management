@@ -1,5 +1,19 @@
 # Dispatch ledger
 
+## ⚖️ RAJEEV'S RULE — 2026-09-13, binding until the list is finished
+
+> *"I want to finish the list you gave me 'CLEANLY' without creating another list as a biproduct of building this list."*
+
+- A builder or coordinator fixes **only what its task asks for**.
+- Anything else noticed is **one line** in `docs/work/AFTER-UAT.md`: never a new task, never an interruption, never a question to Rajeev. Builders write their lines in their proof under `## After-UAT lines`; **the work manager copies them into the file**, so it has one writer.
+- **The only exception is a real safety problem** (one temple seeing another's data, a security hole). Those still go to Rajeev.
+- **No more follow-up task ids from findings.** T-191 and T-194 were already defined and go ahead. **Nothing else new is dispatched until the main session sends Rajeev's full set of answers as build instructions.**
+- **Answers so far (relayed by the main session, 2026-09-13):**
+  1. **No counter-phone backfill**: the data will be wiped.
+  2. **Yes, attach the PO PDF on WhatsApp**: T-182, with an app id box in Settings → WhatsApp. It waits for the full instructions.
+  3. **The two marketing templates stay as they are**: he has asked Meta for a review, and it is a test account.
+
+
 Read `docs/work/README.md` first — it explains what this file is and who is allowed to write to it.
 Read `docs/work/INTAKE.md` second — it is the verification behind every row here, and it is where the
 docket items that are *not* build tasks went.
@@ -557,7 +571,8 @@ Run by the work manager 2026-09-13 after T-178, T-169b, T-172 and T-179 were all
 - **Runs:** 19/19; the existing ITs of changed classes 97/97 and 75/75; guards plus AccessControlEnforcementIT, MembershipIT and AuthenticationFilterIT 913/913.
 - **Central option not built:** clearing the uid once the temple is chosen would break the temple switcher and DocumentService's author lookup, and would hide the recipe library and platform notices from signed-in users. It needs a separate this-membership setting, an auth and migration change. Not queued without a decision.
 - **Follow-ups queued:**
-  - **T-191** (small): `TenantContext.setAuthLookupUid` and V2's comment still say the escape exposes a single row. **Also, from T-189:** `build.gradle.kts` still says the context repair *"is filed separately"*, and its out-of-heap failure message still says the suite keeps 81 contexts reachable; both are now wrong (21 contexts, 279 MB live). `UserRepository.findByFirebaseUid` returns `Optional`, so it would throw for a two-temple person if anything called it; nothing in main does (only `findAllByFirebaseUid` is used). Either remove it or scope it to the temple, with a test.
+  - **T-191 proven 2026-09-13** (`docs/work/proof/T-191.md`). **`findByFirebaseUid` removed (option a):** no main caller, and one or two lines per test. The four WhatsApp ITs use `findAllByFirebaseUid` filtered to the fixture's temple; `StockMovementLedgerIT` looks up by the fixture's id; the two TemplateStatus ITs (a platform operator, no temple) use `findAllByFirebaseUid` and assert exactly one account. New test in `OwnAccountsAtOtherTemplesIT`: signed in at A with an account at B, the uid lookup returns both, the temple filter picks A's, and the method is gone. `TenantContext.setAuthLookupUid` Javadoc rewritten (comment only). **V2 left unedited** (Flyway checksum), with a pointer in `RowLevelSecurityIT`. `build.gradle.kts`: the paragraph and the out-of-heap message now give T-189's figures; text only, `maxHeapSize` and logic unchanged. No migration touched. Runs: 1,012/1,012. Control (the old method restored, the new test pointed at it): red with *"Query did not return a unique result: 2 results were returned"*, the other 8 green, restore byte-identical. Two After-UAT lines copied.
+  - **T-191, dispatched 2026-09-13 beside T-194** (disjoint: T-191 backend and `build.gradle.kts`, nothing under `db/migration/`; T-194 frontend only), under Rajeev's one-line rule. Brief: `scratchpad/T-191-brief.md`. Scope: `TenantContext.setAuthLookupUid` and V2's comment still say the escape exposes a single row. **Also, from T-189:** `build.gradle.kts` still says the context repair *"is filed separately"*, and its out-of-heap failure message still says the suite keeps 81 contexts reachable; both are now wrong (21 contexts, 279 MB live). `UserRepository.findByFirebaseUid` returns `Optional`, so it would throw for a two-temple person if anything called it; nothing in main does (only `findAllByFirebaseUid` is used). Either remove it or scope it to the temple, with a test.
   - **T-192, approved by the main session 2026-09-13 as its own call (not Rajeev's):** it only tightens a database policy, is reversible by a later migration, and follows the first rule.
     - **Migration V133 reserved.** **Dispatched 2026-09-13**, building beside the held 4d files, while Rajeev has not answered on 4d. Paths: `db/migration/V133__platform_audit_insert_names_the_temple.sql` (new), `tenancy/RowLevelSecurityIT.java`, `audit/AuditService.java` (the comment only), a new test class if needed, and the proof. They are **disjoint from T-184's held files**, checked against `git status`. **Release constraint: V133 must not reach staging before V132.** Flyway would apply V133 and then refuse V132 as out of order. So **T-192 releases only after T-184, or together with it in one deploy.** **T-189 stays held:** it touches every backend test file, including T-184's held ones.
     - **What the policies allow today:** `platform_audit_ban_events_insert` (V65 ~388) and `platform_audit_notice_insert` (V66 ~309) admit an insert whose `actor_user_id` is any `users` row with the caller's `firebase_uid`, at any temple (V66 also requires ACTIVE). **Misuse:** `AuditService.recordPlatform` passes `actor.getUserId()`, the membership the request speaks for, so only an app bug passing another id gets through, and it would still name the same person under another temple's account. The policy is the backstop.
@@ -593,7 +608,14 @@ Run by the work manager 2026-09-13 after T-178, T-169b, T-172 and T-179 were all
 - **paths:** `frontend/lib/format.ts`, its test, `frontend/app/profile/page.tsx`, `frontend/app/leave/page.tsx`, their tests, plus screens found by the sweep (listed at dispatch).
 - **reservations:** none expected.
 - **wave:** after T-189 and T-191.
-- **state:** queued.
+- **state:** **proven** 2026-09-13 (`docs/work/proof/T-194.md`).
+  - **`dayRange` in `lib/format.ts`:** day-first with a month name. **The year appears only when either day falls outside the temple's current year, by the temple clock:** once at the end for a past or future year (*"12 to 14 August 2025"*), on both days across a year end (*"30 December 2026 to 2 January 2027"*). Dates are parsed as calendar dates; a test in California's zone keeps 1 August as 1 August.
+  - Used by My profile's rows and Withdraw question (wording unchanged, T-184's tests pass as written; a December question about early January now carries the year) and by the Leave screen's rows.
+  - **Sweep:** three more raw ISO ranges, each a report period in a table's screen-reader caption, now fixed with a test: `issued-from-store/page.tsx:119`, `cost-per-serving/page.tsx:114`, `vendor-performance/page.tsx:134`.
+  - Page tests that check leave dates or captions pin the clock to 2026, so they don't fail in 2027.
+  - Control (both leave rows back to ISO): both row tests red; restore from the trap, `cmp` identical. `tsc` clean, full vitest 1,816/1,816, ESLint clean. Three After-UAT lines copied. Not driven in a browser.
+- **Dispatch note:** dispatched 2026-09-13 beside T-191, under Rajeev's one-line rule.
+- **✅ T-191 + T-194 merged check green 2026-09-13 21:39–21:41** (`scratchpad/merged-T191-T194.log`), one lock hold, no daemon before: backend A (T-191's eight lookup callers, RowLevelSecurityIT, OwnAccountsAtOtherTemplesIT, AuthenticationFilterIT, PendingAccountClaimIT, MembershipIT, AccessControlEnforcementIT) **142/142**; B (lesson 3a guards, MetaTemplateRulesTest, NotificationTemplateTest, SharedStubVerifierResetIT) **894/894**; frontend `tsc` clean, vitest **137 files / 1,816**, ESLint clean. No migration file changed; no real phone number in any change. **Ready for one release, reported to the main session.** T-191 is backend and build text only; T-194 is frontend only. Brief: `scratchpad/T-194-brief.md`. **The year rule is the builder's to state and test**, since leave history can be past, so T-184's no-year assumption doesn't hold on the leave page. The sweep fixes only raw ISO date ranges and lists more than three screens before editing.
 - **proof:** —
 
 ### Wave 5 — the Spring test-context collapse (`THE-REST.md` §3)
@@ -622,8 +644,9 @@ Run by the work manager 2026-09-13 after T-178, T-169b, T-172 and T-179 were all
     - the other recording stubs each sit in an unshared context.
   - **Control:** no existing test noticed the verifier reset removed (every class deletes its users, so a leftover token for a deleted user still gets 401), so the builder added `testsupport/SharedStubVerifierResetIT` (3 tests). With the reset patched out and `AuthenticationFilterIT` first, 2 went red, naming the leftover signed-in uids; restore by trap, `cmp` identical.
   - **Stall:** the builder stalled once mid-rewrite and was resumed; nothing lost.
-  - **For the main session:** accept 21 (nearer 12 means rewriting the classes that stub or mock application beans, a separate job); keep the three guard tests; two now-wrong texts in `build.gradle.kts` (the paragraph saying the repair *"is filed separately"* and the out-of-heap message citing 81 reachable contexts) are folded into **T-191**.
-- **Dispatch note:** **Dispatched 2026-09-13, alone,** after the main session confirmed the single deploy live (api-00164-77x / web-00152-xhq / worker-00146-rt9; V132 → V133 → V134 applied; **next free migration V135**). Brief: `scratchpad/T-189-brief.md`, re-checked against the tree the same day. **Conditions from the main session:**
+  - **Released 2026-09-13 as `df8ef93`, test-only, no deploy.** CI green (run 34805638205). The clean-copy gate passed 2,629 tests (2,622 passed, 7 skipped, 0 failed) in 3m48s, and memory did not kill it. CI's backend job took 10m44s against 9m43s before (one line in AFTER-UAT.md).
+  - **Accepted by the main session 2026-09-13 on all three:** 21 contexts is fine; the guard tests stay; the two `build.gradle.kts` texts go into T-191. Released as test-only, with no deploy. Previously put to it: accept 21 (nearer 12 means rewriting the classes that stub or mock application beans, a separate job); keep the three guard tests; two now-wrong texts in `build.gradle.kts` (the paragraph saying the repair *"is filed separately"* and the out-of-heap message citing 81 reachable contexts) are folded into **T-191**.
+- **Dispatch note:** Dispatched 2026-09-13, alone, after the main session confirmed the single deploy live (api-00164-77x / web-00152-xhq / worker-00146-rt9; V132 → V133 → V134 applied; **next free migration V135**). Brief: `scratchpad/T-189-brief.md`, re-checked against the tree the same day. **Conditions from the main session:**
   - three consecutive complete green full runs, one at a time through the lock, one in random class order with the seed recorded;
   - **a run killed for memory is evidence, not a pass**: record it and count only complete green runs, restarting the count after a red or killed run;
   - **no production code**; stop and ask if a production class must change.
