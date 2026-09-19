@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Vendor invoice capture (E5-S8), behind {@code MANAGE_PURCHASE_ORDERS}. */
+/** Vendor invoice capture (E5-S8), itemised since stage 6 (T-271), behind {@code MANAGE_PURCHASE_ORDERS}. */
 @RestController
 @RequestMapping("/api/v1/vendor-invoices")
 public class VendorInvoiceController {
@@ -27,18 +27,38 @@ public class VendorInvoiceController {
 		this.service = service;
 	}
 
+	/**
+	 * The Invoices list. {@code owed=true} is its Unpaid filter: bills money is still owed on, the same
+	 * set as {@code /api/v1/payables}, but readable by anyone who can open the list. Payables stays
+	 * behind MANAGE_VENDOR_PAYMENTS because it carries each bill's outstanding balance and aging; this
+	 * returns only the invoice rows the list already shows to the same people, so it needs nothing
+	 * stricter than the list does. {@code overdue=true} is past due and still owed (T-281).
+	 */
 	@GetMapping
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public List<VendorInvoiceView> list(
 			@RequestParam(required = false) InvoiceStatus status,
-			@RequestParam(required = false, defaultValue = "false") boolean overdue) {
-		return service.list(status, overdue);
+			@RequestParam(required = false, defaultValue = "false") boolean overdue,
+			@RequestParam(required = false, defaultValue = "false") boolean owed) {
+		return service.list(status, overdue, owed);
 	}
 
+	/** One invoice's page (R-INV-7): the row plus its items, deliveries, totals and bill. */
 	@GetMapping("/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
-	public VendorInvoiceView get(@PathVariable UUID id) {
+	public VendorInvoiceDetailView get(@PathVariable UUID id) {
 		return service.get(id);
+	}
+
+	/**
+	 * A vendor's deliveries that no standing invoice bills yet (R-INV-3), newest first — what the
+	 * invoice form offers once a vendor is chosen. A literal path, so Spring prefers it to
+	 * {@code /{id}} rather than trying to read "billable-deliveries" as an invoice id.
+	 */
+	@GetMapping("/billable-deliveries")
+	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
+	public List<BillableDeliveryView> billableDeliveries(@RequestParam UUID vendorId) {
+		return service.billableDeliveries(vendorId);
 	}
 
 	@PostMapping

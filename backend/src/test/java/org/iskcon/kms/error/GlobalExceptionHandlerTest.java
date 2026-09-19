@@ -24,6 +24,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * What a caller is told when the body or the address contains a value we cannot read (T-105).
@@ -323,6 +324,34 @@ class GlobalExceptionHandlerTest {
 		assertThat(Character.isUpperCase(message.charAt(0))).isTrue();
 		assertThat(message).endsWith(".").doesNotContain("!");
 		assertThat(message.toLowerCase(Locale.ROOT)).doesNotContain("must not be");
+	}
+
+	// ---------------------------------------------------------------------------------------
+	// An upload the container stopped for its size (T-267).
+	// ---------------------------------------------------------------------------------------
+
+	@Test
+	@DisplayName("an upload stopped by the container for its size is KMS-400166, not an incident")
+	void anOversizeUploadIsTooLargeNotAFault() {
+		// Exactly what Spring raises when Tomcat refuses a part over spring.servlet.multipart's
+		// max-file-size: the limit, and the container's own exception as the cause.
+		MaxUploadSizeExceededException thrown = new MaxUploadSizeExceededException(
+				11L * 1024 * 1024, new IllegalStateException("The field file exceeds its maximum permitted size"));
+
+		ResponseEntity<ErrorResponse> response = handler.handleUploadTooLarge(
+				thrown, new MockHttpServletRequest("POST", "/api/v1/vendor-invoices/bill-uploads"));
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+		ErrorResponse body = response.getBody();
+		assertThat(body).isNotNull();
+		assertThat(body.code()).isEqualTo("KMS-400166");
+		assertThat(body.code()).isEqualTo(ErrorCode.ATTACHMENT_TOO_LARGE.reference());
+		// The same words the service's own refusal uses, and nothing of the container's.
+		assertThat(body.message()).isEqualTo(ErrorCode.ATTACHMENT_TOO_LARGE.whatHappened());
+		assertThat(body.message() + " " + body.action())
+				.doesNotContain("exceeds")
+				.doesNotContain("field file")
+				.doesNotContain("Exception");
 	}
 
 	// ---------------------------------------------------------------------------------------

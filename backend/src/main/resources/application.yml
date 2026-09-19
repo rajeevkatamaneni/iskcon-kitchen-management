@@ -37,6 +37,20 @@ spring:
           timeout: 10000
           writetimeout: 10000
 
+  # Uploads: the copy of a bill and proof of payment (T-267). The real limit is 10 MB, and
+  # AttachmentService enforces it with KMS-400166. These are set well above it on purpose, at the
+  # 32 MiB Cloud Run itself accepts for a request, so that every too-large file that can reach us at
+  # all reaches the service and is refused there, cleanly and in our words. A limit tripped by the
+  # container while it is still reading the request is answered with the same KMS-400166 by
+  # GlobalExceptionHandler, but the container then closes the connection with the rest of the upload
+  # unread, and a client still sending sees a broken connection rather than the answer; measured in
+  # AttachmentIT with an 11.5 MB file against an 11 MB limit. The defaults (1 MB a file) would have
+  # refused an ordinary phone photo.
+  servlet:
+    multipart:
+      max-file-size: 32MB
+      max-request-size: 32MB
+
   jpa:
     hibernate:
       ddl-auto: validate

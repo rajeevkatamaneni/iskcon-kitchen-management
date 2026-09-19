@@ -26,6 +26,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -481,6 +482,30 @@ public class GlobalExceptionHandler {
 				code.reference(), request.getMethod(), request.getRequestURI(), e.getParameterName());
 
 		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code, fieldErrors));
+	}
+
+	/**
+	 * An upload far over the size limit, stopped by the container before any controller ran (T-267).
+	 *
+	 * <p>There are two limits and this is the outer one. {@code AttachmentService} refuses anything
+	 * over 10 MB itself, with KMS-400166. {@code spring.servlet.multipart} in application.yml is set
+	 * far above that, at the 32 MiB Cloud Run accepts for a request, so an ordinary too-large photo
+	 * reaches the service and is refused there. Only something past 32 MB is stopped here while the
+	 * request is still being read, and before this handler existed that was answered KMS-500001,
+	 * "Something went wrong at our end", for what is a file the person can simply make smaller.
+	 *
+	 * <p>It is the same code and the same words either way, because to the person it is the same
+	 * thing: the file is too large, and the next step is the same. Logged at {@code warn}, like the
+	 * other caller mistakes; no incident id, because nothing is broken.
+	 */
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	public ResponseEntity<ErrorResponse> handleUploadTooLarge(
+			MaxUploadSizeExceededException e, HttpServletRequest request) {
+
+		ErrorCode code = ErrorCode.ATTACHMENT_TOO_LARGE;
+		log.warn("{} method={} path={} limit={}",
+				code.reference(), request.getMethod(), request.getRequestURI(), e.getMaxUploadSize());
+		return ResponseEntity.status(code.httpStatus()).body(ErrorResponse.of(code));
 	}
 
 	/**

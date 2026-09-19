@@ -59,6 +59,8 @@ class InvoicePaymentIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
+		// attachments first: its foreign key to invoice_payments is RESTRICT.
+		admin.execute("DELETE FROM attachments");
 		admin.execute("DELETE FROM invoice_payments");
 		admin.execute("DELETE FROM vendor_invoices");
 		admin.execute("DELETE FROM vendors");
@@ -107,9 +109,15 @@ class InvoicePaymentIT extends AbstractIntegrationTest {
 	@DisplayName("a compensating negative entry reopens a paid invoice")
 	void compensatingReopens() throws Exception {
 		UUID inv = invoice("INV-4", "500", null);
-		mvc.perform(pay(inv, "500", "CHEQUE")).andExpect(status().isCreated());
+		String created = mvc.perform(pay(inv, "500", "CHEQUE")).andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		UUID payment = UUID.fromString(created.replaceAll(".*\"id\"\\s*:\\s*\"([^\"]+)\".*", "$1"));
 		assert invoiceStatus(inv).equals("PAID");
-		mvc.perform(pay(inv, "-200", "CHEQUE")).andExpect(status().isCreated());
+		// Through Reverse, which writes the compensating negative row itself: a hand-entered negative
+		// amount is refused since T-280 (PaymentProofIT has that refusal).
+		mvc.perform(authed(post("/api/v1/vendor-invoices/{id}/payments/{paymentId}/reverse", inv, payment))
+						.contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"The cheque bounced.\"}"))
+				.andExpect(status().isNoContent());
 		assert invoiceStatus(inv).equals("PENDING") : "a reversal should reopen it";
 	}
 
@@ -142,7 +150,32 @@ class InvoicePaymentIT extends AbstractIntegrationTest {
 		return authed(post("/api/v1/vendor-invoices/{id}/payments", invoiceId))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"paidOn\":\"" + java.time.LocalDate.now() + "\",\"amount\":" + amount
-						+ ",\"method\":\"" + method + "\"}");
+						+ ",\"method\":\"" + method + "\"" + proofFields(amount, method) + "}");
+	}
+
+	/**
+	 * The proof a payment of this method needs since stage 6 (R-PAY-2), as JSON fields to add to the
+	 * body. Written straight into {@code attachments} as unclaimed uploads, because what these tests
+	 * are about is the money, not the upload: {@code PaymentProofIT} goes through the real upload
+	 * endpoint. Every payment carries it: a negative amount is no longer something this endpoint takes
+	 * (T-280), so there is no case without.
+	 */
+	private String proofFields(String amount, String method) {
+		if (method.equals("CASH")) {
+			return ",\"receivedByName\":\"Manjunath K.\",\"signedNoteAttachmentId\":\""
+					+ unclaimedUpload("CASH_SIGNED_NOTE") + "\",\"receiverPhotoAttachmentId\":\""
+					+ unclaimedUpload("CASH_RECEIVER_PHOTO") + "\"";
+		}
+		return ",\"proofAttachmentId\":\"" + unclaimedUpload("PAYMENT_PROOF") + "\"";
+	}
+
+	private UUID unclaimedUpload(String kind) {
+		UUID id = UUID.randomUUID();
+		admin.update("""
+				INSERT INTO attachments (id, tenant_id, kind, storage_key, content_type, size_bytes, uploaded_by)
+				VALUES (?, ?, ?, ?, 'image/png', 64, ?)
+				""", id, tenant, kind, "tenants/" + tenant + "/attachments/" + id, adminId);
+		return id;
 	}
 
 	private String invoiceStatus(UUID invoiceId) {

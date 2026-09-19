@@ -68,6 +68,8 @@ class InvoiceCorrectionIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
+		// attachments first: its foreign key to invoice_payments is RESTRICT.
+		admin.execute("DELETE FROM attachments");
 		admin.execute("DELETE FROM invoice_payments");
 		admin.execute("DELETE FROM vendor_invoices");
 		admin.execute("DELETE FROM vendors");
@@ -308,11 +310,17 @@ class InvoiceCorrectionIT extends AbstractIntegrationTest {
 				WHERE action = 'INVOICE_VOIDED' AND entity_id = ?
 				""", String.class, inv)).as("the audit still records what was paid when it was struck").isEqualTo("0.00");
 
-		// The hand-entered compensating entry V40 has allowed since 2025 carries no link to the payment
-		// it corrects, but it nets the same way, and the refusal reads the net.
+		// A hand-entered compensating entry carries no link to the payment it corrects, but it nets the
+		// same way, and the refusal reads the net. The API stopped taking these in T-280, so the row is
+		// written here as the legacy data it now is: temples recorded some before then, and they have
+		// to keep counting.
 		UUID corrected = invoice("INV-24", "500", null);
 		pay(corrected, "250", "UPI");
-		pay(corrected, "-250", "UPI");
+		admin.update("""
+				INSERT INTO invoice_payments (tenant_id, invoice_id, paid_on, amount, method, recorded_by)
+				VALUES (?, ?, CURRENT_DATE, -250, 'UPI', ?)
+				""", tenant, corrected, adminId);
+		assertThat(paidToDate(corrected)).as("the legacy row nets the payment out").isEqualByComparingTo("0");
 		mvc.perform(voidInvoice(corrected, "Billed twice.")).andExpect(status().isNoContent());
 		assertThat(invoiceStatus(corrected)).isEqualTo("VOIDED");
 	}
@@ -439,7 +447,32 @@ class InvoiceCorrectionIT extends AbstractIntegrationTest {
 		return authed(post("/api/v1/vendor-invoices/{id}/payments", invoiceId))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"paidOn\":\"" + java.time.LocalDate.now() + "\",\"amount\":" + amount
-						+ ",\"method\":\"" + method + "\"}");
+						+ ",\"method\":\"" + method + "\"" + proofFields(amount, method) + "}");
+	}
+
+	/**
+	 * The proof a payment of this method needs since stage 6 (R-PAY-2), as JSON fields to add to the
+	 * body. Written straight into {@code attachments} as unclaimed uploads, because what these tests
+	 * are about is the money, not the upload: {@code PaymentProofIT} goes through the real upload
+	 * endpoint. Every payment carries it: a negative amount is no longer something this endpoint takes
+	 * (T-280), so there is no case without.
+	 */
+	private String proofFields(String amount, String method) {
+		if (method.equals("CASH")) {
+			return ",\"receivedByName\":\"Manjunath K.\",\"signedNoteAttachmentId\":\""
+					+ unclaimedUpload("CASH_SIGNED_NOTE") + "\",\"receiverPhotoAttachmentId\":\""
+					+ unclaimedUpload("CASH_RECEIVER_PHOTO") + "\"";
+		}
+		return ",\"proofAttachmentId\":\"" + unclaimedUpload("PAYMENT_PROOF") + "\"";
+	}
+
+	private UUID unclaimedUpload(String kind) {
+		UUID id = UUID.randomUUID();
+		admin.update("""
+				INSERT INTO attachments (id, tenant_id, kind, storage_key, content_type, size_bytes, uploaded_by)
+				VALUES (?, ?, ?, ?, 'image/png', 64, ?)
+				""", id, tenant, kind, "tenants/" + tenant + "/attachments/" + id, adminId);
+		return id;
 	}
 
 	private MockHttpServletRequestBuilder reverse(UUID invoiceId, UUID paymentId, String reason) {

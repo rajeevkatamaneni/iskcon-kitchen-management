@@ -29,6 +29,15 @@ public class InvoicePaymentController {
 		this.service = service;
 	}
 
+	/**
+	 * Records a payment with its proof (R-PAY-1, R-PAY-2).
+	 *
+	 * <p>Paying moved onto the invoice page in stage 6, and the permission deliberately did not move
+	 * with it: this stays {@code MANAGE_VENDOR_PAYMENTS}, the Temple Admin's alone. R-PAY-1 says
+	 * <em>who can pay must not widen</em>, and the invoice page is one a Kitchen Manager can open; the
+	 * button is hidden from them there, and this annotation is what makes hiding it more than
+	 * decoration. {@code PaymentProofIT} holds both the 403 and the policy table to it.
+	 */
 	@PostMapping("/api/v1/vendor-invoices/{id}/payments")
 	@PreAuthorize("hasAuthority('MANAGE_VENDOR_PAYMENTS')")
 	public ResponseEntity<Map<String, Object>> record(
@@ -59,6 +68,7 @@ public class InvoicePaymentController {
 		return ResponseEntity.noContent().build();
 	}
 
+	/** The invoice's payments, each with who took the cash and its proof files (R-PAY-3). */
 	@GetMapping("/api/v1/vendor-invoices/{id}/payments")
 	@PreAuthorize("hasAuthority('MANAGE_VENDOR_PAYMENTS')")
 	public List<InvoicePaymentView> payments(@PathVariable UUID id) {

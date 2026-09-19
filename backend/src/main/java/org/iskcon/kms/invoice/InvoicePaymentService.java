@@ -4,15 +4,22 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.iskcon.kms.attachment.AttachmentKind;
+import org.iskcon.kms.attachment.AttachmentService;
+import org.iskcon.kms.attachment.AttachmentView;
 import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
 import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.error.ErrorResponse;
+import org.iskcon.kms.invoice.RecordInvoicePaymentRequest.PaymentMethod;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -35,6 +42,26 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>What is owed is the invoiced amount less any credit notes, and the status that follows from it
  * is decided in one place — {@link VendorInvoiceService#restateStatus} — which this service calls
  * rather than working it out a second time.
+ *
+ * <h2>Proof (R-PAY-2, stage 6)</h2>
+ *
+ * <p>Every payment now carries the evidence that the money left: a receipt or screenshot for UPI, a
+ * bank transfer or a cheque; for cash, the name of whoever took it, the note they signed and a photo
+ * of them. The files are uploaded while the form is open and arrive here as ids, and
+ * {@link #recordPayment} claims them onto the new row in the same transaction that writes it (see
+ * {@link AttachmentService}). What is required and what is ignored is set out on {@link #proofFor}.
+ *
+ * <h2>Only positive amounts are recorded here (T-280)</h2>
+ *
+ * <p>{@link #recordPayment} refuses any amount of ₹0 or less ({@code KMS-400174}). It used to accept a
+ * negative one as a hand-entered correction, which V40's signed {@code amount} permits, and it asked
+ * no proof of it because no money moves on a correction. That was a way to change what an invoice
+ * shows as paid with nothing on file to say why, which R-PAY-2 ("proof for every payment") exists to
+ * stop. Nobody needed it either: the form has always required an amount above zero, and a payment
+ * recorded by mistake is undone with {@link #reversePayment}, which writes the compensating negative
+ * row itself, names the payment it undoes and records a reason. So a negative row now enters the
+ * ledger only that way. Negative rows already written by hand before this are left as they are and
+ * still count in every sum, because the ledger is append-only and they are part of what was paid.
  */
 @Service
 public class InvoicePaymentService {
@@ -42,15 +69,48 @@ public class InvoicePaymentService {
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final VendorInvoiceService invoices;
+	private final AttachmentService attachments;
 
-	public InvoicePaymentService(JdbcTemplate jdbc, AuditService auditService, VendorInvoiceService invoices) {
+	public InvoicePaymentService(JdbcTemplate jdbc, AuditService auditService, VendorInvoiceService invoices,
+			AttachmentService attachments) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.invoices = invoices;
+		this.attachments = attachments;
 	}
 
+	/**
+	 * Records one payment, with its proof.
+	 *
+	 * <p>The amount is checked before anything else, even the proof: a payment of ₹0 or less is not a
+	 * payment this endpoint records at all (see the class comment), so telling someone which receipt is
+	 * missing from it would send them off to find a file for something that would be refused anyway.
+	 * It is also checked before the invoice is read, so the answer is the same whatever state the bill
+	 * is in.
+	 *
+	 * <p>The proof is checked next, still before the invoice is read: a missing file is a form that is
+	 * not finished, the same kind of answer as a missing date, and it would be perverse to tell someone
+	 * the bill is already paid and only then, on their second try, that they also forgot the receipt.
+	 *
+	 * <p>The files are claimed after the row is inserted, and the order is forced rather than chosen.
+	 * A claim sets {@code attachments.payment_id}, a foreign key to this row, so the row has to exist
+	 * first; and {@link AttachmentService#claimForPayment} reads the payment through RLS and locks it
+	 * before claiming, which it could not do to a row not yet written. {@code invoice_payments} being
+	 * append-only does not get in the way: that is a trigger on UPDATE and DELETE, and neither the
+	 * row lock nor the foreign-key check fires it — nothing here ever changes the payment row after
+	 * the INSERT. A refused claim (KMS-400167: the file is missing, already used, of the wrong kind or
+	 * another temple's) throws out of this transaction, so the payment row goes with it and no payment
+	 * is ever left recorded without its proof.
+	 */
 	@Transactional
 	public UUID recordPayment(AuthenticatedUser actor, UUID invoiceId, RecordInvoicePaymentRequest request) {
+		if (request.amount().signum() <= 0) {
+			throw new ApplicationException(ErrorCode.PAYMENT_AMOUNT_NOT_POSITIVE,
+					Map.of("invoiceId", invoiceId, "amount", request.amount().toPlainString()));
+		}
+		List<FileToClaim> proof = proofFor(request);
+		String receivedBy = request.method() == PaymentMethod.CASH ? request.receivedByName().trim() : null;
+
 		BigDecimal owed;
 		String status;
 		try {
@@ -72,7 +132,7 @@ public class InvoicePaymentService {
 		}
 
 		BigDecimal paid = paidToDate(invoiceId);
-		if (request.amount().signum() > 0 && paid.compareTo(owed) >= 0) {
+		if (paid.compareTo(owed) >= 0) {
 			throw new ApplicationException(ErrorCode.INVOICE_ALREADY_PAID, Map.of("invoiceId", invoiceId));
 		}
 		BigDecimal newPaid = paid.add(request.amount());
@@ -80,25 +140,39 @@ public class InvoicePaymentService {
 			throw new ApplicationException(ErrorCode.INVOICE_OVERPAYMENT,
 					Map.of("invoiceId", invoiceId, "outstanding", owed.subtract(paid)));
 		}
-		if (newPaid.signum() < 0) {
-			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
-					Map.of("field", "amount", "reason", "would take paid-to-date below zero"));
-		}
 
 		UUID id = UUID.randomUUID();
 		jdbc.update("""
-				INSERT INTO invoice_payments (id, tenant_id, invoice_id, paid_on, amount, method, reference, note, recorded_by)
-				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?)
+				INSERT INTO invoice_payments (id, tenant_id, invoice_id, paid_on, amount, method, reference, note,
+					recorded_by, received_by_name)
+				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?, ?)
 				""", id, invoiceId, request.paidOn(), request.amount(), request.method().name(),
-				trimToNull(request.reference()), trimToNull(request.note()), actor.getUserId());
+				trimToNull(request.reference()), trimToNull(request.note()), actor.getUserId(), receivedBy);
+
+		List<String> claimed = new ArrayList<>();
+		for (FileToClaim file : proof) {
+			claimed.add(attachments.claimForPayment(file.attachmentId(), file.kind(), id).id().toString());
+		}
 
 		String newStatus = invoices.restateStatus(invoiceId);
 
+		// Map.of refuses a null, and a payment with no cash receiver has none, so the after-state is
+		// built up. The file ids are named so that an auditor reading one payment's history can go
+		// from the entry to the proof that was attached when it was made.
+		Map<String, Object> after = new LinkedHashMap<>();
+		after.put("status", newStatus);
+		after.put("paidToDate", newPaid.toPlainString());
+		after.put("amount", request.amount().toPlainString());
+		after.put("method", request.method().name());
+		after.put("paymentId", id.toString());
+		if (receivedBy != null) {
+			after.put("receivedByName", receivedBy);
+		}
+		if (!claimed.isEmpty()) {
+			after.put("attachmentIds", List.copyOf(claimed));
+		}
 		auditService.record(actor, AuditAction.INVOICE_PAYMENT_RECORDED, AuditEntityType.VENDOR_INVOICE, invoiceId,
-				Map.of("status", status, "paidToDate", paid.toPlainString()),
-				Map.of("status", newStatus, "paidToDate", newPaid.toPlainString(),
-						"amount", request.amount().toPlainString(), "method", request.method().name()),
-				null);
+				Map.of("status", status, "paidToDate", paid.toPlainString()), after, null);
 		return id;
 	}
 
@@ -117,8 +191,8 @@ public class InvoicePaymentService {
 	 * {@code created_at}, which is already recorded.
 	 *
 	 * <p>Only a positive payment can be reversed. A row that is already negative is itself a
-	 * correction — either one of these reversals or the hand-entered compensating entry V40 has
-	 * allowed since 2025 — and undoing a correction is recording a fresh payment, which is a
+	 * correction — either one of these reversals or a hand-entered compensating entry written before
+	 * {@link #recordPayment} stopped accepting them (T-280) — and undoing a correction is recording a fresh payment, which is a
 	 * different act with a different date. Both cases answer {@code KMS-400133}.
 	 */
 	@Transactional
@@ -165,15 +239,24 @@ public class InvoicePaymentService {
 		return id;
 	}
 
+	/**
+	 * Every payment on the invoice, each with its proof (R-PAY-3).
+	 *
+	 * <p>The files are read for the whole list in one query ({@link AttachmentService#ofPayments}),
+	 * not one per row: a bill paid in six instalments is six rows, and six extra round trips to show
+	 * six thumbnails is the shape that turns into sixty on the day someone pays weekly. A reversal has
+	 * no files of its own — it undoes money, it does not move any — so it comes back with an empty
+	 * list, as does every payment recorded before proof was asked for.
+	 */
 	@Transactional(readOnly = true)
 	public List<InvoicePaymentView> payments(UUID invoiceId) {
 		// The self-join is the other end of a reversal. An append-only table cannot be told after the
 		// fact that one of its rows has been undone, so "was this payment reversed" is a question
 		// answered by looking for the row that names it — and a unique index on `reverses` is what
 		// makes at most one such row possible.
-		return jdbc.query("""
+		List<InvoicePaymentView> rows = jdbc.query("""
 				SELECT p.id, p.paid_on, p.amount, p.method, p.reference, p.note, u.full_name AS recorded_by_name,
-					   p.reverses, r.id AS reversed_by, p.reverse_reason, p.created_at
+					   p.reverses, r.id AS reversed_by, p.reverse_reason, p.received_by_name, p.created_at
 				FROM invoice_payments p
 				LEFT JOIN users u ON u.id = p.recorded_by
 				LEFT JOIN invoice_payments r ON r.reverses = p.id
@@ -183,8 +266,11 @@ public class InvoicePaymentService {
 				rs.getBigDecimal("amount"), rs.getString("method"), rs.getString("reference"),
 				rs.getString("note"), rs.getString("recorded_by_name"),
 				rs.getObject("reverses", UUID.class), rs.getObject("reversed_by", UUID.class),
-				rs.getString("reverse_reason"),
+				rs.getString("reverse_reason"), rs.getString("received_by_name"), List.of(),
 				instant(rs.getObject("created_at", OffsetDateTime.class))), invoiceId);
+
+		Map<UUID, List<AttachmentView>> files = attachments.ofPayments(rows.stream().map(InvoicePaymentView::id).toList());
+		return rows.stream().map(row -> row.withAttachments(files.get(row.id()))).toList();
 	}
 
 	/** Outstanding invoices with their aging bucket, for the payables view (E7-S8). */
@@ -217,6 +303,67 @@ public class InvoicePaymentService {
 	}
 
 	// ---------------------------------------------------------------------
+
+	/** One upload the payment must claim, and the kind it has to be. */
+	private record FileToClaim(UUID attachmentId, AttachmentKind kind) {
+	}
+
+	/**
+	 * What proof this payment needs, refusing it when any is missing (R-PAY-2).
+	 *
+	 * <p><strong>Required.</strong> UPI, bank transfer and cheque need one file: {@code proofAttachmentId}.
+	 * Cash needs three things: {@code receivedByName}, {@code signedNoteAttachmentId} and
+	 * {@code receiverPhotoAttachmentId}. Every one missing is named in the same answer, one field error
+	 * each, so a person who left out two things hears about both at once rather than one per press.
+	 * The words are the product's standard required message — the field's label on the form, then
+	 * "is required" — the sentence {@code formMessages.required} puts under an empty box, with the full
+	 * stop every server-side field error carries.
+	 *
+	 * <p><strong>Ignored.</strong> A field that belongs to the other method is ignored, not refused:
+	 * a proof id sent with a cash payment, or a receiver's name or cash photos sent with a UPI one, is
+	 * neither claimed nor stored. The form swaps these boxes when the method changes (R-PAY-2), so the
+	 * one way such a field arrives is a file picked before somebody changed their mind about the
+	 * method. Refusing it would put an error against a box that is no longer on the screen, which the
+	 * person could neither see nor clear; ignoring it leaves the upload unclaimed, which is exactly what
+	 * an upload abandoned any other way is. Nothing is lost that was ever part of this payment.
+	 *
+	 * <p><strong>Asked of every payment.</strong> There is no amount for which this returns nothing.
+	 * It once did for a negative one, as a correction on which no money moves; that exemption went with
+	 * the negative amounts themselves (T-280), which {@link #recordPayment} now refuses before it gets
+	 * here. The compensating row {@link #reversePayment} writes never comes through this method, so it
+	 * still carries no files, and nothing here needs to know about it.
+	 */
+	private static List<FileToClaim> proofFor(RecordInvoicePaymentRequest request) {
+		List<ErrorResponse.FieldError> missing = new ArrayList<>();
+		List<FileToClaim> files;
+		if (request.method() == PaymentMethod.CASH) {
+			if (request.receivedByName() == null || request.receivedByName().isBlank()) {
+				missing.add(new ErrorResponse.FieldError("receivedByName", "Received by is required."));
+			}
+			if (request.signedNoteAttachmentId() == null) {
+				missing.add(new ErrorResponse.FieldError("signedNoteAttachmentId", "Signed note is required."));
+			}
+			if (request.receiverPhotoAttachmentId() == null) {
+				missing.add(new ErrorResponse.FieldError("receiverPhotoAttachmentId",
+						"Photo of the person who took the cash is required."));
+			}
+			files = List.of(
+					new FileToClaim(request.signedNoteAttachmentId(), AttachmentKind.CASH_SIGNED_NOTE),
+					new FileToClaim(request.receiverPhotoAttachmentId(), AttachmentKind.CASH_RECEIVER_PHOTO));
+		} else {
+			if (request.proofAttachmentId() == null) {
+				missing.add(new ErrorResponse.FieldError("proofAttachmentId", "Proof of payment is required."));
+			}
+			files = List.of(new FileToClaim(request.proofAttachmentId(), AttachmentKind.PAYMENT_PROOF));
+		}
+		if (!missing.isEmpty()) {
+			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
+					Map.of("method", request.method().name(),
+							"missing", missing.stream().map(ErrorResponse.FieldError::field).toList()),
+					missing, null);
+		}
+		return files;
+	}
 
 	private BigDecimal paidToDate(UUID invoiceId) {
 		BigDecimal paid = jdbc.queryForObject(

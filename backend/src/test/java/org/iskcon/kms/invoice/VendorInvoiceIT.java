@@ -22,6 +22,12 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 /**
  * Vendor invoice capture (E5-S8): invoices against a PO and direct (no-PO) invoices, the payment
  * queue, the informational price variance, the soft duplicate-number warning, and the overdue badge.
+ *
+ * <p>Since stage 6 (T-271) an invoice is recorded itemised — lines, deliveries, totals and a required
+ * copy of the bill — and {@code InvoiceLinesIT} owns that shape. The variance tests here are about
+ * invoices recorded <em>before</em> stage 6, which have only an amount against an order and must keep
+ * reading exactly as they did; they are seeded in that old shape with SQL, since the endpoint no longer
+ * writes it. Everything else records through the endpoint in the new shape.
  */
 @AutoConfigureMockMvc
 class VendorInvoiceIT extends AbstractIntegrationTest {
@@ -82,22 +88,10 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 
 	@AfterEach
 	void tearDown() {
-		admin.execute("DELETE FROM vendor_invoices");
-		admin.execute("DELETE FROM goods_receipt_lines");
-		admin.execute("DELETE FROM goods_receipts");
-		admin.execute("DELETE FROM stock_movements");
-		admin.execute("DELETE FROM po_events");
-		admin.execute("DELETE FROM purchase_order_lines");
-		admin.execute("DELETE FROM purchase_orders");
-		admin.execute("DELETE FROM po_sequence");
-		admin.execute("DELETE FROM vendors");
-		admin.execute("DELETE FROM audit_events");
-		// Anything that moved through the stock ledger is tracked now, so the item rows exist
-		// even where the test never asked for them, and they hold the ingredient down.
-		admin.execute("DELETE FROM inventory_items");
-		admin.execute("DELETE FROM ingredients");
-		admin.execute("DELETE FROM users");
-		admin.execute("DELETE FROM tenants");
+		// The tenant purge rather than a list of DELETEs: an itemised invoice now reaches the price
+		// history and the market-rate history, both append-only, and the purge is the one path that
+		// knows how to take those down (V86).
+		admin.execute("SELECT delete_tenant_cascade('" + tenant + "')");
 	}
 
 	@Test
@@ -105,13 +99,13 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	void poInvoiceEntersQueue() throws Exception {
 		UUID poId = receivedPo("PO-2026-0042", "30", "45.00", "30"); // 30 received @ 45 → expected 1350
 
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + poId
-						+ "\",\"invoiceNumber\":\"INV-1\",\"invoiceDate\":\"2026-08-01\",\"amount\":1350,"
-						+ "\"dueDate\":\"2026-08-20\",\"scanRef\":\"gcs://scans/inv-1.pdf\"}"))
+		// Billed through its delivery, at the order's price: ₹1,350 against ₹1,350 delivered.
+		mvc.perform(invoice(deliveryBill(poId, "INV-1", "30", "1350", "2026-08-20")))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.duplicateWarning").value(false))
 				.andExpect(jsonPath("$.invoice.status").value("PENDING"))
 				.andExpect(jsonPath("$.invoice.direct").value(false))
+				.andExpect(jsonPath("$.invoice.purchaseOrderId").value(poId.toString()))
 				.andExpect(jsonPath("$.invoice.expectedValue").value(1350.0))
 				.andExpect(jsonPath("$.invoice.variance").value(0.0));
 
@@ -126,19 +120,24 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	void varianceSurfacesWhenPricesDiffer() throws Exception {
 		UUID poId = receivedPo("PO-2026-0043", "30", "45.00", "30"); // expected 1350
 
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + poId
-						+ "\",\"invoiceNumber\":\"INV-2\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}"))
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.invoice.expectedValue").value(1350.0))
-				.andExpect(jsonPath("$.invoice.variance").value(50.0)); // 1400 - 1350, shown not enforced
+		UUID id = legacy(poId, "INV-2", "1400");
+		mvc.perform(authed(get("/api/v1/vendor-invoices/{id}", id)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.expectedValue").value(1350.0))
+				.andExpect(jsonPath("$.variance").value(50.0)) // 1400 - 1350, shown not enforced
+				// An invoice from before stage 6: no items, no deliveries, no totals, no bill.
+				.andExpect(jsonPath("$.lines.length()").value(0))
+				.andExpect(jsonPath("$.deliveries.length()").value(0))
+				.andExpect(jsonPath("$.subTotal").doesNotExist())
+				.andExpect(jsonPath("$.grandTotal").doesNotExist())
+				.andExpect(jsonPath("$.bill").doesNotExist());
 	}
 
 	@Test
 	@DisplayName("a credit note against the bill settles the variance it was raised for")
 	void varianceIsNetOfCreditNotes() throws Exception {
 		UUID poId = receivedPo("PO-2026-0044", "30", "45.00", "30"); // 30 received @ 45 → expected 1350
-		String id = recordAndReturnId("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + poId
-				+ "\",\"invoiceNumber\":\"INV-3\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}");
+		String id = legacy(poId, "INV-3", "1400").toString();
 
 		// Before the credit: the discrepancy the variance exists to surface. Asserted here as well as
 		// in varianceSurfacesWhenPricesDiffer so that a negative control on the fix cannot pass by
@@ -174,8 +173,7 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	@DisplayName("a partial credit leaves the part of the variance that is still in dispute")
 	void aPartialCreditLeavesTheRemainingVariance() throws Exception {
 		UUID poId = receivedPo("PO-2026-0045", "30", "45.00", "30"); // expected 1350
-		String id = recordAndReturnId("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + poId
-				+ "\",\"invoiceNumber\":\"INV-4\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}");
+		String id = legacy(poId, "INV-4", "1400").toString();
 
 		signIn("uid-admin-a");
 		mvc.perform(authed(post("/api/v1/vendor-invoices/{id}/credit", id))
@@ -200,10 +198,8 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 		// struck, one left standing, so the live figure is proved unchanged in the same run.
 		UUID struckPo = receivedPo("PO-2026-0071", "30", "45.00", "30"); // expected 1350
 		UUID livePo = receivedPo("PO-2026-0072", "30", "45.00", "30");   // expected 1350
-		String struck = recordAndReturnId("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + struckPo
-				+ "\",\"invoiceNumber\":\"GW-V1\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}");
-		recordAndReturnId("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + livePo
-				+ "\",\"invoiceNumber\":\"GW-V2\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}");
+		String struck = legacy(struckPo, "GW-V1", "1400").toString();
+		legacy(livePo, "GW-V2", "1400").toString();
 
 		// Before the void it carries the variance, so the assertion after it cannot pass on a bill
 		// that never had one.
@@ -241,9 +237,7 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a direct (no-PO) invoice is recordable with a description and has no variance")
 	void directInvoiceHasNoVariance() throws Exception {
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor
-						+ "\",\"description\":\"Cash market vegetables\",\"invoiceNumber\":\"CASH-9\","
-						+ "\"invoiceDate\":\"2026-08-05\",\"amount\":800}"))
+		mvc.perform(invoice(direct("Cash market vegetables", "CASH-9", "2026-08-05", "800", null)))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.invoice.direct").value(true))
 				.andExpect(jsonPath("$.invoice.description").value("Cash market vegetables"))
@@ -252,24 +246,24 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a direct invoice without a description is rejected")
-	void directInvoiceNeedsDescription() throws Exception {
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor
-						+ "\",\"invoiceNumber\":\"CASH-10\",\"invoiceDate\":\"2026-08-05\",\"amount\":800}"))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-400054"));
+	@DisplayName("a direct invoice without a description is recorded: its lines say what was bought")
+	void directInvoiceNeedsNoDescription() throws Exception {
+		// Until stage 6 this was refused with KMS-400054, because the description was the only thing
+		// a direct bill said about itself. Its item lines say it now (conductor's ruling for T-271).
+		mvc.perform(invoice(direct(null, "CASH-10", "2026-08-05", "800", null)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.invoice.direct").value(true))
+				.andExpect(jsonPath("$.invoice.description").doesNotExist());
 	}
 
 	@Test
 	@DisplayName("a repeated invoice number for the same vendor warns softly but still records")
 	void duplicateNumberWarnsSoftly() throws Exception {
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor
-						+ "\",\"description\":\"first\",\"invoiceNumber\":\"DUP-1\",\"invoiceDate\":\"2026-08-01\",\"amount\":100}"))
+		mvc.perform(invoice(direct("first", "DUP-1", "2026-08-01", "100", null)))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.duplicateWarning").value(false));
 
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor
-						+ "\",\"description\":\"second\",\"invoiceNumber\":\"DUP-1\",\"invoiceDate\":\"2026-08-02\",\"amount\":120}"))
+		mvc.perform(invoice(direct("second", "DUP-1", "2026-08-02", "120", null)))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.duplicateWarning").value(true)); // soft — still created
 
@@ -285,9 +279,7 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 		// counted — and counting it warned the clerk that they had duplicated a bill the temple had
 		// just said was never owed. "A warning that fires when somebody is being careful is one they
 		// learn to dismiss."
-		String struck = recordAndReturnId("{\"vendorId\":\"" + vendor
-				+ "\",\"description\":\"keyed as 1200 by mistake\",\"invoiceNumber\":\"GW-77\","
-				+ "\"invoiceDate\":\"2026-08-01\",\"amount\":1200}");
+		String struck = recordAndReturnId(direct("keyed as 1200 by mistake", "GW-77", "2026-08-01", "1200", null));
 
 		signIn("uid-admin-a"); // striking a bill is MANAGE_VENDOR_PAYMENTS, which the store keeper has not
 		mvc.perform(authed(post("/api/v1/vendor-invoices/{id}/void", UUID.fromString(struck)))
@@ -296,9 +288,7 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 				.andExpect(status().isNoContent());
 		signIn("uid-staff-a");
 
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor
-						+ "\",\"description\":\"the same bill, keyed right\",\"invoiceNumber\":\"GW-77\","
-						+ "\"invoiceDate\":\"2026-08-01\",\"amount\":1250}"))
+		mvc.perform(invoice(direct("the same bill, keyed right", "GW-77", "2026-08-01", "1250", null)))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.duplicateWarning").value(false));
 
@@ -313,9 +303,7 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 		// The other half, and the one that stops the fix being a deletion of the feature: excluding
 		// voided rows must not excuse the case this check exists for — being billed twice for one
 		// delivery, which is money out of the door.
-		String struck = recordAndReturnId("{\"vendorId\":\"" + vendor
-				+ "\",\"description\":\"first attempt\",\"invoiceNumber\":\"GW-88\","
-				+ "\"invoiceDate\":\"2026-08-01\",\"amount\":900}");
+		String struck = recordAndReturnId(direct("first attempt", "GW-88", "2026-08-01", "900", null));
 
 		signIn("uid-admin-a");
 		mvc.perform(authed(post("/api/v1/vendor-invoices/{id}/void", UUID.fromString(struck)))
@@ -325,16 +313,12 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 		signIn("uid-staff-a");
 
 		// The re-entry: clean, so no warning.
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor
-						+ "\",\"description\":\"re-entered\",\"invoiceNumber\":\"GW-88\","
-						+ "\"invoiceDate\":\"2026-08-02\",\"amount\":900}"))
+		mvc.perform(invoice(direct("re-entered", "GW-88", "2026-08-02", "900", null)))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.duplicateWarning").value(false));
 
 		// And a third under the same number, with a standing bill now in the way, warns as it always did.
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor
-						+ "\",\"description\":\"billed for it twice\",\"invoiceNumber\":\"GW-88\","
-						+ "\"invoiceDate\":\"2026-08-03\",\"amount\":900}"))
+		mvc.perform(invoice(direct("billed for it twice", "GW-88", "2026-08-03", "900", null)))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.duplicateWarning").value(true));
 	}
@@ -342,9 +326,7 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("an overdue PENDING invoice is flagged and filterable")
 	void overdueIsFlagged() throws Exception {
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor
-						+ "\",\"description\":\"old bill\",\"invoiceNumber\":\"OLD-1\",\"invoiceDate\":\"2026-01-01\","
-						+ "\"amount\":500,\"dueDate\":\"2026-01-31\"}"))
+		mvc.perform(invoice(direct("old bill", "OLD-1", "2026-01-01", "500", "2026-01-31")))
 				.andExpect(status().isCreated());
 
 		mvc.perform(authed(get("/api/v1/vendor-invoices?overdue=true")))
@@ -360,18 +342,21 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	}
 
 	// ---- The order must belong to the vendor being invoiced (T-082) ------
+	//
+	// An invoice no longer names an order: it bills deliveries, and the server names the order from
+	// them (T-271). T-082's guarantee — a bill for Vendor A never computes its money from Vendor B's
+	// order — now holds one step earlier: B's delivery cannot be billed on A's invoice at all.
 
 	@Test
-	@DisplayName("an invoice quoting another vendor's purchase order is refused, and nothing is recorded")
+	@DisplayName("an invoice billing another vendor's delivery is refused, and nothing is recorded")
 	void orderMustBelongToTheVendorOnTheInvoice() throws Exception {
 		// Sri Traders' order, at a price of its own so that the variance it would have produced is
 		// visibly not Govind's.
 		UUID sriOrder = receivedPo(otherVendor, "PO-2026-0070", "30", "45.00", "30"); // worth 1350
 
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + sriOrder
-						+ "\",\"invoiceNumber\":\"INV-CROSS\",\"invoiceDate\":\"2026-08-01\",\"amount\":1400}"))
+		mvc.perform(invoice(deliveryBill(sriOrder, "INV-CROSS", "30", "1400", null)))
 				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-400145"));
+				.andExpect(jsonPath("$.code").value("KMS-400169"));
 
 		// Refused outright rather than recorded-and-flagged: a bill in the pay queue against the
 		// wrong order is money owed computed from somebody else's delivery.
@@ -379,28 +364,36 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an order that does not exist at all is still a not-found, not a mismatch")
-	void anAbsentOrderIsStillNotFound() throws Exception {
-		// The two failures stayed distinct when the check was folded into one query. A random id is
-		// also what a cross-tenant order looks like from here, since RLS hides it.
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + UUID.randomUUID()
-						+ "\",\"invoiceNumber\":\"INV-GHOST\",\"invoiceDate\":\"2026-08-01\",\"amount\":100}"))
-				.andExpect(status().isNotFound());
+	@DisplayName("a delivery that does not exist is refused like any delivery that can't be billed")
+	void anAbsentDeliveryIsNotBillable() throws Exception {
+		// A random id is also what another temple's delivery looks like from here, since RLS hides it,
+		// so the two must not be told apart. Both are "not billable": the screen offers only billable
+		// deliveries, and reaching this means the page is stale.
+		String body = deliveryBillJson(UUID.randomUUID(), UUID.randomUUID(), "INV-GHOST", "1", "100", null);
+		mvc.perform(invoice(body))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400169"));
 	}
 
 	@Test
 	@DisplayName("the variance is computed from the order actually on the invoice")
 	void varianceComesFromTheOrderOnTheInvoice() throws Exception {
-		// Two orders for the same vendor, worth different money. Before the guard the wrong one
-		// could be quoted; this asserts the arithmetic follows po_id rather than the vendor.
+		// Two orders for the same vendor, worth different money: the arithmetic follows the order the
+		// billed delivery is on, not the vendor.
 		receivedPo(vendor, "PO-2026-0071", "30", "45.00", "30"); // worth 1350, and a decoy
 		UUID quoted = receivedPo(vendor, "PO-2026-0072", "10", "20.00", "10"); // worth 200
 
-		mvc.perform(invoice("{\"vendorId\":\"" + vendor + "\",\"purchaseOrderId\":\"" + quoted
-						+ "\",\"invoiceNumber\":\"INV-8\",\"invoiceDate\":\"2026-08-01\",\"amount\":250}"))
+		mvc.perform(invoice(deliveryBill(quoted, "INV-8", "10", "250", null)))
 				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.invoice.purchaseOrderId").value(quoted.toString()))
 				.andExpect(jsonPath("$.invoice.expectedValue").value(200.0))
 				.andExpect(jsonPath("$.invoice.variance").value(50.0));
+
+		// And an invoice recorded before stage 6 against the same order reads the same way it always did.
+		UUID old = legacy(quoted, "INV-8-OLD", "250");
+		mvc.perform(authed(get("/api/v1/vendor-invoices/{id}", old)))
+				.andExpect(jsonPath("$.expectedValue").value(200.0))
+				.andExpect(jsonPath("$.variance").value(50.0));
 	}
 
 	@Test
@@ -477,6 +470,57 @@ class VendorInvoiceIT extends AbstractIntegrationTest {
 
 	private MockHttpServletRequestBuilder invoice(String json) {
 		return authed(post("/api/v1/vendor-invoices")).contentType(MediaType.APPLICATION_JSON).content(json);
+	}
+
+	/**
+	 * A direct bill in the stage-6 shape: one one-off line for the whole amount, no deliveries, and an
+	 * uploaded copy of the bill. What these tests are about is the invoice row, not its items.
+	 */
+	private String direct(String description, String number, String date, String amount, String dueDate) {
+		return "{\"vendorId\":\"" + vendor + "\""
+				+ (description == null ? "" : ",\"description\":\"" + description + "\"")
+				+ ",\"invoiceNumber\":\"" + number + "\",\"invoiceDate\":\"" + date + "\""
+				+ (dueDate == null ? "" : ",\"dueDate\":\"" + dueDate + "\"")
+				+ ",\"receiptIds\":[],\"lines\":[{\"description\":\"" + (description == null ? "Goods" : description)
+				+ "\",\"billedQty\":1,\"unit\":\"PIECES\",\"amount\":" + amount + "}]"
+				+ ",\"gstAmount\":0,\"otherCharges\":0,\"discount\":0,\"grandTotal\":" + amount
+				+ ",\"billAttachmentId\":\"" + bill() + "\"}";
+	}
+
+	/** A stage-6 bill for the one delivery on {@code poId} (seeded by {@link #receivedPo}), its one line. */
+	private String deliveryBill(UUID poId, String number, String qty, String amount, String dueDate) {
+		UUID receipt = admin.queryForObject("SELECT id FROM goods_receipts WHERE po_id = ?", UUID.class, poId);
+		UUID line = admin.queryForObject("SELECT id FROM goods_receipt_lines WHERE receipt_id = ?", UUID.class, receipt);
+		return deliveryBillJson(receipt, line, number, qty, amount, dueDate);
+	}
+
+	private String deliveryBillJson(UUID receipt, UUID line, String number, String qty, String amount, String dueDate) {
+		return "{\"vendorId\":\"" + vendor + "\",\"invoiceNumber\":\"" + number + "\",\"invoiceDate\":\"2026-08-01\""
+				+ (dueDate == null ? "" : ",\"dueDate\":\"" + dueDate + "\"")
+				+ ",\"receiptIds\":[\"" + receipt + "\"],\"lines\":[{\"goodsReceiptLineId\":\"" + line
+				+ "\",\"ingredientId\":\"" + rice + "\",\"billedQty\":" + qty + ",\"unit\":\"KG\",\"amount\":"
+				+ amount + "}],\"gstAmount\":0,\"otherCharges\":0,\"discount\":0,\"grandTotal\":" + amount
+				+ ",\"billAttachmentId\":\"" + bill() + "\"}";
+	}
+
+	/** An uploaded, unclaimed copy of a bill, as POST /bill-uploads leaves it. */
+	private UUID bill() {
+		return admin.queryForObject("""
+				INSERT INTO attachments (tenant_id, kind, storage_key, content_type, size_bytes, uploaded_by)
+				VALUES (?, 'INVOICE_BILL', ?, 'application/pdf', 1024, ?) RETURNING id
+				""", UUID.class, tenant, "tenants/" + tenant + "/attachments/" + UUID.randomUUID(), staffId);
+	}
+
+	/**
+	 * An invoice as the endpoint wrote it before stage 6: an amount against an order, and nothing else
+	 * — no lines, totals or bill. Seeded directly because the endpoint no longer writes this shape, and
+	 * those invoices exist in every temple's records and must go on reading as they did.
+	 */
+	private UUID legacy(UUID poId, String number, String amount) {
+		return admin.queryForObject("""
+				INSERT INTO vendor_invoices (tenant_id, vendor_id, po_id, invoice_number, invoice_date, amount, created_by)
+				VALUES (?, ?, ?, ?, DATE '2026-08-01', ?::numeric, ?) RETURNING id
+				""", UUID.class, tenant, vendor, poId, number, amount, staffId);
 	}
 
 	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder b) {
