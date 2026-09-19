@@ -13,7 +13,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
  * values are identical and the codebase should have one way of writing a component.
  */
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "warning";
 export type ButtonSize = "sm" | "md";
 
 const VARIANTS: Record<ButtonVariant, string> = {
@@ -38,6 +38,13 @@ const VARIANTS: Record<ButtonVariant, string> = {
   // a resting border of its own, so that stays true.
   ghost: "btn btn-secondary",
   danger: "btn btn-danger",
+  // An act to take with care rather than one that destroys anything: correcting a date the
+  // calendar worked out (Rajeev, 2026-09-18, T-237). Built exactly as `.btn-danger` is — tinted
+  // fill, coloured text, a 1px border of the same colour — from the warning tokens, so it reads as
+  // amber in every pack. Utilities rather than a `.btn-warning` class in `globals.css` because
+  // nothing about it varies by pack beyond the tokens themselves, which these utilities already
+  // follow.
+  warning: "btn border border-warning bg-warning-bg text-warning",
 };
 
 const SIZES: Record<ButtonSize, string> = {
@@ -61,14 +68,12 @@ export function BUTTON_CLASSES({
     // No `rounded` here: §4's `.btn` sets `border-radius: var(--radius-control)`, which follows
     // the pack — 11px glossy, 9px frosted, 5px flat.
     "inline-flex items-center justify-center gap-2 font-medium",
-    // The press. A button is pressed tens of times a day, so this sits at the near-imperceptible
-    // end on purpose — 120ms, a 1px drop and two per cent of give. What changed is that the give
-    // is now part of the transition rather than instant: the fill used to fade over 150ms while
-    // the drop happened in a single frame, so the half you could see was the half that was not
-    // animated. Transform and colour, nothing that costs a layout.
-    "transition-[transform,background-color,border-color,color] duration-press ease-out",
-    "active:translate-y-px active:scale-press",
-    "disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100",
+    // No press here any more. The give under a finger — the `press` scale, a 1px drop, 120ms,
+    // none on a disabled button, no movement for someone who asked for less — moved to `.btn` in
+    // `globals.css` (T-240, Rajeev 2026-09-19), because about sixty buttons are hand-made with the
+    // `btn` classes and never came through this function, so they never pressed. One rule on the
+    // base class now covers both kinds.
+    "disabled:cursor-not-allowed",
     SIZES[size],
     VARIANTS[variant],
     fullWidth ? "w-full" : "",

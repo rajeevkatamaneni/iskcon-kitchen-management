@@ -37,7 +37,14 @@ export function FieldRow({
   return (
     <div
       data-field-row=""
-      className={["grid grid-flow-col grid-rows-field-row justify-start gap-x-4 gap-y-1", className].join(" ")}
+      // Below `sm` the row stacks: one field under another, full width. A row of three 16rem
+      // fields is 50rem, and on a phone it ran off the side of the card and took the page with it.
+      // The column template a caller passes is overridden here for that width only.
+      className={[
+        "grid grid-flow-col grid-rows-field-row justify-start gap-x-4 gap-y-1",
+        "max-sm:grid-flow-row max-sm:gap-y-4 max-sm:justify-stretch max-sm:![grid-template-columns:minmax(0,1fr)]",
+        className,
+      ].join(" ")}
     >
       {toArray(children).map((child, i) => (
         <div key={i} data-field-row-cell="" className="row-span-2 grid grid-rows-subgrid gap-1">

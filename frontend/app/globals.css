@@ -41,6 +41,9 @@
   --kms-warning: 128 93 48; /* #805D30 */
   --kms-success-bg: 231 244 233; /* #E7F4E9 */
   --kms-success: 56 105 68; /* #386944 */
+  --kms-festival-bg: 255 239 205; /* #FFEFCD */
+  --kms-festival: 191 121 70; /* #BF7946 */
+  --kms-festival-text: 148 96 60; /* #94603C */
   --kms-meter-low: 166 105 98; /* #A66962 */
   --kms-meter-mid: 177 140 95; /* #B18C5F */
   --kms-meter-high: 85 134 96; /* #558660 */
@@ -123,6 +126,9 @@
   --warning: #805D30;
   --success-bg: #E7F4E9;
   --success: #386944;
+  --festival-bg: #FFEFCD;
+  --festival: #BF7946;
+  --festival-text: #94603C;
   --meter-low: #A66962;
   --meter-mid: #B18C5F;
   --meter-high: #558660;
@@ -242,16 +248,36 @@ body                { background: var(--canvas-bg); color: var(--ink); }
                       box-shadow: var(--btn-primary-shadow); }
 .btn-primary:hover  { background: var(--accent-hover); }
 
-.btn-secondary      { background: var(--btn-secondary-bg);
-                      color: var(--ink-secondary);
-                      border: var(--btn-secondary-border);
-                      box-shadow: var(--btn-secondary-shadow);
-                      backdrop-filter: var(--surface-card-backdrop); }
-.btn-secondary:hover{ background: var(--sunken); box-shadow: none; }
-
-.btn-quiet          { background: transparent; color: var(--accent-text);
-                      border: 1px solid var(--accent-border); }
-.btn-quiet:hover    { background: var(--accent-bg); }
+/*
+ * One departure from the verbatim block, by Rajeev's decision of 2026-09-19 (T-240, DESIGN_SYSTEM
+ * §4, "style E" from the T-238 mock). Both secondary materials used to read as boxes rather than
+ * buttons: `.btn-quiet` was accent text in a pale accent hairline with no fill (1.1–1.3:1 against a
+ * white card), and `.btn-secondary` a white fill in a grey hairline (as low as 1.01:1). Neither
+ * edge met the 3:1 a control's outline needs, so on "Ask for volunteers" and "Open this day"
+ * people could not tell there was something to press.
+ *
+ * Style E is raised, like a key: a mid-ink border with a darker two-pixel bottom edge and a small
+ * shadow, dark ink text on the card colour. Both materials take it, so every secondary-level button
+ * in the application reads the same way — the class names stay two because forty-odd screens and
+ * their tests name them, not because they look different any more.
+ *
+ * What it gives up: the glossy packs' gradient `btn-secondary-*` finish and the frosted packs'
+ * backdrop blur on the white button. The mock that was chosen painted E flat in every pack, and a
+ * mockup that was approved is built as it was shown. The `btn-secondary-*` tokens are left in the
+ * packs, unread, rather than deleted, so going back is a stylesheet change and nothing else.
+ *
+ * The shadow's alpha is the one THEME-TOKENS §8.3 does not forbid: it darkens what is behind the
+ * button, and no text or edge contrast depends on it. The ink border carries the 3:1 by itself.
+ */
+.btn-secondary,
+.btn-quiet          { background: var(--raised);
+                      color: var(--ink);
+                      border: 1px solid var(--ink-muted);
+                      border-bottom: 2px solid var(--ink-secondary);
+                      box-shadow: 0 1px 3px rgb(var(--kms-ink) / 0.14); }
+.btn-secondary:hover,
+.btn-quiet:hover    { background: var(--sunken);
+                      box-shadow: 0 2px 6px rgb(var(--kms-ink) / 0.18); }
 
 .btn-danger         { background: var(--danger-bg); color: var(--danger);
                       border: 1px solid var(--danger); }
@@ -301,6 +327,24 @@ input:disabled      { background: var(--sunken); color: var(--ink-muted); }
 .sidebar-surface  { background: var(--surface-card-bg);
                     backdrop-filter: var(--surface-card-backdrop);
                     border-right: 1px solid var(--hairline); }
+
+/*
+ * The phone and portrait-tablet bar that replaces the column below `lg` (T-225). The same material
+ * as the column it stands in for; its one edge is the hairline along the bottom.
+ */
+.topbar-surface   { background: var(--surface-card-bg);
+                    backdrop-filter: var(--surface-card-backdrop);
+                    border-bottom: 1px solid var(--hairline); }
+
+/*
+ * Below `lg`, a page's `flex min-h-screen` row becomes a column, so the bar sits above the page and
+ * the page gets the full width (T-225). Every page mounts the menu itself inside that row, and a
+ * child cannot restyle its parent, so this is keyed on the parent holding the bar rather than on
+ * sixty page files. 1023.98px is Tailwind's own `max-lg`, so the two layouts meet with no gap.
+ */
+@media (max-width: 1023.98px) {
+  :has(> .app-topbar) { flex-direction: column; }
+}
 
 /*
  * A box the form refused wears a red edge, whoever built the box (T-170).
@@ -461,5 +505,183 @@ tbody tr {
   tbody tr:hover {
     transform: none;
     box-shadow: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The table rule (T-236, DESIGN_SYSTEM §5 Tables, Rajeev 2026-09-18). It
+   replaces the rule of earlier the same day that grouped short columns on the
+   right and parked the leftover width in one blank block between the groups —
+   on the Shopping list, a wide empty space beside three columns squeezed so
+   tight that a quantity box showed "2792" cut off.
+
+   Every table, wide (lg and up):
+   - Every column and every heading reads left, figures included.
+   - Every column is at least as wide as its widest content, input boxes
+     included; nothing is cut off. Short values (`kms-fixed`, `kms-lead`)
+     never wrap. Text columns (`kms-flex`) wrap only when the table has no
+     room for them on one line.
+   - Width nobody needs is shared out evenly between the gaps separating the
+     columns, so the columns spread across the whole table with the same space
+     between each pair. CSS cannot share width evenly (an auto table shares it
+     in proportion to each column's width, so the widest column takes most of
+     it), so `components/ds/table.ts` measures each column and writes the
+     widths onto the headings; `kms-measuring` below is the state it measures
+     in. Without script the table is an ordinary auto table: nothing is cut
+     off, the spacing is just uneven.
+   - Edges: 20px of inline padding at both ends of every row, 12px either side
+     of every other cell. The last column takes no share of the spare width,
+     so its content ends 20px from the right edge as the first starts 20px
+     from the left.
+
+   Narrow (below lg, the width at which the sidebar also becomes a drawer):
+   each row becomes a compact card. Line one is the text columns in order (the
+   name, then its category); line two is the short values followed by the
+   buttons, pushed to the far edge. The header row is hidden visually and kept
+   for screen readers, and a short value that would be a bare number without
+   its heading carries `data-label`, printed before the value. Nothing scrolls
+   sideways, because nothing refuses to wrap except a single short value.
+   --------------------------------------------------------------------------- */
+
+/* Both layouts: wrapping for text, one line for short values, a fixed pitch for figures.
+   `anywhere` rather than `break-word` because only `anywhere` lowers a cell's minimum width: an
+   email address has no spaces, and with `break-word` it cannot give way when the table is short of
+   room. Words still break at spaces first; a word is split only when it alone is wider than the
+   column. */
+.kms-table .kms-flex { white-space: normal; overflow-wrap: anywhere; }
+.kms-table .kms-num  { font-variant-numeric: tabular-nums; }
+.kms-table .kms-fixed { white-space: nowrap; }
+.kms-table .kms-lead  { white-space: nowrap; }
+/* A figure with a sentence under it (how it was worked out, what it leaves out) keeps the figure
+   whole and lets the sentence wrap — but only when the table is short of room: the fitter measures
+   the sentence unwrapped and gives the column that width whenever the table has it. */
+.kms-table .kms-fixed :is(.block, p) { white-space: normal; }
+
+/* A number box in any table grows to fit the figure in it (T-236: "2792" was cut off in a 64px
+   box on the Shopping list). Each box sets its usual width as a minimum (`min-w-*`, not `w-*`),
+   so an empty or short one keeps its size and only a long figure widens it. A browser without
+   `field-sizing` gives the box its default width, about twenty characters, which also fits. */
+.table td input[type="number"] { field-sizing: content; }
+
+/* Only for the instant table.ts measures the columns: each cell on its own, at the width its
+   content needs unwrapped, so the widest one is what the column needs. Removed before anything is
+   painted. `!important` because a heading's inline pixel width is exactly what must not apply
+   while measuring. Applies to every `table.table`, not only ruled ones: the fitter spaces them all. */
+.table.kms-measuring > * > tr > * { display: block !important; width: max-content !important; }
+/* The same at each cell's narrowest (every word on a line of its own), measured only when the
+   table is short of room, so table.ts knows how far each text column can give way. */
+.table.kms-measuring-min > * > tr > * { display: block !important; width: min-content !important; }
+
+/* The wide table. Scoped to lg and up so the card layout below never has to out-shout it. */
+@media (min-width: 1024px) {
+  .kms-table { table-layout: auto; }
+
+  .kms-table :is(th, td) { padding: 12px; text-align: start; }
+  .kms-table tr > :first-child { padding-inline-start: 20px; }
+  .kms-table tr > :last-child  { padding-inline-end: 20px; }
+}
+
+@media (max-width: 1023.98px) {
+  .kms-table,
+  .kms-table > tbody,
+  .kms-table > tfoot { display: block; width: 100%; }
+
+  /* The header row, hidden the way `sr-only` hides things: still read, never seen. */
+  .kms-table > thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+                       overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+  /* 24px in at the sides, the inset every card's own title and content already have (T-235). At
+     16px the rows started 8px left of the title of the card they sit in — measured 17px against
+     25px from the card's edge on "Upcoming outside commitments" at 390, 768 and 1023. */
+  .kms-table > tbody > tr,
+  .kms-table > tfoot > tr { display: flex; flex-wrap: wrap; align-items: baseline;
+                            column-gap: 16px; row-gap: 6px; padding: 12px 24px;
+                            border-top: 1px solid rgb(var(--kms-hairline)); }
+  .kms-table > tbody > tr:first-child { border-top: 0; }
+
+  /* The line break between the two lines of a card: a zero-height item a full line wide,
+     ordered after the flexible cells and before the fixed ones. */
+  .kms-table > tbody > tr::after,
+  .kms-table > tfoot > tr::after { content: ""; order: 1; flex-basis: 100%; height: 0; }
+
+  .kms-table > tbody > tr > *,
+  .kms-table > tfoot > tr > * { display: block; width: auto; padding: 0; border-top: 0; text-align: start; }
+
+  .kms-table .kms-lead  { order: 0; }
+  .kms-table .kms-flex  { order: 0; }
+  .kms-table .kms-primary { font-weight: 500; }
+  .kms-table .kms-fixed { order: 2; max-width: 100%; }
+  .kms-table .kms-actions { margin-inline-start: auto; }
+  /* A cell spanning the row (an empty-state line, an expanded detail) takes a line of its own, last;
+     one spanning several fixed columns (an editing row's fields) takes its own line among them. */
+  .kms-table [colspan] { flex-basis: 100%; order: 3; }
+  .kms-table .kms-fixed[colspan] { order: 2; }
+
+  .kms-table [data-label]::before { content: attr(data-label) "\00a0"; color: rgb(var(--kms-ink-muted)); }
+  /* A deliberately blank cell (a total that does not exist) is not worth a label with nothing after it. */
+  .kms-table > * > tr > :empty { display: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Entry grids (`ENTRY_GRID` in components/ds/table.ts, T-233): a table of input
+   boxes, one row per line of an order. Wide, it is an ordinary table. Below lg
+   each row is a card: what the line is across the top, then its boxes in a
+   wrapping grid, each with its heading printed above it from `data-label`, so
+   nothing scrolls sideways and no box is left without a name.
+   --------------------------------------------------------------------------- */
+@media (max-width: 1023.98px) {
+  .kms-entry-grid,
+  .kms-entry-grid > tbody { display: block; width: 100%; }
+  .kms-entry-grid > thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+                            overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .kms-entry-grid > tbody > tr { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+                                 gap: 12px 16px; padding: 16px 0; }
+  .kms-entry-grid > tbody > tr > td { display: block; min-width: 0; padding: 0; white-space: normal; text-align: start; }
+  .kms-entry-grid > tbody > tr > td:first-child,
+  .kms-entry-grid > tbody > tr > td[colspan] { grid-column: 1 / -1; }
+  .kms-entry-grid > tbody > tr > td:first-child { font-weight: 500; }
+  .kms-entry-grid [data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px;
+                                         font-size: 0.75rem; color: rgb(var(--kms-ink-muted)); }
+  .kms-entry-grid :is(input, select) { max-width: 100%; }
+}
+
+/* ---------------------------------------------------------------------------
+   The press (T-240, DESIGN_SYSTEM §4, Rajeev 2026-09-19). Every button gives a
+   little under the finger: it shrinks to the `press` scale and drops one pixel
+   while held, over the `press` duration, and springs back on release.
+
+   It used to live in components/ds/Button.tsx as Tailwind utilities, so only
+   buttons drawn through that component had it. About sixty buttons across
+   twenty-nine screens are hand-made with the `btn` classes and never pressed at
+   all. Putting it on `.btn` gives them all the same feel from one place.
+
+   Why here, after `@tailwind utilities`, and not in the components layer with
+   the rest of the button recipe: most of those hand-made buttons carry
+   `transition-colors duration-state`, and a utility beats a component class of
+   the same weight. Inside the layer, their `transition-colors` would have
+   replaced this transition and the press would have jumped instead of moved.
+   Written after the utilities, `.btn`'s transition wins; it still covers the
+   colours, so their hover fades carry on, at the press's 120ms rather than
+   150ms.
+
+   A disabled button does not give, because nothing is going to happen — the
+   press is the button saying "yes". Someone who asked for less motion gets the
+   inset shade from `.btn:active` and no movement, the same trade the table
+   rows make above.
+   --------------------------------------------------------------------------- */
+.btn {
+  transition:
+    transform theme(transitionDuration.press) theme(transitionTimingFunction.out),
+    background-color theme(transitionDuration.press) theme(transitionTimingFunction.out),
+    border-color theme(transitionDuration.press) theme(transitionTimingFunction.out),
+    color theme(transitionDuration.press) theme(transitionTimingFunction.out),
+    box-shadow theme(transitionDuration.press) theme(transitionTimingFunction.out);
+}
+.btn:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: translateY(1px) scale(theme(scale.press));
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: none;
   }
 }

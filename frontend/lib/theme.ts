@@ -69,6 +69,25 @@ export const THEME_TOKENS = [
   "success-bg",
   "success",
 
+  // Festivals, which are not a status at all (T-229, Rajeev 2026-09-18). They wore `success` until
+  // then, and green is kept for one thing only: telling somebody that what they just did worked. A
+  // festival is neither an outcome nor a warning, so it gets a colour of its own — saffron — rather
+  // than borrowing a status or the accent, which already means "fasting day" on the calendar.
+  //
+  // Three members because the calendar paints a festival at three weights: a tint behind the day's
+  // cell, a solid dot beside its name, and the name set as text on the planner. The tint leans
+  // yellow (saffron the spice) and the dot and text lean orange (deep saffron), for the reason
+  // Radix's orange ramp does the same: at a pale tint there is almost no room in sRGB for orange
+  // that is not also the warning's peach or a red accent's blush, and yellow has the room.
+  //
+  // Floors, held by `theme-contract.test.ts`: ink, ink-secondary and ink-muted at 4.5 on the tint,
+  // because the cell carries the tithi in muted text; the text at 4.5 on the tint and on all three
+  // surfaces; the dot at 3.0 against every ground it sits on, since it is a graphic that carries
+  // meaning (SC 1.4.11).
+  "festival-bg",
+  "festival",
+  "festival-text",
+
   // Progress meters: fills, never text and never a background. Five rather than one because a bar
   // that is 20% full and one that is 95% full mean different things, and length alone is a poor
   // way to say so at a glance across a room. `pledged` is money promised towards something not yet

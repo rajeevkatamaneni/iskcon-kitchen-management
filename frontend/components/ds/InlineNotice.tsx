@@ -91,7 +91,7 @@ export function InlineNotice({
         rather than squeezing them, which is the same answer the page header gives.
       */}
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 grow basis-60">
           {title && <p className="font-medium">{title}</p>}
           {children && <div className={title ? "mt-1" : ""}>{children}</div>}
         </div>

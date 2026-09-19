@@ -42,12 +42,20 @@ export function StatTile({
         {icon && <i className={`ti ti-${icon} text-base text-ink-muted`} aria-hidden="true" />}
         {label}
       </span>
-      <span className={["text-2xl font-semibold tabular-nums", tones[tone]].join(" ")}>{value}</span>
-      {note && <span className="text-xs text-ink-muted">{note}</span>}
+      {/* The figure at `text-lg`, down from `text-2xl`, and the tile's side padding at 20px, down
+          from 24px (Rajeev, 2026-09-18, T-237). He asked for the workforce tile's figure to hold
+          "120 staff · 1400 volunteers" on one line at 1280 and 1920, with the number smaller and
+          the text given more room, and for the four Today tiles to stay alike. Measured in Chrome
+          at 1280, where four tiles share a row and the text box is narrowest: that string needs
+          213px at the old size against a 172px box, 186px at `text-xl` against 188px even with
+          16px padding, and 167px at `text-lg` against 180px here. `text-lg` is also the figure
+          size the donations page's own tiles already use. */}
+      <span className={["text-lg font-semibold tabular-nums", tones[tone]].join(" ")}>{value}</span>
+      {note && <span className="text-pretty text-xs text-ink-muted">{note}</span>}
     </>
   );
 
-  const shell = "card grid gap-1 px-6 py-4";
+  const shell = "card grid gap-1 px-5 py-4";
 
   if (!href) {
     return <div className={shell}>{body}</div>;

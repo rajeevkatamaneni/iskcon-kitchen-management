@@ -25,7 +25,7 @@ import { SegmentedControl } from "@/components/ds/SegmentedControl";
  *               month/week/year — the same control either way.
  * @param heading what the middle says. Always the period on screen, never a state.
  * @param current whether that period is the one the clock is in — today, this week, this month.
- *               Drawn as a pill around the heading rather than by swapping the heading for the
+ *               Drawn as a filled mark around the heading rather than by swapping the heading for the
  *               word "Today": Rajeev's objection (2026-09-05) is that a stepper which says "Today"
  *               has stopped telling you the date, and the date is what you came to it for. The
  *               heading never changes; only its ground does.
@@ -86,7 +86,7 @@ export function PeriodNav<T extends string>({
       <div className="flex items-center gap-2">
         <IconButton label={`Previous ${view}`} icon="chevron-left" onClick={() => onStep(-1)} />
         {/* Wide enough for the longest heading either screen produces, so the arrows do not shuffle
-            sideways as you step from "September" to "23 Aug – 29 Aug 2026". The pill sits inside
+            sideways as you step from "September" to "23 Aug – 29 Aug 2026". The mark sits inside
             that width and shrinks to its words, so it reads as a mark on the period rather than as a
             band across the control — and the padding is on the inner span in both states, so the
             heading does not jump a few pixels as you step off today and back onto it. */}
@@ -94,7 +94,7 @@ export function PeriodNav<T extends string>({
           <span
             aria-current={current ? "date" : undefined}
             className={[
-              "rounded-full px-3 py-1 text-center text-sm transition-colors duration-state",
+              "rounded-control px-3 py-1 text-center text-sm transition-colors duration-state",
               current ? "bg-accent-bg font-semibold text-accent-text" : "font-medium text-ink",
             ].join(" ")}
           >
@@ -121,7 +121,7 @@ export function PeriodNav<T extends string>({
 }
 
 /**
- * What the pill means, said in words for anyone who cannot see that it is coloured. The views are
+ * What the mark means, said in words for anyone who cannot see that it is coloured. The views are
  * named after the unit they step in, so the unit is the word: "This week", "This month".
  */
 function currentLabel(view: string): string {
@@ -143,7 +143,7 @@ export function IconButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex min-h-touch min-w-touch items-center justify-center rounded text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
+      className="flex min-h-touch min-w-touch items-center justify-center rounded-control text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
     >
       <i className={`ti ti-${icon} text-lg`} aria-hidden="true" />
     </button>
@@ -226,7 +226,7 @@ export function periodRange(view: string, anchor: string): { from: string; to: s
 }
 
 /**
- * Whether the period on screen is the one the clock is in — the fact the pill draws.
+ * Whether the period on screen is the one the clock is in — the fact the mark draws.
  *
  * <p>Beside the heading and the stepper rather than in each screen, for the reason the whole file
  * exists: three screens working out "is this this month?" three ways is how they came to disagree.

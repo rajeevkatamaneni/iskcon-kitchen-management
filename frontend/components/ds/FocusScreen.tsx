@@ -55,16 +55,33 @@ export function FocusScreen({
             colour, so over a `canvas-bg` gradient or bloom it read as an almost-matching patch
             rather than as a band. `sunken` is the recessed band §3.1 describes, and it is the
             background §6 names for this case. */}
-        <header className="sticky top-0 z-10 border-b border-hairline bg-sunken px-8 py-4">
-          <div className="mx-auto flex max-w-content flex-wrap items-start justify-between gap-4">
+        {/* Below lg the shell has its own sticky bar (56px, the drawer's Menu button) at the top of
+            the viewport, so this header sticks just under it rather than sliding beneath it: at 390
+            with `top-0` the task's title and Cancel sat under the Menu bar on every form (T-232).
+
+            On a phone the header is compacted, because it rides along over the form for the whole
+            scroll and at 145px it took a sixth of a 390×844 screen. Tighter padding, a smaller
+            title, and the buttons one size of text and padding smaller so three fit on one row —
+            never shorter than the 44px touch height. The "whose record" line stays in the band on a
+            phone too: on Terminate it is the person's name, and keeping it beside the button is
+            the reason this header is sticky at all (see "Why sticky" above). That is what holds the
+            phone header at about 115px rather than under 100.
+
+            The actions wrap rather than refuse to: three or four buttons (the message composer has
+            four) otherwise pushed the page sideways, to 610px on a 390 phone.
+            The side gutter matches the list screens and the menu bar: 16px on a phone, 32 above. */}
+        <header className="sticky top-14 z-10 border-b border-hairline bg-sunken px-4 py-2 sm:px-8 sm:py-4 lg:top-0">
+          <div className="mx-auto flex max-w-content flex-wrap items-start justify-between gap-x-4 gap-y-2 sm:gap-4">
             <div className="min-w-0">
-              <h1 className="text-xl font-semibold text-ink">{task}</h1>
+              <h1 className="text-lg font-semibold leading-6 text-ink sm:text-xl">{task}</h1>
               {who && <p className="mt-0.5 text-sm text-ink-secondary">{who}</p>}
             </div>
-            {actions && <div className="flex flex-none gap-2">{actions}</div>}
+            {actions && (
+              <div className="flex flex-wrap gap-2 max-sm:[&_.btn]:px-3 max-sm:[&_.btn]:text-sm">{actions}</div>
+            )}
           </div>
         </header>
-        <div className="mx-auto grid max-w-content gap-6 px-8 pb-16 pt-6">{children}</div>
+        <div className="mx-auto grid max-w-content gap-6 px-4 pb-16 pt-6 sm:px-8">{children}</div>
       </main>
     </div>
   );

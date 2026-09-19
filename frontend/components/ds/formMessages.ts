@@ -132,13 +132,13 @@ export function messageFor(name: string, facts: ControlFacts): string {
     if (facts.moreThan) return moreThan(name, facts.moreThan);
     if (type === "date") return onOrAfter(name, facts.min);
     if (type === "time") return orLater(name, facts.min);
-    return atLeast(name, facts.min);
+    return atLeast(name, grouped(facts.min));
   }
 
   if (validity.rangeOverflow) {
     if (type === "date") return onOrBefore(name, facts.max);
     if (type === "time") return orEarlier(name, facts.max);
-    return atMost(name, facts.max);
+    return atMost(name, grouped(facts.max));
   }
 
   if (validity.stepMismatch) {
@@ -153,4 +153,10 @@ export function messageFor(name: string, facts: ControlFacts): string {
   if (validity.tooLong) return tooManyCharacters(name, facts.maxLength);
 
   return notValid(name);
+}
+
+/** A number bound written the way the rest of the app writes numbers: 50000 reads "50,000". */
+function grouped(bound: string): string {
+  const n = Number(bound);
+  return bound.trim() !== "" && Number.isFinite(n) ? n.toLocaleString("en-IN") : bound;
 }

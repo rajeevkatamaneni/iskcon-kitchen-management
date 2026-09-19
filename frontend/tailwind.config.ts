@@ -85,6 +85,15 @@ const config: Config = {
           DEFAULT: "rgb(var(--kms-success) / <alpha-value>)",
         },
 
+        // Festivals: saffron, and not a status (T-229). Green means only "what you did worked", so a
+        // festival day could not keep wearing it. `bg` is the day cell's tint, the bare name is the
+        // dot, and `text` is the festival's name written on the page or on the tint.
+        festival: {
+          bg: "rgb(var(--kms-festival-bg) / <alpha-value>)",
+          DEFAULT: "rgb(var(--kms-festival) / <alpha-value>)",
+          text: "rgb(var(--kms-festival-text) / <alpha-value>)",
+        },
+
         // Progress meters. Fills only — never text, never a page background. The names say what a
         // reading means rather than what colour it is, so a theme can answer "what does nearly
         // empty look like" for itself.
@@ -238,6 +247,16 @@ const config: Config = {
           from: { opacity: "0" },
           to: { opacity: "1" },
         },
+        /**
+         * The phone menu, arriving from the edge it lives behind (T-225). Only the last quarter of
+         * the distance: the whole width reads as a slide show at 200ms, a short travel reads as the
+         * panel settling into place. Faded in at the same time so the first frame is never a hard
+         * edge. Used behind `motion-safe:`, so a reduced-motion device gets the panel with no travel.
+         */
+        "drawer-in": {
+          from: { opacity: "0", transform: "translateX(-25%)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
         /** A line of text that was not there a moment ago, arriving without pushing anything. */
         "notice-in": {
           from: { opacity: "0", transform: "translateY(-4px)" },
@@ -249,6 +268,7 @@ const config: Config = {
         "overlay-in": "overlay-in 240ms cubic-bezier(0.23, 1, 0.32, 1)",
         "scrim-in": "scrim-in 200ms cubic-bezier(0.23, 1, 0.32, 1)",
         "notice-in": "notice-in 200ms cubic-bezier(0.23, 1, 0.32, 1)",
+        "drawer-in": "drawer-in 200ms cubic-bezier(0.23, 1, 0.32, 1)",
       },
 
       spacing: {

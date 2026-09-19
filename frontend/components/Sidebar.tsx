@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { SIDEBAR_SCROLL_KEY, navForRole } from "@/lib/nav";
 
@@ -38,46 +38,57 @@ const NAME_MIN_PX = 12;
 /** So the longest name stops a little short of the edge rather than exactly on it. */
 const NAME_BREATHING_PX = 6;
 
-function fitToWidth(el: HTMLElement) {
+function fitToWidth(el: HTMLElement, maxPx: number = NAME_MAX_PX) {
   const available = el.clientWidth - NAME_BREATHING_PX;
   if (available <= 0) {
     return;
   }
-  el.style.fontSize = `${NAME_MAX_PX}px`;
+  el.style.fontSize = `${maxPx}px`;
   const wanted = el.scrollWidth;
   if (wanted <= 0) {
     return;
   }
-  const scaled = Math.floor((NAME_MAX_PX * available) / wanted);
-  el.style.fontSize = `${Math.max(NAME_MIN_PX, Math.min(NAME_MAX_PX, scaled))}px`;
+  const scaled = Math.floor((maxPx * available) / wanted);
+  el.style.fontSize = `${Math.max(NAME_MIN_PX, Math.min(maxPx, scaled))}px`;
 }
 
-function TempleHeader({ subtitle }: { subtitle: string }) {
-  const { appUser, switchTemple } = useAuth();
-  const [open, setOpen] = useState(false);
-  const temples = appUser?.temples ?? [];
-  const many = temples.length > 1;
-
-  const name = useRef<HTMLSpanElement>(null);
-
+/**
+ * The same measure-and-fit, for a name that has to be re-fitted whenever it is shown.
+ *
+ * <p>On a phone the menu is `display: none` until it is opened, and a hidden element measures zero
+ * wide — {@link fitToWidth} quite rightly does nothing with that. So the drawer passes its open state
+ * in as `refit`, and the name is sized again on the frame it first becomes visible.
+ */
+function useFittedName(text: string, maxPx: number, refit?: unknown) {
+  const ref = useRef<HTMLSpanElement>(null);
   // Before paint, so the name is never seen at the wrong size; and again once the webfont has
   // arrived, because the first measurement was of the fallback face.
   useBeforePaint(() => {
-    const el = name.current;
+    const el = ref.current;
     if (!el) {
       return;
     }
-    fitToWidth(el);
+    fitToWidth(el, maxPx);
     let cancelled = false;
     document.fonts?.ready.then(() => {
-      if (!cancelled && name.current) {
-        fitToWidth(name.current);
+      if (!cancelled && ref.current) {
+        fitToWidth(ref.current, maxPx);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [subtitle]);
+  }, [text, maxPx, refit]);
+  return ref;
+}
+
+function TempleHeader({ subtitle, refit }: { subtitle: string; refit?: unknown }) {
+  const { appUser, switchTemple } = useAuth();
+  const [open, setOpen] = useState(false);
+  const temples = appUser?.temples ?? [];
+  const many = temples.length > 1;
+
+  const name = useFittedName(subtitle, NAME_MAX_PX, refit);
 
   const mark = (
     <>
@@ -179,8 +190,117 @@ function TempleHeader({ subtitle }: { subtitle: string }) {
  * <p>Deliberately no hover-reveal or slide transition. That is a marketing-site pattern for dozens
  * of destinations; we have a handful per role, it does not exist on touch devices, and the animation
  * is sluggish on the mid-range Android phones most volunteers carry.
+ *
+ * <p><b>Below the `lg` breakpoint (1024px) the column becomes a drawer (T-225).</b> A 280px column
+ * beside the page left a 390px phone about 110px for the page itself, and a portrait tablet (768px)
+ * under 500 — neither is room for an inventory table or a recipe. So under 1024px the column is
+ * hidden, a slim bar with the temple's name and a "Menu" button sits at the top of the page, and the
+ * button opens this same column over the page from the left. 1024 rather than the design system's
+ * 768 because Rajeev asked for portrait tablets to get the page's full width too; from 1024 up there
+ * is room for both, and the column is exactly what it always was.
+ *
+ * <p>It is one menu, not two. The drawer is the very same element, re-positioned, so the
+ * destinations, the person at the foot and Sign out are never duplicated and cannot drift apart.
+ * The slide-in is an entrance (200ms, the design system's entrance time), not the between-pages
+ * motion the paragraph above rules out, and it is dropped entirely for anyone who has asked their
+ * device for less motion.
+ *
+ * <p>Every page mounts its own copy of this component inside a `flex min-h-screen` row. The bar has
+ * to sit above the page rather than beside it, and a child cannot turn its parent's row into a
+ * column — so `globals.css` does that for any row holding `.app-topbar`, below `lg` only. That is
+ * one rule rather than an edit to sixty pages, and it goes when the menu moves into a shared layout.
  */
 export function Sidebar({ activeHref }: { activeHref: string }) {
+  const [open, setOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const drawer = useRef<HTMLDivElement>(null);
+  // Only a close the person asked for sends focus back to the Menu button. Choosing a destination
+  // also closes the drawer, but the page is about to be replaced and focus belongs to the next one.
+  const returnFocus = useRef(false);
+
+  const close = useCallback((restoreFocus: boolean) => {
+    returnFocus.current = restoreFocus;
+    setOpen(false);
+  }, []);
+
+  // While the drawer is open: Escape closes it, the page behind cannot be scrolled or reached, and
+  // focus starts on Close. `inert` on everything beside the drawer is what really keeps the
+  // keyboard and a screen reader inside it; the Tab handler below is the belt to its braces, for
+  // the older browsers (and jsdom) that do not know `inert`.
+  useEffect(() => {
+    if (!open) {
+      if (returnFocus.current) {
+        returnFocus.current = false;
+        menuButton.current?.focus();
+      }
+      return;
+    }
+    const panel = drawer.current;
+    const behind = panel?.parentElement
+      ? Array.from(panel.parentElement.children).filter(
+          (el) => el !== panel && !el.hasAttribute("data-menu-backdrop"),
+        )
+      : [];
+    behind.forEach((el) => el.setAttribute("inert", ""));
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButton.current?.focus();
+
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close(true);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    // Crossing into the laptop layout with the drawer open would leave a dialog, a locked page and
+    // an inert main behind a column that no longer needs opening. So it closes itself.
+    const wide = typeof window.matchMedia === "function" ? window.matchMedia("(min-width: 1024px)") : null;
+    const onWide = (event: MediaQueryListEvent) => {
+      if (event.matches) close(false);
+    };
+    wide?.addEventListener?.("change", onWide);
+
+    return () => {
+      behind.forEach((el) => el.removeAttribute("inert"));
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKey);
+      wide?.removeEventListener?.("change", onWide);
+    };
+  }, [open, close]);
+
+  function trapTab(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!open || event.key !== "Tab" || !drawer.current) {
+      return;
+    }
+    const focusable = Array.from(
+      drawer.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusable.length === 0) {
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  // Any link chosen inside the drawer closes it — a destination, or My profile in the person's
+  // panel. Caught here once rather than wired onto every link, so a link added later cannot forget.
+  function closeOnLink(event: React.MouseEvent<HTMLDivElement>) {
+    if (open && (event.target as HTMLElement).closest("a[href]")) {
+      close(false);
+    }
+  }
+
   const { appUser } = useAuth();
   const groups = navForRole(appUser?.role);
   // The temple's own name, from whoami. A platform operator belongs to no temple and runs the
@@ -190,6 +310,8 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
 
   const scroller = useRef<HTMLDivElement>(null);
 
+  // Also on opening: on a phone the list is `display: none` when the page mounts it, and a hidden
+  // element cannot be scrolled, so the position is put back when the drawer is first shown.
   useBeforePaint(() => {
     const list = scroller.current;
     if (!list) {
@@ -199,92 +321,196 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
     if (saved > 0) {
       list.scrollTop = saved;
     }
-  }, []);
+  }, [open]);
 
   function rememberScroll(event: React.UIEvent<HTMLDivElement>) {
     sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(event.currentTarget.scrollTop));
   }
 
   return (
-    <nav
-      aria-label="Main"
-      // Its own column, as tall as the window and pinned to it. Before this the sidebar was simply
-      // as tall as the page, which put the profile and Sign out at the foot of the *document* — so
-      // on a long screen (a month of meals, a hundred ingredients) you had to scroll past all of it
-      // to reach your own account, and on a screen with a panel open you could not reach it at all.
-      // The column is the height of the window and does not scroll as a whole: the destinations
-      // scroll inside it and the person at the foot stays put. Scrolling the sidebar itself was the
-      // bug — on a short window the profile sat below the fold, and the page's own scrollbar could
-      // not reach it because the sidebar is pinned.
-      className="sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6"
-    >
-      <TempleHeader subtitle={subtitle} />
-
-      {/* Every page mounts its own copy of this menu, so choosing a destination unmounts the list
-          and mounts a fresh one — which starts at the top, throwing away where you were. Until the
-          menu lives in a layout that survives navigation, it remembers its own position and puts
-          itself back before the first paint. */}
+    <>
+      {/* The drawer comes first in the source, so a page's own "the first image", "the first
+          scrolling list" still mean the menu's, as they always have; `order-first` puts the bar
+          visually above it. Below `lg` only — from 1024 up the bar does not exist. */}
       <div
-        ref={scroller}
-        onScroll={rememberScroll}
-        // `-mx-3 px-3` looks like it cancels itself and does not: it widens the box that clips
-        // without moving anything inside it. `overflow-y: auto` forces `overflow-x` to `auto` too —
-        // the two axes cannot disagree — so this element clips horizontally whether or not anybody
-        // asked it to, and the destinations were sitting flush against both of its edges (measured:
-        // an item 16→264 inside a scroller 16→264, no slack at all). Anything a menu item painted
-        // outside its own box — a lift shadow, a ring, a glow — was sliced off at the left and the
-        // right and survived only along the top and bottom, which reads as a broken box rather than
-        // as depth. Nothing paints out there today; this is so that the next thing that does can.
-        className="-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"
+        ref={drawer}
+        id="app-menu"
+        role={open ? "dialog" : undefined}
+        aria-modal={open ? true : undefined}
+        aria-label={open ? "Menu" : undefined}
+        onKeyDown={trapTab}
+        onClickCapture={closeOnLink}
+        // Closed, below lg: gone. Open, below lg: pinned to the left edge over the page. From lg up
+        // it is `display: contents`, so the <nav> inside is the page row's own child exactly as it
+        // was before this wrapper existed, and its sticky column behaves as it always did.
+        className={
+          open
+            ? "fixed inset-y-0 left-0 z-50 flex shadow-overlay motion-safe:animate-drawer-in lg:contents"
+            : "hidden lg:contents"
+        }
       >
-        {groups.map((group) => (
-          <div key={group.title ?? "main"} className="grid gap-1">
-            {group.title && (
-              <span className="mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted">
-                {group.title}
-              </span>
-            )}
-            {group.items.map((item) => {
-              const active = item.href === activeHref;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={[
-                    "flex min-h-touch items-center gap-3 rounded px-3 text-base",
-                    "transition-[transform,box-shadow,background-color,color] duration-state ease-out",
-                    active
-                      ? "bg-accent-bg font-semibold text-accent-text"
-                      // Lifts under the pointer, like the tiles. A menu item is passed over dozens
-                      // of times a day, which is exactly the tier where motion has to be nearly
-                      // imperceptible or not there at all — so it is two pixels and a step of tone,
-                      // and nothing else. No shadow: see the note in ds/StatTile.
-                      //
-                      // This does not contradict the design system's "no animation" on navigation
-                      // (§4). That rule is about *moving between* pages — the blur-and-slide
-                      // Stripe does, which was rejected for being sluggish on a mid-range Android.
-                      // Answering the pointer is a different thing.
-                      //
-                      // The active item deliberately does not lift. It is where you already are,
-                      // not somewhere you can go, and lifting it would offer a journey that ends
-                      // where it starts.
-                      : "text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift",
-                  ].join(" ")}
-                >
-                  <i className={`ti ti-${item.icon} text-lg`} aria-hidden="true" />
-                  {item.label}
-                </Link>
-              );
-            })}
+        <nav
+          aria-label="Main"
+          // Its own column, as tall as the window and pinned to it. Before this the sidebar was simply
+          // as tall as the page, which put the profile and Sign out at the foot of the *document* — so
+          // on a long screen (a month of meals, a hundred ingredients) you had to scroll past all of it
+          // to reach your own account, and on a screen with a panel open you could not reach it at all.
+          // The column is the height of the window and does not scroll as a whole: the destinations
+          // scroll inside it and the person at the foot stays put. Scrolling the sidebar itself was the
+          // bug — on a short window the profile sat below the fold, and the page's own scrollbar could
+          // not reach it because the sidebar is pinned.
+          //
+          // In the drawer it is the drawer's height instead (`max-lg:h-full`): 100vh on a phone is the
+          // height with the browser's address bar hidden, which would put Sign out under the bar.
+          className="sidebar-surface sticky top-0 flex h-screen w-sidebar shrink-0 flex-col gap-4 overflow-hidden px-4 py-6 max-lg:h-full"
+        >
+          {open && (
+            <button
+              ref={closeButton}
+              type="button"
+              onClick={() => close(true)}
+              className="absolute right-3 top-3 z-10 flex min-h-touch items-center gap-2 rounded-control px-3 text-sm text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink lg:hidden"
+            >
+              <i className="ti ti-x text-lg" aria-hidden="true" />
+              Close
+            </button>
+          )}
+          <TempleHeader subtitle={subtitle} refit={open} />
+
+          {/* Every page mounts its own copy of this menu, so choosing a destination unmounts the list
+              and mounts a fresh one — which starts at the top, throwing away where you were. Until the
+              menu lives in a layout that survives navigation, it remembers its own position and puts
+              itself back before the first paint. */}
+          <div
+            ref={scroller}
+            onScroll={rememberScroll}
+            // `-mx-3 px-3` looks like it cancels itself and does not: it widens the box that clips
+            // without moving anything inside it. `overflow-y: auto` forces `overflow-x` to `auto` too —
+            // the two axes cannot disagree — so this element clips horizontally whether or not anybody
+            // asked it to, and the destinations were sitting flush against both of its edges (measured:
+            // an item 16→264 inside a scroller 16→264, no slack at all). Anything a menu item painted
+            // outside its own box — a lift shadow, a ring, a glow — was sliced off at the left and the
+            // right and survived only along the top and bottom, which reads as a broken box rather than
+            // as depth. Nothing paints out there today; this is so that the next thing that does can.
+            className="-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"
+          >
+            {groups.map((group) => (
+              <div key={group.title ?? "main"} className="grid gap-1">
+                {group.title && (
+                  <span className="mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted">
+                    {group.title}
+                  </span>
+                )}
+                {group.items.map((item) => {
+                  const active = item.href === activeHref;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      className={[
+                        "flex min-h-touch items-center gap-3 rounded px-3 text-base",
+                        "transition-[transform,box-shadow,background-color,color] duration-state ease-out",
+                        active
+                          ? "bg-accent-bg font-semibold text-accent-text"
+                          // Lifts under the pointer, like the tiles. A menu item is passed over dozens
+                          // of times a day, which is exactly the tier where motion has to be nearly
+                          // imperceptible or not there at all — so it is two pixels and a step of tone,
+                          // and nothing else. No shadow: see the note in ds/StatTile.
+                          //
+                          // This does not contradict the design system's "no animation" on navigation
+                          // (§4). That rule is about *moving between* pages — the blur-and-slide
+                          // Stripe does, which was rejected for being sluggish on a mid-range Android.
+                          // Answering the pointer is a different thing.
+                          //
+                          // The active item deliberately does not lift. It is where you already are,
+                          // not somewhere you can go, and lifting it would offer a journey that ends
+                          // where it starts.
+                          : "text-ink-secondary hover:-translate-y-0.5 hover:bg-sunken hover:text-ink hover:shadow-lift",
+                      ].join(" ")}
+                    >
+                      <i className={`ti ti-${item.icon} text-lg`} aria-hidden="true" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </div>
-        ))}
+
+          <SignedInPerson activeHref={activeHref} />
+        </nav>
       </div>
 
-      <SignedInPerson activeHref={activeHref} />
-    </nav>
+      {open && (
+        // The page behind, dimmed; pressing it closes the menu. Not a button of its own — Close and
+        // Escape are the keyboard's ways out, and a second "close" stop in the tab order is noise.
+        <div
+          aria-hidden="true"
+          data-menu-backdrop=""
+          onClick={() => close(true)}
+          className="fixed inset-0 z-40 bg-ink/40 motion-safe:animate-scrim-in lg:hidden"
+        />
+      )}
+
+      <TopBar
+        subtitle={subtitle}
+        open={open}
+        onOpen={() => setOpen(true)}
+        buttonRef={menuButton}
+      />
+    </>
   );
 }
+
+/**
+ * The phone and portrait-tablet header: Menu, then whose kitchen this is (T-225).
+ *
+ * <p>Menu leads, at the edge the thumb and the eye both start from, and says what it does in a word
+ * beside its icon — the design system keeps icons for navigation and never without text. The
+ * temple's name is fitted to the room left, the same way the column's is, rather than cut off
+ * with an ellipsis.
+ */
+function TopBar({
+  subtitle,
+  open,
+  onOpen,
+  buttonRef,
+}: {
+  subtitle: string;
+  open: boolean;
+  onOpen: () => void;
+  buttonRef: React.RefObject<HTMLButtonElement>;
+}) {
+  const name = useFittedName(subtitle, TOPBAR_NAME_MAX_PX);
+  return (
+    <header className="app-topbar topbar-surface sticky top-0 z-30 order-first flex min-h-14 items-center gap-3 px-4 py-1 lg:hidden">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={onOpen}
+        aria-expanded={open}
+        aria-controls="app-menu"
+        className="-ms-3 flex min-h-touch flex-none items-center gap-2 rounded-control px-3 text-base font-medium text-ink transition-colors duration-state hover:bg-sunken"
+      >
+        <i className="ti ti-menu-2 text-lg" aria-hidden="true" />
+        Menu
+      </button>
+      {/* The name alone, no lotus. The mark lives in the menu, and the rule elsewhere in the app is
+          one lotus on a screen (a test on /donate holds it); a second one in a 56px bar would
+          also cost the name the width it most needs on a narrow phone. */}
+      <span
+        ref={name}
+        className="block min-w-0 flex-1 overflow-hidden whitespace-nowrap font-medium leading-tight text-ink"
+      >
+        {subtitle}
+      </span>
+    </header>
+  );
+}
+
+/** The bar's name tops out at `lg` on the type scale: a label for the page, not a heading on it. */
+const TOPBAR_NAME_MAX_PX = 18;
 
 /**
  * Who you are, at the foot of the menu (E1-S16).
