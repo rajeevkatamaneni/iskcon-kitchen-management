@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { RecipeSearchResult } from "@/lib/api";
 
-const { authRef, searchMock, importMock, countMock } = vi.hoisted(() => ({
+const { authRef, searchMock, importMock, countMock, closeMatchesMock } = vi.hoisted(() => ({
   authRef: {
     current: {
       status: "signed-in",
@@ -17,6 +17,7 @@ const { authRef, searchMock, importMock, countMock } = vi.hoisted(() => ({
   searchMock: vi.fn(),
   importMock: vi.fn(),
   countMock: vi.fn(),
+  closeMatchesMock: vi.fn(),
 }));
 
 // The screen reads its own address bar, so the stub answers both halves of next/navigation.
@@ -39,6 +40,8 @@ vi.mock("@/lib/api", async (orig) => {
       ...actual.api,
       searchRecipes: searchMock,
       importRecipe: importMock,
+      // T-287: the copy asks for close matches first. Empty unless a test says otherwise.
+      importCloseMatches: closeMatchesMock,
       // T-119. Stubbed for every test in this file, not only the ones that read it: without it the
       // real wrapper would reach for `fetch` on every render of this screen.
       countIngredientsAddedByImport: countMock,
@@ -119,6 +122,7 @@ describe("recipe browse", () => {
       .mockResolvedValue({ id: "new", name: "Majjige", ingredientsCreated: 8, categoryCreated: false });
     searchMock.mockReset().mockResolvedValue([mine(), library()]);
     countMock.mockReset().mockResolvedValue({ count: 0 });
+    closeMatchesMock.mockReset().mockResolvedValue([]);
   });
 
   it("shows the temple's own recipes and the library's in one list", async () => {
@@ -178,6 +182,66 @@ describe("recipe browse", () => {
     // Somebody adding three recipes should not be thrown out of their search after the first.
     expect(screen.getByText("Majjige")).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("asks about close matches before copying, and copies with the answers (T-287)", async () => {
+    searchMock.mockResolvedValue([library()]);
+    closeMatchesMock.mockResolvedValue([
+      { libraryName: "Tomatos", note: "chopped", existingIngredientId: "ing-t", existingIngredientName: "Tomato, ripe" },
+    ]);
+    render(<RecipesPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /add majjige to your recipes/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Did you mean this ingredient?" });
+    expect(closeMatchesMock).toHaveBeenCalledWith("m1", "token");
+    // Nothing is copied until the question is answered.
+    expect(importMock).not.toHaveBeenCalled();
+    expect(dialog).toHaveTextContent("Tomatos · chopped");
+
+    fireEvent.click(screen.getByRole("button", { name: "Use Tomato, ripe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to my recipes" }));
+
+    await vi.waitFor(() =>
+      expect(importMock).toHaveBeenCalledWith("m1", "token", [
+        { libraryName: "Tomatos", useIngredientId: "ing-t", confirmDifferent: false },
+      ])
+    );
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /add majjige to your recipes/i })).not.toBeInTheDocument();
+  });
+
+  it("copies at once, with no question, when nothing is a close match", async () => {
+    searchMock.mockResolvedValue([library()]);
+    render(<RecipesPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /add majjige to your recipes/i }));
+
+    await vi.waitFor(() => expect(importMock).toHaveBeenCalledWith("m1", "token"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens the question when the copy itself is refused for a close match (KMS-400156)", async () => {
+    const { ApiError } = await import("@/lib/api");
+    searchMock.mockResolvedValue([library()]);
+    importMock.mockRejectedValueOnce(
+      new ApiError({
+        code: "KMS-400156",
+        message: "There's already an ingredient with a name very like this one.",
+        action: "Use the existing ingredient.",
+        fieldErrors: [
+          { field: "closeMatches[0].libraryName", message: "Jaggary" },
+          { field: "closeMatches[0].existingIngredientId", message: "ing-j" },
+          { field: "closeMatches[0].existingIngredientName", message: "Jaggery" },
+        ],
+      })
+    );
+    render(<RecipesPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /add majjige to your recipes/i }));
+
+    expect(await screen.findByRole("dialog", { name: "Did you mean this ingredient?" })).toHaveTextContent("Jaggary");
+    expect(screen.getByRole("button", { name: "Use Jaggery" })).toBeInTheDocument();
   });
 
   it("opens a recipe on its own screen, and carries the search back with it", async () => {

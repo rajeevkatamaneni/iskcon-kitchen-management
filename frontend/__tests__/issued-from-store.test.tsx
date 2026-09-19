@@ -137,9 +137,28 @@ describe("Issued from the temple store", () => {
     expect(
       screen.getByText(/Estimated, materials only · 2 ingredients have no known price/)
     ).toBeInTheDocument();
-    expect(screen.getByText(/Rock Salt, Curry Leaves are left out/)).toBeInTheDocument();
+    // Both ways an ingredient gets a price, since R-ING-3 made the market rate one of them (T-294).
+    expect(
+      screen.getByText(
+        /Rock Salt, Curry Leaves are left out until they have a vendor’s list price or a market rate\./
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/until a vendor price is recorded/)).not.toBeInTheDocument();
     expect(
       within(rowFor("Deity kitchen")).getByText("2 ingredients have no known price")
+    ).toBeInTheDocument();
+  });
+
+  it("says it, not they, when one ingredient has no price", () => {
+    queryRef.current.data = report({
+      ingredientsWithoutPrice: 1,
+      unpriced: [{ ingredientId: "i-1", name: "Banana", quantity: 3, unit: "KG" }],
+      kitchens: [kitchen({ ingredientsWithoutPrice: 1, ingredientsPriced: 16 })],
+    });
+    render(<IssuedFromStorePage />);
+
+    expect(
+      screen.getByText(/Banana is left out until it has a vendor’s list price or a market rate\./)
     ).toBeInTheDocument();
   });
 
@@ -147,7 +166,11 @@ describe("Issued from the temple store", () => {
     queryRef.current.data = report();
     render(<IssuedFromStorePage />);
 
-    expect(screen.getByText(/Estimated, materials only/)).toBeInTheDocument();
+    // Cost per serving's words exactly, since R-ING-3 made the market rate a price (T-312).
+    expect(
+      screen.getByText("Estimated, materials only — from list prices, or the market rate")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/last-known/)).not.toBeInTheDocument();
     expect(screen.getByText(/Labour, fuel and the rest/)).toBeInTheDocument();
   });
 

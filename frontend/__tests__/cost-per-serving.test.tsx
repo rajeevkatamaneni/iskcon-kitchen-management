@@ -222,6 +222,9 @@ describe("Cost per serving", () => {
     render(<CostPerServingPage />);
 
     expect(screen.getByText(/Estimated, materials only/)).toBeInTheDocument();
+    // What it is costed from, in today's words: list prices, then the market rate (R-ING-3, T-310).
+    expect(screen.getByText("Estimated, materials only — from list prices, or the market rate")).toBeInTheDocument();
+    expect(screen.queryByText(/last-known/)).toBeNull();
     expect(screen.getByText(/Labour, fuel and the rest of what a meal costs are not in these figures/))
       .toBeInTheDocument();
   });
@@ -240,7 +243,7 @@ describe("Cost per serving", () => {
     // Once at the head of the report, and again on the row it actually bites — a reader comparing
     // two kinds needs to know which of them the gap is in.
     expect(screen.getAllByText(/2 ingredients have no known price/)).toHaveLength(2);
-    expect(screen.getByText(/Rock Salt, Curry Leaves/)).toBeInTheDocument();
+    expect(screen.getByText(/Rock Salt, Curry Leaves have no list price or market rate, so they are left out\./)).toBeInTheDocument();
   });
 
   it("says nothing was cooked rather than showing a table of zeroes", () => {

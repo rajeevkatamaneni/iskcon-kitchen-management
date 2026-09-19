@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { IngredientView, StockItemView } from "@/lib/api";
+import { ApiError, type IngredientView, type StockItemView } from "@/lib/api";
 
 // The screen makes two authed queries — every ingredient, and what is already tracked — so the
 // stub tells them apart by the fetcher it is handed.
-const { ingFn, authRef, ingRef, trackedRef, createItemMock, adjustMock, pushMock } = vi.hoisted(() => ({
+const { ingFn, authRef, ingRef, trackedRef, createItemMock, adjustMock, pushMock, suggestMock } = vi.hoisted(() => ({
   ingFn: () => {},
   authRef: {
     current: { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } } as {
@@ -17,6 +17,7 @@ const { ingFn, authRef, ingRef, trackedRef, createItemMock, adjustMock, pushMock
   createItemMock: vi.fn(),
   adjustMock: vi.fn(),
   pushMock: vi.fn(),
+  suggestMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock, replace: vi.fn() }) }));
@@ -40,6 +41,7 @@ vi.mock("@/lib/api", async (orig) => {
       listIngredients: ingFn,
       createInventoryItem: createItemMock,
       adjustStock: adjustMock,
+      getStockValueSuggestion: suggestMock,
     },
   };
 });
@@ -52,6 +54,10 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
     name: "Rice",
     category: "Grains",
     unit: "KG",
+    packSizes: [],
+    marketRate: null,
+    marketRateOn: null,
+    marketRateSource: null,
     ekadashiProhibited: false,
     supply: false,
     libraryDerived: false,
@@ -69,6 +75,8 @@ describe("adding to inventory", () => {
     createItemMock.mockReset().mockResolvedValue("new-item");
     adjustMock.mockReset().mockResolvedValue(undefined);
     pushMock.mockReset();
+    // No vendor price and no market rate: the case R-ING-3's acceptance criterion names.
+    suggestMock.mockReset().mockResolvedValue({ pricePerUnit: null, source: null });
   });
 
   it("opens the item with what is on the shelf, and returns to the list with the confirmation", async () => {
@@ -78,18 +86,23 @@ describe("adding to inventory", () => {
     fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
     fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "40" } });
     fireEvent.change(screen.getByLabelText(/where it lives/i), { target: { value: "Main store" } });
+    fireEvent.change(valueBox(), { target: { value: "62" } });
 
     // The commit button is in the sticky header, outside the form, and reaches it by name.
     fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
 
+    // ONE request (T-294, VERIFY-A defect 5). The count travels with the item and the server writes
+    // both or neither, so a failure can no longer leave an item with no stock and no value. The
+    // count opens the item's first lot, so nothing sits at zero badged "below reorder level".
     await waitFor(() => expect(createItemMock).toHaveBeenCalledTimes(1));
-    expect(createItemMock.mock.calls[0][0]).toMatchObject({
+    expect(createItemMock.mock.calls[0][0]).toEqual({
       ingredientId: "ing-rice",
       storageLocation: "Main store",
+      reorderThreshold: null,
+      notes: null,
+      openingCount: { quantity: 40, unit: "KG", pricePerUnit: 62 },
     });
-    // The count opens the item's first lot, so nothing sits at zero badged "below reorder level".
-    await waitFor(() => expect(adjustMock).toHaveBeenCalledTimes(1));
-    expect(adjustMock.mock.calls[0][1]).toMatchObject({ quantity: 40, unit: "KG", reason: "COUNT_CORRECTION" });
+    expect(adjustMock).not.toHaveBeenCalled();
 
     // Rule 8: the confirmation waits on the list, not here.
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/inventory?added=Rice"));
@@ -128,6 +141,7 @@ describe("adding to inventory", () => {
       reorderThreshold: 0.5,
     });
     // Nothing was typed into the count, so no lot is opened.
+    expect(createItemMock.mock.calls[0][0].openingCount).toBeNull();
     expect(adjustMock).not.toHaveBeenCalled();
   });
 
@@ -163,6 +177,129 @@ describe("adding to inventory", () => {
     expectSaidBeside(screen.getByPlaceholderText("e.g. 40"), "How much is on the shelf now must be at least 0");
     expect(createItemMock).not.toHaveBeenCalled();
     expect(adjustMock).not.toHaveBeenCalled();
+  });
+
+  /** The stock-value box, by its field rather than its "i" (whose name also contains the label). */
+  function valueBox() {
+    return screen.getByLabelText(/what it would cost to buy today/i, { selector: "input" });
+  }
+
+  describe("what it would cost to buy today (R-ING-3)", () => {
+    it("asks for the value of rice with no vendor price, and adds nothing until it is given", async () => {
+      render(<NewInventoryItemPage />);
+
+      // Before an ingredient is chosen there is no unit to name, and the box waits (conductor's ruling).
+      expect(valueBox()).toBeDisabled();
+      expect(screen.getByText("What it would cost to buy today (₹)")).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+      await waitFor(() => expect(suggestMock).toHaveBeenCalledWith("ing-rice", "test-token"));
+      // The unit is the ingredient's stock unit, in the app's own label.
+      expect(screen.getByText("What it would cost to buy today (₹ per Kg)")).toBeInTheDocument();
+      expect(valueBox()).toBeEnabled();
+      expect(valueBox()).toHaveValue(null);
+
+      fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "40" } });
+      fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
+
+      expectSaidBeside(valueBox(), "What it would cost to buy today (₹ per Kg) is required");
+      expect(valueBox()).toBeRequired();
+      expect(createItemMock).not.toHaveBeenCalled();
+      expect(adjustMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses 0 in red beside the box", () => {
+      render(<NewInventoryItemPage />);
+      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+      fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "40" } });
+      fireEvent.change(valueBox(), { target: { value: "0" } });
+
+      fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
+
+      expectSaidBeside(valueBox(), "What it would cost to buy today (₹ per Kg) must be more than 0");
+      expect(createItemMock).not.toHaveBeenCalled();
+    });
+
+    it("pre-fills the suggestion, and sends it with the count", async () => {
+      suggestMock.mockResolvedValue({ pricePerUnit: 58.5, source: "PREFERRED_VENDOR" });
+      render(<NewInventoryItemPage />);
+      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+      await waitFor(() => expect(valueBox()).toHaveValue(58.5));
+
+      fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "40" } });
+      fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
+
+      await waitFor(() => expect(createItemMock).toHaveBeenCalledTimes(1));
+      expect(createItemMock.mock.calls[0][0].openingCount).toEqual({
+        quantity: 40,
+        unit: "KG",
+        pricePerUnit: 58.5,
+      });
+      expect(adjustMock).not.toHaveBeenCalled();
+    });
+
+    it("names the stock unit even when the count is typed in another unit of it", async () => {
+      render(<NewInventoryItemPage />);
+      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-hing" } });
+      await waitFor(() => expect(suggestMock).toHaveBeenCalledWith("ing-hing", "test-token"));
+      fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "KG" } });
+      // Asafoetida is kept in gm, so its value is per gm whatever the count is typed in.
+      expect(screen.getByText("What it would cost to buy today (₹ per gm)")).toBeInTheDocument();
+    });
+
+    it("does not ask for a value when no count is typed, because no stock is added", async () => {
+      render(<NewInventoryItemPage />);
+      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+      expect(valueBox()).not.toBeRequired();
+
+      fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
+
+      await waitFor(() => expect(createItemMock).toHaveBeenCalledTimes(1));
+      expect(createItemMock.mock.calls[0][0].openingCount).toBeNull();
+      expect(adjustMock).not.toHaveBeenCalled();
+    });
+
+    it("shows the server's refusal the usual way (KMS-400161)", async () => {
+      // The refusal now comes back on the one request that carries the count; the server has
+      // written nothing, so the page stays put with everything still typed in.
+      createItemMock.mockRejectedValue(
+        new ApiError(
+          {
+            code: "KMS-400161",
+            message: "Enter what it would cost to buy this today.",
+            action: "Type the price per unit. It can't be blank or 0, and it becomes the ingredient's market rate.",
+            fieldErrors: [],
+          },
+          400
+        )
+      );
+      render(<NewInventoryItemPage />);
+      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+      fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "40" } });
+      fireEvent.change(valueBox(), { target: { value: "62" } });
+      fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
+
+      expect(await screen.findByText("Enter what it would cost to buy this today.")).toBeInTheDocument();
+      expect(screen.getByText(/KMS-400161/)).toBeInTheDocument();
+      expect(pushMock).not.toHaveBeenCalled();
+      expect(createItemMock).toHaveBeenCalledTimes(1);
+      expect(adjustMock).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * VERIFY-A defect 4: at 390 wide the form stayed two columns, and the ingredient select showed
+   * "VERIFY-A Rice — kept" of "VERIFY-A Rice — kept in Kg" (157px of text in a 125px box). jsdom
+   * has no layout, so this pins the class that decides it — one column below `md`, two from `md` up —
+   * and the widths themselves were measured on the running app (docs/work/proof/T-294.md).
+   */
+  it("puts each field on its own row on a phone, and pairs them from md up", () => {
+    render(<NewInventoryItemPage />);
+    const form = screen.getByRole("form", { name: "Add to inventory" });
+    const classes = form.className.split(/\s+/);
+    expect(classes).toContain("grid-cols-1");
+    expect(classes).toContain("md:grid-cols-2");
+    expect(classes).not.toContain("grid-cols-2");
   });
 
   it("leaves out an ingredient the inventory already holds", () => {

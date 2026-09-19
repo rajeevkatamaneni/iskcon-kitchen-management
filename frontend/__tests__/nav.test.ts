@@ -70,7 +70,7 @@ describe("navForRole", () => {
   it("gives the temple admin the leadership pages but not the volunteer sign-up", () => {
     const hrefs = hrefsFor("TEMPLE_ADMIN");
     for (const adminOnly of [
-      "/users", "/staff", "/communications", "/audit", "/money", "/wishlist", "/staff-schedule",
+      "/users", "/staff", "/communications", "/audit", "/wishlist", "/staff-schedule",
       "/leave", "/notices",
     ]) {
       expect(hrefs).toContain(adminOnly);
@@ -139,6 +139,37 @@ describe("navForRole", () => {
 
     for (const role of ["SUPER_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF", "VOLUNTEER"] as const) {
       expect(hrefsFor(role)).not.toContain("/settings/meal-kinds");
+    }
+  });
+
+  it("puts Deliveries straight after Purchase orders, for the admin, the manager and kitchen staff", () => {
+    // R-DEL-1 (T-266). The page needs RECEIVE_DELIVERIES. Kitchen Staff was open question Q-1
+    // ("does Kitchen Staff get RECEIVE_DELIVERIES by default, or only named staff?") until Rajeev
+    // answered it on 2026-09-19: by default. So a cook at the gate is offered the door too (T-282).
+    // Volunteers and the operator still hold no RECEIVE_DELIVERIES and are offered nothing.
+    for (const role of ["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"] as const) {
+      const ordering = navForRole(role).find((g) => g.items.some((i) => i.href === "/orders"));
+      const hrefs = ordering?.items.map((i) => i.href) ?? [];
+      expect(hrefs[hrefs.indexOf("/orders") + 1]).toBe("/deliveries");
+      expect(ordering?.items.find((i) => i.href === "/deliveries")?.label).toBe("Deliveries");
+    }
+    for (const role of ["VOLUNTEER", "SUPER_ADMIN"] as const) {
+      expect(hrefsFor(role)).not.toContain("/deliveries");
+    }
+  });
+
+  it("offers nobody a Payments item, or anything leading to /money (R-PAY-4)", () => {
+    // T-275. The Payments page is gone: what it listed (unpaid invoices by age, and the total owed)
+    // is the Invoices list's filters now, and /money only redirects there. Read across every role,
+    // because the rule is that the item exists for nobody, not that the admin lost it.
+    for (const role of ["SUPER_ADMIN", "TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF", "VOLUNTEER"] as const) {
+      const items = navForRole(role).flatMap((g) => g.items);
+      expect(items.map((i) => i.href)).not.toContain("/money");
+      expect(items.map((i) => i.label)).not.toContain("Payments");
+    }
+    // Invoices stays, for every role that had it.
+    for (const role of ["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"] as const) {
+      expect(hrefsFor(role)).toContain("/invoices");
     }
   });
 

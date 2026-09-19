@@ -1,161 +1,21 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { Fragment, useCallback, useState } from "react";
-import { Sidebar } from "@/components/Sidebar";
-import { ErrorNotice } from "@/components/ErrorNotice";
-import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type PayableView } from "@/lib/api";
-import { money, todayIso } from "@/lib/format";
-import { useAuth } from "@/lib/auth-context";
-import { useAuthedQuery } from "@/lib/use-authed-query";
-import { Loading } from "@/components/Loading";
-import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
-import { Button } from "@/components/ds/Button";
-import { Form } from "@/components/ds/Form";
+/**
+ * The Payments page is gone (R-PAY-4, T-275). Its only job was the unpaid invoices by age and the
+ * total owed, and that is the Invoices list's Unpaid and overdue filters now, with the total owed
+ * above them; paying moves to the invoice's own page.
+ *
+ * <p>The route stays as a redirect because somebody has /money bookmarked, and a 404 is a worse way
+ * to learn a screen moved. It is a server component calling `redirect()`, so the answer is an HTTP
+ * redirect from the server rather than a page that loads and then moves. `force-dynamic` keeps it a
+ * real response on every request instead of a prerendered page. Temporary (307), not permanent: a
+ * browser caches a permanent redirect indefinitely, and where this lands may still change.
+ *
+ * <p>No role check here: the Invoices list decides what each reader sees, and a Kitchen Manager who
+ * follows an old link lands on the list as they always see it.
+ */
+export const dynamic = "force-dynamic";
 
-const BUCKET_LABEL: Record<string, string> = {
-  CURRENT: "Current",
-  DUE_1_30: "1–30 days overdue",
-  OVERDUE_31_PLUS: "31+ days overdue",
-};
-
-export default function PayablesPage() {
-  return (
-    <RequireRole roles={["TEMPLE_ADMIN"]}>
-      <PayablesView />
-    </RequireRole>
-  );
-}
-
-function PayablesView() {
-  const { getToken } = useAuth();
-  const { data, error, loading, reload } = useAuthedQuery(useCallback((t: string | undefined) => api.payables(t), []));
-  const payables = data ?? [];
-
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [paying, setPaying] = useState<string | null>(null);
-
-  async function pay(event: React.FormEvent<HTMLFormElement>, p: PayableView) {
-    event.preventDefault();
-    const f = new FormData(event.currentTarget);
-    setBusy(true);
-    setActionError(null);
-    try {
-      await api.recordInvoicePayment(p.invoiceId, {
-        paidOn: String(f.get("paidOn") ?? ""),
-        amount: Number(f.get("amount") ?? 0),
-        method: String(f.get("method") ?? "BANK_TRANSFER"),
-        reference: String(f.get("reference") ?? "") || undefined,
-      }, await getToken());
-      setPaying(null);
-      reload();
-    } catch (e) {
-      setActionError(toApiError(e, "We couldn’t record that payment."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const total = payables.reduce((sum, p) => sum + p.outstanding, 0);
-  const today = todayIso();
-
-  return (
-    <div className="flex min-h-screen">
-      <Sidebar activeHref="/money" />
-      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
-        <div className="mx-auto max-w-content">
-          <header className="mb-6">
-            <h1>Payments</h1>
-            <p className="mt-1 text-ink-secondary">
-              Record payments made outside the app.
-            </p>
-          </header>
-
-          {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
-
-          {loading ? (
-            <Loading label="Loading payables…" />
-          ) : error ? (
-            <ErrorNotice error={error} />
-          ) : payables.length === 0 ? (
-            <div className="card px-6 py-14 text-center">
-              <p className="text-lg">Nothing outstanding</p>
-              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">All vendor invoices are paid.</p>
-            </div>
-          ) : (
-            <>
-              <p className="mb-4 text-sm text-ink-secondary">
-                Total outstanding: <span className="font-medium tabular-nums text-ink">{money(total, "INR")}</span>
-              </p>
-              <div className="table-wrap overflow-x-auto">
-                {/* The table rule (DESIGN_SYSTEM §5): the vendor is the one flexible column, so it
-                    leads; the invoice number is a short code and not a link here, so it sits with
-                    the fixed values. Below 1024px each row is a card and Record payment stays on
-                    screen instead of past a sideways scroll. */}
-                <table className={RULED_TABLE}>
-                  <thead className={THEAD}>
-                    <tr>
-                      <th className={TH_PRIMARY}>Vendor</th>
-                      <th className={TH_FIXED}>Invoice</th>
-                      <th className={TH_FIXED}>Outstanding</th>
-                      <th className={TH_FIXED}>Aging</th>
-                      <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {payables.map((p) => (
-                      <Fragment key={p.invoiceId}>
-                        <tr className={TR}>
-                          <td className={TD_PRIMARY}>{p.vendorName}</td>
-                          <td className={`${TD_FIXED} font-medium`}>{p.invoiceNumber}</td>
-                          <td className={TD_FIXED_NUM} data-label="Outstanding">{money(p.outstanding, "INR")}</td>
-                          <td className={TD_FIXED}>
-                            <span className={`rounded-control px-2 py-1 text-xs ${p.agingBucket === "CURRENT" ? "bg-sunken text-ink-secondary" : "bg-warning-bg text-warning"}`}>
-                              {BUCKET_LABEL[p.agingBucket] ?? p.agingBucket}
-                            </span>
-                          </td>
-                          <td className={TD_ACTIONS_FIXED}>
-                            <Button variant="ghost" size="sm" onClick={() => setPaying(paying === p.invoiceId ? null : p.invoiceId)}>
-                              Record payment
-                            </Button>
-                          </td>
-                        </tr>
-                        {paying === p.invoiceId && (
-                          <tr className="border-t border-hairline bg-sunken hover:bg-sunken">
-                            <td colSpan={5} className="px-5 py-4">
-                              <Form className="flex flex-wrap items-end gap-3" aria-label={`Record payment for ${p.invoiceNumber}`} onSubmit={(e) => pay(e, p)}>
-                                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Date</span>
-                                  <input name="paidOn" type="date" defaultValue={today} required className="min-h-touch rounded-control border border-hairline px-2" />
-                                </label>
-                                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Amount (₹)</span>
-                                  <input name="amount" type="number" min="0" step="any" defaultValue={p.outstanding} required className="min-h-touch min-w-32 rounded-control border border-hairline px-2 tabular-nums" />
-                                </label>
-                                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Method</span>
-                                  <select name="method" className="min-h-touch rounded-control border border-hairline px-2">
-                                    <option value="BANK_TRANSFER">Bank transfer</option>
-                                    <option value="UPI">UPI</option>
-                                    <option value="CHEQUE">Cheque</option>
-                                    <option value="CASH">Cash</option>
-                                  </select>
-                                </label>
-                                <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Reference</span>
-                                  <input name="reference" className="min-h-touch rounded-control border border-hairline px-2" />
-                                </label>
-                                <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Save</button>
-                              </Form>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-      </main>
-    </div>
-  );
+export default function PaymentsMovedPage(): never {
+  redirect("/invoices?filter=unpaid");
 }

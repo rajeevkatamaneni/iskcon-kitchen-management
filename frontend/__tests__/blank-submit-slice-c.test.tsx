@@ -53,6 +53,7 @@ const { authRef, router, mocks } = vi.hoisted(() => ({
     createVendor: vi.fn(),
     updateVendor: vi.fn(),
     setVendorSupply: vi.fn(),
+    addVendorSupplies: vi.fn(),
     deactivateVendor: vi.fn(),
     reactivateVendor: vi.fn(),
     getEquipment: vi.fn(),
@@ -157,7 +158,7 @@ beforeEach(() => {
   mocks.listVendors.mockReset().mockResolvedValue([vendor()]);
   mocks.getVendor.mockReset().mockResolvedValue(vendorDetail());
   mocks.listIngredients.mockReset().mockResolvedValue([
-    { id: "ing2", name: "Jaggery", unit: "KG", category: "Sweeteners" },
+    { id: "ing2", name: "Jaggery", unit: "KG", category: "Sweeteners", packSizes: [] },
   ]);
   mocks.createVendor.mockReset().mockResolvedValue({ id: "v-new" });
   mocks.updateVendor.mockReset().mockResolvedValue(undefined);
@@ -199,32 +200,23 @@ describe("vendors (T-163)", () => {
     expect(mocks.updateVendor).not.toHaveBeenCalled();
   });
 
-  it("adding a supply: names a blank Ingredient, and sets nothing", async () => {
+  /*
+    Until T-256 there were two tests here on the one-at-a-time "Add supply" form: a blank Ingredient
+    picker, and a lead time over 365. That form is gone; "Other ingredients" replaced it (the
+    conductor's call, 2026-09-19). The blank-Ingredient test went with it and has no successor,
+    because there is no ingredient box left to leave blank: each row *is* its ingredient. The
+    lead-time test moved to the new table, where the same box can still be over-filled.
+  */
+  it("adding supplies: says a lead time over 365 can be at most 365, and adds nothing", async () => {
+    mocks.addVendorSupplies.mockReset().mockResolvedValue(undefined);
     render(<VendorDetailPage />);
-    const form = await screen.findByRole("form", { name: /add a supply/i });
-    const add = within(form).getByRole("button", { name: /add supply/i });
-    // Disabled until the ingredient list has arrived, which is a separate rule and left alone.
-    await waitFor(() => expect(add).toBeEnabled());
-
-    fireEvent.click(add);
-
-    expectRefused(within(form).getByLabelText("Ingredient"), "Ingredient is required");
-    expect(mocks.setVendorSupply).not.toHaveBeenCalled();
-  });
-
-  it("adding a supply: says a lead time over 365 can be at most 365, and sets nothing", async () => {
-    render(<VendorDetailPage />);
-    const form = await screen.findByRole("form", { name: /add a supply/i });
-    const add = within(form).getByRole("button", { name: /add supply/i });
-    await waitFor(() => expect(add).toBeEnabled());
-
-    fireEvent.change(within(form).getByLabelText("Ingredient"), { target: { value: "ing2" } });
-    const lead = within(form).getByLabelText(/lead time/i, { selector: "input" });
+    const form = await screen.findByRole("form", { name: "Other ingredients" });
+    const lead = await within(form).findByLabelText("Lead time (days) for Jaggery");
     fireEvent.change(lead, { target: { value: "400" } });
-    fireEvent.click(add);
+    fireEvent.click(within(form).getByRole("button", { name: "Save" }));
 
-    expectRefused(lead, "Lead time (days) can be at most 365");
-    expect(mocks.setVendorSupply).not.toHaveBeenCalled();
+    expectRefused(lead, "Lead time (days) for Jaggery can be at most 365");
+    expect(mocks.addVendorSupplies).not.toHaveBeenCalled();
   });
 });
 

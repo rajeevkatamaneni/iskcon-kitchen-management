@@ -74,19 +74,19 @@ const MIXED: PurchaseOrderDetailView = {
     createdAt: "2026-08-01T09:00:00Z",
   },
   lines: [
-    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 30, unit: "KG", expectedPrice: 45, arrivedOn: null },
+    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 30, unit: "KG", expectedPrice: 45, arrivedOn: null, packSizeId: null, packLabel: null, packQuantity: null, packCount: null },
     // `arrivedOn: null` is stated rather than left off, for the same reason `description` is: it is
     // required-and-nullable, so every fixture has to say whether this line has been accounted for.
-    { id: "l2", ingredientId: null, ingredientName: null, description: "Plastic stool", quantity: 4, unit: "PIECES", expectedPrice: 250, arrivedOn: null },
-    { id: "l3", ingredientId: null, ingredientName: null, description: "Extension cord", quantity: 2, unit: "PIECES", expectedPrice: 180, arrivedOn: null },
+    { id: "l2", ingredientId: null, ingredientName: null, description: "Plastic stool", quantity: 4, unit: "PIECES", expectedPrice: 250, arrivedOn: null, packSizeId: null, packLabel: null, packQuantity: null, packCount: null },
+    { id: "l3", ingredientId: null, ingredientName: null, description: "Extension cord", quantity: 2, unit: "PIECES", expectedPrice: 180, arrivedOn: null, packSizeId: null, packLabel: null, packQuantity: null, packCount: null },
   ],
   events: [],
 };
 
 const RECEIPTS: GoodsReceiptView[] = [];
 const INGREDIENTS: IngredientView[] = [
-  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
-  { id: "ing2", name: "Toor Dal", category: "Pulses", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null, ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing2", name: "Toor Dal", category: "Pulses", unit: "KG", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null, ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
 ];
 
 function withDetail(detail: PurchaseOrderDetailView) {
@@ -124,46 +124,26 @@ describe("a purchase-order line that isn't in the catalogue", () => {
     // described line's subject now also appears on the "Did these arrive?" list, so an unscoped
     // getByText would be asserting "this text is somewhere on the screen" while reading as "this
     // line is on the order". It threw on the ambiguity, which is the right way to find that out.
-    const ordered = within(screen.getByRole("table", { name: /what was ordered/i }));
+    const ordered = within(screen.getByRole("table", { name: "Items" }));
     expect(ordered.getByText("Rice")).toBeInTheDocument();
     expect(ordered.getByText("Plastic stool")).toBeInTheDocument();
     expect(ordered.getByText("Extension cord")).toBeInTheDocument();
   });
 
-  it("offers no boxes for a described line in the receiving table, and says why", () => {
+  // REMOVED AT T-265: "offers no boxes for a described line in the receiving table" and "submits
+  // only the ingredient lines when a delivery is recorded". Both tested this page's own delivery
+  // form, which R-PO-4 removed: deliveries are recorded on the Deliveries screen, which lists
+  // catalogue lines only. What replaces them here is how a described line reads in the merged table.
+  it("shows a described line as an ordinary row of the merged table, with nothing delivered yet", () => {
     render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /receive delivery/i }));
-
-    // The ingredient line takes a delivery.
-    expect(screen.getByLabelText("Received Rice")).toBeInTheDocument();
-
-    // The described ones do not, and the row says so rather than being blank or absent. Absent
-    // would be worse than either: the storekeeper is holding a delivery note that lists stools.
-    expect(screen.queryByLabelText("Received Plastic stool")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Received Extension cord")).not.toBeInTheDocument();
-    // CHANGED AT T-066. This used to assert the row read "record it as delivered on the
-    // order" — KMS-400129's words repeated verbatim, pointing at an action that existed
-    // nowhere. The row now points at the form that does exist, three sections down.
-    expect(screen.getAllByText(/say below whether it arrived/i)).toHaveLength(2);
-    expect(screen.queryByText(/record it as delivered on the order/i)).toBeNull();
-  });
-
-  it("submits only the ingredient lines when a delivery is recorded", async () => {
-    const receive = vi.spyOn(api, "receiveDelivery").mockResolvedValue({} as GoodsReceiptView);
-    render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /receive delivery/i }));
-
-    fireEvent.change(screen.getByLabelText("Received Rice"), { target: { value: "30" } });
-    await act(async () => {
-      fireEvent.submit(screen.getByRole("form", { name: /record a delivery/i }));
-    });
-
-    expect(receive).toHaveBeenCalledTimes(1);
-    const submitted = receive.mock.calls[0][1].lines;
-    // Exactly one line, and it is the rice. A described line reaching the server would be refused
-    // with KMS-400129 — this is the offer being absent rather than the refusal being caught.
-    expect(submitted).toHaveLength(1);
-    expect(submitted[0].poLineId).toBe("l1");
+    const row = screen.getAllByRole("row").find((r) => r.querySelector("td")?.textContent === "Plastic stool")!;
+    expect(within(row).getAllByRole("cell").map((c) => c.textContent)).toEqual([
+      "Plastic stool", "4 pieces", "0 pieces", "—", "—", "",
+    ]);
+    // No history until somebody says it arrived, and never a Return to vendor: nothing entered stock.
+    expect(within(row).queryByRole("button")).toBeNull();
+    expect(row.nextElementSibling?.querySelector("td")?.textContent).toBe("Extension cord");
+    expect(screen.queryByLabelText(/received plastic stool/i)).toBeNull();
   });
 
   it("gives two described lines distinct React keys", () => {
@@ -406,7 +386,7 @@ describe("a purchase-order line that isn't in the catalogue", () => {
     expect(arrivals.getByText("4 pieces")).toBeInTheDocument();
     expect(arrivals.queryByText("1 pieces")).toBeNull();
 
-    const ordered = within(screen.getByRole("table", { name: /what was ordered/i }));
+    const ordered = within(screen.getByRole("table", { name: "Items" }));
     expect(ordered.getByText("1 piece")).toBeInTheDocument();
     expect(ordered.getByText("4 pieces")).toBeInTheDocument();
     expect(ordered.queryByText("1 pieces")).toBeNull();
@@ -432,8 +412,16 @@ describe("a purchase-order line that isn't in the catalogue", () => {
     expect(within(form).getByLabelText(/extension cord/i)).toBeInTheDocument();
 
     // The arrival is readable on the order itself, which is the only record a described line will
-    // ever have — there is no delivery table row for it anywhere.
-    expect(screen.getByText(/arrived 18 Aug 2026/i)).toBeInTheDocument();
+    // ever have. Since T-265 (conductor's ruling, 2026-09-19) it reads like any other line: the
+    // whole amount delivered, and the arrival as the one part of the shared "▸ N deliveries"
+    // history. The separate "Arrived <date>" note is gone, so there is one way to show it.
+    expect(screen.queryByText(/arrived 18 Aug 2026/i)).toBeNull();
+    const row = screen.getAllByRole("row").find((r) => r.querySelector("td")?.textContent === "Plastic stool")!;
+    expect(within(row).getAllByRole("cell")[2].textContent).toBe("4 pieces");
+    const below = row.nextElementSibling as HTMLElement;
+    fireEvent.click(within(below).getByRole("button", { name: /1 delivery/ }));
+    const items = within(below).getAllByRole("listitem").map((li) => li.textContent);
+    expect(items).toEqual(["18 Aug · 4 pieces received", "Received 4 of 4 pieces ordered · complete 18 Aug"]);
   });
 
   it("does not offer the form at all once every described line is accounted for", () => {

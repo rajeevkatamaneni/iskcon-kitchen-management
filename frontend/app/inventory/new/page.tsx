@@ -41,35 +41,42 @@ function NewInventoryItemView() {
   const fetchTracked = useCallback((token: string | undefined) => api.listInventory({}, token), []);
   const { data: trackedData } = useAuthedQuery(fetchTracked);
 
+  // The pre-fill for "What it would cost to buy today" (R-ING-3). Kept stable so the form's lookup
+  // does not re-run on every render.
+  const loadStockValue = useCallback(
+    async (ingredientId: string) =>
+      (await api.getStockValueSuggestion(ingredientId, await getToken())).pricePerUnit,
+    [getToken]
+  );
+
   async function add(input: NewInventoryItem) {
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      const itemId = await api.createInventoryItem(
+      // One request, one transaction (T-294). The count is the first thing anybody knows about a
+      // consumable, so it is asked for here rather than on a second screen afterwards, and it opens
+      // the item's first lot. It used to follow the item as a second request, and when that one
+      // failed the item was left behind with no stock and no value (VERIFY-A defect 5). Now the
+      // server writes both or neither.
+      const addsStock = input.openingQuantity != null && input.openingQuantity > 0;
+      await api.createInventoryItem(
         {
           ingredientId: input.ingredientId,
           storageLocation: input.storageLocation,
           reorderThreshold: input.reorderThreshold,
           notes: input.notes,
+          openingCount: addsStock
+            ? {
+                quantity: input.openingQuantity as number,
+                unit: input.unit,
+                // Required by the server for any count that adds stock (KMS-400161), and it becomes
+                // the ingredient's market rate. The form has already refused a blank or 0.
+                pricePerUnit: input.pricePerUnit as number,
+              }
+            : null,
         },
-        token
+        await getToken()
       );
-      // The count is the first thing anybody knows about a consumable, so it is asked for here
-      // rather than on a second screen afterwards. It opens the item's first lot.
-      if (input.openingQuantity != null && input.openingQuantity > 0) {
-        await api.adjustStock(
-          String(itemId),
-          {
-            batchId: null,
-            quantity: input.openingQuantity,
-            unit: input.unit,
-            reason: "COUNT_CORRECTION",
-            note: "Opening count, when the item was added to inventory.",
-          },
-          token
-        );
-      }
       // Rule 8: back to the list, with the confirmation waiting there rather than here.
       router.push(`/inventory?added=${encodeURIComponent(input.name)}`);
     } catch (e) {
@@ -101,6 +108,7 @@ function NewInventoryItemView() {
         busy={busy}
         error={error}
         onSubmit={add}
+        loadStockValue={loadStockValue}
       />
     </FocusScreen>
   );

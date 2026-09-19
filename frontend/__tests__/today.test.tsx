@@ -311,7 +311,10 @@ describe("today", () => {
 
       expect(tile()).toHaveTextContent("1 meal from what was cooked, 1 from the plan");
       // Beside, not instead of, what the estimate leaves out.
-      expect(tile()).toHaveTextContent(/Estimated from vendors’ last-known prices/);
+      // T-311: names what the costing reads now, in Cost per serving's words, and no longer the old
+      // "last-known prices".
+      expect(tile()).toHaveTextContent("Estimated from list prices, or the market rate");
+      expect(tile()).not.toHaveTextContent(/last-known/);
     });
 
     it("in the morning, before any card is typed in, says it is all the plan", () => {

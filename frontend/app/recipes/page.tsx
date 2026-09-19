@@ -9,7 +9,15 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { ButtonLink } from "@/components/ds/ButtonLink";
-import { api, toApiError, type ApiError, type RecipeSearchResult } from "@/lib/api";
+import {
+  api,
+  toApiError,
+  type ApiError,
+  type ImportCloseMatchDecision,
+  type ImportCloseMatchView,
+  type RecipeSearchResult,
+} from "@/lib/api";
+import { ImportCloseMatches, closeMatchesFrom } from "@/components/ImportCloseMatches";
 import { useAuth } from "@/lib/auth-context";
 import { Loading } from "@/components/Loading";
 
@@ -56,6 +64,10 @@ function RecipesView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
+  // The recipe whose copy is waiting on "Did you mean …?" answers (Q-11, T-287), and the refusal
+  // of that copy when it is not about a close match — shown inside the dialog, beside the answers.
+  const [asking, setAsking] = useState<{ row: RecipeSearchResult; matches: ImportCloseMatchView[] } | null>(null);
+  const [askingError, setAskingError] = useState<ApiError | null>(null);
 
   /*
     How many ingredients an import has created and nobody has saved since (T-119).
@@ -119,24 +131,60 @@ function RecipesView() {
     router.replace(q.toString() ? `/recipes?${q}` : "/recipes");
   }
 
+  /*
+    The copy asks first (Q-11, T-287): if any ingredient name in the library recipe is only close to
+    one the temple has, the "Did you mean …?" dialog lists them all and nothing is copied until each
+    is answered. With none — the usual case — it copies at once, exactly as before.
+  */
   async function add(row: RecipeSearchResult) {
     setAdding(row.id);
     setError(null);
     try {
-      await api.importRecipe(row.id, await getToken());
-      // The row keeps its place and loses its plus; nothing navigates, because a person adding three
-      // recipes should not be thrown out of their search after the first.
-      setResults((rows) =>
-        rows.map((r) => (r.id === row.id ? { ...r, alreadyAdded: true } : r))
-      );
-      // The import may have just created the ingredients the message counts, so ask again rather
-      // than leave the number describing the catalogue as it was before the button was pressed.
-      refreshAddedByImport();
+      const token = await getToken();
+      const matches = await api.importCloseMatches(row.id, token);
+      if (matches.length > 0) {
+        setAskingError(null);
+        setAsking({ row, matches });
+        return;
+      }
+      await api.importRecipe(row.id, token);
+      added(row);
     } catch (e) {
-      setError(toApiError(e, "We couldn’t add that recipe."));
+      // The catalogue can change between asking and copying; a refusal naming close matches opens
+      // the dialog on them rather than showing an error nobody can act on.
+      const matches = closeMatchesFrom(e);
+      if (matches) setAsking({ row, matches });
+      else setError(toApiError(e, "We couldn’t add that recipe."));
     } finally {
       setAdding(null);
     }
+  }
+
+  async function addAnswered(decisions: ImportCloseMatchDecision[]) {
+    if (!asking) return;
+    const { row } = asking;
+    setAdding(row.id);
+    setAskingError(null);
+    try {
+      await api.importRecipe(row.id, await getToken(), decisions);
+      setAsking(null);
+      added(row);
+    } catch (e) {
+      const matches = closeMatchesFrom(e);
+      if (matches) setAsking({ row, matches });
+      else setAskingError(toApiError(e, "We couldn’t add that recipe."));
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  function added(row: RecipeSearchResult) {
+    // The row keeps its place and loses its plus; nothing navigates, because a person adding three
+    // recipes should not be thrown out of their search after the first.
+    setResults((rows) => rows.map((r) => (r.id === row.id ? { ...r, alreadyAdded: true } : r)));
+    // The import may have just created the ingredients the message counts, so ask again rather
+    // than leave the number describing the catalogue as it was before the button was pressed.
+    refreshAddedByImport();
   }
 
   return (
@@ -150,12 +198,9 @@ function RecipesView() {
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <h1>Recipes</h1>
             <div className="flex flex-wrap gap-2">
-              <Link
-                href="/glossary"
-                className="flex min-h-touch items-center rounded-control border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
-              >
+              <ButtonLink href="/glossary" variant="secondary">
                 Glossary
-              </Link>
+              </ButtonLink>
               <Link
                 href="/recipes/new"
                 className="btn btn-primary flex min-h-touch items-center px-5 transition-colors duration-state"
@@ -323,7 +368,7 @@ function RecipesView() {
                         onClick={() => add(row)}
                         disabled={adding !== null}
                         aria-label={`Add ${row.name} to your recipes`}
-                        className="flex min-h-touch w-full items-center justify-center rounded-control border border-hairline-strong text-xl transition-colors duration-state hover:bg-canvas disabled:opacity-60"
+                        className="btn btn-secondary flex min-h-touch w-full items-center justify-center text-xl disabled:opacity-60"
                       >
                         {adding === row.id ? "…" : "+"}
                       </button>
@@ -337,6 +382,17 @@ function RecipesView() {
         </div>
         </Screen>
       </main>
+
+      {asking && (
+        <ImportCloseMatches
+          recipeName={asking.row.name}
+          matches={asking.matches}
+          busy={adding === asking.row.id}
+          error={askingError}
+          onAdd={addAnswered}
+          onCancel={() => setAsking(null)}
+        />
+      )}
     </div>
   );
 }

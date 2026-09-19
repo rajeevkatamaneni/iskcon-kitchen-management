@@ -53,6 +53,8 @@ function line(o: Partial<ShoppingListLineView>): ShoppingListLineView {
     included: true,
     edited: false,
     excludedSince: null,
+    buyPacks: [],
+    packFromVendor: false,
     ...o,
   };
 }
@@ -63,6 +65,17 @@ describe("shopping list", () => {
     queryRef.current = { data: [line({})], error: null, loading: false };
     catalogueRef.current = [];
     reloadMock.mockReset();
+    // T-264: pressing a tile's button reads the vendor's supplies (for the list price) before the
+    // panel opens, and a "No vendor yet" tile reads the active vendors for its dropdowns. Neither
+    // is what these tests are about, so both answer with nothing to say.
+    vi.spyOn(api, "getVendor").mockResolvedValue({
+      vendor: {} as never, supplies: [], statusHistory: [],
+    });
+    vi.spyOn(api, "listVendors").mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("shows suggested lines with their provenance", () => {
@@ -277,13 +290,14 @@ describe("shopping list", () => {
      * The panel is the edit screen, and this is the assertion that says so: the same fields, by the
      * same names, over the shopping list.
      */
-    it("opens the purchase-order editor as a panel holding only that vendor's lines", () => {
+    it("opens the purchase-order editor as a panel holding only that vendor's lines", async () => {
       withLines([RICE, CURD, OIL]);
       render(<ShoppingListPage />);
 
       fireEvent.click(screen.getAllByRole("button", { name: /generate purchase order$/i })[1]);
+      await screen.findByRole("dialog");
 
-      const panel = screen.getByRole("dialog", { name: /purchase order for Heritage Fresh Dairy/i });
+      const panel = await screen.findByRole("dialog", { name: /purchase order for Heritage Fresh Dairy/i });
       expect(within(panel).getByLabelText("Quantity of Curd")).toHaveValue(4);
       expect(within(panel).getByLabelText("Quantity of Groundnut oil")).toHaveValue(5);
       expect(within(panel).queryByLabelText("Quantity of Rice")).not.toBeInTheDocument();
@@ -306,10 +320,11 @@ describe("shopping list", () => {
      * which it cannot have before it exists — and this test is what proves the gate holds where it
      * matters. The tick box goes with it: it is part of the same block.
      */
-    it("offers no way to cancel a purchase order that does not exist yet", () => {
+    it("offers no way to cancel a purchase order that does not exist yet", async () => {
       withLines([CURD]);
       render(<ShoppingListPage />);
       fireEvent.click(screen.getByRole("button", { name: /generate purchase order$/i }));
+      await screen.findByRole("dialog");
 
       expect(screen.queryByRole("heading", { name: /cancel this purchase order/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /cancel order/i })).not.toBeInTheDocument();
@@ -335,7 +350,8 @@ describe("shopping list", () => {
       expect(screen.getByText(/Not ordering — since 20 Aug 2026/)).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /generate purchase order$/i }));
-      const panel = screen.getByRole("dialog", { name: /purchase order for Heritage Fresh Dairy/i });
+      await screen.findByRole("dialog");
+      const panel = await screen.findByRole("dialog", { name: /purchase order for Heritage Fresh Dairy/i });
       expect(within(panel).queryByLabelText("Quantity of Groundnut oil")).not.toBeInTheDocument();
 
       await act(async () => {
@@ -352,6 +368,7 @@ describe("shopping list", () => {
       render(<ShoppingListPage />);
 
       fireEvent.click(screen.getAllByRole("button", { name: /generate purchase order$/i })[1]);
+      await screen.findByRole("dialog");
       // An adjusted quantity, because carrying the edit through is the whole reason the panel is a
       // form rather than a confirmation.
       fireEvent.change(screen.getByLabelText("Quantity of Curd"), { target: { value: "6" } });
@@ -370,21 +387,22 @@ describe("shopping list", () => {
       // Back on the shopping list, with the order named in the green confirmation — "PO-2026-0041",
       // the thing a person can say out loud, and not a uuid.
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(screen.getByText(/PO-2026-0041 raised for Heritage Fresh Dairy/)).toBeInTheDocument();
+      expect(screen.getByText("PO-2026-0041 was created for Heritage Fresh Dairy.")).toBeInTheDocument();
       expect(reloadMock).toHaveBeenCalled();
     });
 
-    it("creates nothing when the panel is cancelled", () => {
+    it("creates nothing when the panel is cancelled", async () => {
       const create = vi.spyOn(api, "createPurchaseOrder");
       withLines([CURD]);
       render(<ShoppingListPage />);
 
       fireEvent.click(screen.getByRole("button", { name: /generate purchase order$/i }));
+      await screen.findByRole("dialog");
       fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(create).not.toHaveBeenCalled();
-      expect(screen.queryByText(/raised for/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/was created for/i)).not.toBeInTheDocument();
     });
 
     // The refusal has to be inside the panel. Rendered on the page behind it, it would be a message
@@ -395,14 +413,46 @@ describe("shopping list", () => {
       render(<ShoppingListPage />);
 
       fireEvent.click(screen.getByRole("button", { name: /generate purchase order$/i }));
+      await screen.findByRole("dialog");
       fireEvent.click(screen.getByRole("button", { name: /remove curd/i }));
       await act(async () => {
         fireEvent.submit(screen.getByRole("form", { name: /purchase order for Heritage Fresh Dairy/i }));
       });
 
       expect(create).not.toHaveBeenCalled();
-      const panel = screen.getByRole("dialog", { name: /purchase order for Heritage Fresh Dairy/i });
+      const panel = await screen.findByRole("dialog", { name: /purchase order for Heritage Fresh Dairy/i });
       expect(within(panel).getByText(/An order needs at least one line/)).toBeInTheDocument();
+    });
+
+    // The panel's own refusal is its one sentence (T-303, as T-298 did on /orders/new): no "Check
+    // your connection and try again.", no "If you need help, quote KMS-0000", because nothing was
+    // sent. And it goes when the panel is closed, as the notice it replaced did.
+    it("says the panel's own refusal and nothing under it, and drops it on close (T-303)", async () => {
+      const create = vi.spyOn(api, "createPurchaseOrder");
+      withLines([CURD]);
+      render(<ShoppingListPage />);
+
+      fireEvent.click(screen.getByRole("button", { name: /generate purchase order$/i }));
+      await screen.findByRole("dialog");
+      fireEvent.click(screen.getByRole("button", { name: /remove curd/i }));
+      await act(async () => {
+        fireEvent.submit(screen.getByRole("form", { name: /purchase order for Heritage Fresh Dairy/i }));
+      });
+
+      expect(create).not.toHaveBeenCalled();
+      const alerts = screen.getAllByRole("alert");
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0].textContent).toBe(
+        "An order needs at least one line. Add what is being bought, or close this panel to leave the list as it is."
+      );
+      expect(alerts[0].querySelectorAll("p")).toHaveLength(1);
+      expect(document.body.textContent).not.toMatch(/connection|KMS-/);
+
+      fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /generate purchase order$/i }));
+      await screen.findByRole("dialog");
+      expect(screen.queryByRole("alert")).toBeNull();
     });
 
     /**
@@ -422,7 +472,8 @@ describe("shopping list", () => {
       render(<ShoppingListPage />);
 
       fireEvent.click(screen.getByRole("button", { name: /generate purchase order$/i }));
-      const panel = screen.getByRole("dialog", { name: /purchase order for Heritage Fresh Dairy/i });
+      await screen.findByRole("dialog");
+      const panel = await screen.findByRole("dialog", { name: /purchase order for Heritage Fresh Dairy/i });
       // Said out loud before anybody presses anything, by the same warning the order screen shows.
       expect(within(panel).getByText("That day has already gone")).toBeInTheDocument();
 

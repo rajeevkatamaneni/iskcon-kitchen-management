@@ -57,6 +57,10 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
     name: "Rice",
     category: "Grains",
     unit: "KG",
+    packSizes: [],
+    marketRate: null,
+    marketRateOn: null,
+    marketRateSource: null,
     ekadashiProhibited: false,
     supply: false,
     libraryDerived: false,
@@ -95,6 +99,12 @@ describe("ingredient management", () => {
     updateMock.mockReset().mockResolvedValue(undefined);
     ekadashiFlagMock.mockReset().mockResolvedValue(undefined);
     deleteMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("links each name to the ingredient's own page (Q-10, T-286)", () => {
+    render(<IngredientsPage />);
+    const cell = screen.getByRole("cell", { name: "Rice" });
+    expect(within(cell).getByRole("link", { name: "Rice" })).toHaveAttribute("href", "/ingredients/i1");
   });
 
   it("lists ingredients and sends adding to a screen of its own", () => {
@@ -552,6 +562,21 @@ describe("ingredient management", () => {
       render(<IngredientsPage />);
       expect(replaceMock).toHaveBeenCalledWith("/ingredients?show=added-by-import");
     });
+  });
+
+  // T-276: the one way to the merge tool, for those who hold MERGE_INGREDIENTS (the Temple Admin).
+  it("links a Temple Admin to the merge tool", () => {
+    render(<IngredientsPage />);
+    expect(screen.getByRole("link", { name: "Merge duplicates" })).toHaveAttribute("href", "/ingredients/merge");
+  });
+
+  it("does not show a Kitchen Manager or Kitchen Staff the merge link", () => {
+    for (const role of ["KITCHEN_MANAGER", "KITCHEN_STAFF"]) {
+      authRef.current = { status: "signed-in", appUser: { role, userId: "me" } };
+      const { unmount } = render(<IngredientsPage />);
+      expect(screen.queryByRole("link", { name: /merge/i })).not.toBeInTheDocument();
+      unmount();
+    }
   });
 
   it("refuses a role without recipe access", () => {

@@ -77,8 +77,8 @@ function detail(overrides: Partial<RecipeDetail> = {}): RecipeDetail {
     status: "ACTIVE",
     version: 1,
     ingredients: [
-      { ingredientId: "i1", ingredientName: "Rice", quantity: 2, unit: "KG" },
-      { ingredientId: "i2", ingredientName: "Toor Dal", quantity: 1, unit: "KG" },
+      { ingredientId: "i1", ingredientName: "Rice", quantity: 2, unit: "KG", preparationNote: null },
+      { ingredientId: "i2", ingredientName: "Toor Dal", quantity: 1, unit: "KG", preparationNote: null },
     ],
     createdAt: "2026-08-10T00:00:00Z",
     ...overrides,
@@ -181,8 +181,8 @@ describe("recipe detail", () => {
       name: "खिचड़ी",
       categoryName: "चावल",
       ingredients: [
-        { name: "चावल", quantity: 2, unit: "KG" },
-        { name: "तूर दाल", quantity: 1, unit: "KG" },
+        { name: "चावल", quantity: 2, unit: "KG", preparationNote: null },
+        { name: "तूर दाल", quantity: 1, unit: "KG", preparationNote: null },
       ],
       method: ["चावल धो लें।"],
     };
@@ -216,8 +216,8 @@ describe("recipe detail", () => {
       name: `Khichdi (${language})`,
       categoryName: "Rice",
       ingredients: [
-        { name: "Rice", quantity: 2, unit: "KG" },
-        { name: dal, quantity: 1, unit: "KG" },
+        { name: "Rice", quantity: 2, unit: "KG", preparationNote: null },
+        { name: dal, quantity: 1, unit: "KG", preparationNote: null },
       ],
       method: [],
     });
@@ -264,8 +264,8 @@ describe("recipe detail", () => {
       name: "खिचड़ी",
       categoryName: "चावल",
       ingredients: [
-        { name: "चावल", quantity: 2, unit: "KG" },
-        { name: "तूर दाल", quantity: 1, unit: "KG" },
+        { name: "चावल", quantity: 2, unit: "KG", preparationNote: null },
+        { name: "तूर दाल", quantity: 1, unit: "KG", preparationNote: null },
       ],
       method: [],
     } satisfies TranslatedRecipe);

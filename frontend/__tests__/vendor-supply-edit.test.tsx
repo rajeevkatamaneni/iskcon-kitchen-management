@@ -47,9 +47,12 @@ const { authRef } = vi.hoisted(() => ({
   },
 }));
 
-const { getVendorMock, listIngredientsMock, setVendorSupplyMock, removeVendorSupplyMock } = vi.hoisted(() => ({
+const { getVendorMock, listIngredientsMock, listPreferredVendorsMock, setVendorSupplyMock, removeVendorSupplyMock } = vi.hoisted(() => ({
   getVendorMock: vi.fn(),
   listIngredientsMock: vi.fn(),
+  // R-VEN-2 (T-258): nobody else holds a preference here; the "replaces" words are tested in
+  // preferred-replaces.test.tsx.
+  listPreferredVendorsMock: vi.fn(),
   setVendorSupplyMock: vi.fn(),
   removeVendorSupplyMock: vi.fn(),
 }));
@@ -68,6 +71,7 @@ vi.mock("@/lib/api", async (orig) => {
       ...actual.api,
       getVendor: getVendorMock,
       listIngredients: listIngredientsMock,
+      listPreferredVendors: listPreferredVendorsMock,
       setVendorSupply: setVendorSupplyMock,
       removeVendorSupply: removeVendorSupplyMock,
     },
@@ -100,6 +104,12 @@ function supply(o: Partial<VendorSupplyView> = {}): VendorSupplyView {
     ingredientId: "ing-curd",
     ingredientName: "Curd",
     lastPrice: 58,
+    unit: "L",
+    packSizeId: null,
+    packLabel: null,
+    pricePerPack: null,
+    previousPrice: null,
+    previousPriceOn: null,
     leadTimeDays: null,
     preferred: true,
     ...o,
@@ -118,14 +128,15 @@ function rowFor(name: string): HTMLElement {
 /** Open a row for editing and hand back the row, now holding controls. */
 async function openEditor(name: string): Promise<HTMLElement> {
   fireEvent.click(within(rowFor(name)).getByRole("button", { name: "Edit" }));
-  await screen.findByRole("button", { name: "Save" });
+  // Within the row: since T-256 the page has a second Save, under Other ingredients.
+  await within(rowFor(name)).findByRole("button", { name: "Save" });
   return rowFor(name);
 }
 
 const leadBox = (row: HTMLElement) =>
   within(row).getByLabelText("Lead time (days)", { selector: "input" });
 const priceBox = (row: HTMLElement) =>
-  within(row).getByLabelText("Last price (₹)", { selector: "input" });
+  within(row).getByLabelText("List price (₹)", { selector: "input" });
 const preferredBox = (row: HTMLElement) => within(row).getByLabelText("Preferred");
 
 beforeEach(() => {
@@ -137,27 +148,30 @@ beforeEach(() => {
   };
   getVendorMock.mockReset().mockResolvedValue(detail([supply()]));
   listIngredientsMock.mockReset().mockResolvedValue([
-    { id: "ing-curd", name: "Curd", unit: "L", category: "Dairy" },
-    { id: "ing-ghee", name: "Ghee", unit: "L", category: "Dairy" },
+    { id: "ing-curd", name: "Curd", unit: "L", category: "Dairy", packSizes: [] },
+    { id: "ing-ghee", name: "Ghee", unit: "L", category: "Dairy", packSizes: [] },
   ]);
+  listPreferredVendorsMock.mockReset().mockResolvedValue([]);
   setVendorSupplyMock.mockReset().mockResolvedValue(undefined);
   removeVendorSupplyMock.mockReset().mockResolvedValue(undefined);
 });
 
-describe("the Add supply form still cannot reach a supply that exists", () => {
+describe("Other ingredients still cannot reach a supply that exists", () => {
   /*
     Not a change — this is the behaviour that made editing necessary, asserted so that the reason
     the edit row exists is written down somewhere a change would trip over. If this ever starts
     offering Curd, somebody has made "add" a second way of editing and the two will disagree.
+
+    Until T-256 it read the one-at-a-time Add supply form's picker. That form is gone and "Other
+    ingredients" took its job (the conductor's call, 2026-09-19); the same rule now holds of its rows.
   */
-  it("offers only ingredients this vendor does not already supply", async () => {
+  it("lists only ingredients this vendor does not already supply", async () => {
     render(<VendorDetailPage />);
     await screen.findByText("Curd");
 
-    const picker = screen.getByLabelText("Ingredient") as HTMLSelectElement;
-    const offered = Array.from(picker.options).map((o) => o.textContent);
-    expect(offered).toContain("Ghee");
-    expect(offered).not.toContain("Curd");
+    const other = screen.getByRole("form", { name: "Other ingredients" });
+    expect(within(other).getByLabelText("Ghee")).toBeTruthy();
+    expect(within(other).queryByLabelText("Curd")).toBeNull();
   });
 });
 
@@ -196,11 +210,14 @@ describe("editing a supply in place", () => {
 
     await waitFor(() => expect(setVendorSupplyMock).toHaveBeenCalled());
     const body = setVendorSupplyMock.mock.calls[0][1] as Record<string, unknown>;
+    // All six keys, the pack pair as explicit nulls: the server writes the whole row (T-256).
     expect(body).toEqual({
       ingredientId: "ing-curd",
       lastPrice: 58,
       leadTimeDays: 3,
       preferred: true,
+      packSizeId: null,
+      pricePerPack: null,
     });
   });
 
@@ -293,7 +310,7 @@ describe("editing a supply in place", () => {
     fireEvent.change(leadBox(row), { target: { value: "9" } });
     fireEvent.click(within(row).getByRole("button", { name: "Cancel" }));
 
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).toBeNull());
+    await waitFor(() => expect(within(rowFor("Curd")).queryByRole("button", { name: "Save" })).toBeNull());
     expect(setVendorSupplyMock).not.toHaveBeenCalled();
     expect(within(rowFor("Curd")).getByRole("button", { name: "Edit" })).toBeTruthy();
   });
@@ -307,7 +324,8 @@ describe("editing a supply in place", () => {
     render(<VendorDetailPage />);
     await screen.findByText("Curd");
 
-    const headers = screen.getAllByRole("columnheader").length;
+    // The supplies table's own headings: since T-256 the Other ingredients table has headings too.
+    const headers = within(rowFor("Curd").closest("table")!).getAllByRole("columnheader").length;
     const row = await openEditor("Curd");
     expect(row.querySelectorAll("td").length).toBe(headers);
   });

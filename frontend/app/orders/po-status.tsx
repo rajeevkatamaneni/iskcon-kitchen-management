@@ -17,7 +17,12 @@ export const STATUSES: PoStatus[] = [
 export const STATUS_LABEL: Record<PoStatus, string> = {
   DRAFT: "Draft",
   SENT: "Sent",
-  PARTIALLY_RECEIVED: "Partially received",
+  /**
+   * "Part delivered", as mock dev-po design E draws it (T-265, conductor's ruling 2026-09-19: the
+   * mock wins where the document is silent). One label, here, so the list, the order page and the
+   * invoice's order picker all say the same thing.
+   */
+  PARTIALLY_RECEIVED: "Part delivered",
   /**
    * A part-delivered order somebody ended (T-142, D-26). "Closed" and never "Part delivered" or
    * "Short closed": the word has to say that nothing more is expected on this order, which is the
@@ -32,7 +37,11 @@ export const STATUS_LABEL: Record<PoStatus, string> = {
 const STATUS_CLASS: Record<PoStatus, string> = {
   DRAFT: "bg-sunken text-ink-secondary",
   SENT: "bg-accent-bg text-accent-text",
-  PARTIALLY_RECEIVED: "bg-warning-bg text-warning",
+  // Neutral, as the mock draws it (T-265). Amber is for something the reader should act on now,
+  // and a part-delivered order is a standing state: the rest is simply still owed. Where it is
+  // overdue, that is the Deliveries screen's amber pill to say, not this chip's (colour rule,
+  // DESIGN_SYSTEM v1.13).
+  PARTIALLY_RECEIVED: "bg-sunken text-ink-secondary",
   // The muted tone a finished-and-not-celebrated order wears, the same as a cancellation. Not the
   // success green: some of what was asked for never arrived, and not the warning amber either,
   // because nobody is waiting on it any more.

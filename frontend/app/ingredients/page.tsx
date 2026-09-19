@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
@@ -11,7 +12,18 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
 import { SegmentedControl } from "@/components/ds/SegmentedControl";
 import { Badge } from "@/components/ds/Badge";
 import { splitAliases } from "@/components/IngredientForm";
-import { api, toApiError, type ApiError, type IngredientView } from "@/lib/api";
+import {
+  DuplicateIngredientPrompt,
+  lookalikeFrom,
+  type Lookalike,
+} from "@/components/DuplicateIngredientPrompt";
+import {
+  api,
+  toApiError,
+  type ApiError,
+  type IngredientView,
+  type UpdateIngredientInput,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
@@ -162,6 +174,79 @@ function IngredientsView() {
     return () => clearTimeout(timer);
   }, [flash]);
 
+  /*
+    "Use Curd" from anywhere lands here as `?edit=<id>` (T-251): the existing ingredient's editing
+    row opens, scrolled into view, so the person is looking at the thing they meant and can add the
+    spelling they typed as an alias. Captured once behind a ref, like `added` above, and stripped
+    from the address so a reload does not reopen it.
+
+    A supply is not on this screen — T-089 put that half of the catalogue on /supplies — so a
+    lookalike that turns out to be a supply sends the person there instead of opening nothing.
+  */
+  const editParam = params.get("edit");
+  const editCaptured = useRef(false);
+  const [scrollTo, setScrollTo] = useState<string | null>(null);
+  useEffect(() => {
+    if (editCaptured.current || !editParam || !data) return;
+    editCaptured.current = true;
+    openRow(editParam);
+    // The whole catalogue, not the import filter: the row asked for may not carry the label.
+    router.replace("/ingredients");
+    // openRow is a plain function declared below and reads only state setters and `data`.
+  }, [editParam, data, router]);
+
+  useEffect(() => {
+    if (!scrollTo) return;
+    document.getElementById(rowId(scrollTo))?.scrollIntoView?.({ block: "center" });
+    setScrollTo(null);
+  }, [scrollTo]);
+
+  /** Opens an ingredient's editing row and brings it into view, or goes to Supplies for a supply. */
+  function openRow(id: string) {
+    const target = ingredients.find((i) => i.id === id);
+    if (target?.supply) {
+      router.push("/supplies");
+      return;
+    }
+    if (!target) return;
+    setEditing(id);
+    setScrollTo(id);
+  }
+
+  // The rename the server said looks like another ingredient (R-DUP-2), held with what was typed
+  // so the confirmed save sends exactly the same edit again.
+  const [lookalike, setLookalike] = useState<{
+    ingredientId: string;
+    input: UpdateIngredientInput;
+    existing: Lookalike;
+  } | null>(null);
+
+  /**
+   * Saves the editing row. Its own function rather than `run`, because one failure here is not an
+   * error to print at the top of a long page but a question — "Did you mean Curd?" — asked in a
+   * layer that comes to wherever the row is.
+   */
+  async function saveRow(ingredientId: string, input: UpdateIngredientInput) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.updateIngredient(ingredientId, input, await getToken());
+      setLookalike(null);
+      setEditing(null);
+      reload();
+    } catch (e) {
+      const existing = lookalikeFrom(e);
+      if (existing) {
+        setLookalike({ ingredientId, input, existing });
+      } else {
+        setLookalike(null);
+        setActionError(toApiError(e, "We couldn’t save that."));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
     setActionError(null);
@@ -190,7 +275,18 @@ function IngredientsView() {
                 cooks with lives here, and everything else it uses up lives under Supplies.
               </p>
             </div>
-            <ButtonLink href="/ingredients/new">Add an ingredient</ButtonLink>
+            {/*
+              The one way to the merge tool (R-DUP-3, T-276), which has no menu item. Shown only to
+              those who hold MERGE_INGREDIENTS — the Temple Admin, the same `isAdmin` test this
+              screen already uses — because anyone else following it would only be told "Not your
+              page". Style E beside the primary: two actions, and adding is the everyday one.
+            */}
+            <div className="flex flex-wrap gap-3">
+              {isAdmin && (
+                <ButtonLink href="/ingredients/merge" variant="secondary">Merge duplicates</ButtonLink>
+              )}
+              <ButtonLink href="/ingredients/new">Add an ingredient</ButtonLink>
+            </div>
           </header>
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
@@ -329,13 +425,10 @@ function IngredientsView() {
                         canSetEkadashi={isAdmin}
                         busy={busy}
                         onCancel={() => setEditing(null)}
-                        onSave={async (input) => {
-                          const ok = await run((t) => api.updateIngredient(ing.id, input, t), "We couldn’t save that.");
-                          if (ok) setEditing(null);
-                        }}
+                        onSave={(input) => saveRow(ing.id, input)}
                       />
                     ) : (
-                      <tr key={ing.id} className={TR}>
+                      <tr key={ing.id} id={rowId(ing.id)} className={TR}>
                         {/*
                           The label sits under the name rather than in a column of its own, and that
                           is not only about width: a column would print something on every row —
@@ -352,7 +445,12 @@ function IngredientsView() {
                           rather than trusting a number written down here.)
                         */}
                         <td className={TD_PRIMARY}>
-                          <span>{ing.name}</span>
+                          {/* The way to the ingredient's own page (Q-10, T-286): its pack sizes, market
+                              rate and vendors live there. The name, not a new button, so the row keeps
+                              its two actions and the link reads as the thing it opens. */}
+                          <Link href={`/ingredients/${ing.id}`} className="text-accent-text hover:underline">
+                            {ing.name}
+                          </Link>
                           {ing.libraryDerived && (
                             <span className="mt-1 flex">
                               <Badge>{ADDED_BY_IMPORT}</Badge>
@@ -409,8 +507,34 @@ function IngredientsView() {
           )}
         </div>
       </main>
+
+      {lookalike && (
+        <DuplicateIngredientPrompt
+          candidate={lookalike.input.name}
+          existing={lookalike.existing}
+          busy={busy}
+          /*
+            "Use Curd" on a rename: this row keeps its name — the edit is dropped, nothing is saved —
+            and Curd's own editing row opens instead, which is the same place "Use Curd" lands from
+            the add screens. Merging the two rows is the merge tool's job (R-DUP-3), not a rename's.
+          */
+          onUse={() => {
+            const to = lookalike.existing.id;
+            setLookalike(null);
+            setEditing(null);
+            openRow(to);
+          }}
+          onDifferent={() => saveRow(lookalike.ingredientId, { ...lookalike.input, confirmDifferent: true })}
+          onDismiss={() => setLookalike(null)}
+        />
+      )}
     </div>
   );
+}
+
+/** The DOM id a row carries, so "Use Curd" can bring it into view. */
+function rowId(ingredientId: string): string {
+  return `ingredient-${ingredientId}`;
 }
 
 /**
@@ -497,7 +621,7 @@ function EditRow({
   const [ekadashiProhibited, setEkadashiProhibited] = useState(ingredient.ekadashiProhibited);
 
   return (
-    <tr className="border-t border-hairline bg-sunken align-top">
+    <tr id={rowId(ingredient.id)} className="border-t border-hairline bg-sunken align-top">
       {/* Name, with Category beneath it — see the note above this component. */}
       <td className={TD_PRIMARY}>
         <label className={FIELD}>

@@ -1,76 +1,161 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
+import { PageHeader } from "@/components/ds/PageHeader";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type InvoicePaymentView, type VendorInvoiceView } from "@/lib/api";
+import { AttachmentThumb } from "@/components/AttachmentThumb";
+import { InvoiceTotals } from "@/components/InvoiceTotals";
+import { PayInvoiceForm, PAYMENT_METHODS } from "@/components/PayInvoiceForm";
+import {
+  api,
+  toApiError,
+  type ApiError,
+  type AttachmentView,
+  type InvoiceLineView,
+  type InvoicePaymentView,
+  type VendorInvoiceDetailView,
+  type VendorInvoiceView,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { dateWithYear, money, moment } from "@/lib/format";
-import { RULED_TABLE, THEAD, TR, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
+import { dateWithYear, money, moment, quantity, readablePackRate, readableRate, repeatsPack, shortDate } from "@/lib/format";
+import {
+  RULED_TABLE,
+  THEAD,
+  TR,
+  TH_PRIMARY,
+  TD_PRIMARY,
+  TH_SECOND,
+  TD_SECOND,
+  TH_FIXED,
+  TD_FIXED,
+  TD_FIXED_NUM,
+  TH_ACTIONS_FIXED,
+  TD_ACTIONS_FIXED,
+  withLongTokenBreaks,
+} from "@/components/ds/table";
 
 /**
- * One vendor invoice in full (A8).
+ * One vendor invoice in full (A8; since stage 6 of the procurement build, R-INV-7 and R-PAY-1..3, the
+ * `dev-invoices` mock's design D).
  *
- * <p>The list can only carry six columns, so several things captured at recording were being stored
- * and never shown again: the description that is the whole content of a direct cash-market invoice,
- * the date on the paper, and the reference of the scan somebody filed. They live here.
+ * <p>In order down the page: the summary with the copy of the bill, the items the vendor billed with
+ * the bill's totals under them, "Invoiced vs received", and the payments, where the invoice is paid
+ * from. The list can only carry six columns, so everything captured when the invoice was recorded
+ * lives here.
  *
- * <p>The variance is the other reason this page exists. On the list it reads "variance ₹50" with
- * nothing to be a difference *from*, which is a number a person cannot act on. Here it is shown as
- * the subtraction it actually is: what the vendor invoiced, against what the goods received would
- * cost at the purchase order's own prices.
+ * <p><b>"Invoiced vs received"</b> is the reason this page first existed. On the list a difference
+ * reads "₹50" with nothing to be a difference *from*. Here it is the subtraction it is: the items
+ * billed, against what was delivered at the order's own prices. Since stage 6 the server works both
+ * from the invoice's lines (T-271) and sends null where it has no basis (a direct buy, an order line
+ * with no price). A null is shown as "—", never as ₹0: ₹0 would say the bill matched when nobody can
+ * know.
  *
- * <p>It is also where a bill is corrected (T-010) — struck as never owed, reduced by a credit note,
- * or relieved of a payment that did not happen. Those three acts sit behind the payments permission
- * and not the one that opens this page, so they appear for a Temple Admin alone.
+ * <p><b>Invoices recorded before stage 6</b> have no lines, no totals and no uploaded bill, only a total
+ * and perhaps a typed scan reference. They still read sensibly: the Grand total is their amount, the
+ * Items section is left out rather than shown empty, the scan reference is shown where the bill would
+ * be, and "Invoiced vs received" compares their total as it always did (the server keeps that reading
+ * for them).
  *
- * <p>Gated to the same roles as the list — the API is the boundary, and this reads no more than the
- * list already does. The payment history is the exception and is handled separately below.
+ * <p><b>Who sees what.</b> The page is gated to the same roles as the list. Paying, reading payments,
+ * voiding and crediting all sit behind MANAGE_VENDOR_PAYMENTS, which of the roles that can open this
+ * page only a Temple Admin holds. For anyone else the Payments section, the Pay this invoice button and
+ * both corrections are absent rather than empty: an empty payments table would tell a Kitchen Manager
+ * the bill is unpaid when in truth they simply cannot see. R-PAY-1: who can pay must not widen, so the
+ * button uses exactly the check the payment list always used.
  */
 export default function InvoiceDetailPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <InvoiceDetailView />
+      {/* useSearchParams, for the confirmation "Create an invoice" comes back with. */}
+      <Suspense>
+        <InvoiceDetailView />
+      </Suspense>
     </RequireRole>
   );
 }
+
+const rs = (n: number) => money(n, "INR");
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function InvoiceDetailView() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const { appUser } = useAuth();
+  const router = useRouter();
+  const search = useSearchParams();
+
+  // MANAGE_VENDOR_PAYMENTS: the Temple Admin today (RolePermissions). One check, used for the
+  // payments, the Pay button and the corrections alike, so none of them can drift from the others.
+  const canPay = appUser?.role === "TEMPLE_ADMIN";
 
   const fetchInvoice = useCallback((token: string | undefined) => api.getInvoice(id, token), [id]);
   const { data: invoice, error, loading, reload } = useAuthedQuery(fetchInvoice);
 
-  // Recording and reading payments sit behind MANAGE_VENDOR_PAYMENTS, which of the roles that can
-  // open this page only a Temple Admin holds. Showing a Kitchen Manager an empty payments table
-  // would tell them the invoice is unpaid when in truth they simply cannot see; the section is
-  // absent instead. The same permission gates voiding and crediting.
-  const canCorrect = appUser?.role === "TEMPLE_ADMIN";
+  // The payments are read here rather than inside their section because the header's Pay button
+  // needs what is still owed. For a reader who cannot pay, nothing is asked of the server at all.
+  const fetchPayments = useCallback(
+    (token: string | undefined) =>
+      canPay ? api.listInvoicePayments(id, token) : Promise.resolve([] as InvoicePaymentView[]),
+    [id, canPay]
+  );
+  const ledger = useAuthedQuery(fetchPayments);
+  const reloadLedger = ledger.reload;
+
+  // A payment, a reversal or a correction changes the invoice as well as the payment list, because
+  // what is paid decides whether the bill is settled. Both are reloaded from one place so the two
+  // halves of the screen can never disagree.
+  const reloadEverything = useCallback(() => {
+    reload();
+    reloadLedger();
+  }, [reload, reloadLedger]);
 
   // Which correction is being written, if any. One at a time: a void and a credit note are
   // different answers to the same question, and offering both half-open invites the wrong one.
   const [correcting, setCorrecting] = useState<"void" | "credit" | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const payments = useRef<HTMLElement>(null);
 
-  // A reversal changes the invoice as well as the payment list, because what is paid decides
-  // whether the bill is settled. Both queries are reloaded from one place so the two halves of the
-  // screen can never disagree.
-  const [ledgerNonce, setLedgerNonce] = useState(0);
-  const reloadEverything = useCallback(() => {
-    reload();
-    setLedgerNonce((n) => n + 1);
-  }, [reload]);
+  // "Create an invoice" ends here with ?recorded=<number>, and &duplicate=1 when another invoice from
+  // the vendor already uses that number (conductor's ruling, T-273/T-274). Read once and the address
+  // cleared, so a reload does not say it again. The ref guards the capture: setting state re-renders,
+  // and a router object that is new each render would otherwise re-run this effect for ever (the
+  // repo's known flash-capture loop, which runs a test out of memory).
+  const recorded = search.get("recorded");
+  const duplicate = search.get("duplicate") === "1";
+  const [flash, setFlash] = useState<{ number: string; duplicate: boolean } | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !recorded) return;
+    captured.current = true;
+    setFlash({ number: recorded, duplicate });
+    router.replace(`/invoices/${id}`);
+  }, [recorded, duplicate, router, id]);
 
   const voided = invoice?.status === "VOIDED";
+  const paidToDate = (ledger.data ?? []).reduce((sum, p) => sum + p.amount, 0);
+  const owed = invoice ? round2(invoice.amount - invoice.creditedAmount - paidToDate) : 0;
+  const ledgerReady = canPay && !ledger.loading && !ledger.error && ledger.data != null;
+
+  function openPay() {
+    setPaying(true);
+    setDone(null);
+    // The form opens in the Payments section, so the page is taken there with the cursor in Amount.
+    setTimeout(() => {
+      payments.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      payments.current?.querySelector<HTMLInputElement>("form input")?.focus({ preventScroll: true });
+    }, 0);
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -79,125 +164,140 @@ function InvoiceDetailView() {
         <div className="mx-auto max-w-content">
           <Link href="/invoices" className="text-sm text-accent-text hover:underline">← All invoices</Link>
 
-          {loading ? (
+          {loading && !invoice ? (
             <Loading label="Loading invoice…" />
           ) : error ? (
             <div className="mt-6"><ErrorNotice error={error} /></div>
           ) : !invoice ? null : (
-            <>
-              <header className="mb-6 mt-3 flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <h1>{invoice.invoiceNumber}</h1>
-                  <p className="mt-1 flex flex-wrap items-center gap-2 text-ink-secondary">
+            <div className="mt-3 grid gap-6">
+              <PageHeader
+                title={invoice.invoiceNumber}
+                subtitle={
+                  <span className="flex flex-wrap items-center gap-2">
                     <Link href={`/vendors/${invoice.vendorId}`} className="text-accent-text hover:underline">
                       {invoice.vendorName}
                     </Link>
                     {voided ? (
-                      <span className="rounded-control bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Voided</span>
+                      <Badge>Voided</Badge>
                     ) : invoice.status === "PAID" ? (
                       // Neutral: a settled state, not a fresh result (T-227).
-                      <span className="rounded-control bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Paid</span>
+                      <Badge>Paid</Badge>
                     ) : (
-                      <span className="rounded-control bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Pending</span>
+                      // "Unpaid", never "Pending": the same word as the list (conductor, 2026-09-19).
+                      <Badge tone="accent">Unpaid</Badge>
                     )}
-                    {invoice.overdue && (
-                      <span className="rounded-control bg-danger-bg px-2 py-1 text-xs text-danger font-semibold">Overdue</span>
-                    )}
-                  </p>
-                </div>
-                {canCorrect && !voided && (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Button variant="secondary" onClick={() => setCorrecting("credit")}>
-                      Record a credit note
-                    </Button>
-                    <Button variant="danger" onClick={() => setCorrecting("void")}>
-                      Void this bill
-                    </Button>
-                  </div>
-                )}
-              </header>
+                    {invoice.overdue && <Badge tone="danger">Overdue</Badge>}
+                  </span>
+                }
+                // Up to three actions. On a phone they wrap inside the shared header: Pay and Record a
+                // credit note side by side, Void on the line below (T-277 fixed PageHeader for this;
+                // T-274 had to copy its markup).
+                actions={
+                  canPay && !voided ? (
+                    <>
+                      {ledgerReady && owed > 0.005 && !paying && (
+                        <Button icon="cash" onClick={openPay}>
+                          Pay this invoice
+                        </Button>
+                      )}
+                      <Button variant="ghost" onClick={() => setCorrecting("credit")}>
+                        Record a credit note
+                      </Button>
+                      <Button variant="danger" onClick={() => setCorrecting("void")}>
+                        Void this bill
+                      </Button>
+                    </>
+                  ) : undefined
+                }
+              />
 
-              {/* The void is the first thing on the page after the name, because every figure below
-                  it means something different once a bill was never owed. */}
-              {voided && (
-                <div className="mb-6">
-                  {/* Information: a settled state, explained, not something to act on (T-227). */}
-                  <InlineNotice tone="info" title="This bill was struck as never owed.">
-                    {invoice.voidReason}
-                    {invoice.voidedAt ? ` — ${moment(invoice.voidedAt)}` : ""}
+              {flash &&
+                (flash.duplicate ? (
+                  <InlineNotice tone="warning" title={`Invoice ${flash.number} was recorded.`}>
+                    Another invoice from this vendor already uses that number.
                   </InlineNotice>
-                </div>
+                ) : (
+                  <InlineNotice tone="success" autoDismiss title={`Invoice ${flash.number} was recorded.`} />
+                ))}
+
+              {done && (
+                <InlineNotice tone="success" autoDismiss>
+                  {done}
+                </InlineNotice>
               )}
 
-              <section className="card mb-8 px-6 py-5" aria-labelledby="invoice-heading">
-                <h2 id="invoice-heading" className="text-lg">The invoice</h2>
-                <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                  <Detail label="Amount">
-                    <span className="tabular-nums">{money(invoice.amount, "INR")}</span>
-                  </Detail>
-                  <Detail label="Against">{against(invoice)}</Detail>
-                  <Detail label="Invoice date">
-                    <span className="tabular-nums">{dateWithYear(invoice.invoiceDate)}</span>
-                  </Detail>
-                  <Detail label="Due">
-                    <span className="tabular-nums">
-                      {invoice.dueDate ? dateWithYear(invoice.dueDate) : "No due date"}
-                    </span>
-                  </Detail>
-                  {/* Shown only once there is a credit note, and shown with what is left owed
-                      beside it. A credited bill whose amount still reads ₹1,400 is a bill somebody
-                      pays ₹1,400 against. */}
-                  {invoice.creditedAmount > 0 && (
+              {/* The void comes straight after the name, because every figure below it means
+                  something different once a bill was never owed. Information: a settled state,
+                  explained, not something to act on (T-227). */}
+              {voided && (
+                <InlineNotice tone="info" title="This bill was struck as never owed.">
+                  {invoice.voidReason}
+                  {invoice.voidedAt ? ` — ${moment(invoice.voidedAt)}` : ""}
+                </InlineNotice>
+              )}
+
+              <Summary invoice={invoice} />
+
+              {invoice.lines.length > 0 && <Items invoice={invoice} />}
+
+              {/* A direct buy has no order to compare with, and a struck bill has no figures. */}
+              {!invoice.direct && !voided && <InvoicedVsReceived invoice={invoice} />}
+
+              {canPay && (
+                <section
+                  ref={payments}
+                  className="card scroll-mt-4 px-6 py-5"
+                  aria-labelledby="payments-heading"
+                >
+                  <h2 id="payments-heading" className="text-lg font-semibold text-ink">
+                    Payments
+                  </h2>
+                  <p className="mt-1 max-w-prose text-sm text-ink-secondary">
+                    Payments are made at the bank and recorded here. This app never pays anybody.
+                  </p>
+
+                  {ledger.loading && !ledger.data ? (
+                    <Loading label="Loading payments…" />
+                  ) : ledger.error ? (
+                    <div className="mt-4"><ErrorNotice error={ledger.error} /></div>
+                  ) : (
                     <>
-                      <Detail label="Credited">
-                        <span className="tabular-nums">{money(invoice.creditedAmount, "INR")}</span>
-                      </Detail>
-                      <Detail label="Owed after credit">
-                        <span className="tabular-nums">
-                          {money(invoice.amount - invoice.creditedAmount, "INR")}
-                        </span>
-                      </Detail>
+                      <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-4 text-sm">
+                        <Detail label="Paid to date">
+                          <span className="tabular-nums">{rs(paidToDate)}</span>
+                        </Detail>
+                        <Detail label="Still owed">
+                          <span className="tabular-nums">{rs(owed)}</span>
+                        </Detail>
+                      </dl>
+
+                      {paying && (
+                        <PayInvoiceForm
+                          invoiceId={id}
+                          owed={owed}
+                          onCancel={() => setPaying(false)}
+                          onPaid={(amount) => {
+                            setPaying(false);
+                            const left = round2(owed - amount);
+                            setDone(
+                              `Payment of ${rs(amount)} recorded. ` +
+                                (left > 0.005
+                                  ? `${rs(left)} is still owed on this invoice.`
+                                  : "This invoice is now paid in full.")
+                            );
+                            reloadEverything();
+                          }}
+                        />
+                      )}
+
+                      <PaymentTable
+                        invoiceId={id}
+                        payments={ledger.data ?? []}
+                        onReversed={reloadEverything}
+                      />
                     </>
                   )}
-                  {invoice.description && <Detail label="Description">{invoice.description}</Detail>}
-                  <Detail label="Scan reference">
-                    {invoice.scanRef ?? <span className="text-ink-muted">Nothing filed</span>}
-                  </Detail>
-                </dl>
-              </section>
-
-              {invoice.expectedValue != null && (
-                <section className="card mb-8 px-6 py-5" aria-labelledby="variance-heading">
-                  <h2 id="variance-heading" className="text-lg">Invoiced against received</h2>
-                  <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-                    What was received, at this order’s own line prices. A difference is worth a
-                    question, not a refusal.
-                  </p>
-                  <dl className="mt-4 grid grid-cols-3 gap-x-8 gap-y-4 text-sm">
-                    <Detail label="Invoiced">
-                      <span className="tabular-nums">{money(invoice.amount, "INR")}</span>
-                    </Detail>
-                    <Detail label="Value received">
-                      <span className="tabular-nums">{money(invoice.expectedValue, "INR")}</span>
-                    </Detail>
-                    <Detail label="Difference">
-                      <span className={`tabular-nums ${invoice.variance ? "text-warning" : ""}`}>
-                        {invoice.variance == null || invoice.variance === 0
-                          ? "None"
-                          : `${money(Math.abs(invoice.variance), "INR")} ${invoice.variance > 0 ? "more" : "less"} than expected`}
-                      </span>
-                    </Detail>
-                  </dl>
                 </section>
-              )}
-
-              {canCorrect && (
-                <PaymentHistory
-                  invoiceId={id}
-                  owed={invoice.amount - invoice.creditedAmount}
-                  nonce={ledgerNonce}
-                  onReversed={reloadEverything}
-                />
               )}
 
               {correcting && (
@@ -211,7 +311,7 @@ function InvoiceDetailView() {
                   }}
                 />
               )}
-            </>
+            </div>
           )}
         </div>
       </main>
@@ -220,121 +320,440 @@ function InvoiceDetailView() {
 }
 
 /**
- * What has been paid against this invoice, and what is still owed.
+ * The invoice's own facts, and the copy of the bill beside them (the mock's "The invoice" card).
  *
- * <p>Its own component so its query only ever runs for a reader who holds the permission — hooks
- * cannot be called conditionally, so the condition has to live at the component boundary.
+ * <p>Beyond the mock: the credit (shown with what is left owed beside it, because a credited bill whose
+ * total still reads ₹1,400 is a bill somebody pays ₹1,400 against), the description a direct buy may
+ * carry, the deliveries the bill covers in R-INV-3's own words, and an old invoice's typed scan
+ * reference. Each appears only when there is something to say.
+ */
+function Summary({ invoice }: { invoice: VendorInvoiceDetailView }) {
+  return (
+    <section className="card px-6 py-5" aria-labelledby="invoice-heading">
+      <h2 id="invoice-heading" className="text-lg font-semibold text-ink">
+        The invoice
+      </h2>
+      <div className="mt-4 flex flex-wrap items-start gap-x-8 gap-y-4">
+        <dl className="grid min-w-0 grow basis-72 grid-cols-2 gap-x-8 gap-y-4 text-sm">
+          <Detail label="Grand total">
+            {/* The invoice's amount is the grand total typed from the bill (T-271); an old invoice's
+                amount means the same thing, what the vendor billed, all in. */}
+            <span className="tabular-nums">{rs(invoice.grandTotal ?? invoice.amount)}</span>
+          </Detail>
+          <Detail label="Against">{against(invoice)}</Detail>
+          <Detail label="Invoice date">
+            <span className="tabular-nums">{dateWithYear(invoice.invoiceDate)}</span>
+          </Detail>
+          <Detail label="Due">
+            <span className="tabular-nums">
+              {invoice.dueDate ? dateWithYear(invoice.dueDate) : "No due date"}
+            </span>
+          </Detail>
+          {invoice.creditedAmount > 0 && (
+            <>
+              <Detail label="Credited">
+                <span className="tabular-nums">{rs(invoice.creditedAmount)}</span>
+              </Detail>
+              <Detail label="Owed after credit">
+                <span className="tabular-nums">{rs(invoice.amount - invoice.creditedAmount)}</span>
+              </Detail>
+            </>
+          )}
+          {invoice.description && (
+            <div className="col-span-2">
+              <Detail label="Description">{invoice.description}</Detail>
+            </div>
+          )}
+          {invoice.deliveries.length > 0 && (
+            <div className="col-span-2">
+              <Detail label={invoice.deliveries.length === 1 ? "Delivery billed" : "Deliveries billed"}>
+                <ul className="grid gap-1">
+                  {invoice.deliveries.map((d) => (
+                    <li key={d.receiptId} className="tabular-nums">
+                      <Link href={`/orders/${d.purchaseOrderId}`} className="text-accent-text hover:underline">
+                        {d.poNumber}
+                      </Link>
+                      {` · delivered ${shortDate(d.receivedOn)}`}
+                      {d.receivedByName ? ` · received by ${d.receivedByName}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </Detail>
+            </div>
+          )}
+          {invoice.scanRef && (
+            <div className="col-span-2">
+              <Detail label="Scan reference">
+                <span className="[overflow-wrap:anywhere]">{invoice.scanRef}</span>
+              </Detail>
+            </div>
+          )}
+        </dl>
+        <BillCopy invoiceId={invoice.id} bill={invoice.bill} />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The copy of the bill: its thumbnail, and its name as a second way in, both opening the file
+ * (R-INV-7). The thumbnail owns the viewing layer, so the name presses it rather than keeping a
+ * second viewer of its own.
+ */
+function BillCopy({ invoiceId, bill }: { invoiceId: string; bill: AttachmentView | null }) {
+  const { getToken } = useAuth();
+  const box = useRef<HTMLSpanElement>(null);
+  const name = bill?.originalName ?? "Copy of the bill";
+  return (
+    <div className="grid gap-1 text-sm">
+      <span className="text-ink-secondary">Copy of the bill</span>
+      {bill ? (
+        <span ref={box} className="flex items-center gap-3">
+          <AttachmentThumb
+            fileId={bill.id}
+            name={name}
+            contentType={bill.contentType}
+            load={async () => api.invoiceBill(invoiceId, await getToken())}
+          />
+          <button
+            type="button"
+            // The accessible name is the file's own; the thumbnail beside it says "Open …".
+            onClick={() => box.current?.querySelector<HTMLButtonElement>("button[data-attachment-thumb]")?.click()}
+            className="min-h-touch text-left text-accent-text [overflow-wrap:anywhere] hover:underline"
+          >
+            {name}
+          </button>
+        </span>
+      ) : (
+        // An invoice recorded before the upload was required (stage 6) has none.
+        <span className="text-ink-muted">Nothing uploaded</span>
+      )}
+    </div>
+  );
+}
+
+/** "4 × Bag (25 Kg)": a count of packs as a person writes it. */
+const count = (n: number) => new Intl.NumberFormat("en-IN", { maximumFractionDigits: 3 }).format(n);
+
+/**
+ * How much one pack of a line holds, in the line's own unit. The server checks packCount × the
+ * pack's size = billedQty (T-271), so the size is the billed quantity over the count; it is not
+ * restated from the pack's own unit here, because the line does not carry that unit.
+ */
+function packSize(l: InvoiceLineView): number | null {
+  if (!l.packLabel || l.packCount == null || l.packCount <= 0 || l.billedQty <= 0) return null;
+  return l.billedQty / l.packCount;
+}
+
+/**
+ * The Rate cell: "₹100 / Kg", and on a pack line per pack and per unit, "₹1,500 / bag · ₹60 / Kg". A
+ * dash when nothing was billed. Said through the shared {@link readableRate} (T-293), so a 500 gm
+ * line billed at ₹250 reads "₹500 / Kg" as the vendor page and the order sheet say it — not "₹0.50 /
+ * gm", which followed the unit the quantity happened to be printed in. The pack price is the one the
+ * server worked out for the line (`ratePerPack`), printed as it stands rather than rebuilt from the
+ * rate.
+ */
+function lineRate(l: InvoiceLineView): string {
+  if (l.rate == null || l.billedQty <= 0) return "—";
+  const perStock = l.amount / l.billedQty;
+  const rate = packSize(l) && l.ratePerPack != null
+    ? readablePackRate(l.ratePerPack, l.packLabel!, perStock, l.unit)
+    : readableRate(perStock, l.unit);
+  return rate ?? "—";
+}
+
+/** A quantity cell: "45 Kg", or on a pack line "4 × Bag (25 Kg)" over "100 Kg" (T-273's form). */
+function LineQuantity({ value, line }: { value: number | null; line: InvoiceLineView }) {
+  if (value == null) return <span className="text-ink-muted">—</span>;
+  const size = packSize(line);
+  if (!size) return <span className="tabular-nums">{quantity(value, line.unit)}</span>;
+  const packs = Number((value / size).toFixed(3));
+  // One pack with no name is its own size, so "500 gm" under "1 × 500 gm" is dropped (T-302). The
+  // rule is `repeatsPack`, one copy for every view (T-303); `packs` is the count as written above.
+  const unnamedSingle = repeatsPack(line.packLabel!, packs);
+  return (
+    <span className="inline-flex flex-col">
+      <span className="tabular-nums text-ink">{`${count(packs)} × ${line.packLabel}`}</span>
+      {!unnamedSingle && <span className="text-sm tabular-nums text-ink-secondary">{quantity(value, line.unit)}</span>}
+    </span>
+  );
+}
+
+/** The amber note for a line billed at more than came (R-INV-4): "Billed 50 Kg, 45 Kg delivered". */
+function overBilled(l: InvoiceLineView): string | null {
+  if (l.deliveredQty == null || l.billedQty <= l.deliveredQty + 1e-9) return null;
+  return `Billed ${quantity(l.billedQty, l.unit)}, ${quantity(l.deliveredQty, l.unit)} delivered`;
+}
+
+/**
+ * The items the vendor billed, read-only (R-INV-4's columns), and the bill's totals under them with
+ * the labels "Create an invoice" typed them under (R-INV-5: these labels are used everywhere), in
+ * design D's compact list rather than the form's boxes (`InvoiceTotals readOnly`, T-277).
+ */
+function Items({ invoice }: { invoice: VendorInvoiceDetailView }) {
+  // A direct buy has nothing ordered or delivered to show, as on the form that made it.
+  const delivered = invoice.lines.some((l) => l.orderedQty != null || l.deliveredQty != null);
+  const totals = invoice.subTotal != null && invoice.grandTotal != null;
+  return (
+    <section className="card overflow-hidden" aria-labelledby="items-heading">
+      <h2 id="items-heading" className="px-6 pt-5 text-lg font-semibold text-ink">
+        Items
+      </h2>
+      <table className={`${RULED_TABLE} mt-3`}>
+        <thead className={THEAD}>
+          <tr>
+            <th className={TH_PRIMARY}>Item</th>
+            {delivered && <th className={TH_FIXED}>Ordered</th>}
+            {delivered && <th className={TH_FIXED}>Delivered</th>}
+            <th className={TH_FIXED}>Billed qty</th>
+            <th className={TH_FIXED}>Amount</th>
+            <th className={TH_FIXED}>Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {invoice.lines.map((l) => {
+            const warn = overBilled(l);
+            return (
+              <tr key={l.id} className={TR}>
+                <td className={TD_PRIMARY}>
+                  {l.itemName}
+                  {warn && (
+                    <span className="flex items-center gap-1 text-sm font-normal text-warning">
+                      <i className="ti ti-alert-triangle" aria-hidden="true" />
+                      {warn}
+                    </span>
+                  )}
+                </td>
+                {delivered && (
+                  <td className={TD_FIXED_NUM} data-label="Ordered">
+                    <LineQuantity value={l.orderedQty} line={l} />
+                  </td>
+                )}
+                {delivered && (
+                  <td className={TD_FIXED_NUM} data-label="Delivered">
+                    <LineQuantity value={l.deliveredQty} line={l} />
+                  </td>
+                )}
+                <td className={TD_FIXED_NUM} data-label="Billed qty">
+                  <LineQuantity value={l.billedQty} line={l} />
+                </td>
+                <td className={TD_FIXED_NUM} data-label="Amount">
+                  {rs(l.amount)}
+                </td>
+                <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="Rate">
+                  {lineRate(l)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {/* The bill's foot, on the right as on the paper. Not a table, so the table rule's left
+          alignment does not reach it (see InvoiceTotals). */}
+      {totals && (
+        <div className="flex border-t border-hairline px-6 py-4">
+          <InvoiceTotals
+            readOnly
+            subTotal={invoice.subTotal!}
+            gstAmount={invoice.gstAmount ?? 0}
+            otherCharges={invoice.otherCharges ?? 0}
+            otherChargesNote={invoice.otherChargesNote}
+            discount={invoice.discount ?? 0}
+            grandTotal={invoice.grandTotal!}
+          />
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * "Invoiced vs received" (R-INV-7): the items billed against what was delivered at the order's own
+ * prices, and the difference, all as the server works them out from the lines (T-271). The server's
+ * difference also takes off any credit note, which is why it is shown as sent and not re-subtracted
+ * here. An old invoice compares its whole total, as it always did.
+ */
+function InvoicedVsReceived({ invoice }: { invoice: VendorInvoiceDetailView }) {
+  const itemised = invoice.subTotal != null;
+  const variance = invoice.variance;
+  const over = invoice.lines
+    .map((l) => {
+      const warn = overBilled(l);
+      return warn ? `${l.itemName}: ${warn.replace("Billed", "billed")}` : null;
+    })
+    .filter((w): w is string => w != null);
+  return (
+    <section className="card px-6 py-5" aria-labelledby="variance-heading">
+      <h2 id="variance-heading" className="text-lg font-semibold text-ink">
+        Invoiced vs received
+      </h2>
+      <p className="mt-1 max-w-prose text-sm text-ink-secondary">
+        The items billed, against what was delivered at the order’s own prices. A difference is worth
+        a question, not a refusal.
+      </p>
+      <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-4 text-sm">
+        <Detail label={itemised ? "Items billed" : "Invoiced"}>
+          <span className="tabular-nums">{rs(itemised ? invoice.subTotal! : invoice.amount)}</span>
+        </Detail>
+        <Detail label="Delivered, at the order’s prices">
+          <span className="tabular-nums">
+            {invoice.expectedValue == null ? "—" : rs(invoice.expectedValue)}
+          </span>
+        </Detail>
+        <Detail label="Difference">
+          <span className={`tabular-nums ${variance ? "text-warning" : ""}`}>
+            {variance == null
+              ? "—"
+              : variance === 0
+                ? "None"
+                : `${rs(Math.abs(variance))} ${variance > 0 ? "more" : "less"} than received`}
+          </span>
+        </Detail>
+      </dl>
+      {over.length > 0 && (
+        <ul className="mt-3 grid gap-1 text-sm text-warning">
+          {over.map((w) => (
+            <li key={w} className="flex items-center gap-1">
+              <i className="ti ti-alert-triangle" aria-hidden="true" />
+              {w}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** The name a proof file is shown under when the device gave it none. */
+const PROOF_NAME: Record<string, string> = {
+  PAYMENT_PROOF: "Proof of payment",
+  CASH_SIGNED_NOTE: "Signed note",
+  CASH_RECEIVER_PHOTO: "Photo of the person who took the cash",
+};
+
+/**
+ * What has been paid against this invoice (R-PAY-3), with its proof.
  *
  * <p>A payment recorded in error is reversed rather than struck, because the ledger underneath is
  * append-only and nothing in it is ever edited. So a reversal shows as two rows: the payment, which
  * stays exactly as it was, and the correction of the opposite sign that names it. Both are dimmed,
- * because between them they are worth nothing, and the total above them already says so.
+ * because between them they are worth nothing, and the total above them already says so. The
+ * Reversal column is there only when some row is part of a reversal: an always-empty column is a
+ * dead block (table rule).
+ *
+ * <p>"Paid by" (R-PAY-3, was "Recorded by") is whoever recorded the payment. For cash, the Reference
+ * place names who took the money, as the form asked for it in the same place. The proof is one
+ * thumbnail, or two for cash (the signed note, then the photo), each opening its file; a payment made
+ * before proof was asked for has none, and says so with a dash.
  */
-function PaymentHistory({
+/**
+ * The Payments table's Reference column: a text column that keeps a short value's place on a phone.
+ *
+ * <p>It was a short value ({@link TD_FIXED}), which never wraps. But what it holds is free text of
+ * no fixed length: a bank's UTR ("UTR SBIN0226019876543210"), or for cash the name of whoever took
+ * the money ("Received by Manjunath Krishnamurthy Gowda"). Measured at 390 (T-300, defect N1 of the
+ * second invoices verification): a 34-character reference was a 315-334px line that would not
+ * give, it widened the Payments card, the page is a grid so every card went with it, and the page
+ * scrolled 10px sideways (scrollWidth 400). At 1024 the same reference held its column at full
+ * width and the fitter had to squeeze "Paid by" to 36px, one letter per line.
+ *
+ * <p>So it is a text column (§5's logic, Q-18: what wraps is decided by what the content is, not by
+ * where the column sits). It wraps between words, and on a wide screen the fitter can narrow it like
+ * "Paid by" beside it, never below its longest word. A single token wider than the whole card (a
+ * pasted reference with no spaces) may break inside itself, from the text column's
+ * `overflow-wrap: anywhere`, and only then: a broken reference is the lesser evil against a page
+ * that scrolls sideways, and a reference is an identifier to be copied, not a word to be read.
+ *
+ * <p>On a phone it keeps the place the approved mock gives it: on the card's second line, between
+ * the method and the proof, not moved up to the first line beside the payer's name, which is where
+ * a text column would otherwise go. `!` because the card rule placing text columns is two classes
+ * deep in globals.css.
+ */
+const REFERENCE = `${TD_SECOND} max-lg:!order-2`;
+
+function PaymentTable({
   invoiceId,
-  owed,
-  nonce,
+  payments,
   onReversed,
 }: {
   invoiceId: string;
-  /** The invoiced amount less any credit notes — what a full payment would have to reach. */
-  owed: number;
-  /** Bumped by the page when something outside this component changed the ledger. */
-  nonce: number;
+  payments: InvoicePaymentView[];
   onReversed: () => void;
 }) {
-  const fetchPayments = useCallback(
-    (token: string | undefined) => api.listInvoicePayments(invoiceId, token),
-    [invoiceId]
-  );
-  const { data, error, loading, reload } = useAuthedQuery(fetchPayments);
-  const payments = data ?? [];
-  const paidToDate = payments.reduce((sum, p) => sum + p.amount, 0);
-  const outstanding = owed - paidToDate;
-
-  // The invoice half of the screen reloads on its own clock; this keeps the ledger in step with it
-  // without a second query hook. The ref guards the first render, which is not a change.
-  const seen = useRef(nonce);
-  useEffect(() => {
-    if (seen.current === nonce) return;
-    seen.current = nonce;
-    reload();
-  }, [nonce, reload]);
-
+  const { getToken } = useAuth();
   const [reversing, setReversing] = useState<InvoicePaymentView | null>(null);
+  const anyReversal = payments.some((p) => p.reverses != null || p.reversedBy != null);
+
+  if (payments.length === 0) {
+    return <p className="mt-4 text-sm text-ink-muted">Nothing paid yet.</p>;
+  }
 
   return (
-    <section className="card mb-8 px-6 py-5" aria-labelledby="payments-heading">
-      <h2 id="payments-heading" className="text-lg">Payments</h2>
-      <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-        Payments are made at the bank and recorded here. This app never pays anybody.
-      </p>
-
-      {loading ? (
-        <Loading label="Loading payments…" />
-      ) : error ? (
-        <div className="mt-4"><ErrorNotice error={error} /></div>
-      ) : (
-        <>
-          <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-            <Detail label="Paid to date">
-              <span className="tabular-nums">{money(paidToDate, "INR")}</span>
-            </Detail>
-            <Detail label="Outstanding">
-              <span className="tabular-nums">{money(outstanding, "INR")}</span>
-            </Detail>
-          </dl>
-
-          {payments.length === 0 ? (
-            <p className="mt-4 text-sm text-ink-muted">Nothing paid yet.</p>
-          ) : (
-            <div className="table-wrap mt-4 overflow-x-auto">
-              {/* On the table rule since 2026-09-18 (T-233). The old "Action" column held either a
-                  button or the reversal's reason, which is somebody's own words and any length;
-                  Rajeev classified the reason as a secondary flexible column and the button as
-                  fixed, so they are two columns now (all reading left since T-236). Who recorded it is a person, the
-                  other secondary column. The payment's reference is a bank or UPI code, so fixed. */}
-              <table className={`${RULED_TABLE} text-sm`}>
-                <thead className={THEAD}>
-                  <tr>
-                    <th className={TH_SECOND}>Reversal</th>
-                    <th className={TH_SECOND}>Recorded by</th>
-                    <th className={TH_FIXED}>Paid on</th>
-                    <th className={TH_FIXED}>Amount</th>
-                    <th className={TH_FIXED}>Method</th>
-                    <th className={TH_FIXED}>Reference</th>
-                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map((p) => {
-                    const spent = p.reverses != null || p.reversedBy != null;
-                    return (
-                      <tr key={p.id} className={`${TR} ${spent ? "opacity-50" : ""}`}>
-                        <td className={`${TD_SECOND} text-ink-secondary`}>
-                          {p.reverses != null ? p.reverseReason : p.reversedBy != null ? "Reversed" : null}
-                        </td>
-                        <td className={`${TD_SECOND} text-ink-secondary`}>{p.recordedByName ?? "—"}</td>
-                        <td className={TD_FIXED}>{dateWithYear(p.paidOn)}</td>
-                        <td className={TD_FIXED_NUM}>{money(p.amount, "INR")}</td>
-                        <td className={TD_FIXED}>{p.method.replace(/_/g, " ").toLowerCase()}</td>
-                        <td className={`${TD_FIXED} text-ink-secondary`} data-label="Reference">{p.reference ?? "—"}</td>
-                        <td className={TD_ACTIONS_FIXED}>
-                          {p.reverses == null && p.reversedBy == null && p.amount > 0 ? (
-                            <Button variant="ghost" size="sm" onClick={() => setReversing(p)}>
-                              Reverse
-                            </Button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
+    <div className="-mx-6 mt-4">
+      <table className={RULED_TABLE}>
+        <thead className={THEAD}>
+          <tr>
+            <th className={TH_FIXED}>Paid on</th>
+            <th className={TH_FIXED}>Amount</th>
+            <th className={TH_FIXED}>Method</th>
+            <th className={REFERENCE}>Reference</th>
+            <th className={TH_SECOND}>Paid by</th>
+            <th className={TH_FIXED}>Proof</th>
+            {anyReversal && <th className={TH_SECOND}>Reversal</th>}
+            <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {payments.map((p) => {
+            const spent = p.reverses != null || p.reversedBy != null;
+            return (
+              <tr key={p.id} className={`${TR} ${spent ? "opacity-50" : ""}`}>
+                <td className={TD_FIXED}>{dateWithYear(p.paidOn)}</td>
+                <td className={TD_FIXED_NUM}>{rs(p.amount)}</td>
+                <td className={TD_FIXED}>
+                  {PAYMENT_METHODS.find((m) => m.value === p.method)?.label ?? p.method.replace(/_/g, " ").toLowerCase()}
+                </td>
+                <td className={`${REFERENCE} text-ink-secondary`} data-label="Reference">
+                  {p.receivedByName ? `Received by ${p.receivedByName}` : p.reference || "—"}
+                </td>
+                <td className={`${TD_SECOND} text-ink-secondary`} data-label="Paid by">
+                  {p.recordedByName ?? "—"}
+                </td>
+                <td className={TD_FIXED} data-label="Proof">
+                  {p.attachments.length === 0 ? (
+                    <span className="text-ink-muted">—</span>
+                  ) : (
+                    <span className="inline-flex gap-2 align-middle">
+                      {p.attachments.map((file) => (
+                        <AttachmentThumb
+                          key={file.id}
+                          small
+                          fileId={file.id}
+                          name={file.originalName ?? PROOF_NAME[file.kind] ?? "Proof of payment"}
+                          contentType={file.contentType}
+                          load={async () => api.paymentFile(invoiceId, p.id, file.id, await getToken())}
+                        />
+                      ))}
+                    </span>
+                  )}
+                </td>
+                {anyReversal && (
+                  <td className={`${TD_SECOND} text-ink-secondary`} data-label="Reversal">
+                    {p.reverses != null ? p.reverseReason : p.reversedBy != null ? "Reversed" : null}
+                  </td>
+                )}
+                <td className={TD_ACTIONS_FIXED}>
+                  {p.reverses == null && p.reversedBy == null && p.amount > 0 ? (
+                    <Button variant="ghost" size="sm" onClick={() => setReversing(p)}>
+                      Reverse
+                    </Button>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
 
       {reversing && (
         <ReverseDialog
@@ -343,12 +762,11 @@ function PaymentHistory({
           onCancel={() => setReversing(null)}
           onDone={() => {
             setReversing(null);
-            reload();
             onReversed();
           }}
         />
       )}
-    </section>
+    </div>
   );
 }
 
@@ -501,7 +919,7 @@ function CorrectionDialog({
         )}
 
         <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
-          <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
           <Button type="submit" variant={striking ? "danger" : "primary"} busy={busy}>
@@ -608,7 +1026,7 @@ function ReverseDialog({
         )}
 
         <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
-          <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
           <Button type="submit" variant="danger" busy={busy}>
@@ -635,11 +1053,26 @@ function against(invoice: VendorInvoiceView) {
   );
 }
 
+/**
+ * One labelled value in the invoice's details.
+ *
+ * <p>A value with no spaces in it (a description or reference pasted from somewhere, an email
+ * address) is one unbreakable word to a browser, and here it widened its card and, the page being a
+ * grid, the whole page with it (T-304; T-300 measured the same in the Payments table: 1349px at
+ * 1024). So a value may break inside itself, but only when it alone is wider than its place: first
+ * after an "@", full stop, hyphen, slash or underscore, the same break points the tables give a long
+ * token ({@link withLongTokenBreaks}, which leaves every word shorter than a pasted token alone, so
+ * a PO number never splits), then anywhere. `min-w-0` lets the two-column grid of details give its
+ * columns less than their longest word; without it a grid column never goes below that, whatever
+ * the text is allowed to do.
+ */
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-ink-secondary">{label}</dt>
-      <dd className="mt-1">{children}</dd>
+      <dd className="mt-1 [overflow-wrap:anywhere]">
+        {typeof children === "string" ? withLongTokenBreaks(children, "separators") : children}
+      </dd>
     </div>
   );
 }

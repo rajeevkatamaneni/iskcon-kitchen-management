@@ -73,11 +73,13 @@ describe("the menu stays where it was left", () => {
  * browser against Anek, over the real names this product shows: every one lands on a single line
  * inside the 264px column, with and without the temple switcher's chevron.
  *
- * <p>What these can do is hold the two decisions in place — the mark's size, and that the name is
- * never allowed to wrap.
+ * <p>What these can do is hold the decisions in place — the mark's size, and that the name is never
+ * cut off. It used to be held on one line by the class list; since T-284 one line is something the
+ * fit grants after measuring, and a name too long for the floor size wraps between words instead
+ * (sidebar-names.test.tsx holds that part).
  */
 describe("the temple's mark and name", () => {
-  it("keeps the enlarged mark, centres the lockup, and never wraps or clips the name", () => {
+  it("keeps the enlarged mark, centres the lockup, and never clips the name", () => {
     const { container } = render(<Sidebar activeHref="/today" />);
 
     const mark = container.querySelector('img[src*="iskcon"]') as HTMLElement;
@@ -89,7 +91,9 @@ describe("the temple's mark and name", () => {
 
     // The column's name; the phone bar's (T-225) is a separate, smaller label.
     const name = within(screen.getByLabelText("Main")).getByText("ISKCON South Bengaluru");
-    expect(name.className).toContain("whitespace-nowrap");
+    // Not held on one line by the class list: that is how a failed fit became "ISKCON South Benga".
+    expect(name.className).not.toContain("whitespace-nowrap");
+    expect(name.className).not.toContain("overflow-hidden");
     expect(name.className).toContain("text-center");
     // Deliberately NOT truncate: an ellipsis would hide the very failure the measurement prevents.
     expect(name.className).not.toContain("truncate");

@@ -41,10 +41,11 @@ const { authRef } = vi.hoisted(() => ({
   },
 }));
 
-const { getVendorMock, listIngredientsMock, setVendorSupplyMock } = vi.hoisted(() => ({
+const { getVendorMock, listIngredientsMock, setVendorSupplyMock, addVendorSuppliesMock } = vi.hoisted(() => ({
   getVendorMock: vi.fn(),
   listIngredientsMock: vi.fn(),
   setVendorSupplyMock: vi.fn(),
+  addVendorSuppliesMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -62,6 +63,7 @@ vi.mock("@/lib/api", async (orig) => {
       getVendor: getVendorMock,
       listIngredients: listIngredientsMock,
       setVendorSupply: setVendorSupplyMock,
+      addVendorSupplies: addVendorSuppliesMock,
     },
   };
 });
@@ -92,6 +94,12 @@ function supply(o: Partial<VendorSupplyView> = {}): VendorSupplyView {
     ingredientId: "ing1",
     ingredientName: "Rice",
     lastPrice: 58,
+    unit: "KG",
+    packSizeId: null,
+    packLabel: null,
+    pricePerPack: null,
+    previousPrice: null,
+    previousPriceOn: null,
     leadTimeDays: 1,
     preferred: true,
     ...o,
@@ -103,12 +111,11 @@ function detail(supplies: VendorSupplyView[]): VendorDetailView {
 }
 
 /**
- * The lead-time box, and not the "i" beside it. `HintedField` names its hint button "More about Lead
- * time (days)", so a bare `getByLabelText(/lead time/i)` matches two elements and throws.
+ * The cells of the row for an ingredient: Ingredient, Sells it as, List price, Lead time, Preferred,
+ * and the actions. Lead time is index 3 since T-256 put "Sells it as" before it.
  */
-const BOX = { selector: "input" } as const;
+const LEAD = 3;
 
-/** The cells of the row for an ingredient: Ingredient, Last price, Lead time, Preferred, Remove. */
 function cellsFor(name: string): (string | null)[] {
   const cell = screen.getByText(name);
   return Array.from(cell.closest("tr")!.querySelectorAll("td")).map((c) => c.textContent);
@@ -123,9 +130,10 @@ beforeEach(() => {
   };
   getVendorMock.mockReset().mockResolvedValue(detail([supply()]));
   listIngredientsMock.mockReset().mockResolvedValue([
-    { id: "ing2", name: "Jaggery", unit: "KG", category: "Sweeteners" },
+    { id: "ing2", name: "Jaggery", unit: "KG", category: "Sweeteners", packSizes: [] },
   ]);
   setVendorSupplyMock.mockReset().mockResolvedValue(undefined);
+  addVendorSuppliesMock.mockReset().mockResolvedValue(undefined);
 });
 
 describe("a vendor's lead time", () => {
@@ -134,13 +142,13 @@ describe("a vendor's lead time", () => {
     render(<VendorDetailPage />);
 
     await screen.findByText("Rice");
-    expect(cellsFor("Rice")[2]).toBe("4 days");
+    expect(cellsFor("Rice")[LEAD]).toBe("4 days");
   });
 
   it("says one day, not one days", async () => {
     render(<VendorDetailPage />);
     await screen.findByText("Rice");
-    expect(cellsFor("Rice")[2]).toBe("1 day");
+    expect(cellsFor("Rice")[LEAD]).toBe("1 day");
   });
 
   // An em dash, never a nought. Nobody having recorded how long this vendor takes and this vendor
@@ -153,49 +161,53 @@ describe("a vendor's lead time", () => {
     render(<VendorDetailPage />);
 
     await screen.findByText("Rice");
-    expect(cellsFor("Rice")[2]).toBe("—");
-    expect(cellsFor("Brooms")[2]).toBe("0 days");
+    expect(cellsFor("Rice")[LEAD]).toBe("—");
+    expect(cellsFor("Brooms")[LEAD]).toBe("0 days");
   });
+
+  /*
+    Until T-256 these three typed into the one-at-a-time "Add supply" form. That form is gone (the
+    conductor's call, 2026-09-19: "Other ingredients" replaces it), and the lead time is typed into a
+    row of that table instead. The assertions are the same three: a typed figure, a blank, and a zero.
+  */
+  const leadFor = (name: string) => screen.getByLabelText(`Lead time (days) for ${name}`);
+  const save = () => fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  const firstRow = () => (addVendorSuppliesMock.mock.calls[0][1] as Record<string, unknown>[])[0];
 
   it("records a lead time somebody types", async () => {
     render(<VendorDetailPage />);
-    await screen.findByText("Rice");
+    await screen.findByText("Jaggery");
 
-    fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "ing2" } });
-    fireEvent.change(screen.getByLabelText(/lead time/i, BOX), { target: { value: "7" } });
-    fireEvent.click(screen.getByRole("button", { name: /add supply/i }));
+    fireEvent.change(leadFor("Jaggery"), { target: { value: "7" } });
+    save();
 
-    await waitFor(() => expect(setVendorSupplyMock).toHaveBeenCalled());
-    const body = setVendorSupplyMock.mock.calls[0][1] as Record<string, unknown>;
-    expect(body.leadTimeDays).toBe(7);
+    await waitFor(() => expect(addVendorSuppliesMock).toHaveBeenCalled());
+    expect(firstRow().leadTimeDays).toBe(7);
   });
 
   // The assertion this file exists for. `Number("")` is 0, so a blank box coerced the ordinary way
   // would post a same-day delivery and quietly promise a cook time that is not there.
   it("posts an explicit null when the box is left blank, and never a zero", async () => {
     render(<VendorDetailPage />);
-    await screen.findByText("Rice");
+    await screen.findByText("Jaggery");
 
-    fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "ing2" } });
-    fireEvent.click(screen.getByRole("button", { name: /add supply/i }));
+    fireEvent.click(screen.getByLabelText("Jaggery"));
+    save();
 
-    await waitFor(() => expect(setVendorSupplyMock).toHaveBeenCalled());
-    const body = setVendorSupplyMock.mock.calls[0][1] as Record<string, unknown>;
-    expect(Object.keys(body)).toContain("leadTimeDays");
-    expect(body.leadTimeDays).toBeNull();
+    await waitFor(() => expect(addVendorSuppliesMock).toHaveBeenCalled());
+    expect(Object.keys(firstRow())).toContain("leadTimeDays");
+    expect(firstRow().leadTimeDays).toBeNull();
   });
 
   // And zero survives as zero, which is what makes the null above mean something.
   it("posts a real zero for a shop you walk into", async () => {
     render(<VendorDetailPage />);
-    await screen.findByText("Rice");
+    await screen.findByText("Jaggery");
 
-    fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "ing2" } });
-    fireEvent.change(screen.getByLabelText(/lead time/i, BOX), { target: { value: "0" } });
-    fireEvent.click(screen.getByRole("button", { name: /add supply/i }));
+    fireEvent.change(leadFor("Jaggery"), { target: { value: "0" } });
+    save();
 
-    await waitFor(() => expect(setVendorSupplyMock).toHaveBeenCalled());
-    const body = setVendorSupplyMock.mock.calls[0][1] as Record<string, unknown>;
-    expect(body.leadTimeDays).toBe(0);
+    await waitFor(() => expect(addVendorSuppliesMock).toHaveBeenCalled());
+    expect(firstRow().leadTimeDays).toBe(0);
   });
 });

@@ -14,6 +14,7 @@ import { FOOD_UNITS, dateWithYear, expiryWord, moment, quantity, unitLabel } fro
 import { Loading } from "@/components/Loading";
 import { RULED_TABLE, RULED_TABLE_EVEN, THEAD, TR, ACTIONS_ROW, TH_LEAD, TD_LEAD, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
+import { StockValueField, usePrefilledStockValue } from "@/components/InventoryItemForm";
 
 const REASONS = ["SPOILAGE", "DAMAGE", "COUNT_CORRECTION", "WASTE", "OTHER"];
 const REASON_LABEL: Record<string, string> = {
@@ -344,6 +345,7 @@ function ItemView() {
                   screen said "below reorder level" and offered nothing that could answer it. */}
               <AdjustForm
                 batches={batches}
+                ingredientId={item.ingredientId}
                 unit={item.unit}
                 busy={busy}
                 onSubmit={(input) => run((t) => api.adjustStock(id, input, t), "We couldn’t record that adjustment.")}
@@ -387,18 +389,50 @@ function ItemView() {
 
 function AdjustForm({
   batches,
+  ingredientId,
   unit,
   busy,
   onSubmit,
 }: {
   batches: BatchStock[];
+  ingredientId: string;
   unit: string;
   busy: boolean;
-  onSubmit: (input: { batchId: string | null; quantity: number; unit: string; reason: string; note: string | null }) => Promise<boolean>;
+  onSubmit: (input: {
+    batchId: string | null;
+    quantity: number;
+    unit: string;
+    reason: string;
+    note: string | null;
+    pricePerUnit: number | null;
+  }) => Promise<boolean>;
 }) {
+  const { getToken } = useAuth();
   const [open, setOpen] = useState(false);
   /** Nothing in the ledger yet, so this is the first count rather than a correction to a lot. */
   const opening = batches.length === 0;
+  /** The change as typed. Read as it changes, because its sign decides whether the value is asked. */
+  const [change, setChange] = useState("");
+
+  /*
+   * "What it would cost to buy today" (R-ING-3). Asked whenever this adds stock, for any reason —
+   * a count correction, or a positive spoilage, damage, waste or "other" — because the server asks it
+   * for any positive quantity (the conductor's ruling, T-254), and a box the server needs but the
+   * screen hides is a refusal nobody could answer. Taking stock away needs no price, so the box
+   * is not shown then. Looked up only once the form is open: nobody reading the page needs it.
+   */
+  const addsStock = Number(change) > 0;
+  const loadStockValue = useCallback(
+    async (id: string) => (await api.getStockValueSuggestion(id, await getToken())).pricePerUnit,
+    [getToken]
+  );
+  const [stockValue, setStockValue] = usePrefilledStockValue(open ? ingredientId : null, loadStockValue);
+  /*
+   * The note fills the gap beside the last field when the fields above it are odd in number, and
+   * takes the whole row when they are even — so no state of this form leaves a half-empty row,
+   * whichever of the batch and the value boxes are showing.
+   */
+  const fieldsAboveNote = (opening ? 3 : 4) + (addsStock ? 1 : 0);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -410,16 +444,20 @@ function AdjustForm({
       unit: String(f.get("unit") ?? unit),
       reason: String(f.get("reason") ?? "SPOILAGE"),
       note: (String(f.get("note") ?? "").trim() || null),
+      pricePerUnit: addsStock ? Number(stockValue) : null,
     });
-    if (ok) form.reset();
+    if (ok) {
+      form.reset();
+      setChange("");
+    }
   }
 
   if (!open) {
     return (
       <section className="mb-8">
-        <button type="button" onClick={() => setOpen(true)} className="min-h-touch rounded-control border border-hairline-strong px-5 text-ink transition-colors duration-state hover:bg-sunken">
+        <Button variant="secondary" onClick={() => setOpen(true)}>
           {opening ? "Record what's on the shelf" : "Adjust stock"}
-        </button>
+        </Button>
       </section>
     );
   }
@@ -465,6 +503,8 @@ function AdjustForm({
             step="any"
             min={opening ? 0 : undefined}
             required
+            value={change}
+            onChange={(e) => setChange(e.target.value)}
             className="min-h-touch rounded-control border border-hairline px-3"
           />
         </label>
@@ -474,7 +514,12 @@ function AdjustForm({
             {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
           </select>
         </label>
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+        {addsStock && (
+          <StockValueField unit={unit} value={stockValue} onChange={setStockValue} required />
+        )}
+        <label
+          className={`${fieldsAboveNote % 2 === 0 ? "col-span-2 " : ""}flex flex-col gap-1 text-sm text-ink-secondary`}
+        >
           <span className="pl-field-inset font-medium text-ink">Note (required for &ldquo;Other&rdquo;)</span>
           <input name="note" className="min-h-touch rounded-control border border-hairline px-3" />
         </label>

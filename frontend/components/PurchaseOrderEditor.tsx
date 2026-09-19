@@ -1,11 +1,11 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
 import { HintedField } from "@/components/ds/InfoHint";
 import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
-import { FOOD_UNITS, leadTimeWarning, unitLabel } from "@/lib/format";
+import { FOOD_UNITS, leadTimeWarning, quantity, unitLabel } from "@/lib/format";
 import type { IngredientView, PoLineInput } from "@/lib/api";
 
 /**
@@ -49,6 +49,57 @@ import type { IngredientView, PoLineInput } from "@/lib/api";
  */
 
 /**
+ * Brings the refusal a failed save has just put on the screen into view, and moves focus to it
+ * (T-304).
+ *
+ * <p>Measured on a phone (390) before this: the order page draws its refusals at the top of the
+ * page, and Save is at the foot of this form, so pressing Save on an empty order changed nothing
+ * that could be seen. The refusal was 1,000px or more above the viewport. The same is true of the
+ * shopping list's panel, and of Create a purchase order once somebody has scrolled down to its
+ * items. Two ways to fix it were weighed:
+ *
+ * <ul>
+ *   <li><b>Put the refusal beside Save.</b> Right for the refusals this form makes itself, but a
+ *       refusal from the server on the same press ("this order was sent from another screen", a
+ *       line the server names) is drawn by the host, at the top, with the field errors it sends,
+ *       and would still be off-screen. And Create a purchase order has no button at the foot to put
+ *       it beside: its Create order sits in the sticky header.</li>
+ *   <li><b>Take the person to the refusal, wherever the screen draws it.</b> One behaviour for every
+ *       refusal, local or from the server, on all three screens, and the screen reader hears the
+ *       refusal read out because focus lands on it. Chosen.</li>
+ * </ul>
+ *
+ * <p>It looks for the first visible `role="alert"` in `scope` (the panel on the shopping list, the
+ * page elsewhere): every refusal and ErrorNotice in the application is drawn with that role. It
+ * waits a frame, and a few more if it has to, because the host draws the notice on its next render,
+ * after the save that caused it has returned. Centred rather than scrolled to the top, so a sticky
+ * header never covers it. The notice takes `tabindex="-1"` so it can hold focus without becoming a
+ * stop when somebody tabs through the page.
+ */
+export function revealNotice(scope: ParentNode = document, stillWanted: () => boolean = () => true): void {
+  if (typeof requestAnimationFrame !== "function") return;
+  let tries = 0;
+  const look = () => {
+    // A save that succeeded closes the form on the host's next render: nothing to show then.
+    if (!stillWanted()) return;
+    const notice = Array.from(scope.querySelectorAll<HTMLElement>('[role="alert"]')).find(
+      // Next.js's own announcer is an alert too, and is never the thing to show.
+      // `checkVisibility` skips one inside something hidden; a browser without it, and jsdom, take
+      // the first.
+      (el) => el.id !== "__next-route-announcer__" && (el.checkVisibility?.() ?? true)
+    );
+    if (!notice) {
+      if (++tries < 10) requestAnimationFrame(look);
+      return;
+    }
+    notice.scrollIntoView?.({ block: "center" });
+    if (!notice.hasAttribute("tabindex")) notice.setAttribute("tabindex", "-1");
+    notice.focus({ preventScroll: true });
+  };
+  requestAnimationFrame(look);
+}
+
+/**
  * A line as it is being edited. The quantity is held as the text in the box rather than a number so
  * a person can clear the field and retype it; it becomes a number once, on save.
  *
@@ -71,6 +122,26 @@ export interface PurchaseOrderDraftLine {
   quantity: string;
   unit: string;
   expectedPrice: number | null;
+  /**
+   * The pack this line is ordered in — "4 × Bag (25 Kg)" (R-SL-3, T-264) — or absent.
+   *
+   * <p><strong>When it is set, `quantity` is the number of packs, not an amount.</strong> The box
+   * then reads "4" beside "× Bag (25 Kg)", because that is what the vendor is being asked for, and
+   * the stock-unit amount it comes to (100 Kg) is printed under it rather than typed. On save the
+   * line goes out with `packSizeId` and `packCount`, and `quantity` = count × `perPackQty` in
+   * `unit`, which is what the server stores for stock and costing (T-260).
+   *
+   * <p>Optional, and additive on purpose: the shopping-list panel is the only host that sets it
+   * today. A host that never sets it — the order screen — gets exactly the form it had, and the
+   * lines it saves carry no pack keys at all.
+   */
+  pack?: { packSizeId: string; label: string; perPackQty: number } | null;
+  /**
+   * What the vendor's list price is, in words, printed under the item — "List price ₹1,500 / bag ·
+   * ₹60 / Kg" (T-264). Written by the host, which is the one that read the vendor's supplies, and
+   * absent where there is nothing to say. Optional for the same reason `pack` is.
+   */
+  priceNote?: string | null;
 }
 
 /** A finished draft, in the shape both endpoints take. */
@@ -188,19 +259,42 @@ export function PurchaseOrderEditor({
   // against five. Null means nobody has recorded a lead time for this vendor, which is silence.
   const neededByWarning = neededBy === "" ? null : leadTimeWarning(neededBy, leadTimeDays);
 
+  // Where a refusal is looked for once a save fails (see revealNotice): inside the panel when this
+  // form is in one, so a notice on the page behind it is never the one chosen; the page otherwise.
+  const self = useRef<HTMLElement>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const reveal = () =>
+    revealNotice(self.current?.closest('[role="dialog"]') ?? document, () => mounted.current);
+  const refuse = (message: string) => {
+    onRefuse(message);
+    reveal();
+  };
+
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     // An order with nothing on it is not an empty order, it is a cancelled one — and this is where
     // that is said, in words, rather than by greying the last Remove button (T-135).
     if (lines.length === 0) {
-      onRefuse(words.emptyOrder);
+      refuse(words.emptyOrder);
       return;
     }
 
     const quantities = lines.map((l) => Number(l.quantity));
     if (quantities.some((q) => !Number.isFinite(q) || q <= 0)) {
-      onRefuse("Every line needs a quantity above zero. Remove a line you no longer want.");
+      refuse("Every line needs a quantity above zero. Remove a line you no longer want.");
+      return;
+    }
+    // A vendor sells whole bags. Only a line ordered in a pack is asked this, so a host that never
+    // sets `pack` never sees the sentence (T-264).
+    if (lines.some((l, i) => l.pack && !Number.isInteger(quantities[i]))) {
+      refuse("Order whole packs. Change the number of packs to a whole number.");
       return;
     }
 
@@ -208,7 +302,7 @@ export function PurchaseOrderEditor({
     // server's KMS-400014 so the refusal arrives before the round trip rather than after it. The
     // server is still the guard; this only saves a wasted submit.
     if (neededBy !== "" && neededBy < minNeededBy) {
-      onRefuse(words.dateBeforeFloor);
+      refuse(words.dateBeforeFloor);
       return;
     }
 
@@ -219,18 +313,38 @@ export function PurchaseOrderEditor({
       // omit it — an omitted optional field is exempt from the excess-property check when it is
       // spread, arrives as undefined, and would turn every described line back into a line with
       // no subject at all, which the server then refuses with KMS-400128.
-      lines: lines.map((l, i) => ({
-        ingredientId: l.ingredientId,
-        description: l.description,
-        quantity: quantities[i],
-        unit: l.unit,
-        expectedPrice: l.expectedPrice,
-      })),
+      //
+      // A pack line adds its two keys and states its amount as packs × pack size. The server takes
+      // the pack as the truth and would store that product whatever was sent beside it (T-260), so
+      // sending the same product keeps the request honest rather than relying on that.
+      lines: lines.map((l, i) =>
+        l.pack
+          ? {
+              ingredientId: l.ingredientId,
+              description: l.description,
+              quantity: Number((quantities[i] * l.pack.perPackQty).toFixed(6)),
+              unit: l.unit,
+              expectedPrice: l.expectedPrice,
+              packSizeId: l.pack.packSizeId,
+              packCount: quantities[i],
+            }
+          : {
+              ingredientId: l.ingredientId,
+              description: l.description,
+              quantity: quantities[i],
+              unit: l.unit,
+              expectedPrice: l.expectedPrice,
+            }
+      ),
     });
+    // Both hosts close this form when the save succeeds. Still here, it failed, and the host has
+    // drawn why: the server's refusal, at the top of the page or the panel. (The close may not have
+    // been drawn yet when the save returns, which is why revealNotice asks again each frame.)
+    if (mounted.current) reveal();
   }
 
   return (
-    <section className="card mb-6 px-6 py-5" aria-labelledby={headingId}>
+    <section ref={self} className="card mb-6 px-6 py-5" aria-labelledby={headingId}>
       <h2 id={headingId} className="text-lg">{words.heading}</h2>
       {words.intro && (
         <p className="mt-1 max-w-prose text-sm text-ink-secondary">{words.intro}</p>
@@ -288,21 +402,42 @@ export function PurchaseOrderEditor({
           <tbody>
             {lines.map((l, i) => (
               <tr key={l.key} className={TR}>
-                <td className={TD_PRIMARY}>{subjectOf(l)}</td>
+                <td className={TD_PRIMARY}>
+                  {subjectOf(l)}
+                  {l.priceNote && (
+                    <span className="block text-xs text-ink-muted">{l.priceNote}</span>
+                  )}
+                </td>
                 <td className={TD_FIXED_NUM}>
                   <input
                     type="number"
                     min="0"
-                    step="any"
+                    step={l.pack ? "1" : "any"}
                     value={l.quantity}
-                    aria-label={`Quantity of ${subjectOf(l)}`}
+                    // A pack line's box holds a count, and there can be two lines for one ingredient
+                    // when sizes are mixed, so its name says which pack it counts.
+                    aria-label={l.pack ? `Quantity of ${subjectOf(l)}, in ${l.pack.label}` : `Quantity of ${subjectOf(l)}`}
                     onChange={(e) => setLines((cur) => cur.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))}
-                    className="min-w-28 rounded-control border border-hairline px-2 py-1 tabular-nums"
+                    className={`${l.pack ? "w-20" : "min-w-28"} rounded-control border border-hairline px-2 py-1 tabular-nums`}
                   />{" "}
-                  {/* The bare label, never a promoted one: the box beside it holds and submits the
-                      line's own stored unit, so a readout that said "gm" over a figure in kilograms
-                      would invite a thousandfold error. */}
-                  <span className="text-ink-secondary">{unitLabel(l.unit)}</span>
+                  {l.pack ? (
+                    <>
+                      <span className="text-ink-secondary">× {l.pack.label}</span>
+                      {/* The stock-unit amount the packs come to (R-SL-3): what goes into stock and
+                          costing. Said, not typed — the count above is what decides it. */}
+                      {Number(l.quantity) > 0 && (
+                        <span className="block text-xs text-ink-muted">
+                          = {quantity(Number(l.quantity) * l.pack.perPackQty, l.unit)}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    // The bare label, never a promoted one: the box beside it holds and submits the
+                    // line's own unit, so a readout that said "gm" over a figure in kilograms would
+                    // invite a thousandfold error. A host that wants "3 Kg" rather than "3000 gm"
+                    // hands the line over in Kg (the shopping list does, T-264).
+                    <span className="text-ink-secondary">{unitLabel(l.unit)}</span>
+                  )}
                 </td>
                 <td className={TD_ACTIONS_FIXED}>
                   {/*
@@ -332,7 +467,7 @@ export function PurchaseOrderEditor({
                     variant="ghost"
                     size="sm"
                     disabled={busy}
-                    aria-label={`Remove ${subjectOf(l)}`}
+                    aria-label={l.pack ? `Remove ${subjectOf(l)}, ${l.pack.label}` : `Remove ${subjectOf(l)}`}
                     onClick={() => setLines((cur) => cur.filter((_, j) => j !== i))}
                   >
                     Remove
@@ -444,30 +579,37 @@ function AddLine({
   }
 
   return (
-    <div className="mt-4 grid gap-4 border-t border-hairline pt-4">
-      <div className="flex flex-wrap items-end gap-3">
+    /*
+      T-269: nothing in here may be wider than the card. A select is as wide as its longest option,
+      so a catalogue holding "Sri Lakshmi cold-pressed groundnut oil" made "Add an ingredient" wider
+      than the card on a 390px phone, and the 256px box for an item not in the catalogue did the
+      same inside the shopping list's narrower panel: measured 8px past the card there (T-264 saw
+      14px with its data). `[&>*]:max-w-full` caps each field at the width of its row and
+      `max-w-full` on the control caps it at its field, so on a phone a field is at most the card's
+      width and the text in a long option is cut by the select's own box, as every select does.
+      `grid-cols-1` is what makes those caps bite: it is `minmax(0, 1fr)`, where the default grid
+      column is as wide as the widest thing in it, so the select would widen the column and the
+      rows with it. On a wide screen none of this is reached and nothing moves.
+    */
+    <div className="mt-4 grid grid-cols-1 gap-4 border-t border-hairline pt-4">
+      <div className="flex flex-wrap items-end gap-3 [&>*]:max-w-full">
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Add an ingredient</span>
           <select
             value={chosen}
             onChange={(e) => setChosen(e.target.value)}
-            className="min-h-touch rounded-control border border-hairline px-3"
+            className="min-h-touch max-w-full rounded-control border border-hairline px-3"
           >
             <option value="">Choose…</option>
             {available.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
           </select>
         </label>
-        <button
-          type="button"
-          disabled={busy || chosen === ""}
-          onClick={add}
-          className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
-        >
+        <Button variant="secondary" disabled={busy || chosen === ""} onClick={add}>
           Add line
-        </button>
+        </Button>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3 [&>*]:max-w-full">
         {/* The hint says what this is for and, more usefully, what it costs: a described line is
             never taken into stock, which is the whole reason it does not need a catalogue entry.
             Saying so here is cheaper than saying it at the receiving table, where somebody has
@@ -486,7 +628,7 @@ function AddLine({
               maxLength={200}
               placeholder="Plastic stool"
               onChange={(e) => setDescribed(e.target.value)}
-              className="min-h-touch w-64 rounded-control border border-hairline px-3"
+              className="min-h-touch w-64 max-w-full rounded-control border border-hairline px-3"
             />
           )}
         </HintedField>
@@ -512,14 +654,9 @@ function AddLine({
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          disabled={busy || described.trim() === ""}
-          onClick={addDescribed}
-          className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
-        >
+        <Button variant="secondary" disabled={busy || described.trim() === ""} onClick={addDescribed}>
           Add described line
-        </button>
+        </Button>
       </div>
     </div>
   );

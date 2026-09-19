@@ -16,7 +16,9 @@ const useBeforePaint = typeof window === "undefined" ? useEffect : useLayoutEffe
  * it can only offer temples this person has actually joined.
  */
 /**
- * Sizes the temple's name to the width it actually has, on one line, never truncated.
+ * Sizes the temple's name to the width it actually has: one line when it fits at a readable size,
+ * and otherwise two lines, broken between words. Never truncated, never clipped, never split
+ * mid-word.
  *
  * <p>Estimating this from the character count is what the first two attempts did, and both were
  * wrong in the way estimates are: the first assumed a column 32px wider than the name really has,
@@ -24,61 +26,102 @@ const useBeforePaint = typeof window === "undefined" ? useEffect : useLayoutEffe
  * measures differently from a name of narrow ones. The result was an ellipsis in the menu, which is
  * the one outcome this is supposed to prevent.
  *
- * <p>So it measures. The name is laid out at the largest size allowed, its width read back, and the
- * size scaled by the ratio of the room available to the room wanted — text width is linear in font
- * size, so one measurement is enough and the answer is exact rather than close. It runs before
- * paint, so nothing is ever seen at the wrong size, and again when the webfont finishes loading,
- * because a width measured in the fallback face is a width for a different typeface.
+ * <p>So it measures. The name is laid out on one line at the largest size allowed, its width read
+ * back, and the size scaled by the ratio of the room available to the room wanted — text width is
+ * linear in font size, so one measurement is enough and the answer is exact rather than close.
  *
- * @param available the element's own content box, so the padding either side is already excluded.
+ * <p><b>The third attempt (T-284) still cut the name off</b>, and the reason is worth keeping. A
+ * verifier's screenshot at 1280 showed "ISKCON South Benga" at 28px: the size this sets before it
+ * measures, left in place because the measurement ran against a width that was not the column's
+ * final one — and nothing ever measured again. Two changes close that for good:
+ *
+ * <ol>
+ *   <li>It re-measures whenever the name's own box changes width ({@link useFittedName} watches it
+ *       with a ResizeObserver), not only on mount and when the webfont lands. A stylesheet arriving
+ *       late, a drawer opening, a window resized: each one changes the width, so each one re-fits.
+ *   <li>The fallback — no measurement yet, or a hidden element that measures zero — is the CSS
+ *       default, and the CSS default wraps. `whitespace-nowrap` and `overflow-hidden` are no longer
+ *       in the class list; one line is something this function grants after it has measured that
+ *       the name fits, never something the page assumes. If the script never runs, the name is on
+ *       two lines, which is untidy; before, it was cut off, which is wrong.
+ * </ol>
+ *
+ * <p>The floor is what decides between shrinking and wrapping. Scaling alone would take a long name
+ * all the way down to 12px to keep it on one line, which is technically whole and practically
+ * unreadable at the top of the menu. Below the floor, it stops shrinking and wraps instead, at the
+ * floor size, balanced so the two lines are close in length rather than one long and one orphan.
  */
 const NAME_MAX_PX = 28;
-/** `xs` on the type scale. A floor, not a target — nothing real has needed it. */
-const NAME_MIN_PX = 12;
+/** `lg` on the type scale: below this the column's name wraps rather than shrinks. */
+const NAME_MIN_PX = 18;
 /** So the longest name stops a little short of the edge rather than exactly on it. */
 const NAME_BREATHING_PX = 6;
 
-function fitToWidth(el: HTMLElement, maxPx: number = NAME_MAX_PX) {
-  const available = el.clientWidth - NAME_BREATHING_PX;
-  if (available <= 0) {
-    return;
-  }
+function fitToWidth(el: HTMLElement, maxPx: number, minPx: number) {
+  // Measured on one line at the largest size; anything that returns early hands the name back to
+  // the class list, which wraps, so a failed measurement can only ever cost a line, not letters.
+  el.style.whiteSpace = "nowrap";
   el.style.fontSize = `${maxPx}px`;
+  const available = el.clientWidth - NAME_BREATHING_PX;
   const wanted = el.scrollWidth;
-  if (wanted <= 0) {
+  if (available <= 0 || wanted <= 0) {
+    el.style.whiteSpace = "";
+    el.style.fontSize = "";
     return;
   }
   const scaled = Math.floor((maxPx * available) / wanted);
-  el.style.fontSize = `${Math.max(NAME_MIN_PX, Math.min(maxPx, scaled))}px`;
+  if (scaled >= minPx) {
+    // Fits on one line at a readable size: keep the nowrap set above.
+    el.style.fontSize = `${Math.min(maxPx, scaled)}px`;
+  } else {
+    el.style.whiteSpace = "";
+    el.style.fontSize = `${minPx}px`;
+  }
 }
 
 /**
- * The same measure-and-fit, for a name that has to be re-fitted whenever it is shown.
+ * The same measure-and-fit, for a name that has to be re-fitted whenever its room changes.
  *
  * <p>On a phone the menu is `display: none` until it is opened, and a hidden element measures zero
- * wide — {@link fitToWidth} quite rightly does nothing with that. So the drawer passes its open state
- * in as `refit`, and the name is sized again on the frame it first becomes visible.
+ * wide — {@link fitToWidth} quite rightly does nothing with that. The ResizeObserver catches the
+ * frame it first becomes visible; `refit` (the drawer's open state) is kept as a second trigger for
+ * the browsers and test environments that have no ResizeObserver.
  */
-function useFittedName(text: string, maxPx: number, refit?: unknown) {
+function useFittedName(text: string, maxPx: number, minPx: number, refit?: unknown) {
   const ref = useRef<HTMLSpanElement>(null);
-  // Before paint, so the name is never seen at the wrong size; and again once the webfont has
-  // arrived, because the first measurement was of the fallback face.
+  // Before paint, so the name is never seen at the wrong size; again once the webfont has arrived,
+  // because the first measurement was of the fallback face; and again on any change of width.
   useBeforePaint(() => {
     const el = ref.current;
     if (!el) {
       return;
     }
-    fitToWidth(el, maxPx);
+    fitToWidth(el, maxPx, minPx);
     let cancelled = false;
     document.fonts?.ready.then(() => {
       if (!cancelled && ref.current) {
-        fitToWidth(ref.current, maxPx);
+        fitToWidth(ref.current, maxPx, minPx);
       }
     });
+    // Width only. Wrapping onto a second line changes the box's height, and re-fitting on that
+    // would be a measurement answering itself; the width is set by the column, never by the name.
+    let lastWidth = el.clientWidth;
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            const width = el.clientWidth;
+            if (!cancelled && width !== lastWidth) {
+              lastWidth = width;
+              fitToWidth(el, maxPx, minPx);
+            }
+          });
+    observer?.observe(el);
     return () => {
       cancelled = true;
+      observer?.disconnect();
     };
-  }, [text, maxPx, refit]);
+  }, [text, maxPx, minPx, refit]);
   return ref;
 }
 
@@ -88,7 +131,7 @@ function TempleHeader({ subtitle, refit }: { subtitle: string; refit?: unknown }
   const temples = appUser?.temples ?? [];
   const many = temples.length > 1;
 
-  const name = useFittedName(subtitle, NAME_MAX_PX, refit);
+  const name = useFittedName(subtitle, NAME_MAX_PX, NAME_MIN_PX, refit);
 
   const mark = (
     <>
@@ -113,17 +156,18 @@ function TempleHeader({ subtitle, refit }: { subtitle: string; refit?: unknown }
         the name of the software they were already looking at, and whispered the one thing that
         actually identifies where they are. This is somebody’s temple, not a product.
 
-        Stacked and centred under the mark, never wrapped and never truncated: {@link fitToWidth}
-        measures it and scales it to the width it actually has. No `truncate` here on purpose — an
-        ellipsis would hide the failure this is meant to prevent rather than show it.
+        Stacked and centred under the mark, never truncated: {@link fitToWidth} measures it and
+        scales it to the width it actually has, and wraps it between words when even the floor size
+        will not fit on one line. No `truncate`, `whitespace-nowrap` or `overflow-hidden` here on
+        purpose — each of those turns a failed fit into missing letters rather than an extra line.
       */}
       <span
         ref={name}
-        // min-w-0 and overflow-hidden are load-bearing, not tidying. Measuring lays the name out at
-        // 28px first, and without them a flex/grid item's min-width:auto lets that momentarily-wide
-        // text push its own track wider — so clientWidth reads the width the name just created
-        // rather than the width it actually has, and the fit is computed against a lie.
-        className="block w-full min-w-0 overflow-hidden whitespace-nowrap text-center font-medium leading-tight text-ink"
+        // min-w-0 is load-bearing, not tidying. Measuring lays the name out on one line at 28px
+        // first, and without it a grid item's min-width:auto lets that momentarily-wide text push
+        // its own track wider — so clientWidth reads the width the name just created rather than
+        // the width it actually has, and the fit is computed against a lie.
+        className="block w-full min-w-0 text-balance text-center text-lg font-medium leading-tight text-ink"
       >
         {subtitle}
       </span>
@@ -482,7 +526,7 @@ function TopBar({
   onOpen: () => void;
   buttonRef: React.RefObject<HTMLButtonElement>;
 }) {
-  const name = useFittedName(subtitle, TOPBAR_NAME_MAX_PX);
+  const name = useFittedName(subtitle, TOPBAR_NAME_MAX_PX, TOPBAR_NAME_MIN_PX);
   return (
     <header className="app-topbar topbar-surface sticky top-0 z-30 order-first flex min-h-14 items-center gap-3 px-4 py-1 lg:hidden">
       <button
@@ -501,7 +545,8 @@ function TopBar({
           also cost the name the width it most needs on a narrow phone. */}
       <span
         ref={name}
-        className="block min-w-0 flex-1 overflow-hidden whitespace-nowrap font-medium leading-tight text-ink"
+        // As the column's name: one line when it fits, two when it does not, never cut (T-284).
+        className="block min-w-0 flex-1 text-balance text-lg font-medium leading-tight text-ink"
       >
         {subtitle}
       </span>
@@ -511,6 +556,8 @@ function TopBar({
 
 /** The bar's name tops out at `lg` on the type scale: a label for the page, not a heading on it. */
 const TOPBAR_NAME_MAX_PX = 18;
+/** `sm`: a phone bar is narrow enough that a long name should shrink a little before it wraps. */
+const TOPBAR_NAME_MIN_PX = 14;
 
 /**
  * Who you are, at the foot of the menu (E1-S16).
@@ -589,7 +636,10 @@ function SignedInPerson({ activeHref }: { activeHref: string }) {
             {initials(name)}
           </span>
           <span className="grid min-w-0 flex-1 text-left">
-            <span className="truncate text-sm font-medium text-ink">{name}</span>
+            {/* Wraps between words rather than truncating (T-284): "Karuna Murti Das" is 102px of
+                text in a 99px column, and "Karuna Murti D…" is not anybody's name. Balanced, so
+                a second line carries a real part of the name rather than one orphaned word. */}
+            <span className="text-balance text-sm font-medium text-ink">{name}</span>
             <span className="text-xs text-ink-muted">{label}</span>
           </span>
           <i
@@ -625,6 +675,10 @@ function initials(name: string): string {
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Platform operator",
   TEMPLE_ADMIN: "Temple admin",
+  // Missing until T-284, so a Kitchen Manager read "KITCHEN_MANAGER" under their own name. The words
+  // are the Staff screen's (ACCESS_LABELS in components/staff/labels.ts), so the access an admin
+  // grants there is named the same way here.
+  KITCHEN_MANAGER: "Kitchen manager",
   KITCHEN_STAFF: "Kitchen staff",
   VOLUNTEER: "Volunteer",
 };

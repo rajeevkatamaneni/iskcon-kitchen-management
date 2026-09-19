@@ -312,6 +312,180 @@ export function convertQuantity(value: number, from: string | null | undefined, 
 }
 
 /**
+ * A quantity as a box should show it for typing into: the figure and the unit it is in, promoted to
+ * the family's large unit from 1,000 up — 3000 gm is `{ value: 3, unit: "KG" }`, 450 gm stays
+ * `{ value: 450, unit: "GM" }` (T-243, rebuilt and re-verified in T-264).
+ *
+ * <p>Rajeev, 2026-09-19, of the shopping list's order box reading "2792 gm": unreadable (R-SL-1). The
+ * box used to hold the stored unit on purpose, and its comment said why — a readout that said "gm"
+ * over a figure in kilograms would invite a thousandfold error. That hazard is real and this keeps
+ * clear of it the only safe way: the unit printed beside the box is the one returned here, always,
+ * and {@link fromEntry} reads what was typed in that same unit. The box and its label cannot
+ * disagree because they are one answer.
+ *
+ * <p>The same threshold as {@link quantity}, and zero stays in its own unit for the same reason.
+ * The figure is exact — no rounding — because it is a value somebody may submit unchanged; the
+ * toFixed only clears float dust (2.5 × 1000 is exact; 0.3 × 1000 is not quite). Pieces, and any
+ * unit this file does not know, come back as they went in.
+ */
+export function entryQuantity(value: number, unit: string): { value: number; unit: string } {
+  const code = (unit ?? "").toUpperCase();
+  const family = FAMILY[code];
+  if (!family || !Number.isFinite(value)) return { value, unit: code };
+  const inBase = value * BASE_FACTOR[code];
+  const shown = inBase === 0 ? code : Math.abs(inBase) >= 1000 ? family.large : family.small;
+  return { value: Number((inBase / BASE_FACTOR[shown]).toFixed(6)), unit: shown };
+}
+
+/**
+ * What somebody typed into a box labelled `shownUnit`, back in the unit it is stored in — 3 typed
+ * beside "Kg" on a line kept in grams is 3000 (T-243, T-264). The inverse of {@link entryQuantity}.
+ *
+ * <p>Two units that do not convert (which a box built from entryQuantity cannot produce) leave the
+ * figure as typed rather than inventing a factor.
+ */
+export function fromEntry(typed: number, shownUnit: string, storedUnit: string): number {
+  const converted = convertQuantity(typed, shownUnit, storedUnit);
+  return converted == null ? typed : Number(converted.toFixed(6));
+}
+
+/**
+ * A price per one unit restated per another unit of the same family — ₹0.0712 per gm is ₹71.20 per
+ * Kg — or null where there is no price or the units do not convert (T-264).
+ *
+ * <p>The inverse direction of {@link convertQuantity}, and deliberately built on it rather than on a
+ * second table: a kilo is a thousand grams, so a price per kilo is a thousand times a price per
+ * gram. Kept to four decimal places, which is what a purchase-order line's price column holds
+ * (V146) — any finer and the figure sent is not the figure stored.
+ *
+ * <p>Why it exists: the conductor's ruling for the shopping list (2026-09-19) is that the rate
+ * follows the unit the quantity is shown in — "3 Kg" goes with "₹71.20 / Kg", never with a price per
+ * gram — and a list price is stored per the ingredient's own unit.
+ */
+export function pricePer(price: number | null | undefined, perUnit: string, wantedUnit: string): number | null {
+  if (price == null || !Number.isFinite(price)) return null;
+  const converted = convertQuantity(price, wantedUnit, perUnit);
+  return converted == null ? null : Number(converted.toFixed(4));
+}
+
+/**
+ * A price said the way a person says it: per Kg, per L or per piece — "₹300 / Kg" from ₹0.30 a
+ * gram, "₹250 / L" from ₹0.25 a millilitre, "₹4 / piece" — and, for a line bought in packs, per
+ * pack first: "₹1,500 / bag · ₹60 / Kg" (T-288, VERIFY-B D-8).
+ *
+ * <p><b>The one formatter for a rate on any screen.</b> Every screen that prints a price per unit
+ * should come through here, so a price reads the same on the create form, the order, the merge
+ * screen, the invoice and the ingredient page. Before it, a 500 gm tea pack read "₹250 / 500 gm ·
+ * ₹0.50 / gm" beside pepper at "₹800 / Kg" on one sheet: the rate followed the unit the quantity
+ * happened to be printed in, and below 1,000 gm that is gm. The conductor's rule (2026-09-19): the
+ * rate follows the READABLE unit. A weight is priced per Kg and a volume per L whatever the amount
+ * beside it, because a price per gram is a few paise that two places round into a different price
+ * and nobody in a market quotes one. The server's PO sheet follows the same rule
+ * (`DocumentGenerationService.rateUnit`), so the paper and the screen agree.
+ *
+ * @param price the price per ONE `perUnit` — as a purchase-order line stores it (four places, V146),
+ *   or a vendor's list price per the ingredient's unit. Null or not finite gives null: no price is
+ *   said as nothing, never as "₹0".
+ * @param perUnit the unit `price` is per: "GM", "KG", "ML", "L" or "PIECES".
+ * @param pack the pack the line is bought in, or nothing: `label` is the order form the server
+ *   writes, "Bag (25 Kg)", or a plain size, "500 gm"; `quantity` is one pack's size in `perUnit`.
+ *   The price per pack is `price × quantity`, and the word it is "per" is the pack's name in lower
+ *   case ("bag"), or its size where it has no name ("₹250 / 500 gm") — the vendor page's rule.
+ *
+ * <p>Each figure is rounded to paise before it is written, because ₹0.0712 × 1000 is not exactly
+ * 71.2 in floating point and {@link money} would print the dust as "₹71.20" beside a whole "₹60.00".
+ * A count is said in the singular — "/ piece", not "/ pieces" — because a rate is a price for one.
+ */
+export function readableRate(
+  price: number | null | undefined,
+  perUnit: string,
+  pack?: { label: string; quantity: number } | null
+): string | null {
+  if (price == null || !Number.isFinite(price)) return null;
+  if (pack) return readablePackRate(price * pack.quantity, pack.label, price, perUnit);
+  const code = (perUnit ?? "").toUpperCase();
+  const said = rateUnit(code);
+  const perSaid = convertQuantity(price, said, code) ?? price;
+  return `${money(toPaise(perSaid), "INR")} / ${unitLabelFor(1, said)}`;
+}
+
+/**
+ * {@link readableRate}'s pack form, for a view that holds the price per pack as its own figure —
+ * the vendor's quoted "₹1,450 a bag", an invoice's amount over its count — rather than as the price
+ * per unit times the pack (T-293). Working the pack price back out of a four-place price per gram
+ * can miss by paise: ₹1,000 for a 3 Kg bag is ₹0.3333 a gram, and ₹0.3333 × 3,000 is ₹999.90. So
+ * the figure somebody quoted is printed as they quoted it, and only the rate after the dot is
+ * derived. Same words as {@link readableRate}: "₹1,500 / bag · ₹60 / Kg".
+ *
+ * <p>Either half may be missing, and the line says what it has: a pack price with no unit price is
+ * "₹1,500 / bag" (the vendor page's supply quoted only per bag), a unit price with no pack price is
+ * "₹60 / Kg", and neither is null — never "₹0".
+ *
+ * @param packLabel the pack as any view holds it: the order form "Bag (25 Kg)", the vendor page's
+ *   chip "Bag = 25 Kg", a bare word "bag", or a plain size "500 gm". See {@link ratePackWord}.
+ */
+export function readablePackRate(
+  packPrice: number | null | undefined,
+  packLabel: string,
+  unitPrice: number | null | undefined,
+  perUnit: string
+): string | null {
+  const rate = readableRate(unitPrice, perUnit);
+  if (packPrice == null || !Number.isFinite(packPrice)) return rate;
+  const perPack = `${money(toPaise(packPrice), "INR")} / ${ratePackWord(packLabel)}`;
+  return rate === null ? perPack : `${perPack} · ${rate}`;
+}
+
+/**
+ * The unit a rate is said per: Kg for a price kept per gram, L for one kept per millilitre, and the
+ * unit itself otherwise (T-288's rule, T-293). Exported for the price boxes that are typed per Kg
+ * and the price-trend tip, so a box and the words beside it name the same unit.
+ */
+export function rateUnit(unit: string): string {
+  const code = (unit ?? "").toUpperCase();
+  return FAMILY[code]?.large ?? code;
+}
+
+/**
+ * The word a price is "per" for a pack: "bag" for "Bag (25 Kg)" (the order form, T-259) or "Bag = 25
+ * Kg" (the pack chip, T-252), and the size itself for a pack with no name ("500 gm"). Before T-293
+ * each view read its own label format with its own copy of this; one copy reads both, so a pack is
+ * called the same thing on every screen.
+ */
+export function ratePackWord(label: string): string {
+  const named = /^(.+) \((.+)\)$/.exec(label);
+  if (named) return named[1].toLowerCase();
+  const at = label.indexOf(" = ");
+  return at > 0 ? label.slice(0, at).toLowerCase() : label;
+}
+
+/**
+ * Whether the stock amount written beside a pack count only says the pack's label again: one pack
+ * with no name, whose label is its size. "1 × 500 gm" over "500 gm" says the amount twice, so the
+ * second one goes (VERIFY2-C, T-299 on the Deliveries screen; T-302 on the order, the invoice and
+ * the invoice form; T-303 made it this one rule for all of them, and for the Billed qty box).
+ *
+ * <p>It counts packs, not text. A label written "0.5 Kg" over a "500 gm" total is a repeat too,
+ * although the two strings differ. "2 × 500 gm" keeps its "1 Kg", because the total is new
+ * information (the conductor's ruling). A named pack, "1 × Bag (25 Kg)", keeps its "25 Kg": the
+ * name is the word before " (", as `packWord` on the Deliveries screen and the order document take
+ * it, and the size in the bracket is not the whole of what the line says.
+ *
+ * <p>`packs` is the count as the caller writes it. A view that prints a count to 3 places passes it
+ * rounded to 3 places, so the line under "1 × 500 gm" never goes for a count shown as "1.2" or stays
+ * for one shown as "1". A box passes what was typed: 1.0004 packs of 500 gm typed on the Deliveries
+ * screen still shows "(500.2 gm)", because the box says 1.0004 and not 1. The comparison is exact
+ * for that reason; rounding is the display's business, and each display already does it.
+ */
+export function repeatsPack(label: string, packs: number): boolean {
+  return label.indexOf(" (") <= 0 && packs === 1;
+}
+
+function toPaise(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+/**
  * A quantity rounded the way a person rounds it — to a step that grows with the size of the number.
  *
  * <p>Nobody weighs 134.4 gm of cardamom; they weigh 135. Nobody measures 10.08 Kg of rice; they

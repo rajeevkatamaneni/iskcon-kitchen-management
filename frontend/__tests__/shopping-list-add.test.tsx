@@ -41,6 +41,10 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
     name: "Rice",
     category: "Grains",
     unit: "KG",
+    packSizes: [],
+    marketRate: null,
+    marketRateOn: null,
+    marketRateSource: null,
     ekadashiProhibited: false,
     supply: false,
     libraryDerived: false,
@@ -70,6 +74,8 @@ function line(o: Partial<ShoppingListLineView>): ShoppingListLineView {
     included: true,
     edited: false,
     excludedSince: null,
+    buyPacks: [],
+    packFromVendor: false,
     ...o,
   };
 }

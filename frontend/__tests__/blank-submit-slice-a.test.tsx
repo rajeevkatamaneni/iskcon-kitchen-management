@@ -30,7 +30,7 @@ const { catFn, ingFn, authRef, recipeRef, updateMock, pushMock } = vi.hoisted(()
 
 const CATEGORIES: RecipeCategory[] = [{ id: "c1", name: "Rice", fastingCompatible: false }];
 const INGREDIENTS: IngredientView[] = [
-  { id: "i1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "" },
+  { id: "i1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null },
 ];
 
 vi.mock("next/navigation", () => ({
@@ -87,7 +87,7 @@ function recipe(): RecipeDetail {
     masterRecipeId: null,
     status: "ACTIVE",
     version: 1,
-    ingredients: [{ ingredientId: "i1", ingredientName: "Rice", quantity: 2, unit: "KG" }],
+    ingredients: [{ ingredientId: "i1", ingredientName: "Rice", quantity: 2, unit: "KG", preparationNote: null }],
     createdAt: "2026-08-10T00:00:00Z",
   };
 }

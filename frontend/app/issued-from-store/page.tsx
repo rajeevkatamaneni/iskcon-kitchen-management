@@ -206,7 +206,10 @@ function caveatTitle(report: IssuedFromStore): string {
       report.ingredientsWithoutPrice === 1 ? "ingredient has" : "ingredients have"
     } no known price`;
   }
-  return "Estimated, materials only — from vendors’ last-known prices";
+  // Cost per serving's heading, word for word (T-312). The costing reads the list price, and the
+  // market rate where no vendor has one (R-ING-3); "vendors’ last-known prices" was from before
+  // either existed. Only the all-priced variant changes: the "no known price" one above is kept.
+  return "Estimated, materials only — from list prices, or the market rate";
 }
 
 function caveatDetail(report: IssuedFromStore): string {
@@ -215,13 +218,18 @@ function caveatDetail(report: IssuedFromStore): string {
     "This is what left the temple store, and nothing else. A kitchen that buys food itself keeps no record of it here, so its real food cost is higher than the figure beside its name.",
   ];
   if (report.ingredientsWithoutPrice > 0) {
+    // Names both ways an ingredient gets a price (T-294, VERIFY-A defect 6). It used to say "until a
+    // vendor price is recorded", which was the only way until R-ING-3 made the market rate price an
+    // ingredient too. Both terms are the ones the ingredient page shows ("List price", "Market
+    // rate"), so the reader can find what the sentence names.
+    const one = report.ingredientsWithoutPrice === 1;
     parts.push(
       `${report.unpriced
         .slice(0, 6)
         .map((ingredient) => ingredient.name)
         .join(", ")}${report.unpriced.length > 6 ? " and others" : ""} ${
-        report.ingredientsWithoutPrice === 1 ? "is" : "are"
-      } left out until a vendor price is recorded.`
+        one ? "is" : "are"
+      } left out until ${one ? "it has" : "they have"} a vendor’s list price or a market rate.`
     );
   }
   return parts.join(" ");

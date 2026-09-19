@@ -98,5 +98,13 @@ describe("purchase orders", () => {
     queryRef.current = { data: [], error: null, loading: false };
     render(<PurchaseOrdersPage />);
     expect(screen.getByText(/no purchase orders/i)).toBeInTheDocument();
+    // R-PO-1 (T-263): the empty state's way in says the same as the button.
+    expect(screen.getByRole("link", { name: "create a purchase order" })).toHaveAttribute("href", "/orders/new");
+  });
+
+  it("offers “Create a purchase order”, which goes straight to the form (R-PO-1)", () => {
+    render(<PurchaseOrdersPage />);
+    expect(screen.getByRole("link", { name: "Create a purchase order" })).toHaveAttribute("href", "/orders/new");
+    expect(screen.queryByText(/raise an order/i)).toBeNull();
   });
 });

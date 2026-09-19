@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { VendorInvoiceView, VendorView } from "@/lib/api";
 
 // Two useAuthedQuery calls in order: invoices, then active vendors.
@@ -71,6 +71,7 @@ const VENDORS: VendorView[] = [];
 
 describe("invoices", () => {
   beforeEach(() => {
+    paramsRef.current = new URLSearchParams();
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     returnsRef.current = [
       { data: [invoice({})], error: null, loading: false },
@@ -80,12 +81,14 @@ describe("invoices", () => {
     reloadMock.mockReset();
   });
 
-  it("lists invoices with the overdue badge and a price variance", () => {
+  it("lists invoices with the overdue badge and the price difference, named as the invoice page names it", () => {
     render(<InvoicesPage />);
     expect(screen.getByRole("heading", { name: /invoices/i })).toBeInTheDocument();
     expect(screen.getByText("INV-1")).toBeInTheDocument();
-    expect(screen.getByText("Overdue")).toBeInTheDocument(); // the badge; the filter reads "Overdue only"
-    expect(screen.getByText(/variance ₹50/i)).toBeInTheDocument();
+    // The badge, read inside the table: the filter above it has an "Overdue" tab of its own now.
+    expect(within(screen.getByRole("table")).getByText("Overdue")).toBeInTheDocument();
+    expect(screen.getByText("Difference ₹50")).toBeInTheDocument();
+    expect(screen.queryByText(/variance/i)).toBeNull();
   });
 
   it("opens the invoice from its number — the row was inert before (A8)", () => {
@@ -124,37 +127,41 @@ describe("recording an invoice", () => {
     replaceMock.mockReset();
   });
 
-  it("is a screen of its own, reached from the queue", () => {
+  it("is a screen of its own, reached from the list's Create an invoice (R-INV-1)", () => {
     render(<InvoicesPage />);
-    expect(screen.getByRole("link", { name: /record an invoice/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Create an invoice" })).toHaveAttribute(
       "href",
       "/invoices/new"
     );
+    expect(screen.queryByRole("link", { name: /record an invoice/i })).not.toBeInTheDocument();
   });
 
+  // The three below were written for "Record an invoice" and rewritten by T-273 for the form that
+  // replaced it (R-INV-1..3): the same guarantees, in the new form's words.
   it("commits from the header, with Cancel beside it and no back-link", () => {
     render(<NewInvoicePage />);
-    expect(screen.getByRole("form", { name: /record an invoice/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /record invoice/i })).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Create an invoice" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save invoice" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/invoices");
     expect(screen.queryByText(/←/)).not.toBeInTheDocument();
   });
 
-  it("swaps the purchase order for a description when the buy was direct", () => {
+  it("swaps the deliveries being billed for a description when the buy was direct", () => {
     render(<NewInvoicePage />);
-    const form = screen.getByRole("form", { name: /record an invoice/i });
-    // A <select> since T-082, not an <input>: the order is chosen from the vendor's own open
-    // orders rather than pasted in as a database id. The tick still swaps one field for one field.
-    expect(form.querySelector('select[name="purchaseOrderId"]')).toBeInTheDocument();
+    const form = screen.getByRole("form", { name: "Create an invoice" });
+    // What is billed is the vendor's deliveries since T-273 (R-INV-3), not a purchase order. The
+    // tick still swaps one field for one field.
+    expect(screen.getByText("Deliveries being billed")).toBeInTheDocument();
+    expect(form.querySelector('input[name="description"]')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText(/direct, with no purchase order/i));
-    expect(form.querySelector('select[name="purchaseOrderId"]')).not.toBeInTheDocument();
+    expect(screen.queryByText("Deliveries being billed")).not.toBeInTheDocument();
     expect(form.querySelector('input[name="description"]')).toBeInTheDocument();
   });
 
   it("asks for no identifier anybody has to go and copy (T-082)", () => {
     render(<NewInvoicePage />);
-    const form = screen.getByRole("form", { name: /record an invoice/i });
+    const form = screen.getByRole("form", { name: "Create an invoice" });
     expect(form.querySelector('input[name="purchaseOrderId"]')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/paste it from the order/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/purchase order id/i)).not.toBeInTheDocument();

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { InvoicePaymentView, VendorInvoiceView } from "@/lib/api";
+import type { InvoicePaymentView, VendorInvoiceDetailView, VendorInvoiceView } from "@/lib/api";
 
 /**
  * Correcting a bill on the screens (T-010): a struck bill, a credited one, and a payment that has
@@ -70,7 +70,10 @@ vi.mock("@/lib/api", async (orig) => {
 import InvoiceDetailPage from "@/app/invoices/[id]/page";
 import InvoicesPage from "@/app/invoices/page";
 
-function invoice(o: Partial<VendorInvoiceView> = {}): VendorInvoiceView {
+// The page's own shape since stage 6 (T-274): the list row plus lines, deliveries, totals and bill. An
+// invoice recorded before stage 6 has them empty or null, which is what these corrections were
+// written against, so that is what the fixture keeps.
+function invoice(o: Partial<VendorInvoiceDetailView> = {}): VendorInvoiceDetailView {
   return {
     id: "inv1",
     vendorId: "v1",
@@ -92,6 +95,15 @@ function invoice(o: Partial<VendorInvoiceView> = {}): VendorInvoiceView {
     voidReason: null,
     creditedAmount: 0,
     createdAt: "2026-08-01T00:00:00Z",
+    lines: [],
+    deliveries: [],
+    subTotal: null,
+    gstAmount: null,
+    otherCharges: null,
+    otherChargesNote: null,
+    discount: null,
+    grandTotal: null,
+    bill: null,
     ...o,
   };
 }
@@ -108,6 +120,8 @@ function payment(o: Partial<InvoicePaymentView> = {}): InvoicePaymentView {
     reverses: null,
     reversedBy: null,
     reverseReason: null,
+    receivedByName: null,
+    attachments: [],
     createdAt: "2026-08-10T00:00:00Z",
     ...o,
   };
@@ -150,15 +164,14 @@ describe("a bill that was struck", () => {
   });
 
   it("carries the third status onto the queue, as a badge and as a filter", () => {
-    invoiceRef.current = [
-      invoice({ status: "VOIDED", voidedAt: "2026-09-02T06:30:00Z", voidReason: "Duplicate." }),
-    ];
+    const row: VendorInvoiceView = invoice({ status: "VOIDED", voidedAt: "2026-09-02T06:30:00Z", voidReason: "Duplicate." });
+    invoiceRef.current = [row];
     render(<InvoicesPage />);
 
-    // Scoped to the table, because the word is also the new filter option — which is the other
-    // half of what this asserts.
+    // Scoped to the table, because the word is also a filter — which is the other half of what this
+    // asserts. The filter is one of T-275's tabs now, where it used to be a dropdown option.
     expect(within(screen.getByRole("table")).getByText("Voided")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Voided" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Voided" })).toBeInTheDocument();
   });
 });
 
@@ -217,7 +230,8 @@ describe("voiding and crediting", () => {
     expect(screen.getAllByText("₹1,000")).toHaveLength(2);
     // A credit is not a void: the bill is still in the cycle.
     expect(screen.queryByText(/struck as never owed/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Pending")).toBeInTheDocument();
+    // "Unpaid", the list's word for a bill still owed (conductor, 2026-09-19).
+    expect(screen.getByText("Unpaid")).toBeInTheDocument();
   });
 
   it("hides all of it from a reader without the payments permission", () => {

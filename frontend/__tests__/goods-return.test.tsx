@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { ApiError, api } from "@/lib/api";
 import type {
   GoodsReceiptView, GoodsReturnView, IngredientView, PurchaseOrderDetailView,
@@ -67,7 +67,7 @@ const DETAIL: PurchaseOrderDetailView = {
     createdAt: "2026-08-01T09:00:00Z",
   },
   lines: [
-    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 36, unit: "KG", expectedPrice: 45, arrivedOn: null },
+    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 36, unit: "KG", expectedPrice: 45, arrivedOn: null, packSizeId: null, packLabel: null, packQuantity: null, packCount: null },
   ],
   events: [],
 };
@@ -106,7 +106,7 @@ function receipt(returnedQty: number): GoodsReceiptView[] {
 }
 
 const INGREDIENTS: IngredientView[] = [
-  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null, ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
 ];
 
 function withReceipts(receipts: GoodsReceiptView[]) {
@@ -149,14 +149,21 @@ describe("returning received goods to the vendor", () => {
     render(<PurchaseOrderDetailPage />);
 
     // Until T-013 this screen fetched the receipts only to total "received so far" inside the
-    // receiving form: a delivery could be recorded and then never read again anywhere.
-    expect(screen.getByRole("heading", { name: /deliveries received/i })).toBeInTheDocument();
-    expect(screen.getByText(/Staff A/)).toBeInTheDocument();
-    expect(screen.getByText("30 Kg")).toBeInTheDocument();
-    // Rejected at the gate and returned afterwards are two different facts about two different
-    // quantities, and the screen says which is which.
-    expect(screen.getByText("2 Kg · spoiled")).toBeInTheDocument();
-    expect(screen.getByText("5 Kg")).toBeInTheDocument();
+    // receiving form: a delivery could be recorded and then never read again anywhere. Since T-265
+    // (R-PO-4) it is read back in the one merged table rather than a table per delivery.
+    expect(screen.queryByRole("heading", { name: /deliveries received/i })).not.toBeInTheDocument();
+    const row = screen.getAllByRole("row").find((r) => r.querySelector("td")?.textContent === "Rice")!;
+    const cells = within(row).getAllByRole("cell");
+    // Refused on delivery and returned afterwards are two different facts about two different
+    // quantities, and the screen says which is which, each in its own column.
+    expect(cells.map((c) => c.textContent)).toEqual(
+      expect.arrayContaining(["36 Kg", "30 Kg", "2 Kg", "5 Kg"])
+    );
+    // The delivery itself, in the history row under the item.
+    const below = row.nextElementSibling as HTMLElement;
+    fireEvent.click(within(below).getByRole("button", { name: /1 delivery/ }));
+    expect(within(below).getByText("Received by: Staff A")).toBeInTheDocument();
+    expect(within(below).getByText("2 Kg rejected (spoiled)")).toBeInTheDocument();
   });
 
   it("offers the return only while something is left to send back", () => {
@@ -247,7 +254,9 @@ describe("returning received goods to the vendor", () => {
     render(<PurchaseOrderDetailPage />);
     fireEvent.click(screen.getByRole("button", { name: /return to vendor/i }));
 
-    fireEvent.change(screen.getByLabelText(/quantity of Rice to return/i), { target: { value: "40" } });
+    // Within what this screen last saw (30 Kg can go back), so the form lets it through: the case
+    // is a second storekeeper returning the same sack a minute ago, which only the server knows.
+    fireEvent.change(screen.getByLabelText(/quantity of Rice to return/i), { target: { value: "20" } });
     await act(async () => {
       fireEvent.submit(screen.getByRole("form", { name: /return goods to the vendor/i }));
     });
@@ -278,5 +287,24 @@ describe("returning received goods to the vendor", () => {
     });
     expect(screen.getByText("Quantity of Rice to return must be at least 0")).toBeInTheDocument();
     expect(send).not.toHaveBeenCalled();
+  });
+
+  // The screen's own refusal is its one sentence (T-303, as T-298 did on /orders/new): no "Check
+  // your connection and try again.", no "If you need help, quote KMS-0000", because nothing was sent.
+  it("a blank return says only its sentence, with no connection advice and no code (T-303)", async () => {
+    const send = vi.spyOn(api, "returnReceivedGoods").mockResolvedValue(RECORDED);
+    render(<PurchaseOrderDetailPage />);
+    fireEvent.click(screen.getByRole("button", { name: /return to vendor/i }));
+
+    await act(async () => {
+      fireEvent.submit(screen.getByRole("form", { name: /return goods to the vendor/i }));
+    });
+
+    expect(send).not.toHaveBeenCalled();
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].textContent).toBe("Enter how much went back to the vendor.");
+    expect(alerts[0].querySelectorAll("p")).toHaveLength(1);
+    expect(document.body.textContent).not.toMatch(/connection|KMS-/);
   });
 });

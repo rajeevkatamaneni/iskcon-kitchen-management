@@ -16,7 +16,7 @@ const { catFn, ingFn } = vi.hoisted(() => ({ catFn: () => {}, ingFn: () => {} })
 
 const CATEGORIES: RecipeCategory[] = [{ id: "c1", name: "Rasam", fastingCompatible: false }];
 const INGREDIENTS: IngredientView[] = [
-  { id: "i1", name: "Tamarind", category: "Spices", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "" },
+  { id: "i1", name: "Tamarind", category: "Spices", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null },
 ];
 
 vi.mock("@/lib/api", async (orig) => {
@@ -66,7 +66,7 @@ function recipe(overrides: Partial<RecipeDetail> = {}): RecipeDetail {
     perHeadQty: 350, perHeadUnit: "ML", subtitle: null, badge: null, indicativeCost: null, why: null,
     cateringNote: null, subRegion: null, noteStart: null, noteVessel: null, noteSeason: null, tags: [],
     serveWith: [], masterRecipeId: null, status: "ACTIVE", version: 1,
-    ingredients: [{ ingredientId: "i1", ingredientName: "Tamarind", quantity: 2, unit: "KG" }],
+    ingredients: [{ ingredientId: "i1", ingredientName: "Tamarind", quantity: 2, unit: "KG", preparationNote: null }],
     createdAt: "2026-09-01T00:00:00Z",
     ...overrides,
   };

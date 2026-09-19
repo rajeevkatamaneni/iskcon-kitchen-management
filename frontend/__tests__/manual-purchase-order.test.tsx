@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import type { IngredientView, PurchaseOrderView, VendorView } from "@/lib/api";
-import { dateWithYear, todayIso } from "@/lib/format";
 
 /**
+ * CHANGED AT T-263 (R-PO-1): the two screens this file was written for — the vendor on its own, then
+ * the lines — are one form now, "Create a purchase order", and that form is tested in
+ * `po-create-form.test.tsx`. What stays here is the way in from the list, the confirmation the list
+ * shows afterwards, and the old step-two address redirecting to the form. The history below is kept
+ * because it explains why the list's confirmation is built the way it is.
+ *
  * Raising a one-off purchase order by hand, vendor first (T-026, D-7).
  *
  * <p>`POST /api/v1/purchase-orders` has existed since E5-S3 with no caller at all: an order could
@@ -24,7 +29,7 @@ import { dateWithYear, todayIso } from "@/lib/format";
  */
 
 const {
-  authRef, pushMock, replaceMock, paramsRef,
+  authRef, pushMock, replaceMock, redirectMock, paramsRef,
   listVendors, listIngredients, listPurchaseOrders, createPurchaseOrder,
 } = vi.hoisted(() => ({
   // One object, replaced only when the role changes. `useAuthedQuery` lists the auth object's
@@ -49,6 +54,7 @@ const {
   },
   pushMock: vi.fn(),
   replaceMock: vi.fn(),
+  redirectMock: vi.fn(),
   paramsRef: { current: new URLSearchParams() },
   listVendors: vi.fn(),
   listIngredients: vi.fn(),
@@ -64,6 +70,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => paramsRef.current,
   useParams: () => ({}),
   usePathname: () => "/orders",
+  redirect: redirectMock,
 }));
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => authRef.current }));
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -100,51 +107,15 @@ function vendor(o: Partial<VendorView>): VendorView {
 
 const RICE: IngredientView = {
   id: "ing1", name: "Rice", category: "Grains", unit: "KG",
+  packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null,
   ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z",
 };
-
-/** Tomorrow in the temple's own day, which is the clock the server measures needed-by against. */
-function tomorrow(): string {
-  const d = new Date(`${todayIso()}T00:00:00`);
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
-
-function yesterday(): string {
-  const d = new Date(`${todayIso()}T00:00:00`);
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
-
-/**
- * Chooses Rice out of the catalogue picker — once the picker has Rice to offer.
- *
- * <p>The wait is the whole point of the helper. The lines screen gates its form on the *vendor*
- * query alone (`loadingVendors`) and fills this picker from a second, ungated one,
- * `useAuthedQuery(allIngredients)`. So `findByLabelText` resolves on a paint where the
- * {@code <select>} is present and carries nothing but "Choose…", and the two never have to arrive
- * in that order.
- *
- * <p>Worth spelling out because of how it fails. Firing a change at a value no {@code <option>}
- * carries neither throws nor warns — the DOM simply declines it, the select keeps its empty value,
- * "Add line" stays disabled, and the run dies a dozen lines later on
- * {@code getByLabelText("Quantity of Rice")}, a field that was never created, pointing at a screen
- * with nothing wrong with it. That is a different fault from the `within(...)` races T-075 fixed
- * elsewhere: there an *assertion* reads too early and names the thing it could not find, here an
- * *action* lands too early and an innocent later line takes the blame.
- */
-async function chooseRiceFromTheCatalogue() {
-  const picker = await screen.findByLabelText(/add an ingredient/i);
-  await waitFor(() =>
-    expect(within(picker).getByRole("option", { name: "Rice" })).toBeInTheDocument()
-  );
-  fireEvent.change(picker, { target: { value: "ing1" } });
-}
 
 beforeEach(() => {
   paramsRef.current = new URLSearchParams();
   pushMock.mockReset();
   replaceMock.mockReset();
+  redirectMock.mockReset();
   listVendors.mockReset().mockResolvedValue([vendor({})]);
   listIngredients.mockReset().mockResolvedValue([RICE]);
   listPurchaseOrders.mockReset().mockResolvedValue([] as PurchaseOrderView[]);
@@ -156,18 +127,20 @@ beforeEach(() => {
 });
 
 describe("the way in, from the purchase-order list", () => {
-  it("offers raising one by hand, which the screen has never done before", async () => {
+  it("offers “Create a purchase order”, straight to the form (R-PO-1)", async () => {
     render(<PurchaseOrdersPage />);
 
-    const raise = await screen.findByRole("link", { name: /raise an order/i });
-    expect(raise).toHaveAttribute("href", "/orders/new");
+    const create = await screen.findByRole("link", { name: "Create a purchase order" });
+    expect(create).toHaveAttribute("href", "/orders/new");
+    expect(screen.queryByRole("link", { name: /raise an order/i })).toBeNull();
   });
 
   it("puts something behind the empty state’s offer to create one directly", async () => {
     render(<PurchaseOrdersPage />);
 
     // The sentence said "or create one directly" with nothing behind those words at all.
-    const byHand = await screen.findByRole("link", { name: /raise one by hand/i });
+    // "raise one by hand" until R-PO-1 renamed the act (T-263).
+    const byHand = await screen.findByRole("link", { name: "create a purchase order" });
     expect(byHand).toHaveAttribute("href", "/orders/new");
   });
 });
@@ -178,7 +151,7 @@ describe("the confirmation a newly raised order comes back with", () => {
     render(<PurchaseOrdersPage />);
 
     expect(
-      await screen.findByText(/A purchase order for Govind Wholesale was raised\./i)
+      await screen.findByText(/A purchase order for Govind Wholesale was created\./i)
     ).toBeInTheDocument();
     // A draft is about to be read and sent, and finding one row among fifty is not a thing to make
     // somebody do straight after raising it.
@@ -200,7 +173,7 @@ describe("the confirmation a newly raised order comes back with", () => {
     // either way: what breaks is that it never stops being re-shown.
     paramsRef.current = new URLSearchParams("added=Govind%20Wholesale&po=po9");
     const { rerender } = render(<PurchaseOrdersPage />);
-    await screen.findByText(/A purchase order for Govind Wholesale was raised\./i);
+    await screen.findByText(/A purchase order for Govind Wholesale was created\./i);
 
     for (let i = 0; i < 4; i++) {
       await act(async () => {
@@ -213,206 +186,26 @@ describe("the confirmation a newly raised order comes back with", () => {
   });
 });
 
-describe("step one — which vendor", () => {
-  it("asks the server for active vendors only, with the flag the right way round", async () => {
+describe("the retired two-step route", () => {
+  // R-PO-1 (T-263): the button goes straight to the one create form, and the screen that asked only
+  // for the vendor is gone. /orders/new/lines — the old step two — is kept as a redirect so an old
+  // bookmark lands on the form, with the vendor it carried.
+  it("sends /orders/new/lines to the form, keeping the vendor", () => {
+    NewPurchaseOrderLinesPage({ searchParams: { vendor: "v1" } });
+    expect(redirectMock).toHaveBeenCalledWith("/orders/new?vendor=v1");
+  });
+
+  it("sends it to the bare form when no vendor came with it", () => {
+    NewPurchaseOrderLinesPage({ searchParams: {} });
+    expect(redirectMock).toHaveBeenCalledWith("/orders/new");
+  });
+
+  it("the form itself asks for the vendor alongside everything else, not on a screen of its own", async () => {
     render(<NewPurchaseOrderPage />);
-    await screen.findByRole("combobox", { name: /vendor/i });
-
-    // `listVendors`'s flag is inverted against the endpoint's own question: true is active-only,
-    // false asks for the inactive ones as well. The server accepts an order against a vendor
-    // somebody deliberately dropped — `requireVendor` checks only that the row exists — so this
-    // call being right is the whole of the guard.
-    expect(listVendors).toHaveBeenCalledWith(true, "test-token");
-  });
-
-  it("offers no supplier the temple has dropped", async () => {
-    // The narrowing happens in the request, so what proves it here is that the screen renders the
-    // answer to that request and invents nothing: one active vendor in, one option out.
-    listVendors.mockResolvedValue([vendor({}), vendor({ id: "v2", name: "Sri Lakshmi Traders" })]);
-    render(<NewPurchaseOrderPage />);
-
-    const picker = await screen.findByRole("combobox", { name: /vendor/i });
-    const options = within(picker).getAllByRole("option").map((o) => o.textContent);
-    expect(options).toEqual(["Choose a vendor…", "Govind Wholesale", "Sri Lakshmi Traders"]);
-  });
-
-  it("asks one question, so leaving to add a vendor can lose nothing", async () => {
-    render(<NewPurchaseOrderPage />);
-
-    const form = await screen.findByRole("form", { name: /choose a vendor/i });
-    // D-7's premise, asserted rather than assumed: there is exactly one control in this form and it
-    // is the picker. The moment a second field appears here, routing out to /vendors/new starts
-    // costing somebody their typing and the two-screen shape stops paying for itself.
-    expect(within(form).getAllByRole("combobox")).toHaveLength(1);
-    expect(within(form).queryByRole("textbox")).toBeNull();
-
-    expect(within(form).getByRole("link", { name: /add a vendor/i })).toHaveAttribute(
-      "href",
-      "/vendors/new"
-    );
-  });
-
-  it("leads to the lines once a vendor is chosen, and not before", async () => {
-    render(<NewPurchaseOrderPage />);
-    const picker = await screen.findByRole("combobox", { name: /vendor/i });
-
-    // Nothing chosen, nothing to continue to. Continue is still pressable (T-172): pressing it on a
-    // blank picker is how the screen says a vendor is needed, tested below.
-    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
-
-    fireEvent.change(picker, { target: { value: "v1" } });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    });
-    // In the address, so step two is linkable and survives a reload.
-    expect(pushMock).toHaveBeenCalledWith("/orders/new/lines?vendor=v1");
-    expect(pushMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("names the vendor as required when the form is submitted blank, and goes nowhere (T-162)", async () => {
-    render(<NewPurchaseOrderPage />);
-    await screen.findByRole("combobox", { name: /vendor/i });
-    const pushesBefore = pushMock.mock.calls.length;
-
-    // Until T-172 Continue stayed disabled until a vendor was chosen, and this test had to submit the
-    // form directly. It is pressable now, so the real press is what names the picker.
-    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    });
-
-    expect(screen.getByText("Vendor is required")).toBeInTheDocument();
-    expect(pushMock.mock.calls.length).toBe(pushesBefore);
-  });
-});
-
-describe("step two — the lines", () => {
-  beforeEach(() => {
-    paramsRef.current = new URLSearchParams("vendor=v1");
-  });
-
-  it("names the vendor the order is being raised against", async () => {
-    render(<NewPurchaseOrderLinesPage />);
-    expect(await screen.findByText("Govind Wholesale")).toBeInTheDocument();
-  });
-
-  it("raises an order carrying an ingredient line and a described one", async () => {
-    render(<NewPurchaseOrderLinesPage />);
-
-    // An ingredient out of the catalogue…
-    await chooseRiceFromTheCatalogue();
-    fireEvent.click(screen.getByRole("button", { name: /^add line$/i }));
-    fireEvent.change(screen.getByLabelText("Quantity of Rice"), { target: { value: "30" } });
-
-    // …and something the catalogue has never heard of, which is what T-024 made possible.
-    // `{ selector }` because the field is hinted: InfoHint's "i" button carries the accessible name
-    // "More about <label>", so a bare getByLabelText matches the input and the button both.
-    const describe_ = screen.getByLabelText(/an item not in the catalogue/i, {
-      selector: "input",
-    });
-    fireEvent.change(describe_, { target: { value: "  Plastic stool  " } });
-    fireEvent.click(screen.getByRole("button", { name: /add described line/i }));
-    fireEvent.change(screen.getByLabelText("Quantity of Plastic stool"), { target: { value: "4" } });
-
-    fireEvent.change(screen.getByLabelText(/needed by/i), { target: { value: tomorrow() } });
-    fireEvent.change(screen.getByLabelText(/deliver to/i), { target: { value: "Main store" } });
-
-    await act(async () => {
-      fireEvent.submit(screen.getByRole("form", { name: /raise a purchase order/i }));
-    });
-
-    expect(createPurchaseOrder).toHaveBeenCalledTimes(1);
-    const sent = createPurchaseOrder.mock.calls[0][0];
-    expect(sent.vendorId).toBe("v1");
-    expect(sent.neededBy).toBe(tomorrow());
-    expect(sent.deliveryLocation).toBe("Main store");
-    expect(sent.notes).toBeNull();
-
-    // Both halves of the subject on every line, and never both filled. `objectContaining` cannot
-    // test that absence — it would pass on a line that omitted `description` entirely, which is the
-    // undefined the server refuses with KMS-400128 — so the keys are inspected, then the values.
-    expect(sent.lines).toHaveLength(2);
-    for (const line of sent.lines) {
-      expect(Object.keys(line)).toContain("ingredientId");
-      expect(Object.keys(line)).toContain("description");
-    }
-    expect(sent.lines[0]).toEqual({
-      ingredientId: "ing1", description: null, quantity: 30, unit: "KG", expectedPrice: null,
-    });
-    expect(sent.lines[1]).toEqual({
-      ingredientId: null, description: "Plastic stool", quantity: 4, unit: "PIECES", expectedPrice: null,
-    });
-
-    // Rule 8: back to the list, with the confirmation waiting there — the same parameter the vendor
-    // list has taken since /vendors/new was built, plus the id so the order itself is one press away.
-    expect(pushMock).toHaveBeenCalledWith("/orders?added=Govind%20Wholesale&po=po-new");
-  });
-
-  it("refuses a needed-by date that has already passed, in words, before the round trip", async () => {
-    render(<NewPurchaseOrderLinesPage />);
-
-    await chooseRiceFromTheCatalogue();
-    fireEvent.click(screen.getByRole("button", { name: /^add line$/i }));
-    fireEvent.change(screen.getByLabelText("Quantity of Rice"), { target: { value: "30" } });
-
-    // The box carries a `min` of the temple's today, and that attribute is the rule.
-    const needed = screen.getByLabelText(/needed by/i);
-    expect(needed).toHaveAttribute("min", todayIso());
-    fireEvent.change(needed, { target: { value: yesterday() } });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /raise order/i }));
-    });
-
-    // CHANGED AT T-162. This used to submit the form directly and expect the page's own "That date
-    // has already passed" alert, because jsdom never checked the `min`. The form is a `Form` now,
-    // which reads the browser's verdict on the box and names it in red beside it, so that sentence
-    // is what refuses the date — as the browser's own bubble always did in a real browser, where
-    // the page's alert was never reachable. The server's KMS-400014 is still the guard behind both.
-    expect(screen.getByText(`Needed by must be on or after ${dateWithYear(todayIso())}`)).toBeInTheDocument();
-    expect(createPurchaseOrder).not.toHaveBeenCalled();
-  });
-
-  it("will not raise an empty order", async () => {
-    render(<NewPurchaseOrderLinesPage />);
-    await screen.findByRole("form", { name: /raise a purchase order/i });
-
-    await act(async () => {
-      fireEvent.submit(screen.getByRole("form", { name: /raise a purchase order/i }));
-    });
-
-    expect(screen.getByRole("alert")).toHaveTextContent(/at least one line/i);
-    expect(createPurchaseOrder).not.toHaveBeenCalled();
-  });
-
-  it("names a negative quantity beside its box when Raise order is pressed (T-162)", async () => {
-    // No box on this form is `required` — an order with no lines is refused by the page in words,
-    // above — but every quantity carries min="0".
-    render(<NewPurchaseOrderLinesPage />);
-    await chooseRiceFromTheCatalogue();
-    fireEvent.click(screen.getByRole("button", { name: /^add line$/i }));
-    fireEvent.change(screen.getByLabelText("Quantity of Rice"), { target: { value: "-3" } });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /raise order/i }));
-    });
-
-    expect(screen.getByText("Quantity of Rice must be at least 0")).toBeInTheDocument();
-    expect(createPurchaseOrder).not.toHaveBeenCalled();
-  });
-
-  it("sends somebody who arrived without a live vendor back to the question", async () => {
-    // A hand-edited address, or a vendor dropped between the two screens. The server would accept
-    // the order — `requireVendor` only checks the row exists — so this screen is the guard.
-    paramsRef.current = new URLSearchParams("vendor=v-dropped");
-    render(<NewPurchaseOrderLinesPage />);
-
-    expect(await screen.findByText(/no vendor chosen/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /choose a vendor/i })).toHaveAttribute(
-      "href",
-      "/orders/new"
-    );
-    expect(screen.queryByRole("form", { name: /raise a purchase order/i })).toBeNull();
+    const form = await screen.findByRole("form", { name: "Create a purchase order" });
+    expect(within(form).getByRole("combobox", { name: "Vendor" })).toBeInTheDocument();
+    expect(within(form).getByLabelText("Needed by")).toBeInTheDocument();
+    expect(within(form).getByRole("combobox", { name: "Add an item" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /continue/i })).toBeNull();
   });
 });

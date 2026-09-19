@@ -10,7 +10,14 @@ import { RequireRole } from "@/components/RequireRole";
 import { BackToRecipes } from "@/components/BackToRecipes";
 import { Tooltip } from "@/components/ds/Tooltip";
 import { BusyPot, Loading } from "@/components/Loading";
-import { api, toApiError, type ApiError } from "@/lib/api";
+import {
+  api,
+  toApiError,
+  type ApiError,
+  type ImportCloseMatchDecision,
+  type ImportCloseMatchView,
+} from "@/lib/api";
+import { ImportCloseMatches, closeMatchesFrom } from "@/components/ImportCloseMatches";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { batchCost } from "@/lib/format";
@@ -47,14 +54,50 @@ function LibraryRecipeView() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
 
+  // "Did you mean …?" answers the copy is waiting on (Q-11, T-287), and a refusal of the answered
+  // copy that is not about a close match, shown inside the dialog.
+  const [matches, setMatches] = useState<ImportCloseMatchView[] | null>(null);
+  const [askingError, setAskingError] = useState<ApiError | null>(null);
+
+  /*
+    The copy asks first: if any ingredient name here is only close to one the temple has, the dialog
+    lists them all and nothing is copied until each is answered. With none it copies at once, as it
+    always did, and opens the temple's new recipe.
+  */
   async function add() {
     setBusy(true);
     setActionError(null);
     try {
-      const { id: mine } = await api.importRecipe(id, await getToken());
+      const token = await getToken();
+      const close = await api.importCloseMatches(id, token);
+      if (close.length > 0) {
+        setAskingError(null);
+        setMatches(close);
+        setBusy(false);
+        return;
+      }
+      const { id: mine } = await api.importRecipe(id, token);
       router.push(`/recipes/${mine}`);
     } catch (e) {
-      setActionError(toApiError(e, "We couldn’t add that recipe."));
+      // The catalogue can change between asking and copying; a refusal naming close matches opens
+      // the dialog on them.
+      const close = closeMatchesFrom(e);
+      if (close) setMatches(close);
+      else setActionError(toApiError(e, "We couldn’t add that recipe."));
+      setBusy(false);
+    }
+  }
+
+  async function addAnswered(decisions: ImportCloseMatchDecision[]) {
+    setBusy(true);
+    setAskingError(null);
+    try {
+      const { id: mine } = await api.importRecipe(id, await getToken(), decisions);
+      router.push(`/recipes/${mine}`);
+    } catch (e) {
+      const close = closeMatchesFrom(e);
+      if (close) setMatches(close);
+      else setAskingError(toApiError(e, "We couldn’t add that recipe."));
       setBusy(false);
     }
   }
@@ -185,6 +228,17 @@ function LibraryRecipeView() {
 
       {recipe.serveWith.length > 0 && (
         <Note heading="Serve with" body={recipe.serveWith.join(" · ")} />
+      )}
+
+      {matches && (
+        <ImportCloseMatches
+          recipeName={recipe.displayName}
+          matches={matches}
+          busy={busy}
+          error={askingError}
+          onAdd={addAnswered}
+          onCancel={() => setMatches(null)}
+        />
       )}
     </Chrome>
   );

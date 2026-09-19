@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Form } from "@/components/ds/Form";
 import { HintedField } from "@/components/ds/InfoHint";
-import { unitLabel } from "@/lib/format";
+import { unitLabel, unitLabelFor } from "@/lib/format";
 import type { ApiError, IngredientView, StockItemView } from "@/lib/api";
 
 /**
@@ -34,11 +34,24 @@ export interface NewInventoryItem {
   storageLocation: string | null;
   reorderThreshold: number | null;
   notes: string | null;
+  /**
+   * "What it would cost to buy today", ₹ per the ingredient's own stock unit (R-ING-3), or null when
+   * no count was typed. Sent with the opening count and nowhere else: it is only ever asked because
+   * stock is being added, so with no count there is nothing for it to travel with.
+   */
+  pricePerUnit: number | null;
 }
 
 /**
+ * Looks up what to pre-fill in the stock-value box for one ingredient: the preferred vendor's list
+ * price, else its market rate, else null (R-ING-3). Owned by the screen, because it is an API call.
+ */
+export type LoadStockValue = (ingredientId: string) => Promise<number | null>;
+
+/**
  * Adding a consumable to the inventory (E10-S12). Presentational: the screen around it owns the
- * two API calls, the navigation and the error.
+ * API call (one: the item and its opening count are saved together, T-294), the navigation and the
+ * error.
  *
  * <p>It asks the things a storekeeper knows standing in front of the shelf: what it is, how much is
  * there, and where it lives. The count is the one that used to be missing — an item could be added
@@ -55,6 +68,7 @@ export function InventoryItemForm({
   busy,
   error,
   onSubmit,
+  loadStockValue,
 }: {
   /** The id the screen's own commit button points at with `form={formId}`. */
   formId: string;
@@ -65,9 +79,12 @@ export function InventoryItemForm({
   busy: boolean;
   error: ApiError | null;
   onSubmit: (input: NewInventoryItem) => void;
+  loadStockValue: LoadStockValue;
 }) {
   const [ingredientId, setIngredientId] = useState("");
   const [levelUnit, setLevelUnit] = useState<string | null>(null);
+  /** The count as typed, read as it changes because it decides whether the value box is required. */
+  const [count, setCount] = useState("");
 
   const alreadyIn = new Set(tracked.map((i) => i.ingredientId));
   const available = ingredients.filter((i) => !alreadyIn.has(i.id));
@@ -77,6 +94,13 @@ export function InventoryItemForm({
   // default to kilograms, which asserted a unit for an ingredient nobody had named yet.
   const units = chosen ? (ENTRY_UNITS[chosen.unit] ?? [{ code: chosen.unit, per: 1 }]) : [];
   const typedIn = units.find((u) => u.code === levelUnit) ?? units[0] ?? null;
+
+  const [stockValue, setStockValue] = usePrefilledStockValue(chosen?.id ?? null, loadStockValue);
+  // Required only when the count adds stock (the conductor's ruling on R-ING-3, 2026-09-19): the
+  // rule is "whenever a person adds stock", and a blank or 0 count adds none, so there is nothing
+  // for a price to be the price of. The box stays on screen either way, so nothing jumps about as
+  // the count is typed.
+  const addsStock = Number(count) > 0;
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,6 +119,7 @@ export function InventoryItemForm({
       // Stored in the ingredient's own unit, whichever one it was typed in.
       reorderThreshold: level === "" ? null : Number(level) * typedIn.per,
       notes: emptyToNull(String(f.get("notes") ?? "")),
+      pricePerUnit: addsStock ? Number(stockValue) : null,
     });
   }
 
@@ -106,9 +131,24 @@ export function InventoryItemForm({
         <p className="text-sm text-ink-secondary">Every ingredient is already in your inventory.</p>
       )}
 
+      {/* Two columns from `md` (768) up, one below it (VERIFY-A defect 4). At 390 wide two columns
+          left each box 125px, and the ingredient select showed "VERIFY-A Rice — kept" of "VERIFY-A
+          Rice — kept in Kg" — the one thing on this form that must be read in full, cut off. None of
+          the six fields fits beside another on a phone (the count's box also carries its unit
+          picker), so there each gets its own row.
+
+          `md`, not the `sm` most two-column forms here use, and measured rather than assumed (T-294):
+          at 640 two columns give each box 280px, the longest ingredient on the local data ("Fenugreek
+          seeds, soaked overnight — kept in gm", 285px of text) was cut off in it, and the value
+          box's long label wrapped to a third line so its row stood 18px taller than the ones around
+          it. At 768 each box is 344px, that name fits, and all three rows are the same height. The
+          cost is 640–767 wide showing one full-width column, which hides nothing; a squeezed select
+          would. The narrowest two-column box is 332px, at 1024 where the sidebar opens (the name above
+          still fits, with 5px to spare); 460px at 1280. A name longer than the box would still be
+          cut off in the closed select at any layout; the open list shows it in full. */}
       <Form
         id={formId}
-        className="grid grid-cols-2 gap-4"
+        className="grid grid-cols-1 gap-4 md:grid-cols-2"
         aria-label="Add to inventory"
         aria-busy={busy}
         onSubmit={submit}
@@ -146,6 +186,8 @@ export function InventoryItemForm({
                 id={id}
                 name="opening"
                 type="number"
+                value={count}
+                onChange={(e) => setCount(e.target.value)}
                 min="0"
                 step="any"
                 placeholder={chosen ? "e.g. 40" : "Choose an ingredient first"}
@@ -156,6 +198,16 @@ export function InventoryItemForm({
             </div>
           )}
         </HintedField>
+
+        {/* Beside the count's row rather than under Notes: it is a question about the same shelf, and
+            with it the form is six fields in three full rows — no half-empty row anywhere. */}
+        <StockValueField
+          unit={chosen?.unit ?? null}
+          value={stockValue}
+          onChange={setStockValue}
+          required={addsStock}
+          disabled={!chosen}
+        />
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Where it lives</span>
@@ -180,13 +232,107 @@ export function InventoryItemForm({
           )}
         </HintedField>
 
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+        {/* One column now, not two: the stock value made the fields even, and a full-width Notes
+            would leave "Tell me when stock drops below" alone on its row with a blank beside it. */}
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Notes</span>
           <input name="notes" className={FIELD} />
         </label>
       </Form>
     </>
   );
+}
+
+/**
+ * "What it would cost to buy today" (R-ING-3): the box asked whenever a person adds stock, here and
+ * on the item page's adjustment form, so the two ask it in the same words.
+ *
+ * <p>The price is always per the ingredient's **stock** unit, whatever unit the count was typed in —
+ * that is what the server stores as the market rate (T-254) — so the label names the stock unit and
+ * never follows the count's unit picker. Before an ingredient is chosen there is no unit to name, and
+ * the label says "(₹)" with the box disabled (the conductor's ruling, 2026-09-19). The box is on
+ * screen in both states, so choosing an ingredient changes its words and never adds a row.
+ *
+ * <p>Required means `required` plus `data-more-than="0"`, so {@link Form} says "… is required" for a
+ * blank box and "… must be more than 0" for a 0, in red beside it, like every other box. The server
+ * refuses the same two (KMS-400161) as the second guard.
+ */
+export function StockValueField({
+  unit,
+  value,
+  onChange,
+  required,
+  disabled = false,
+}: {
+  /** The ingredient's stock unit, or null before one is chosen. */
+  unit: string | null;
+  value: string;
+  onChange: (value: string) => void;
+  required: boolean;
+  disabled?: boolean;
+}) {
+  // "piece", not "pieces": it is the price of one.
+  const per = unit ? unitLabelFor(1, unit) : null;
+  const label = per ? `What it would cost to buy today (₹ per ${per})` : "What it would cost to buy today (₹)";
+  return (
+    <HintedField
+      label={label}
+      hint={`The price of one ${per ?? "unit"} today. We fill in the preferred vendor’s list price, or else the market rate. Saving it updates the market rate.`}
+    >
+      {(id) => (
+        <input
+          id={id}
+          name="pricePerUnit"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="any"
+          required={required}
+          data-more-than={required ? "0" : undefined}
+          disabled={disabled}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={disabled ? "Choose an ingredient first" : "e.g. 60"}
+          className={`${FIELD} disabled:opacity-60`}
+        />
+      )}
+    </HintedField>
+  );
+}
+
+/**
+ * The stock-value box's contents, pre-filled from {@link LoadStockValue} for the ingredient in hand.
+ *
+ * <p>A pre-fill only: it lands in an empty box and never over something a person has typed, even
+ * when the lookup is slower than their typing. A failed lookup leaves the box empty and says nothing
+ * — the box is still required, and a person can type the price; blocking the form over a suggestion
+ * would be worse than no suggestion.
+ *
+ * <p>The loader is held in a ref and the effect keys on the ingredient only. A screen's loader
+ * closes over `getToken`, which is not guaranteed to keep its identity between renders, and an
+ * effect keyed on it would empty the box on every render.
+ */
+export function usePrefilledStockValue(ingredientId: string | null, load: LoadStockValue) {
+  const [value, setValue] = useState("");
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
+  useEffect(() => {
+    let live = true;
+    setValue("");
+    if (!ingredientId) return;
+    loadRef
+      .current(ingredientId)
+      .then((price) => {
+        if (live && price != null && price > 0) setValue((typed) => (typed === "" ? String(price) : typed));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [ingredientId]);
+
+  return [value, setValue] as const;
 }
 
 /** The unit a level is typed in: a choice where the family has two, a plain label where it has one. */

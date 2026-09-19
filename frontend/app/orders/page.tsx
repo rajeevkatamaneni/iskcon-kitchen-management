@@ -74,13 +74,14 @@ function PurchaseOrdersView() {
             <div>
               <h1>Purchase orders</h1>
               <p className="mt-1 text-ink-secondary">
-                Generate orders from the shopping list, or raise a one-off by hand.
+                Generate orders from the shopping list, or create a one-off by hand.
               </p>
             </div>
             {/* The endpoint behind this has existed since E5-S3 and had no way in: an order could
                 only be generated from the shopping list, which never suggests the one-off buy this
-                is for (T-026). */}
-            <ButtonLink href="/orders/new">Raise an order</ButtonLink>
+                is for (T-026). "Raise an order" until R-PO-1 (2026-09-19), which renamed it and sent
+                it straight to the one create form (T-263). */}
+            <ButtonLink href="/orders/new">Create a purchase order</ButtonLink>
           </header>
 
           {/*
@@ -113,7 +114,7 @@ function PurchaseOrdersView() {
                   and the way to send it is through the link this one carries. */}
               <InlineNotice
                 tone="success"
-                title={`A purchase order for ${flash.vendor} was raised.`}
+                title={`A purchase order for ${flash.vendor} was created.`}
                 action={
                   flash.poId ? (
                     <ButtonLink href={`/orders/${flash.poId}`} variant="secondary" size="sm">
@@ -145,7 +146,7 @@ function PurchaseOrdersView() {
             <div className="card px-6 py-14 text-center">
               <p className="text-lg">No purchase orders</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Generate orders from the <Link href="/shopping-list" className="text-accent-text hover:underline">shopping list</Link>, or <Link href="/orders/new" className="text-accent-text hover:underline">raise one by hand</Link>.
+                Generate orders from the <Link href="/shopping-list" className="text-accent-text hover:underline">shopping list</Link>, or <Link href="/orders/new" className="text-accent-text hover:underline">create a purchase order</Link> by hand.
               </p>
             </div>
           ) : (

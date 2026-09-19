@@ -2,7 +2,8 @@
 
 import { Screen } from "@/components/ds/Screen";
 import { Suspense, useCallback, useRef, useState } from "react";
-import Link from "next/link";
+import { Button } from "@/components/ds/Button";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -156,34 +157,25 @@ function RecipeDetailView() {
       <div className="flex items-center justify-between">
         <BackToRecipes />
         <div className="flex items-center gap-2">
-          <Link
-            href={`/recipes/${id}/edit`}
-            className="min-h-touch flex items-center rounded-control border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
-          >
+          <ButtonLink href={`/recipes/${id}/edit`} variant="secondary">
             Edit
-          </Link>
+          </ButtonLink>
           {recipe.status === "ARCHIVED" ? (
-            <button
-              type="button"
-              onClick={restore}
-              disabled={busy !== null}
-              className="min-h-touch flex items-center rounded-control border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
-            >
+            <Button variant="secondary" onClick={restore} disabled={busy !== null}>
               {busy === "restoring" ? "Restoring…" : "Restore"}
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
+            <Button
+              variant="danger"
               onClick={() => {
                 setConfirmingDelete(true);
                 setActionError(null);
                 setOfferArchive(false);
               }}
               disabled={busy !== null}
-              className="min-h-touch flex items-center rounded-control border border-hairline-strong px-4 text-sm text-danger transition-colors duration-state hover:bg-danger-bg disabled:opacity-60"
             >
               Delete
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -212,21 +204,12 @@ function RecipeDetailView() {
             meal, planned or cooked, you’ll be offered Archive instead.
           </p>
           <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={deleteRecipe}
-              disabled={busy !== null}
-              className="min-h-touch rounded-control bg-danger px-5 text-sm text-ink-inverse transition-opacity duration-state hover:opacity-90 disabled:opacity-60"
-            >
+            <Button variant="danger" onClick={deleteRecipe} busy={busy === "deleting"} disabled={busy !== null}>
               {busy === "deleting" ? "Deleting…" : "Delete recipe"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(false)}
-              className="min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
-            >
+            </Button>
+            <Button variant="secondary" onClick={() => setConfirmingDelete(false)}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -306,14 +289,9 @@ function RecipeDetailView() {
             <p className="mt-2 text-sm text-ink-secondary">The recipe is shown in English.</p>
           )}
           {offerArchive && (
-            <button
-              type="button"
-              onClick={archive}
-              disabled={busy !== null}
-              className="mt-3 min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
-            >
+            <Button variant="secondary" onClick={archive} disabled={busy !== null} className="mt-3">
               {busy === "archiving" ? "Archiving…" : "Archive it instead"}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -358,7 +336,9 @@ function RecipeDetailView() {
             onClick={downloadPdf}
             aria-label="Download recipe as PDF"
             title="Download recipe as PDF"
-            className="flex min-h-touch min-w-touch items-center justify-center rounded-control border border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink disabled:opacity-60"
+            // Stays an icon — DESIGN_SYSTEM §6 allows this one download to — but takes the secondary
+            // button material and its press, like every other button (T-242).
+            className="btn btn-secondary flex min-h-touch min-w-touch items-center justify-center disabled:opacity-60"
           >
             {busy === "pdf" ? <BusyPot /> : <i className="ti ti-download text-lg" aria-hidden="true" />}
           </button>
@@ -374,10 +354,16 @@ function RecipeDetailView() {
             </tr>
           </thead>
           <tbody>
+            {/* Keyed by position as well as ingredient: since the library import stopped making
+                "Coconut, grated" an ingredient of its own, one recipe can hold Coconut twice with
+                two different preparation notes (R-DUP-1). */}
             {recipe.ingredients.map((line, i) => (
-              <tr key={line.ingredientId} className={TR}>
+              <tr key={`${line.ingredientId}-${i}`} className={TR}>
                 <td className={TD_PRIMARY}>
-                  {translated?.ingredients[i]?.name ?? line.ingredientName}
+                  {withPreparation(
+                    translated?.ingredients[i]?.name ?? line.ingredientName,
+                    translated?.ingredients[i]?.preparationNote ?? line.preparationNote
+                  )}
                 </td>
                 <td className={TD_FIXED_NUM}>
                   {cooksQuantity(line.quantity, line.unit)}
@@ -430,6 +416,14 @@ function Chrome({ children }: { children: React.ReactNode }) {
       </main>
     </div>
   );
+}
+
+/**
+ * A line's name with its preparation note, "Green chilli · slit" (R-DUP-1) — the form the job card,
+ * the recipe PDF and the recipe peek print too. The name alone when there is no note.
+ */
+function withPreparation(name: string, note: string | null | undefined): string {
+  return note ? `${name} · ${note}` : name;
 }
 
 function splitMethod(method: string | null): string[] {

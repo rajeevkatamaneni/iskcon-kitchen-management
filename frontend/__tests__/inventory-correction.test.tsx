@@ -18,6 +18,7 @@ const {
   deleteItemMock,
   adjustMock,
   pushMock,
+  suggestMock,
 } = vi.hoisted(() => ({
   authRef: {
     current: {
@@ -34,6 +35,7 @@ const {
   deleteItemMock: vi.fn(),
   adjustMock: vi.fn(),
   pushMock: vi.fn(),
+  suggestMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -54,6 +56,7 @@ vi.mock("@/lib/api", async (orig) => {
       compensateMovement: compensateMock,
       deleteInventoryItem: deleteItemMock,
       adjustStock: adjustMock,
+      getStockValueSuggestion: suggestMock,
     },
   };
 });
@@ -518,5 +521,91 @@ describe("the three figures, the level they are judged against, and who claimed 
 
     expect(await screen.findByText(/more committed than you hold/i)).toBeInTheDocument();
     expect(screen.queryByText(/below reorder level/i)).not.toBeInTheDocument();
+  });
+});
+
+/*
+ * R-ING-3 on this screen (T-257): any adjustment that adds stock, whatever its reason, asks what the
+ * stock would cost to buy today, pre-filled and required; taking stock away asks nothing.
+ */
+describe("the value asked when an adjustment adds stock (R-ING-3)", () => {
+  const batch = { batchId: "b1", quantity: 8, unit: "KG", expiryDate: null, receivedDate: "2026-09-01", expiringSoon: false };
+
+  beforeEach(() => {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "TEMPLE_ADMIN", userId: "me", fullName: "Radha" },
+      getToken: async () => "test-token",
+      refresh: () => {},
+    };
+    movementsRef.current = [];
+    listMovementsMock.mockReset().mockImplementation(async () => movementsRef.current);
+    getItemMock.mockReset().mockImplementation(async () => detail({ batches: [batch] }));
+    adjustMock.mockReset().mockResolvedValue({ id: "mv-new" });
+    suggestMock.mockReset().mockResolvedValue({ pricePerUnit: 60, source: "MARKET_RATE" });
+  });
+
+  function valueBox(form: HTMLElement) {
+    return within(form).queryByLabelText(/what it would cost to buy today/i, { selector: "input" });
+  }
+
+  async function openAdjust(button: RegExp) {
+    render(<InventoryItemPage />);
+    fireEvent.click(await screen.findByRole("button", { name: button }));
+    return screen.getByRole("form", { name: /adjust stock/i });
+  }
+
+  it("does not ask when stock is taken away, and sends no value", async () => {
+    const form = await openAdjust(/adjust stock/i);
+    fireEvent.change(within(form).getByLabelText(/change/i), { target: { value: "-2" } });
+    expect(valueBox(form)).toBeNull();
+
+    fireEvent.click(within(form).getByRole("button", { name: /record adjustment/i }));
+    await waitFor(() => expect(adjustMock).toHaveBeenCalledTimes(1));
+    expect(adjustMock.mock.calls[0][1]).toMatchObject({ batchId: "b1", quantity: -2, pricePerUnit: null });
+  });
+
+  it("asks for any reason that adds stock, pre-filled per the stock unit, and sends it", async () => {
+    const form = await openAdjust(/adjust stock/i);
+    // Spoilage is the default reason, and a positive one still adds stock (the conductor's ruling).
+    fireEvent.change(within(form).getByLabelText(/change/i), { target: { value: "3" } });
+
+    const box = valueBox(form)!;
+    expect(box).toBeRequired();
+    expect(within(form).getByText("What it would cost to buy today (₹ per Kg)")).toBeInTheDocument();
+    await waitFor(() => expect(box).toHaveValue(60));
+    expect(suggestMock).toHaveBeenCalledWith("ing-1", "test-token");
+
+    fireEvent.click(within(form).getByRole("button", { name: /record adjustment/i }));
+    await waitFor(() => expect(adjustMock).toHaveBeenCalledTimes(1));
+    expect(adjustMock.mock.calls[0][1]).toMatchObject({ quantity: 3, reason: "SPOILAGE", pricePerUnit: 60 });
+  });
+
+  it("refuses a blank value in red beside the box, and records nothing", async () => {
+    suggestMock.mockResolvedValue({ pricePerUnit: null, source: null });
+    const form = await openAdjust(/adjust stock/i);
+    fireEvent.change(within(form).getByLabelText(/reason/i), { target: { value: "COUNT_CORRECTION" } });
+    fireEvent.change(within(form).getByLabelText(/change/i), { target: { value: "3" } });
+    await waitFor(() => expect(suggestMock).toHaveBeenCalled());
+
+    fireEvent.click(within(form).getByRole("button", { name: /record adjustment/i }));
+
+    const box = valueBox(form)!;
+    const said = screen.getByText("What it would cost to buy today (₹ per Kg) is required");
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
+    expect(adjustMock).not.toHaveBeenCalled();
+  });
+
+  it("asks on the first count too, since that adds stock", async () => {
+    getItemMock.mockImplementation(async () => detail());
+    const form = await openAdjust(/record what's on the shelf/i);
+    expect(valueBox(form)).toBeNull();
+    fireEvent.change(within(form).getByLabelText(/how much is there/i), { target: { value: "40" } });
+    await waitFor(() => expect(valueBox(form)).toHaveValue(60));
+
+    fireEvent.click(within(form).getByRole("button", { name: /record the count/i }));
+    await waitFor(() => expect(adjustMock).toHaveBeenCalledTimes(1));
+    expect(adjustMock.mock.calls[0][1]).toMatchObject({ batchId: null, quantity: 40, pricePerUnit: 60 });
   });
 });

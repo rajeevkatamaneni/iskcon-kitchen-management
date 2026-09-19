@@ -540,7 +540,12 @@ function materialsNote(cost: TodayMaterialsCost): string {
   if (cost.estimatedTotal === 0) {
     return "Nothing planned to cost yet";
   }
-  return "Estimated from vendors’ last-known prices";
+  // Says what the costing reads now (R-ING-3): the list price (R-VEN-1's name for it, in every
+  // view), and the market rate where no vendor has one. It said "vendors’ last-known prices", from
+  // before either existed (T-311). The words are Cost per serving's, so the two never disagree about
+  // where a figure came from; "materials only" is left off here because the tile's own title,
+  // Cost of materials, already says it.
+  return "Estimated from list prices, or the market rate";
 }
 
 /**

@@ -73,6 +73,8 @@ vi.mock("@/lib/api", async (orig) => {
       getInventoryItem: getItemMock,
       listMovements: listMovementsMock,
       adjustStock: adjustMock,
+      // The stock-value pre-fill (R-ING-3). Nothing to suggest, and never a real request from jsdom.
+      getStockValueSuggestion: vi.fn().mockResolvedValue({ pricePerUnit: null, source: null }),
     },
   };
 });
@@ -111,6 +113,10 @@ function ingredient(overrides: Partial<IngredientView> = {}): IngredientView {
     name: "Ghee",
     category: "Dairy",
     unit: "L",
+    packSizes: [],
+    marketRate: null,
+    marketRateOn: null,
+    marketRateSource: null,
     ekadashiProhibited: false,
     supply: false,
     libraryDerived: false,
@@ -230,6 +236,10 @@ describe("a unit from the wrong family names the ingredient on screen", () => {
     const form = screen.getByRole("form", { name: /adjust stock/i });
     fireEvent.change(within(form).getByLabelText(/how much is there/i), { target: { value: "5" } });
     fireEvent.change(within(form).getByLabelText(/^unit$/i), { target: { value: "L" } });
+    // A count adds stock, so it now needs what it would cost to buy today (R-ING-3, T-257).
+    fireEvent.change(within(form).getByLabelText(/what it would cost to buy today/i, { selector: "input" }), {
+      target: { value: "62" },
+    });
     fireEvent.click(within(form).getByRole("button", { name: /record the count/i }));
 
     await waitFor(() => expect(adjustMock).toHaveBeenCalled());

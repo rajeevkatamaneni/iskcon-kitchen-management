@@ -167,6 +167,53 @@ async function request<T>(
   throw new ApiError(payload, response.status);
 }
 
+/**
+ * A multipart upload (stage 6: the copy of a bill, proof of payment). The same headers and the
+ * same error contract as `request`, except that no Content-Type is set: the browser writes the
+ * multipart boundary itself, and a hand-set `multipart/form-data` without it cannot be parsed.
+ */
+async function upload<T>(path: string, file: File, token?: string): Promise<T> {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    body,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(activeTempleId() ? { "X-KMS-Temple": activeTempleId() as string } : {}),
+    },
+  });
+  if (response.ok) return (await response.json()) as T;
+  let payload: ErrorPayload;
+  try {
+    payload = (await response.json()) as ErrorPayload;
+    if (!payload?.code) throw new Error("unrecognised");
+  } catch {
+    payload = {
+      code: "KMS-0000",
+      message: "We couldn't reach the server.",
+      action: "Check your connection and try again.",
+      fieldErrors: [],
+    };
+  }
+  throw new ApiError(payload, response.status);
+}
+
+/** An uploaded file fetched with the token, for a thumbnail or to open (never a plain link). */
+async function attachmentBlob(path: string, token?: string): Promise<Blob> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: "GET",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(activeTempleId() ? { "X-KMS-Temple": activeTempleId() as string } : {}),
+    },
+  });
+  if (!response.ok) {
+    throw await errorFromBinaryResponse(response, "We couldn't open that file.", "Try again in a moment.");
+  }
+  return response.blob();
+}
+
 export interface TenantSummary {
   id: string;
   slug: string;
@@ -561,6 +608,12 @@ export interface RecipeIngredientView {
   ingredientName: string;
   quantity: number;
   unit: string;
+  /**
+   * How the cook prepares it for this recipe ("halved", "slit", "fresh grated"), or null (R-DUP-1).
+   * Stock, prices and ordering sit on the base ingredient; this note only travels with the line.
+   * Reserved by the work manager for T-250.
+   */
+  preparationNote: string | null;
 }
 
 export interface RecipeDetail {
@@ -599,6 +652,12 @@ export interface RecipeDetail {
 export interface ScaledLine {
   ingredientId: string;
   ingredientName: string;
+  /**
+   * How the cook prepares it for this recipe ("halved", "slit", "fresh grated"), or null (R-DUP-1).
+   * Stock, prices and ordering sit on the base ingredient; this note only travels with the line.
+   * Reserved by the work manager for T-250.
+   */
+  preparationNote: string | null;
   rawQuantity: number;
   rawUnit: string;
   displayQuantity: number;
@@ -631,6 +690,8 @@ export interface DocumentView {
 
 export interface TranslatedLine {
   name: string;
+  /** The preparation note in the chosen language, or null (R-DUP-1). Reserved for T-250. */
+  preparationNote: string | null;
   quantity: number;
   unit: string;
 }
@@ -659,11 +720,53 @@ export interface RecipeFilters {
   ekadashiCompatible?: boolean;
 }
 
+/**
+ * One of an ingredient's alternate units (R-ING-1): an optional name ("Bag") and what it holds in a
+ * unit of the ingredient's family ("25 KG"). Reserved by the work manager for T-253.
+ */
+export interface PackSizeView {
+  id: string;
+  /** "Bag", "Tin", "Pack"… or null for a plain size such as 500 g. */
+  name: string | null;
+  quantity: number;
+  unit: string;
+  /** The same amount in the ingredient's canonical unit, for arithmetic. */
+  baseQuantity: number;
+  /** The chip text, formatted by the server: "500 g", "Bag = 25 Kg". */
+  label: string;
+}
+
+export interface AddPackSizeInput {
+  name?: string | null;
+  quantity: number;
+  unit: string;
+}
+
+/** Where an ingredient's market rate last came from (R-ING-3). */
+export type MarketRateSource = "STOCK_TAKE" | "INVOICE" | "MANUAL";
+
+/**
+ * The value to pre-fill in "What it would cost to buy today" at stock-take (R-ING-3): the preferred
+ * vendor's list price, else the market rate, per canonical unit; null when neither exists.
+ * Reserved by the work manager for T-254.
+ */
+export interface StockValueSuggestion {
+  pricePerUnit: number | null;
+  source: "PREFERRED_VENDOR" | "MARKET_RATE" | null;
+}
+
 export interface IngredientView {
   id: string;
   name: string;
   category: string;
   unit: string;
+  /** Alternate units, smallest first (R-ING-1). Empty when none. Reserved for T-253. */
+  packSizes: PackSizeView[];
+  /** ₹ per canonical unit it would cost to buy today, or null (R-ING-3). Reserved for T-253. */
+  marketRate: number | null;
+  /** ISO date the market rate was set, or null. */
+  marketRateOn: string | null;
+  marketRateSource: MarketRateSource | null;
   /**
    * Whether this may not be cooked on Ekadashi (T-045).
    *
@@ -724,6 +827,28 @@ export interface IngredientView {
   createdAt: string;
 }
 
+/**
+ * One library-recipe line whose ingredient name is a close (not exact) match for an ingredient the
+ * temple already has (Q-11, T-287). `libraryName` is the base name as the library writes it, after
+ * the preparation note is split off (R-DUP-1); `note` is that note, or null.
+ */
+export interface ImportCloseMatchView {
+  libraryName: string;
+  note: string | null;
+  existingIngredientId: string;
+  existingIngredientName: string;
+}
+
+/**
+ * The answer to one close match. `useIngredientId` set: "Use <existing>". Null with
+ * `confirmDifferent: true`: "It's a different ingredient", confirmed deliberately and audited (R-DUP-2).
+ */
+export interface ImportCloseMatchDecision {
+  libraryName: string;
+  useIngredientId: string | null;
+  confirmDifferent: boolean;
+}
+
 export interface CreateIngredientInput {
   name: string;
   category: string;
@@ -733,6 +858,13 @@ export interface CreateIngredientInput {
   /** See `IngredientView.supply`. Required, and for the same reason. */
   supply: boolean;
   aliases: string[];
+  /**
+   * Save even though the name looks like an ingredient the temple already has (R-DUP-2). Send it only
+   * after the person has pressed "It's a different ingredient" and confirmed. Without it, a near match
+   * is refused with KMS-400156, whose details name the existing ingredient (`existingIngredientId`,
+   * `existingIngredientName`). The override is audited. Reserved by the work manager for T-251.
+   */
+  confirmDifferent?: boolean;
 }
 
 export interface UpdateIngredientInput {
@@ -759,12 +891,21 @@ export interface UpdateIngredientInput {
    */
   ekadashiProhibited?: boolean;
   aliases: string[];
+  /**
+   * Save even though the name looks like an ingredient the temple already has (R-DUP-2). Send it only
+   * after the person has pressed "It's a different ingredient" and confirmed. Without it, a near match
+   * is refused with KMS-400156, whose details name the existing ingredient (`existingIngredientId`,
+   * `existingIngredientName`). The override is audited. Reserved by the work manager for T-251.
+   */
+  confirmDifferent?: boolean;
 }
 
 export interface RecipeLineInput {
   ingredientId: string;
   quantity: number;
   unit: string;
+  /** See `RecipeIngredientView.preparationNote`. Blank or omitted means none. Reserved for T-250. */
+  preparationNote?: string | null;
 }
 
 export interface RecipeInput {
@@ -881,6 +1022,14 @@ export interface CreateInventoryItemInput {
   storageLocation?: string | null;
   reorderThreshold?: number | null;
   notes?: string | null;
+  /**
+   * What is on the shelf when the item is added, saved in the SAME transaction as the item, so a
+   * failed count leaves no item behind (VERIFY-A defect 5). Written as the item's first lot with
+   * reason COUNT_CORRECTION and the note "Opening count, when the item was added to inventory.";
+   * `pricePerUnit` is required and above 0 when `quantity` > 0 (KMS-400161) and sets the market rate
+   * (R-ING-3). Omit or null for no opening count. Reserved by the work manager for T-294.
+   */
+  openingCount?: { quantity: number; unit: string; pricePerUnit: number } | null;
 }
 
 export interface AdjustStockInput {
@@ -890,6 +1039,12 @@ export interface AdjustStockInput {
   unit: string;
   reason: string;
   note?: string | null;
+  /**
+   * "What it would cost to buy today", ₹ per canonical unit (R-ING-3). Required by the server, and
+   * never 0, for a count correction that adds stock and for the first count on "Add to inventory";
+   * saving it sets the ingredient's market rate. Reserved by the work manager for T-254.
+   */
+  pricePerUnit?: number | null;
 }
 
 export interface InventoryFilters {
@@ -2004,7 +2159,25 @@ export interface VendorStatusChange {
 export interface VendorSupplyView {
   ingredientId: string;
   ingredientName: string;
+  /**
+   * The list price per canonical unit (shown as "List price"; the column is still last_price).
+   * Derived from `pricePerPack` when the vendor sells in packs, never typed twice.
+   */
   lastPrice: number | null;
+  /** The ingredient's canonical unit, for "₹60 / Kg". Reserved for T-252. */
+  unit: string;
+  /** "Sells it as": one of the ingredient's pack sizes, or null for the stock unit itself (R-VEN-1). */
+  packSizeId: string | null;
+  /** The pack's chip label ("Bag = 25 Kg"), or null. */
+  packLabel: string | null;
+  /** List price per pack, when sold in packs. */
+  pricePerPack: number | null;
+  /**
+   * The list price before the current one, per canonical unit, and the date it was set, for the
+   * arrow beside List price (R-VEN-3). Both null when there is no earlier price.
+   */
+  previousPrice: number | null;
+  previousPriceOn: string | null;
   /**
    * Days between asking this vendor for this ingredient and it arriving (T-090), or null where
    * nobody has recorded it. **Null is unknown, not same-day** — the screen prints an em dash, never
@@ -2013,6 +2186,30 @@ export interface VendorSupplyView {
    */
   leadTimeDays: number | null;
   preferred: boolean;
+}
+
+/** An ingredient's one preferred vendor (R-VEN-2). Reserved by the work manager for T-258. */
+export interface PreferredVendorView {
+  ingredientId: string;
+  vendorId: string;
+  vendorName: string;
+}
+
+/** Input for one supply row, single or bulk (R-VEN-1). Reserved by the work manager for T-252. */
+export interface SetVendorSupplyInput {
+  ingredientId: string;
+  /** Per canonical unit. Ignored when `pricePerPack` is sent; the server derives it. */
+  lastPrice: number | null;
+  leadTimeDays: number | null;
+  preferred: boolean;
+  packSizeId?: string | null;
+  pricePerPack?: number | null;
+}
+
+/** An ingredient's vendors, seen from the ingredient (R-ING-2). Reserved for T-252. */
+export interface IngredientSupplyView extends VendorSupplyView {
+  vendorId: string;
+  vendorName: string;
 }
 
 export interface VendorDetailView {
@@ -2211,6 +2408,23 @@ export interface ShoppingListLineView {
    * quietly leaving a shortfall off the list.
    */
   excludedSince: string | null;
+  /**
+   * The amount in packs (R-SL-2, R-SL-3), or empty when it is not in packs (step table, or a typed
+   * figure that is not a whole number of the vendor's pack). May hold several sizes while mixing is
+   * allowed (provisional, Desk Q-16); each size becomes its own PO line. Sum of count × perPackQty
+   * equals `suggestedQty`. Written by the work manager to match T-259's server view.
+   */
+  buyPacks: BuyPackView[];
+  /** True when `buyPacks` is the preferred vendor's "Sells it as" pack (R-SL-3). */
+  packFromVendor: boolean;
+}
+
+/** One pack size in a shopping-list amount: "4 × Bag (25 Kg)". `perPackQty` is in the line's `unit`. */
+export interface BuyPackView {
+  packSizeId: string;
+  label: string;
+  perPackQty: number;
+  count: number;
 }
 
 export type PoStatus =
@@ -2406,6 +2620,14 @@ export interface PurchaseOrderLineView {
    * interface — see `ingredientId`.
    */
   arrivedOn: string | null;
+  /**
+   * The pack the line was ordered in (R-SL-3, T-260), or null. `quantity` is always the stock-unit
+   * amount (100 Kg); these say it was "4 × Bag (25 Kg)". `packQuantity` is one pack's size in `unit`.
+   */
+  packSizeId: string | null;
+  packLabel: string | null;
+  packQuantity: number | null;
+  packCount: number | null;
 }
 
 export interface PoEventView {
@@ -2464,6 +2686,13 @@ export interface PoLineInput {
   quantity: number;
   unit: string;
   expectedPrice?: number | null;
+  /**
+   * The pack this line is ordered in (R-SL-3), one of the ingredient's pack sizes, or absent/null.
+   * Sent with `packCount`; the server stores `quantity` = packCount × the pack's size, in the pack's
+   * unit, so stock and costing keep the stock-unit amount. Catalogue lines only. Reserved for T-260.
+   */
+  packSizeId?: string | null;
+  packCount?: number | null;
 }
 
 /**
@@ -2536,12 +2765,8 @@ export interface ReceiptLineInput {
   rejectReason?: RejectReason | null;
   expiryDate?: string | null;
   receivedDate?: string | null;
-  /**
-   * What the bill that came with the lorry actually says, per one of the PO line's unit. Optional:
-   * omit it (or send null) where there is no bill. Sending it writes the figure back onto the
-   * vendor's last-known price, so a null must stay a null and never become a 0.
-   */
-  unitPrice?: number | null;
+  // No price: "Price paid" was removed from delivery recording (R-DEL-5). A price belongs to the
+  // invoice (R-VEN-4). Removed by the work manager at the Q2 pass; T-261 stops the server using it.
 }
 
 export interface ReceiveDeliveryInput {
@@ -2549,6 +2774,138 @@ export interface ReceiveDeliveryInput {
   deliveryNoteRef?: string | null;
   note?: string | null;
   lines: ReceiptLineInput[];
+}
+
+// ---- Deliveries screen (R-DEL-1..5, PROCUREMENT-REQUIREMENTS.md §7). Reserved by the work manager
+// for T-261 (server) and T-262/T-266 (screen). Behind RECEIVE_DELIVERIES. **No prices anywhere**:
+// a price belongs to the invoice (R-DEL-5, R-VEN-4). Every quantity is in the order line's `unit`.
+
+/**
+ * One delivery's part against one order line (R-DEL-4): "12 Sept · 30 Kg received · 2 Kg rejected
+ * (spoiled) · Received by: Karuna Murti Das". Deliberately carries no order number.
+ */
+export interface DeliveryPartView {
+  receiptId: string;
+  /** The temple's date the goods came (ISO date). */
+  receivedOn: string;
+  receivedQty: number;
+  rejectedQty: number;
+  rejectReason: RejectReason | null;
+  receivedByName: string | null;
+}
+
+/** An order line as the Deliveries screen and its per-item history see it. Catalogue lines only. */
+export interface DeliveryLineView {
+  poLineId: string;
+  poId: string;
+  poNumber: string;
+  vendorId: string;
+  vendorName: string;
+  ingredientId: string;
+  itemName: string;
+  unit: string;
+  orderedQty: number;
+  /** Kept, summed over every part. Rejected goods are not in it: they stay owed. */
+  receivedQty: number;
+  rejectedQty: number;
+  returnedQty: number;
+  /** orderedQty − receivedQty, never below 0. */
+  stillToCome: number;
+  neededBy: string | null;
+  /** The date of the part that completed the line, or null while anything is still to come. */
+  completedOn: string | null;
+  /** The pack the line was ordered in ("Bag (25 Kg)"), or null. Entry is in packs when set (R-DEL-3). */
+  packLabel: string | null;
+  /** How much of `unit` one pack holds (25 for "Bag (25 Kg)" on a KG line), or null. */
+  packQuantity: number | null;
+  packCount: number | null;
+  /** In date order, oldest first. */
+  parts: DeliveryPartView[];
+}
+
+export interface DeliveryReceiptLineView {
+  poLineId: string;
+  itemName: string;
+  unit: string;
+  receivedQty: number;
+  rejectedQty: number;
+  rejectReason: RejectReason | null;
+  returnedQty: number;
+  /**
+   * Each return made against this delivered line, oldest first, for the Received tab's Returned
+   * column: "Paneer 1 Kg, spoiled, 17 Sept" (mock, VERIFY-C defect 4). `quantity` is in `unit`.
+   * Reserved by the work manager for T-285.
+   */
+  returns: DeliveryReturnView[];
+}
+
+/** One return of goods against a delivered line (T-285). `returnedOn` is an ISO date. */
+export interface DeliveryReturnView {
+  quantity: number;
+  reason: ReturnReason;
+  returnedOn: string;
+}
+
+/** One recorded delivery, for the Received tab's dated history (R-DEL-2). */
+export interface DeliveryReceiptView {
+  receiptId: string;
+  poId: string;
+  poNumber: string;
+  vendorId: string;
+  vendorName: string;
+  receivedOn: string;
+  receivedByName: string | null;
+  lines: DeliveryReceiptLineView[];
+}
+
+export interface DeliveriesView {
+  /** The temple's today (ISO date), so "Today" and late pills never use the browser's clock. */
+  today: string;
+  /** Every catalogue line of a sent or part-delivered order with something still to come. */
+  open: DeliveryLineView[];
+  /**
+   * Recorded deliveries in the last 30 days (the temple's today and the 29 days before it), newest
+   * first. Older ones come 30 days at a time from `api.getOlderDeliveries` ("Show older deliveries").
+   * Conductor's ruling, 2026-09-19.
+   */
+  received: DeliveryReceiptView[];
+  /** Every line a receipt in `received` touched, with its full history, for the per-item history. */
+  receivedLines: DeliveryLineView[];
+  /** The first day `received` covers (ISO date). Pass it as `before` to load the 30 days before it. */
+  receivedFrom: string;
+  /** Whether any delivery was recorded before `receivedFrom`, so the button can be left out when not. */
+  hasOlder: boolean;
+}
+
+/** The next 30 days back of the Received tab: the 30 days ending the day before `before`. */
+export interface OlderDeliveriesView {
+  received: DeliveryReceiptView[];
+  receivedLines: DeliveryLineView[];
+  receivedFrom: string;
+  hasOlder: boolean;
+}
+
+/** One line of "Record a delivery". Quantities in the order line's `unit` (packs converted by the screen). */
+export interface RecordDeliveryLineInput {
+  poLineId: string;
+  receivedQty: number;
+  rejectedQty: number;
+  rejectReason?: RejectReason | null;
+  expiryDate?: string | null;
+}
+
+/**
+ * One vendor's delivery, across any of their open orders (R-DEL-3). The server creates one goods
+ * receipt per order through the existing ReceivingService, so there is one recording code path.
+ */
+export interface RecordDeliveryInput {
+  vendorId: string;
+  idempotencyKey: string;
+  lines: RecordDeliveryLineInput[];
+}
+
+export interface RecordedDelivery {
+  receiptIds: string[];
 }
 
 /**
@@ -2666,18 +3023,225 @@ export interface InvoicePaymentView {
   reversedBy: string | null;
   reverseReason: string | null;
 
+  /** Who took the cash (R-PAY-2); null on every other method and on payments before stage 6. */
+  receivedByName: string | null;
+  /**
+   * The payment's proof (R-PAY-3): one PAYMENT_PROOF, or for cash a CASH_SIGNED_NOTE and a
+   * CASH_RECEIVER_PHOTO. Empty on payments before stage 6. Fetch each with `api.paymentFile`.
+   */
+  attachments: AttachmentView[];
+
   createdAt: string;
 }
 
+/**
+ * An invoice's item line as it is sent (R-INV-3, R-INV-4; stage 6, T-271/T-273). Three shapes, as
+ * `vendor_invoice_lines` has them: a delivered item (`goodsReceiptLineId` + `ingredientId`), a
+ * direct item (`ingredientId` only), a one-off (`description` only). `billedQty` is always in `unit`
+ * (the stock-unit amount, 100 Kg); a line billed in packs also sends `packSizeId` + `packCount` (4),
+ * and the server checks packCount × the pack's size = billedQty. `amount` is required, ₹, may be 0
+ * (an item not billed stays at 0 qty and 0 amount). The rate is never sent: it is Amount ÷ Billed qty.
+ */
+export interface InvoiceLineInput {
+  goodsReceiptLineId?: string | null;
+  ingredientId?: string | null;
+  description?: string | null;
+  billedQty: number;
+  unit: string;
+  packSizeId?: string | null;
+  packCount?: number | null;
+  amount: number;
+}
+
+/**
+ * Stage 6 (R-INV-1..6): an invoice has item lines, the deliveries it bills, the bill's totals and a
+ * required upload. `amount` and `scanRef` are gone: the grand total is the invoice's amount, and the
+ * copy of the bill is an upload (`billAttachmentId`, from `api.uploadBill`). `purchaseOrderId` is
+ * gone too: the server sets it when every billed delivery is on one order. No `receiptIds` = a
+ * direct invoice, whose lines are typed by hand. Sub total is never sent: the server sums the lines,
+ * and refuses with KMS-400168 unless Sub total + GST + Other charges − Discount = Grand total.
+ */
 export interface RecordInvoiceInput {
   vendorId: string;
-  purchaseOrderId?: string | null;
   description?: string | null;
   invoiceNumber: string;
   invoiceDate: string;
-  amount: number;
   dueDate?: string | null;
-  scanRef?: string | null;
+  receiptIds: string[];
+  lines: InvoiceLineInput[];
+  gstAmount: number;
+  otherCharges: number;
+  otherChargesNote?: string | null;
+  discount: number;
+  grandTotal: number;
+  billAttachmentId: string;
+}
+
+/** One line of a delivery that can still be billed (R-INV-3). Quantities are in `unit`. */
+export interface BillableDeliveryLineView {
+  goodsReceiptLineId: string;
+  ingredientId: string;
+  itemName: string;
+  /** What the order line asked for, in `unit`. */
+  orderedQty: number;
+  /** What this delivery kept (received, not rejected), in `unit`. Billed qty defaults to it. */
+  deliveredQty: number;
+  unit: string;
+  /** The pack the order line was in ("Bag (25 Kg)"), or null; the bill is in the unit the order used. */
+  packSizeId: string | null;
+  packLabel: string | null;
+  packQuantity: number | null;
+}
+
+/** A delivery from this vendor that no standing invoice bills yet (R-INV-3). A voided invoice releases its deliveries. */
+export interface BillableDeliveryView {
+  receiptId: string;
+  purchaseOrderId: string;
+  poNumber: string;
+  receivedOn: string;
+  receivedByName: string | null;
+  lines: BillableDeliveryLineView[];
+}
+
+/** An invoice's saved line (R-INV-4, R-INV-7). */
+export interface InvoiceLineView {
+  id: string;
+  goodsReceiptLineId: string | null;
+  ingredientId: string | null;
+  /** The ingredient's name, or the one-off line's description. */
+  itemName: string;
+  orderedQty: number | null;
+  deliveredQty: number | null;
+  billedQty: number;
+  unit: string;
+  packSizeId: string | null;
+  packLabel: string | null;
+  packQuantity: number | null;
+  packCount: number | null;
+  amount: number;
+  /** Amount ÷ Billed qty, per one `unit`; null when nothing was billed. */
+  rate: number | null;
+  /** Amount ÷ packCount, when billed in packs; else null. */
+  ratePerPack: number | null;
+}
+
+/** A delivery an invoice bills: "PO-2026-0044 · delivered 12 Sept · received by Govinda Das". */
+export interface InvoiceDeliveryView {
+  receiptId: string;
+  purchaseOrderId: string;
+  poNumber: string;
+  receivedOn: string;
+  receivedByName: string | null;
+}
+
+/**
+ * One invoice's page (R-INV-7): the list row plus its lines, deliveries, totals and bill. Every
+ * totals field is null on an invoice recorded before stage 6; `lines` and `deliveries` are then
+ * empty. `expectedValue`/`variance` are recomputed from the lines when there are lines.
+ */
+export interface VendorInvoiceDetailView extends VendorInvoiceView {
+  lines: InvoiceLineView[];
+  deliveries: InvoiceDeliveryView[];
+  subTotal: number | null;
+  gstAmount: number | null;
+  otherCharges: number | null;
+  otherChargesNote: string | null;
+  discount: number | null;
+  grandTotal: number | null;
+  /** The uploaded copy of the bill, or null on an old invoice that has none. Fetch it with `api.invoiceBill`. */
+  bill: AttachmentView | null;
+}
+
+/** What an upload is for (R-INV-2, R-PAY-2). */
+export type AttachmentKind =
+  | "INVOICE_BILL"
+  | "PAYMENT_PROOF"
+  | "CASH_SIGNED_NOTE"
+  | "CASH_RECEIVER_PHOTO";
+
+/** A stored upload: a photo or a PDF, at most 10 MB (KMS-400165, KMS-400166). */
+export interface AttachmentView {
+  id: string;
+  kind: AttachmentKind;
+  contentType: string;
+  sizeBytes: number;
+  originalName: string | null;
+  uploadedAt: string;
+}
+
+/**
+ * Paying an invoice (R-PAY-1, R-PAY-2). UPI / BANK_TRANSFER / CHEQUE need `proofAttachmentId`
+ * (kind PAYMENT_PROOF). CASH needs `receivedByName`, `signedNoteAttachmentId` (CASH_SIGNED_NOTE) and
+ * `receiverPhotoAttachmentId` (CASH_RECEIVER_PHOTO), and no proof. A missing one is a field error
+ * with the standard required message. The uploads come from `api.uploadPaymentFile`.
+ */
+export interface RecordInvoicePaymentInput {
+  paidOn: string;
+  amount: number;
+  method: "BANK_TRANSFER" | "UPI" | "CHEQUE" | "CASH";
+  reference?: string;
+  note?: string;
+  proofAttachmentId?: string | null;
+  receivedByName?: string | null;
+  signedNoteAttachmentId?: string | null;
+  receiverPhotoAttachmentId?: string | null;
+}
+
+/**
+ * R-DUP-3, the one-time merge tool for duplicate ingredients (stage 7; T-270 server, T-276 screen).
+ * Everything here is behind MERGE_INGREDIENTS (Temple Admin only).
+ */
+export interface MergeCandidateView {
+  ingredientId: string;
+  name: string;
+  unit: string;
+  /** The preparation note this ingredient's recipe lines would get ("sour"); null when the name carries none. */
+  preparationNote: string | null;
+  recipeLineCount: number;
+  /** On-hand stock in this ingredient's own `unit`. */
+  onHand: number;
+  supplyCount: number;
+}
+
+/** A proposed group: keep one ingredient, merge the others into it ("Curd, sour → Curd"). */
+export interface MergeProposalView {
+  keep: MergeCandidateView;
+  merge: MergeCandidateView[];
+}
+
+export interface MergeGroupInput {
+  keepIngredientId: string;
+  merge: { ingredientId: string; preparationNote?: string | null }[];
+  /** Where one vendor supplies two of the group at different list prices: whose price that vendor keeps. */
+  supplyPriceChoices?: { vendorId: string; keepPriceFromIngredientId: string }[];
+}
+
+/** A vendor that supplies two or more of the group at different list prices (asks which to keep). */
+export interface MergeSupplyConflictView {
+  vendorId: string;
+  vendorName: string;
+  prices: { ingredientId: string; ingredientName: string; listPrice: number; unit: string; packLabel: string | null }[];
+}
+
+/**
+ * What a merge would do, before it is done. `unitProblem` is non-null when the group mixes kinds of
+ * unit (KMS-400171 on the merge itself), naming both, e.g. "Curd is in Kg, Curd pieces is in pieces".
+ */
+export interface MergePreviewView {
+  keep: MergeCandidateView;
+  merge: MergeCandidateView[];
+  /** On-hand stock after the merge, in the kept ingredient's unit. */
+  onHandAfter: number;
+  conflicts: MergeSupplyConflictView[];
+  unitProblem: string | null;
+}
+
+export interface MergeResultView {
+  keptIngredientId: string;
+  mergedIngredientIds: string[];
+  aliasesAdded: string[];
+  /** Rows re-pointed, per table name, from the catalogue's foreign keys. */
+  repointed: Record<string, number>;
 }
 
 export interface RecordInvoiceResponse {
@@ -4386,12 +4950,33 @@ export const api = {
       { method: "GET", token }
     ),
 
-  /** Takes this temple's own copy of a library recipe. The id in, the temple's new id out. */
-  importRecipe: (masterRecipeId: string, token?: string) =>
+  /**
+   * Takes this temple's own copy of a library recipe. The id in, the temple's new id out.
+   *
+   * <p>`decisions` answers every close match `importCloseMatches` listed (Q-11, Rajeev 2026-09-19);
+   * sent as `{ decisions }` in the body when given. A copy with an unanswered close match is refused
+   * with KMS-400156; its field errors are flattened, `closeMatches[i].libraryName` etc., because
+   * ErrorResponse carries only field/message pairs (T-287). The screen asks `importCloseMatches`
+   * first, so it never relies on them. A malformed answer is KMS-400001 with a field error at
+   * `decisions[i].libraryName`, `.useIngredientId` or `.confirmDifferent`. Exact matches map silently.
+   * Reserved by the work manager for T-287.
+   */
+  importRecipe: (masterRecipeId: string, token?: string, decisions?: ImportCloseMatchDecision[]) =>
     request<{ id: string; name: string; ingredientsCreated: number; categoryCreated: boolean }>(
       `/api/v1/recipes/import/${masterRecipeId}`,
-      { method: "POST", token }
+      decisions ? { method: "POST", body: JSON.stringify({ decisions }), token } : { method: "POST", token }
     ),
+
+  /**
+   * Every line of this library recipe whose ingredient is a CLOSE (not exact) match for one the
+   * temple has, one row per line: `GET /api/v1/recipes/import/{masterRecipeId}/close-matches`.
+   * Empty when there are none. Reserved by the work manager for T-287.
+   */
+  importCloseMatches: (masterRecipeId: string, token?: string) =>
+    request<ImportCloseMatchView[]>(`/api/v1/recipes/import/${masterRecipeId}/close-matches`, {
+      method: "GET",
+      token,
+    }),
 
   getLibraryRecipe: (id: string, token?: string) =>
     request<MasterRecipeDetail>(`/api/v1/library/recipes/${id}`, { method: "GET", token }),
@@ -4484,6 +5069,10 @@ export const api = {
     request<void>(`/api/v1/recipes/${id}`, { method: "DELETE", token }),
 
   // Ingredient catalogue (E2-S1).
+  /** One ingredient, for its detail page (Q-10, T-286): `GET /api/v1/ingredients/{id}`. */
+  getIngredient: (id: string, token?: string) =>
+    request<IngredientView>(`/api/v1/ingredients/${id}`, { method: "GET", token }),
+
   listIngredients: (token?: string) =>
     request<IngredientView[]>("/api/v1/ingredients", { method: "GET", token }),
 
@@ -5304,19 +5893,65 @@ export const api = {
    * <p>On `leadTimeDays`: null clears it back to "nobody has said". **Never send 0 for unknown** —
    * 0 means the goods come the same day, and the planner counts back from the two differently.
    */
-  setVendorSupply: (
-    id: string,
-    input: {
-      ingredientId: string;
-      lastPrice: number | null;
-      leadTimeDays: number | null;
-      preferred: boolean;
-    },
-    token?: string
-  ) =>
+  setVendorSupply: (id: string, input: SetVendorSupplyInput, token?: string) =>
     request<void>(`/api/v1/vendors/${id}/supplies`, {
       method: "PUT",
       body: JSON.stringify(input),
+      token,
+    }),
+
+  /**
+   * "Other ingredients" → Save (R-VEN-1): adds every ticked row to this vendor's supplies in one
+   * transaction. Each price written lands in the price history as ONBOARDING (R-VEN-4).
+   * Reserved by the work manager for T-252.
+   */
+  addVendorSupplies: (id: string, rows: SetVendorSupplyInput[], token?: string) =>
+    request<void>(`/api/v1/vendors/${id}/supplies/bulk`, {
+      method: "POST",
+      body: JSON.stringify({ rows }),
+      token,
+    }),
+
+  /**
+   * For every ingredient that has a preferred vendor, which one (R-VEN-2). The vendor page reads it
+   * to say "Preferred (replaces A)" before saving, in both of its tables. Reserved for T-258.
+   */
+  listPreferredVendors: (token?: string) =>
+    request<PreferredVendorView[]>("/api/v1/vendors/preferred", { method: "GET", token }),
+
+  /** Every vendor that supplies this ingredient (R-ING-2). Reserved for T-252. */
+  listIngredientSupplies: (ingredientId: string, token?: string) =>
+    request<IngredientSupplyView[]>(
+      `/api/v1/vendors/supplies?ingredientId=${encodeURIComponent(ingredientId)}`,
+      { method: "GET", token }
+    ),
+
+  // ---- Pack sizes and market rate (R-ING-1, R-ING-3). Reserved for T-253 and T-254. ----
+  addPackSize: (ingredientId: string, input: AddPackSizeInput, token?: string) =>
+    request<{ id: string }>(`/api/v1/ingredients/${ingredientId}/pack-sizes`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  removePackSize: (ingredientId: string, packSizeId: string, token?: string) =>
+    request<void>(`/api/v1/ingredients/${ingredientId}/pack-sizes/${packSizeId}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  /** Typed on the ingredient's page; source MANUAL (R-ING-3). T-254. */
+  setMarketRate: (ingredientId: string, marketRate: number, token?: string) =>
+    request<void>(`/api/v1/ingredients/${ingredientId}/market-rate`, {
+      method: "PUT",
+      body: JSON.stringify({ marketRate }),
+      token,
+    }),
+
+  /** Pre-fill for the stock-take value box (R-ING-3). T-254. */
+  getStockValueSuggestion: (ingredientId: string, token?: string) =>
+    request<StockValueSuggestion>(`/api/v1/ingredients/${ingredientId}/stock-value-suggestion`, {
+      method: "GET",
       token,
     }),
 
@@ -5514,6 +6149,27 @@ export const api = {
       token,
     }),
 
+  // ---- Deliveries screen (R-DEL-1..5). Behind RECEIVE_DELIVERIES. Reserved for T-261/T-266. ----
+  getDeliveries: (token?: string) =>
+    request<DeliveriesView>(`/api/v1/deliveries`, {
+      method: "GET",
+      token,
+    }),
+
+  /** "Show older deliveries": the 30 days before `before` (an ISO date, the last `receivedFrom`). */
+  getOlderDeliveries: (before: string, token?: string) =>
+    request<OlderDeliveriesView>(`/api/v1/deliveries/received?before=${encodeURIComponent(before)}`, {
+      method: "GET",
+      token,
+    }),
+
+  recordDelivery: (input: RecordDeliveryInput, token?: string) =>
+    request<RecordedDelivery>(`/api/v1/deliveries`, {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
   // ---- Returning received goods to the vendor (T-013). ----------------------
   // Addressed by the receipt, not by the order: a return is about one delivery, and an order may
   // take several. Behind MANAGE_INVENTORY on the server — taking stock off the books is the store
@@ -5532,13 +6188,19 @@ export const api = {
     }),
 
   // ---- Vendor invoices (E5-S8). --------------------------------------------
+  /**
+   * `owed: true` → `?owed=true`: only invoices with money still owed on them (status PENDING and
+   * amount − credits − payments > 0), the same rows `/api/v1/payables` returns. What "Unpaid" means
+   * for everyone (fix F9, T-281). `overdue: true` is owed and past its due date.
+   */
   listInvoices: (
-    filters: { status?: InvoiceStatus; overdue?: boolean } = {},
+    filters: { status?: InvoiceStatus; overdue?: boolean; owed?: boolean } = {},
     token?: string
   ) => {
     const params = new URLSearchParams();
     if (filters.status) params.set("status", filters.status);
     if (filters.overdue) params.set("overdue", "true");
+    if (filters.owed) params.set("owed", "true");
     const query = params.toString();
     return request<VendorInvoiceView[]>(`/api/v1/vendor-invoices${query ? `?${query}` : ""}`, {
       method: "GET",
@@ -5547,7 +6209,41 @@ export const api = {
   },
 
   getInvoice: (id: string, token?: string) =>
-    request<VendorInvoiceView>(`/api/v1/vendor-invoices/${id}`, { method: "GET", token }),
+    request<VendorInvoiceDetailView>(`/api/v1/vendor-invoices/${id}`, { method: "GET", token }),
+
+  /** A vendor's deliveries that no standing invoice bills yet (R-INV-3), newest first. MANAGE_PURCHASE_ORDERS. */
+  // ---- Merging duplicate ingredients (R-DUP-3), behind MERGE_INGREDIENTS. ----
+  listMergeProposals: (token?: string) =>
+    request<MergeProposalView[]>("/api/v1/ingredients/merge-proposals", { method: "GET", token }),
+
+  previewMerge: (input: MergeGroupInput, token?: string) =>
+    request<MergePreviewView>("/api/v1/ingredients/merges/preview", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  /** One group, one transaction. Refused with KMS-400171 / 400172 / 400173. */
+  mergeIngredients: (input: MergeGroupInput, token?: string) =>
+    request<MergeResultView>("/api/v1/ingredients/merges", {
+      method: "POST",
+      body: JSON.stringify(input),
+      token,
+    }),
+
+  listBillableDeliveries: (vendorId: string, token?: string) =>
+    request<BillableDeliveryView[]>(
+      `/api/v1/vendor-invoices/billable-deliveries?vendorId=${encodeURIComponent(vendorId)}`,
+      { method: "GET", token },
+    ),
+
+  /** Uploads the copy of a bill before the invoice is saved (R-INV-2). MANAGE_PURCHASE_ORDERS. */
+  uploadBill: (file: File, token?: string) =>
+    upload<AttachmentView>("/api/v1/vendor-invoices/bill-uploads", file, token),
+
+  /** The invoice's copy of the bill, as a file. MANAGE_PURCHASE_ORDERS. */
+  invoiceBill: (invoiceId: string, token?: string) =>
+    attachmentBlob(`/api/v1/vendor-invoices/${invoiceId}/bill`, token),
 
   /**
    * Strikes a bill that should never have been recorded (T-010). A POST rather than a DELETE,
@@ -6314,6 +7010,20 @@ export const api = {
    * MANAGE_PURCHASE_ORDERS that opens the invoice itself — so a screen that shows both must be
    * prepared for this one alone to be refused.
    */
+  /** Uploads proof of payment before the payment is saved (R-PAY-2). MANAGE_VENDOR_PAYMENTS. */
+  uploadPaymentFile: (
+    file: File,
+    kind: "PAYMENT_PROOF" | "CASH_SIGNED_NOTE" | "CASH_RECEIVER_PHOTO",
+    token?: string,
+  ) => upload<AttachmentView>(`/api/v1/vendor-invoices/payment-uploads?kind=${kind}`, file, token),
+
+  /** One of a payment's proof files (R-PAY-3). MANAGE_VENDOR_PAYMENTS. */
+  paymentFile: (invoiceId: string, paymentId: string, attachmentId: string, token?: string) =>
+    attachmentBlob(
+      `/api/v1/vendor-invoices/${invoiceId}/payments/${paymentId}/attachments/${attachmentId}`,
+      token,
+    ),
+
   listInvoicePayments: (invoiceId: string, token?: string) =>
     request<InvoicePaymentView[]>(`/api/v1/vendor-invoices/${invoiceId}/payments`, {
       method: "GET",
@@ -6322,7 +7032,7 @@ export const api = {
 
   recordInvoicePayment: (
     invoiceId: string,
-    input: { paidOn: string; amount: number; method: string; reference?: string; note?: string },
+    input: RecordInvoicePaymentInput,
     token?: string
   ) =>
     request<{ id: string }>(`/api/v1/vendor-invoices/${invoiceId}/payments`, {

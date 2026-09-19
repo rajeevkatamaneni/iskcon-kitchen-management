@@ -2,19 +2,20 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useRef, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
-import { api, toApiError, type ApiError, type CloseOutcome, type GoodsReceiptLineView, type OrderDeliveryScore, type PurchaseOrderLineView, type PurchaseOrderView, type ReturnReason } from "@/lib/api";
+import { api, toApiError, type ApiError, type CloseOutcome, type DeliveryPartView, type GoodsReceiptLineView, type GoodsReceiptView, type OrderDeliveryScore, type PurchaseOrderLineView, type PurchaseOrderView, type RejectReason, type ReturnReason } from "@/lib/api";
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { dateWithYear, money, quantity, unitLabel, templeDay } from "@/lib/format";
+import { dateWithYear, quantity, repeatsPack, shortDate, unitLabel, templeDay, templeZone } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
-import { ENTRY_GRID, RULED_TABLE, TABLE, THEAD, TR, WRAP, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, TD_DATE, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
+import { DeliveryHistory } from "@/components/DeliveryHistory";
 // The edit form, which this screen and the shopping-list panel both mount — see T-134 and the
 // note on the component. `subjectOf` comes with it because the tables below print the same
 // subject and two copies of that rule is how one of them comes to print an empty cell.
@@ -23,8 +24,6 @@ import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
 import { Badge } from "@/components/ds/Badge";
 import { HintedField } from "@/components/ds/InfoHint";
-
-const REJECT_REASONS = ["DAMAGED", "SPOILED", "WRONG_ITEM", "OTHER"];
 
 /**
  * Why goods that were already taken into stock went back to the vendor (T-013).
@@ -195,6 +194,128 @@ function leadTimeLine(po: PurchaseOrderView) {
   );
 }
 
+/** The reasons a delivery can be refused with, as `DeliveryHistory` words them. */
+const REJECT_REASONS: readonly string[] = ["DAMAGED", "SPOILED", "WRONG_ITEM", "OTHER"];
+
+/**
+ * The temple's calendar date of an instant, as an ISO date ("2026-09-12").
+ *
+ * <p>A receipt carries the moment it was recorded; the history speaks in days. The day is the
+ * temple's, not the browser's, for the same reason `todayIso` is: a delivery signed for at 11pm in
+ * Bengaluru must not read as tomorrow's on a phone set to another zone. `en-CA` is used only because
+ * it formats as YYYY-MM-DD.
+ */
+function templeIsoDay(instant: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: templeZone() }).format(new Date(instant));
+}
+
+/**
+ * One order line with everything that happened to it, for the merged table (R-PO-4).
+ *
+ * <p>Worked out here from the order and its receipts, the two reads this page already makes. The
+ * Deliveries screen gets the same facts from its own endpoint, behind RECEIVE_DELIVERIES. When
+ * this was built Kitchen Staff did not hold that permission, so the page summed what it could
+ * already see rather than ask an endpoint that would refuse one of its three readers. Rajeev has
+ * since given Kitchen Staff RECEIVE_DELIVERIES (his answer to Q-1, 2026-09-19), so that reason is
+ * gone; the page still works it out here because the two reads it already makes hold every fact,
+ * and a third request would add a way to fail without adding anything to show.
+ */
+interface LineHistory {
+  line: PurchaseOrderLineView;
+  /** Kept, summed over every delivery. Goods refused on delivery are not in it: they stay owed. */
+  delivered: number;
+  rejected: number;
+  returned: number;
+  /** Every delivery of this line, oldest first, in the shape `DeliveryHistory` takes. */
+  parts: DeliveryPartView[];
+  /** The date of the part that brought the kept total up to what was ordered, or null. */
+  completedOn: string | null;
+  /** The receipt lines something can still go back from, oldest first (T-013). */
+  returnable: { receiptId: string; receivedOn: string; line: GoodsReceiptLineView }[];
+}
+
+function historyOf(line: PurchaseOrderLineView, receipts: GoodsReceiptView[]): LineHistory {
+  // A one-off line never takes a goods receipt: the store room does not track a plastic stool, and
+  // the server refuses one (KMS-400129). "These arrived" is how it is accounted for, so that one
+  // arrival is its one delivery, of the whole amount. Conductor's ruling, 2026-09-19: one-off lines
+  // behave like any other row, with the same history, and no separate "Arrived <date>" note.
+  if (line.ingredientId === null) {
+    const arrived = line.arrivedOn;
+    return {
+      line,
+      delivered: arrived ? line.quantity : 0,
+      rejected: 0,
+      returned: 0,
+      parts: arrived
+        ? [{ receiptId: `arrived-${line.id}`, receivedOn: arrived, receivedQty: line.quantity, rejectedQty: 0, rejectReason: null, receivedByName: null }]
+        : [],
+      completedOn: arrived,
+      returnable: [],
+    };
+  }
+  const found: { part: DeliveryPartView; receiptLine: GoodsReceiptLineView }[] = [];
+  for (const r of receipts) {
+    for (const rl of r.lines) {
+      if (rl.poLineId !== line.id) continue;
+      found.push({
+        receiptLine: rl,
+        part: {
+          receiptId: r.id,
+          // The day the goods came, where the receipt says; otherwise the day it was recorded.
+          receivedOn: rl.receivedDate ?? templeIsoDay(r.receivedAt),
+          receivedQty: rl.receivedQty,
+          rejectedQty: rl.rejectedQty,
+          rejectReason: rl.rejectReason && REJECT_REASONS.includes(rl.rejectReason) ? (rl.rejectReason as RejectReason) : null,
+          receivedByName: r.receivedByName,
+        },
+      });
+    }
+  }
+  // Stable sort by ISO date: two deliveries on one day keep the order the server gave them.
+  found.sort((a, b) => a.part.receivedOn.localeCompare(b.part.receivedOn));
+  let kept = 0;
+  let completedOn: string | null = null;
+  for (const f of found) {
+    kept += f.part.receivedQty;
+    // toFixed, because 0.1 + 0.2 is not 0.3 in floating point and a line must still complete.
+    if (completedOn === null && Number(kept.toFixed(3)) >= line.quantity) completedOn = f.part.receivedOn;
+  }
+  const sum = (pick: (l: GoodsReceiptLineView) => number) =>
+    Number(found.reduce((total, f) => total + pick(f.receiptLine), 0).toFixed(3));
+  return {
+    line,
+    delivered: sum((l) => l.receivedQty),
+    rejected: sum((l) => l.rejectedQty),
+    returned: sum((l) => l.returnedQty),
+    parts: found.map((f) => f.part),
+    completedOn,
+    returnable: found
+      .filter((f) => f.receiptLine.receivedQty > f.receiptLine.returnedQty)
+      .map((f) => ({ receiptId: f.part.receiptId, receivedOn: f.part.receivedOn, line: f.receiptLine })),
+  };
+}
+
+/**
+ * What was ordered, as the vendor was asked for it: "4 × Bag (25 Kg)" for a line ordered in a pack
+ * (R-SL-3, conductor's ruling 2026-09-19), which is how the sheet sent to them words it too. The
+ * stock-unit amount (100 Kg) is kept underneath, because every other column in the row is in it.
+ */
+function OrderedCell({ line }: { line: PurchaseOrderLineView }) {
+  if (line.packCount == null || !line.packLabel) return <>{quantity(line.quantity, line.unit)}</>;
+  // One pack with no name is its own size: "1 × 500 gm" over "500 gm" says the amount twice, so the
+  // line underneath goes (T-302). The rule is `repeatsPack`, one copy for every view (T-303); it is
+  // given the count rounded to the 3 places it is written to above.
+  const unnamedSingle = repeatsPack(line.packLabel, Number(line.packCount.toFixed(3)));
+  return (
+    <>
+      {line.packCount.toLocaleString("en-IN", { maximumFractionDigits: 3 })} × {line.packLabel}
+      {!unnamedSingle && (
+        <span className="block text-sm text-ink-secondary">{quantity(line.quantity, line.unit)}</span>
+      )}
+    </>
+  );
+}
+
 export default function PurchaseOrderDetailPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
@@ -206,7 +327,7 @@ export default function PurchaseOrderDetailPage() {
 function PurchaseOrderDetailView() {
   const params = useParams<{ id: string }>();
   const id = params.id;
-  const { getToken } = useAuth();
+  const { getToken, appUser } = useAuth();
 
   const fetchPo = useCallback((token: string | undefined) => api.getPurchaseOrder(id, token), [id]);
   const { data, error, loading, reload } = useAuthedQuery(fetchPo);
@@ -221,7 +342,28 @@ function PurchaseOrderDetailView() {
   const [busy, setBusy] = useState(false);
   const [preparingPdf, setPreparingPdf] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [showReceive, setShowReceive] = useState(false);
+  /**
+   * A refusal this screen makes itself, before anything is sent: nothing ticked as arrived, no
+   * quantity on a return, or the edit form's own checks. Kept apart from `actionError` because it
+   * is not a failure of the server or the connection (T-303, the fix T-298 made on /orders/new).
+   *
+   * <p>These used to go through `toApiError(null, …)`, which exists for a request that never
+   * reached the server, so the notice put "Check your connection and try again." and "If you need
+   * help, quote KMS-0000" under a sentence that already says what to do. Nothing was wrong with the
+   * connection and there is nothing for anyone helping to look up, so it is the one sentence, drawn
+   * as ErrorNotice draws a refusal, and nothing under it. It lives exactly as long as the notice it
+   * replaced did: until the next action starts, which is why every place that cleared
+   * `actionError` now calls `clearNotices`.
+   */
+  const [refusal, setRefusal] = useState<string | null>(null);
+  function clearNotices() {
+    setActionError(null);
+    setRefusal(null);
+  }
+  function refuse(message: string) {
+    setActionError(null);
+    setRefusal(message);
+  }
   // "Vendor Never Delivered this Order" (T-124). Unticked to begin with, and — since T-135 moved
   // the whole cancellation to the foot of the page where it is always open — reset on a successful
   // cancellation rather than when a panel closes, because there is no longer a panel to close.
@@ -236,10 +378,12 @@ function PurchaseOrderDetailView() {
    */
   const [closeOutcome, setCloseOutcome] = useState<CloseOutcome>("AS_COMPUTED");
   const [closeNote, setCloseNote] = useState("");
-  // Null while nobody is returning anything. Non-null names the one receipt line the form is open
-  // against: a return is about the sack somebody opened, so one line at a time is the whole
-  // interaction and the server takes one line per request for the same reason.
-  const [returning, setReturning] = useState<{ receiptId: string; line: GoodsReceiptLineView } | null>(null);
+  // Null while nobody is returning anything. Non-null names the item, the deliveries of it that
+  // something can still go back from, and which of those is chosen: a return is about the sack
+  // somebody opened, so it is made against one line of one delivery, and the server takes one per
+  // request for the same reason. Conductor's ruling, 2026-09-19: one "Return to vendor" per item
+  // row, which asks which delivery when the item came in more than one.
+  const [returning, setReturning] = useState<{ subject: string; options: LineHistory["returnable"]; receiptId: string } | null>(null);
   // "" means the vendor's own preferred language; otherwise an explicit override for print / PDF.
   const [docLanguage, setDocLanguage] = useState("");
   // Whether the person has been told this order is going out after the vendor's agreed lead time
@@ -263,7 +407,7 @@ function PurchaseOrderDetailView() {
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
-    setActionError(null);
+    clearNotices();
     try {
       await mutation(await getToken());
       reload();
@@ -284,7 +428,7 @@ function PurchaseOrderDetailView() {
   async function generatePdf() {
     setBusy(true);
     setPreparingPdf(true);
-    setActionError(null);
+    clearNotices();
     try {
       const token = await getToken();
       await generateAndDownload({
@@ -302,7 +446,7 @@ function PurchaseOrderDetailView() {
   }
 
   async function print() {
-    setActionError(null);
+    clearNotices();
     try {
       const res = await fetch(api.purchaseOrderPrintUrl(id, docLanguage || undefined), {
         headers: { Authorization: `Bearer ${await getToken()}` },
@@ -322,13 +466,31 @@ function PurchaseOrderDetailView() {
   const po = data?.order;
   const lines = data?.lines ?? [];
   const receipts = receiptsData ?? [];
-  const showPrices = lines.some((l) => l.expectedPrice != null);
   const canSend = po?.status === "DRAFT";
   // Only a draft can be changed, and only in its quantities and its lines — never its vendor. An
   // order addressed to somebody else is a different order, so "change the vendor" would be
   // cancel-and-regenerate wearing a disguise; the server refuses it by not accepting a vendor at all.
   const canEdit = po?.status === "DRAFT";
   const canReceive = po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED";
+  /**
+   * Whether this reader is offered the way across to the Deliveries screen (R-PO-4).
+   *
+   * <p>Deliveries are recorded there and only there, so this page has no recording form of its own
+   * (one code path, R-PO-4). The link is shown to every role that holds RECEIVE_DELIVERIES, because
+   * it would take anyone else to a screen that refuses them. That is all three kitchen roles since
+   * Rajeev gave Kitchen Staff the permission (his answer to Q-1, 2026-09-19); it was Temple Admin and
+   * Kitchen Manager only while that question was open. A role check and not a permission check
+   * only because the browser is told a role, not the policy; the server refuses everyone else
+   * whatever this says.
+   *
+   * <p>Only while there is something a delivery could be recorded against: a sent order with at
+   * least one catalogue line. One-off lines are never received into stock, and have "Did these
+   * arrive?" below instead.
+   */
+  const canRecordDelivery =
+    (appUser?.role === "TEMPLE_ADMIN" || appUser?.role === "KITCHEN_MANAGER" || appUser?.role === "KITCHEN_STAFF")
+    && canReceive
+    && lines.some((l) => l.ingredientId !== null);
   /**
    * Whether the order can be called off (T-124, narrowed by T-142/D-26).
    *
@@ -420,52 +582,10 @@ function PurchaseOrderDetailView() {
    */
   const outstandingArrivals = lines.filter((l) => l.ingredientId === null && l.arrivedOn === null);
 
-  const receivedByLine = new Map<string, number>();
-  for (const r of receipts) {
-    for (const l of r.lines) {
-      receivedByLine.set(l.poLineId, (receivedByLine.get(l.poLineId) ?? 0) + l.receivedQty);
-    }
-  }
-
-  async function receive(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const f = new FormData(form);
-    const receiptLines = lines
-      // A described line has no boxes to read — the store room does not track it, and the server
-      // refuses a receipt against one with KMS-400129. Filtered here rather than relied on to
-      // produce zeros: the field names below would not exist at all for such a line, and
-      // `Number(null ?? 0)` happening to be 0 is a coincidence, not a guard.
-      .filter((l) => l.ingredientId !== null)
-      .map((l) => {
-        const received = Number(f.get(`received_${l.id}`) ?? 0) || 0;
-        const rejected = Number(f.get(`rejected_${l.id}`) ?? 0) || 0;
-        const reason = String(f.get(`reason_${l.id}`) ?? "") || null;
-        const expiry = String(f.get(`expiry_${l.id}`) ?? "") || null;
-        // Blank stays blank. Number("") is 0, and a 0 here would be written back as the vendor's
-        // price — "the bill hasn't come yet" turned into "this costs nothing" by a coercion.
-        const priceText = String(f.get(`price_${l.id}`) ?? "").trim();
-        const unitPrice = priceText === "" ? null : Number(priceText);
-        return { poLineId: l.id, receivedQty: received, rejectedQty: rejected, rejectReason: reason as never, expiryDate: expiry, unitPrice };
-      })
-      .filter((l) => l.receivedQty > 0 || l.rejectedQty > 0);
-    if (receiptLines.length === 0) {
-      setActionError(toApiError(null, "Enter what arrived on at least one line."));
-      return;
-    }
-    if (receiptLines.some((l) => l.unitPrice != null && (!Number.isFinite(l.unitPrice) || l.unitPrice < 0))) {
-      setActionError(toApiError(null, "A price is an amount in rupees. Leave it blank if the bill hasn’t arrived."));
-      return;
-    }
-    const ok = await run(
-      (t) => api.receiveDelivery(id, { idempotencyKey: crypto.randomUUID(), lines: receiptLines }, t),
-      "We couldn’t record that delivery."
-    );
-    if (ok) {
-      form.reset();
-      setShowReceive(false);
-    }
-  }
+  /** Each line with its deliveries, rejections and returns, for the merged table (R-PO-4). */
+  const histories = lines.map((l) => historyOf(l, receipts));
+  /** The delivery the return form is open against, from the ones it offers. */
+  const returnChoice = returning?.options.find((o) => o.receiptId === returning.receiptId) ?? null;
 
   /**
    * Records that described lines on this order turned up (T-066).
@@ -487,7 +607,7 @@ function PurchaseOrderDetailView() {
     const form = event.currentTarget;
     const poLineIds = new FormData(form).getAll("arrived").map(String);
     if (poLineIds.length === 0) {
-      setActionError(toApiError(null, "Tick what arrived. Leave a line unticked if it hasn’t."));
+      refuse("Tick what arrived. Leave a line unticked if it hasn’t.");
       return;
     }
     await run((t) => api.recordArrivals(id, { poLineIds }, t), "We couldn’t record that.");
@@ -497,25 +617,31 @@ function PurchaseOrderDetailView() {
    * Sends part or all of one received line back to the vendor (T-013).
    *
    * <p>The quantity is capped on the server against everything already returned against this line
-   * (KMS-400140), and it is not pre-checked here beyond being a positive number. The screen knows
-   * what it last fetched; the server knows what is true, and a second storekeeper returning the
-   * same sack a minute ago is exactly the case a client-side cap would wave through.
+   * (KMS-400140), and that cap is the one that counts. The screen knows what it last fetched; the
+   * server knows what is true, and a second storekeeper returning the same sack a minute ago is
+   * exactly the case a client-side cap would wave through.
+   *
+   * <p>The box does carry the same figure as its `max` (conductor's ruling, 2026-09-19: a return
+   * takes at most what the chosen delivery received less what has already gone back from it). Now
+   * that one button serves every delivery of an item, the person could pick the wrong delivery and
+   * type a figure that only fits another; the form names that beside the box before anything is
+   * sent, and the server still refuses whatever gets past it.
    */
   async function submitReturn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!returning) return;
+    if (!returning || !returnChoice) return;
     const form = event.currentTarget;
     const f = new FormData(form);
     const qty = Number(String(f.get("return_qty") ?? "").trim());
     if (!Number.isFinite(qty) || qty <= 0) {
-      setActionError(toApiError(null, "Enter how much went back to the vendor."));
+      refuse("Enter how much went back to the vendor.");
       return;
     }
     const note = String(f.get("return_note") ?? "").trim();
     const ok = await run(
-      (t) => api.returnReceivedGoods(returning.receiptId, {
+      (t) => api.returnReceivedGoods(returnChoice.receiptId, {
         idempotencyKey: crypto.randomUUID(),
-        receiptLineId: returning.line.id,
+        receiptLineId: returnChoice.line.id,
         quantity: qty,
         reason: String(f.get("return_reason") ?? "OTHER") as ReturnReason,
         note: note === "" ? null : note,
@@ -589,7 +715,14 @@ function PurchaseOrderDetailView() {
                 <div>
                   <h1 className="tabular-nums">{po.poNumber}</h1>
                   <p className="mt-1 flex items-center gap-2 text-ink-secondary">
-                    {po.vendorName} {statusChip(po.status)}
+                    {po.vendorName}{" "}
+                    {/* The mock's badge is the design system's Badge: semibold, 20px high. The
+                        status chip is shared with the orders list and the invoice's order picker,
+                        where it is regular weight and 24px, and changing it there changes screens
+                        this task does not own (T-289, D-5). So the chip is set to the Badge's
+                        weight and height on this page only, and keeps its colours, which are the
+                        same as the list's for every status. */}
+                    <span className="inline-flex [&>span]:py-0.5 [&>span]:font-semibold">{statusChip(po.status)}</span>
                   </p>
                   {/* The date the temple asked for, on every order and in every state. On a draft
                       it is editable below; once the order has gone to the vendor it is a readout
@@ -618,7 +751,7 @@ function PurchaseOrderDetailView() {
                       {po.neededBy ? `Needed by ${dateWithYear(po.neededBy)}` : "No needed-by date"}
                     </p>
                   )}
-                  {po.sentAt && <p className="text-sm text-ink-muted">Fixed when the order was sent</p>}
+                  {/* "Fixed when the order was sent" used to sit here. R-PO-4 removes it. */}
                   {/*
                     The vendor's own promise, said on the order it applies to (T-137, D-25).
 
@@ -751,9 +884,9 @@ function PurchaseOrderDetailView() {
                     deliberate act, so it is now a titled block at the foot of the page that
                     somebody has to go to on purpose.
 
-                  Receive delivery keeps the tail of the bank. It is not in Rajeev's five because
-                  the order he was looking at was a draft and it does not appear on one; it is the
-                  other thing a person does from this screen, and it belongs beside them.
+                  Receive delivery used to keep the tail of the bank. It has gone (R-PO-4):
+                  deliveries are recorded on the Deliveries screen and nowhere else, and the way
+                  across is the link on the Items table below.
                 */}
                 {/* `!(editing && canEdit)` rather than `!editing`, and the difference only shows in
                     one case: if the order stops being a draft while somebody has the form open —
@@ -770,21 +903,26 @@ function PurchaseOrderDetailView() {
                       <option value="">Vendor’s language</option>
                       {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                     </select>
-                    <button type="button" disabled={busy} onClick={generatePdf} className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{preparingPdf ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Generate PDF"}</button>
-                    <button type="button" disabled={busy} onClick={print} className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Print</button>
+                    <button type="button" disabled={busy} onClick={generatePdf} className="btn btn-secondary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">{preparingPdf ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Generate PDF"}</button>
+                    <button type="button" disabled={busy} onClick={print} className="btn btn-secondary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Print</button>
                     {/* "Edit", not "Edit lines" — Rajeev, 2026-09-10: "because that is what you are
                         doing. EDITING the whole PO, not just 1 line." The form below edits the
                         needed-by date as well as the lines, so the old label was describing less
                         than the button did. It no longer doubles as the way out of edit mode
                         either: it is not rendered there at all. */}
-                    {canEdit && <button type="button" disabled={busy} onClick={() => { setActionError(null); setEditing(true); }} className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Edit</button>}
+                    {canEdit && <button type="button" disabled={busy} onClick={() => { clearNotices(); setEditing(true); }} className="btn btn-secondary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Edit</button>}
                     {canSend && <button type="button" disabled={busy} onClick={() => markSent(false)} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Mark sent</button>}
                     {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn’t send it on WhatsApp.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Send on WhatsApp</button>}
-                    {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
                   </div>
                 )}
               </header>
 
+              {refusal && (
+                // ErrorNotice's box, less its next-step line and reference code: see `refusal`.
+                <div role="alert" className="mb-6 rounded border border-danger bg-danger-bg p-4 text-danger">
+                  <p className="font-medium">{refusal}</p>
+                </div>
+              )}
               {actionError && (
                 <div className="mb-6 grid gap-3">
                   <ErrorNotice error={actionError} />
@@ -850,9 +988,9 @@ function PurchaseOrderDetailView() {
                   words={{
                     heading: "Edit this draft",
                     formLabel: "Edit the draft order",
-                    intro: "The vendor cannot be changed. Cancel this order at the foot of the page and raise it against the right one. Once it is sent, nothing here can be changed at all.",
+                    intro: "The vendor cannot be changed. Cancel this order at the foot of the page and create a new one for the right vendor. Once it is sent, nothing here can be changed at all.",
                     emptyOrder: "An order needs at least one line. Add what is being bought, or cancel the order at the foot of the page.",
-                    dateBeforeFloor: "That date is before the order was raised. Choose a day on or after it.",
+                    dateBeforeFloor: "That date is before the order was created. Choose a day on or after it.",
                   }}
                   initialLines={lines.map((l) => ({
                     key: l.id,
@@ -871,121 +1009,17 @@ function PurchaseOrderDetailView() {
                   busy={busy}
                   onSave={saveLines}
                   onCancel={() => setEditing(false)}
-                  onRefuse={(message) => setActionError(toApiError(null, message))}
+                  onRefuse={refuse}
                 />
               )}
 
 
-              {showReceive && canReceive && (
-                <section className="card mb-8 px-6 py-5" aria-labelledby="receive-heading">
-                  <h2 id="receive-heading" className="text-lg">Record a delivery</h2>
-                  <p className="mt-1 text-sm text-ink-secondary">Rejected goods need a reason and never enter stock. The price is what the bill says — correct it if it differs, or leave it blank for a delivery that came without one.</p>
-                  <Form className="mt-4" aria-label="Record a delivery" onSubmit={receive}>
-                    {/* An entry grid, not a list, so it stays off the table rule (Rajeev,
-                        2026-09-18, T-233): on a wide screen it is the grid it always was. Below
-                        1024px each line becomes a card with a label over every box — ENTRY_GRID in
-                        ds/table.ts, from the `data-label` on each cell — instead of a table eight
-                        columns wide scrolling sideways inside the card. */}
-                    <div className="overflow-x-auto">
-                    <table className={`${TABLE} ${ENTRY_GRID} text-sm`}>
-                      <thead className={THEAD}>
-                        <tr>
-                          {/* A floor, not a width. Seven of these eight columns hold a fixed-width
-                              control or a two-word heading and sit at their minimum whatever the
-                              card is, so a full-width table has nothing to share out and the one
-                              column that may wrap is handed whatever is left — measured at 142px,
-                              which broke a 69-character ingredient name over five lines and made a
-                              125px-tall row nobody can read. `min-w` gives it a floor of 13rem
-                              (three lines, and the knee of the curve: 16rem buys one more line for
-                              twice the scroll) and lets the table run past the card, which now
-                              scrolls rather than clipping. Deliberately a `min-w` and never a
-                              `max-w` — see the note on WRAP in ds/table.ts. */}
-                          <th className={`${TH_TEXT} ${WRAP} min-w-[13rem]`}>Item</th>
-                          <th className={TH_NUM}>Ordered</th>
-                          <th className={TH_NUM}>Received so far</th>
-                          <th className={TH_NUM}>Received now</th>
-                          <th className={TH_NUM}>Rejected</th>
-                          <th className={TH_TEXT}>Reason</th>
-                          <th className={TH_TEXT}>Expiry</th>
-                          <th className={TH_NUM}>Price paid</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lines.map((l) => (
-                          <tr key={l.id} className={TR}>
-                            <td className={`${TD_TEXT} ${WRAP} min-w-[13rem]`}>{subjectOf(l)}</td>
-                            {/* A described line is orderable and payable but never receivable: the
-                                store room counts ingredients, and there is no batch, no expiry and
-                                no on-hand quantity that would mean anything about a plastic stool.
-                                So the row is here — it is part of the order and the storekeeper
-                                needs to see that it was on the lorry — with no boxes to type into.
-                                The server refuses it too (KMS-400129); this is the offer being
-                                absent rather than merely refused when pressed. */}
-                            {l.ingredientId === null ? (
-                              <td className={`${TD_TEXT} text-ink-muted`} colSpan={7}>
-                                {l.arrivedOn
-                                  ? `Not stocked · arrived ${dateWithYear(l.arrivedOn)}`
-                                  : "Not stocked — say below whether it arrived"}
-                              </td>
-                            ) : (
-                            <>
-                            {/* Ledger form on both, and for one reason: this row exists so a
-                                store-keeper can see what is still owed. Round the ordered figure
-                                and not the receipts against it and a fully delivered line reads as
-                                over-delivered. "Received so far" was printing a bare number with no
-                                unit at all, which is the same defect one step further on. */}
-                            <td className={TD_NUM} data-label="Ordered">{quantity(l.quantity, l.unit)}</td>
-                            <td className={`${TD_NUM} text-ink-secondary`} data-label="Received so far">{quantity(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
-                            <td className={TD_NUM} data-label="Received now"><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${subjectOf(l)}`} className="min-w-24 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
-                            <td className={TD_NUM} data-label="Rejected"><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${subjectOf(l)}`} className="min-w-20 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
-                            <td className={TD_TEXT} data-label="Reason">
-                              <select name={`reason_${l.id}`} className="rounded-control border border-hairline px-2 py-1">
-                                <option value="">—</option>
-                                {REJECT_REASONS.map((r) => <option key={r} value={r}>{r.replace("_", " ").toLowerCase()}</option>)}
-                              </select>
-                            </td>
-                            <td className={TD_DATE} data-label="Expiry"><input name={`expiry_${l.id}`} type="date" className="rounded-control border border-hairline px-2 py-1" /></td>
-                            {/* Pre-filled from the order and editable, because the bill that arrived
-                                with the lorry is the truth and the order was only ever a guess. The
-                                expected figure stays visible underneath rather than being replaced,
-                                so a storekeeper can see that ₹80 is not the ₹45 that was budgeted —
-                                as information, not as a gate. Whatever is typed here becomes the
-                                vendor's last-known price for this ingredient. */}
-                            <td className={`${TD_NUM} align-top`} data-label="Price paid">
-                              <input
-                                name={`price_${l.id}`}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                defaultValue={l.expectedPrice ?? ""}
-                                aria-label={`Price paid per ${unitLabel(l.unit)} of ${subjectOf(l)}, optional`}
-                                className="min-w-24 rounded-control border border-hairline px-2 py-1 tabular-nums"
-                              />
-                              <span className="mt-1 block pl-field-inset text-xs text-ink-muted">
-                                {l.expectedPrice == null
-                                  ? `optional, per ${unitLabel(l.unit)}`
-                                  : `expected ${money(l.expectedPrice, "INR")} / ${unitLabel(l.unit)}`}
-                              </span>
-                            </td>
-                            </>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    </div>
-                    <button type="submit" disabled={busy} className="btn btn-primary mt-4 min-h-touch px-5 transition-colors duration-state disabled:opacity-60">Record delivery</button>
-                  </Form>
-                </section>
-              )}
-
               {/* The door KMS-400129 has been pointing at since T-024 (T-066).
 
-                  Outside the "Record a delivery" panel, and always open, deliberately. An order of
-                  nothing but described lines has no delivery to record — every row in that table
-                  would be a row with no boxes — so anything hidden behind that button would be
-                  hidden behind a button the storekeeper has no reason to press. This is the only
-                  way such an order is ever closed, and it has to be the thing you see. */}
+                  Always open, deliberately, and it stays on this page now that deliveries are
+                  recorded on the Deliveries screen (R-PO-4). That screen lists catalogue lines
+                  only: a one-off line is never received into stock, so this is the only way such a
+                  line is ever accounted for, and it has to be the thing you see. */}
               {canReceive && outstandingArrivals.length > 0 && (
                 <section className="card mb-8 px-6 py-5" aria-labelledby="arrivals-heading">
                   <h2 id="arrivals-heading" className="text-lg">Did these arrive?</h2>
@@ -1045,10 +1079,7 @@ function PurchaseOrderDetailView() {
 
                         Disabling it instead would be silent: a storekeeper who presses and sees
                         nothing happen is told neither what is wrong nor what to do, and there is
-                        nowhere on a greyed button to put the sentence that would tell them. It
-                        would also disagree with the receiving panel directly above, which takes
-                        exactly this approach for exactly this case ("Enter what arrived on at
-                        least one line"). Same screen, same mistake, same answer. */}
+                        nowhere on a greyed button to put the sentence that would tell them. */}
                     <button
                       type="submit"
                       disabled={busy}
@@ -1079,142 +1110,201 @@ function PurchaseOrderDetailView() {
                 contradiction. It comes back the moment Save or Cancel is pressed.
               */}
               {!editing && (
-              <section className="table-wrap mb-8 overflow-x-auto">
-                {/* Named, because this screen can show four tables at once — the order as issued,
-                    the receiving form, and one per delivery — and until T-066 none of them could be
-                    told apart by anything but the words inside them. A subject now appears in two
-                    places at once (here, and on the "Did these arrive?" list), so "the line is on
-                    the screen" stopped being the same claim as "the line is on the order". */}
-                <table className={RULED_TABLE} aria-label="What was ordered">
-                  <thead className={THEAD}>
-                    <tr>
-                      <th className={TH_PRIMARY}>Item</th>
-                      <th className={TH_FIXED}>Quantity</th>
-                      {showPrices && <th className={TH_FIXED}>Price</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((l: PurchaseOrderLineView) => (
-                      <tr key={l.id} className={TR}>
-                        <td className={TD_PRIMARY}>
-                          {subjectOf(l)}
-                          {/* Only ever on a described line, and only once somebody has said so
-                              (T-066). A catalogue line's arrival is the delivery table below; this
-                              is the only record a described line will ever have, so the order it
-                              sits on is the place to read it. */}
-                          {l.arrivedOn && (
-                            <span className="block text-xs tabular-nums text-ink-muted">
-                              Arrived {dateWithYear(l.arrivedOn)}
-                            </span>
-                          )}
-                        </td>
-                        {/* The order as issued, beside what it is expected to cost — the figure
-                            the delivery above and the vendor's invoice are both checked against, so
-                            it is exact and agrees line for line with the receiving table. */}
-                        <td className={TD_FIXED_NUM}>{quantity(l.quantity, l.unit)}</td>
-                        {showPrices && <td className={TD_FIXED_NUM} data-label="Price">{money(l.expectedPrice, "INR")}</td>}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-              )}
+                /*
+                  The order and everything that happened to it, in one table (R-PO-4, mock
+                  dev-po design E). Until now this screen had two: the order as issued, and one
+                  table per delivery underneath it. Reading whether the rice had all come meant
+                  adding up the second against the first by eye. Now each item says what was
+                  ordered, what has been kept, what was refused on delivery and what has gone back,
+                  and its deliveries fold away under "▸ N deliveries" in the shared component the
+                  Deliveries screen uses, so the history reads the same in both places.
 
-              {/* What actually arrived, delivery by delivery, and what has since gone back (T-013).
-                  Until now this screen fetched the receipts only to add up "received so far" in the
-                  receiving form, so a delivery could be recorded and then never read again. It has
-                  to be readable to be returnable: a return is made against one line of one
-                  delivery, and there is no other place in the application that shows which line
-                  that is. */}
-              {receipts.length > 0 && (
-                <section className="mb-8" aria-labelledby="deliveries-heading">
-                  <h2 id="deliveries-heading" className="text-lg">Deliveries received</h2>
-                  {receipts.map((r) => (
-                    <div key={r.id} className="mt-4">
-                      <p className="text-sm text-ink-secondary">
-                        {templeDay(r.receivedAt)}{r.receivedByName ? ` · ${r.receivedByName}` : ""}
-                      </p>
-                      <div className="table-wrap mt-2 overflow-x-auto">
-                        <table className={RULED_TABLE}>
-                          <thead className={THEAD}>
-                            <tr>
-                              <th className={TH_PRIMARY}>Item</th>
-                              <th className={TH_FIXED}>Received</th>
-                              <th className={TH_FIXED}>Rejected at the gate</th>
-                              <th className={TH_FIXED}>Returned</th>
-                              <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
+                  No price column and no total (conductor's ruling, 2026-09-19): the document is
+                  silent and the mock has neither. What was paid belongs to the invoice (R-DEL-5).
+
+                  From 1024px the card is the mock's `card px-6 py-5` and the table sits inside
+                  that padding, 25px in from the card's edge, with "Items" at the mock's weight
+                  (medium, the weight an `h3` has) — T-289, D-5: until then the table ran flush to
+                  the card's edges, as the planner's "Upcoming outside commitments" does, and the
+                  heading was semibold. Measured against the mock at 1280: see
+                  docs/work/proof/T-289.md.
+
+                  Below 1024px the side padding stays off. There the rows become cards with their
+                  own 24px inset (globals.css), which already lines them up under the heading;
+                  with the card's 24px as well the item names would start 48px in, 24px right of
+                  "Items", and a phone would lose 48px of a 358px card for nothing. The mock is
+                  drawn with one set of classes for every width, but it is a desktop drawing:
+                  lining the rows up under their heading is the rule's logic, so that wins here.
+
+                  Still inside an `overflow-x-auto` wrapper: if the columns ever cannot fit, the
+                  table scrolls inside its card rather than cutting anything off or pushing the
+                  page sideways.
+
+                  From 1024px to about 1,100px the menu leaves the card 680-750px and the five
+                  short columns need 632px of it on one line. T-265 found the fitter squeezing Item
+                  to 46px at 1024; T-269 fixed that in the shared rule (components/ds/table.ts), not
+                  here: "Rejected on delivery" now wraps before Item gives up anything, and Item is
+                  never narrower than its longest word. Measured: Item 122px at 1024, 140 at 1060,
+                  180 at 1100, 360 at 1280.
+                */
+                <section className="card mb-8 py-5 lg:px-6" aria-labelledby="items-heading">
+                  {/* The mock's heading row, classes and all. 24px in below 1024px, from the
+                      heading's own padding, where the rows are cards inset 24px; from 1024px the
+                      inset is the card's, as in the mock, and the heading starts where the table
+                      does. */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 px-6 lg:px-0">
+                    {/* An h2 (the page's h1 is the order number) at the mock's weight: its h3 is
+                        medium from the base styles, an h2 is semibold, so the weight is said here. */}
+                    <h2 id="items-heading" className="text-lg font-medium">Items</h2>
+                    {/* A link, not a form: deliveries are recorded on the Deliveries screen and only
+                        there, so there is one recording path (R-PO-4). `?order=` opens that screen's
+                        recording panel on this order. No per-item record button beside it:
+                        Rajeev decided against one (Q-8, 2026-09-19). */}
+                    {canRecordDelivery && (
+                      <Link
+                        href={`/deliveries?order=${encodeURIComponent(po.id)}`}
+                        className="inline-flex min-h-touch items-center rounded-control text-sm text-accent-text hover:underline"
+                      >
+                        Record a delivery on the Deliveries screen →
+                      </Link>
+                    )}
+                  </div>
+                  <div className="mt-3 overflow-x-auto">
+                  <table className={RULED_TABLE} aria-labelledby="items-heading">
+                    <thead className={THEAD}>
+                      <tr>
+                        <th className={TH_PRIMARY}>Item</th>
+                        <th className={TH_FIXED}>Ordered</th>
+                        <th className={TH_FIXED}>Delivered</th>
+                        <th className={TH_FIXED}>Rejected on delivery</th>
+                        <th className={TH_FIXED}>Returned</th>
+                        <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {histories.map((h) => {
+                        const subject = subjectOf(h.line) ?? "";
+                        return (
+                          <Fragment key={h.line.id}>
+                          <tr className={TR}>
+                            <td className={TD_PRIMARY}>{subject}</td>
+                            {/* Ledger form throughout: these figures are checked against each other
+                                and against the order, so a rounded one would read as a discrepancy
+                                that is not there. Nothing refused or returned is a dash rather than
+                                0, so the exceptions are the only things the eye stops on. */}
+                            <td className={TD_FIXED_NUM} data-label="Ordered"><OrderedCell line={h.line} /></td>
+                            <td className={TD_FIXED_NUM} data-label="Delivered">{quantity(h.delivered, h.line.unit)}</td>
+                            <td className={TD_FIXED_NUM} data-label="Rejected on delivery">
+                              {h.rejected > 0 ? quantity(h.rejected, h.line.unit) : "—"}
+                            </td>
+                            <td className={TD_FIXED_NUM} data-label="Returned">
+                              {h.returned > 0 ? quantity(h.returned, h.line.unit) : "—"}
+                            </td>
+                            <td className={TD_ACTIONS_FIXED}>
+                              {/* Offered only where something is left to send back. A line refused
+                                  in full never entered stock, and one already returned in full has
+                                  nothing more to take out: the server would refuse both
+                                  (KMS-400140), and an offer refused when pressed is worse than none.
+                                  One per item (conductor's ruling, 2026-09-19); the form asks which
+                                  delivery when there is more than one. */}
+                              {h.returnable.length > 0 && (
+                                <Button
+                                  variant="secondary"
+                                  disabled={busy}
+                                  onClick={() => {
+                                    clearNotices();
+                                    setReturning({ subject, options: h.returnable, receiptId: h.returnable[0].receiptId });
+                                  }}
+                                >
+                                  Return to vendor<span className="sr-only">: {subject}</span>
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                          {/*
+                            The item's deliveries, in a row of their own under it that spans the
+                            table, as the mock draws them (dev-po design E). Not inside the Item
+                            cell: measured at 1280 for T-265, an opened history there wrapped every
+                            line to three in a 305px column while the four figure columns beside it
+                            stood empty for 200px — the dead block the layout rules forbid — and its
+                            unbreakable "Received by: …" pieces set a floor under the column that
+                            pushed the table wider than the card. Spanning, it reads on one line.
+
+                            No rule above it and no top padding, so it reads as part of the item's
+                            row rather than a row of its own; below 1024px the same, inside the
+                            item's card. Only rendered when there is a delivery to show.
+                          */}
+                          {h.parts.length > 0 && (
+                            <tr className="align-top !border-t-0 hover:bg-sunken max-lg:!pb-3 max-lg:!pt-0">
+                              <td colSpan={6} className="!border-t-0 lg:!pb-3 lg:!pt-0">
+                                <DeliveryHistory
+                                  parts={h.parts}
+                                  unit={h.line.unit}
+                                  orderedQty={h.line.quantity}
+                                  completedOn={h.completedOn}
+                                  itemName={subject}
+                                />
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {r.lines.map((l) => (
-                              <tr key={l.id} className={TR}>
-                                <td className={TD_PRIMARY}>{l.ingredientName}</td>
-                                {/* Ledger form throughout, as in the receiving table above: these
-                                    figures are checked against each other and against the order, so
-                                    a rounded one would read as a discrepancy that is not there. */}
-                                <td className={TD_FIXED_NUM} data-label="Received">{quantity(l.receivedQty, l.unit)}</td>
-                                <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="Rejected">
-                                  {l.rejectedQty > 0
-                                    ? `${quantity(l.rejectedQty, l.unit)} · ${reasonLabel(l.rejectReason ?? "")}`
-                                    : "—"}
-                                </td>
-                                {/* The receipt itself is never edited, so this is not a column of
-                                    it: the server sums the returns recorded against the line. A
-                                    line nothing has gone back on reads as a dash rather than 0, so
-                                    the exceptions are the only things the eye stops on. */}
-                                <td className={TD_FIXED_NUM} data-label="Returned">
-                                  {l.returnedQty > 0 ? quantity(l.returnedQty, l.unit) : "—"}
-                                </td>
-                                <td className={TD_ACTIONS_FIXED}>
-                                  {/* Offered only where there is something left to send back.
-                                      A line rejected in full never entered stock, and a line
-                                      already returned in full has nothing more to take out — in
-                                      both the server would refuse it (KMS-400140), and an offer
-                                      that is refused when pressed is worse than no offer. */}
-                                  {l.receivedQty > l.returnedQty && (
-                                    <Button
-                                      variant="secondary"
-                                      disabled={busy}
-                                      onClick={() => { setActionError(null); setReturning({ receiptId: r.id, line: l }); }}
-                                    >
-                                      Return to vendor
-                                    </Button>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
+                          )}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  </div>
                 </section>
               )}
 
-              {returning && (
+              {returning && returnChoice && (
                 <section className="card mb-8 px-6 py-5" aria-labelledby="return-heading">
-                  <h2 id="return-heading" className="text-lg">Return {returning.line.ingredientName} to the vendor</h2>
+                  <h2 id="return-heading" className="text-lg">Return {returning.subject} to the vendor</h2>
                   {/* The quantity still available is stated here, in the open, and not inside the
                       field's "i". A hint holds guidance somebody may want; this is the number the
                       form is about to be judged against — the server caps on exactly this figure
                       (KMS-400140) — and a cap nobody can see until they press the button is how a
                       person ends up guessing. */}
                   <p className="mt-1 text-sm text-ink-secondary">
-                    {quantity(returning.line.receivedQty - returning.line.returnedQty, returning.line.unit)} of
+                    {quantity(returnChoice.line.receivedQty - returnChoice.line.returnedQty, returnChoice.line.unit)} of
                     this delivery can still go back. This takes the goods out of stock. The delivery
                     record stays exactly as it was signed for.
                   </p>
                   <Form className="mt-4" aria-label="Return goods to the vendor" onSubmit={submitReturn}>
                     <div className="flex flex-wrap items-end gap-4">
-                      <HintedField label={`Quantity in ${unitLabel(returning.line.unit)}`}>
+                      {/* Which delivery, asked only when there is a choice (conductor's ruling,
+                          2026-09-19). A return is made against one line of one delivery, and the
+                          merged table has one row per item, so the row's button cannot say which.
+                          Each option names the day and what can still go back from it — the same
+                          figure the sentence above states for the one chosen. */}
+                      {returning.options.length > 1 && (
+                        <HintedField label="Delivery">
+                          {(id) => (
+                            <select
+                              id={id}
+                              value={returning.receiptId}
+                              onChange={(e) => setReturning({ ...returning, receiptId: e.target.value })}
+                              aria-label={`Delivery of ${returning.subject} to return from`}
+                              className="min-h-touch rounded-control border border-hairline px-2"
+                            >
+                              {returning.options.map((o) => (
+                                <option key={o.receiptId} value={o.receiptId}>
+                                  {shortDate(o.receivedOn)} · {quantity(o.line.receivedQty - o.line.returnedQty, o.line.unit)} can go back
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </HintedField>
+                      )}
+                      <HintedField label={`Quantity in ${unitLabel(returnChoice.line.unit)}`}>
                         {(id) => (
                           <input
                             id={id}
                             name="return_qty"
                             type="number"
                             min="0"
+                            max={returnChoice.line.receivedQty - returnChoice.line.returnedQty}
                             step="any"
-                            aria-label={`Quantity of ${returning.line.ingredientName} to return`}
+                            aria-label={`Quantity of ${returning.subject} to return`}
                             className="w-32 min-h-touch rounded-control border border-hairline px-2 tabular-nums"
                           />
                         )}
@@ -1407,7 +1497,7 @@ function PurchaseOrderDetailView() {
                 <section className="card mb-8 px-6 py-5" aria-labelledby="cancel-heading">
                   <h2 id="cancel-heading" className="text-lg">Cancel this purchase order</h2>
                   <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-                    This calls off {po.poNumber} with {po.vendorName}. It cannot be undone — raise a
+                    This calls off {po.poNumber} with {po.vendorName}. It cannot be undone — create a
                     new order if it is needed again.
                   </p>
                   <Form className="mt-3" aria-label="Cancel this purchase order" onSubmit={async (e) => {
@@ -1440,7 +1530,7 @@ function PurchaseOrderDetailView() {
                         <span className="pl-field-inset font-medium text-ink">Reason</span>
                         <input name="reason" required className="min-h-touch rounded-control border border-hairline px-3" />
                       </label>
-                      <button type="submit" disabled={busy} className="min-h-touch rounded-control bg-danger px-5 text-ink-inverse disabled:opacity-60">Cancel order</button>
+                      <Button type="submit" variant="danger" disabled={busy}>Cancel order</Button>
                     </div>
 
                     {/*

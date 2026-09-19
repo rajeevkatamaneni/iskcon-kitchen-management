@@ -16,6 +16,9 @@ import {
   TD_LEAD,
   RULED_TABLE_EVEN,
   shareTableWidth,
+  withAddressBreaks,
+  withLongTokenBreaks,
+  withWholeWords,
 } from "@/components/ds/table";
 
 /**
@@ -110,7 +113,9 @@ describe("the table rule", () => {
   it("says in the stylesheet what the rule says", () => {
     const css = fs.readFileSync(path.join(ROOT, "app/globals.css"), "utf8");
     // Everything reads left: no column kind is aligned to the end any more.
-    expect(css).toMatch(/\.kms-table :is\(th, td\) \{ padding: 12px; text-align: start; \}/);
+    // 12px either side of a cell (§5 rule 4); a variable only so the fitter can close the gaps on a
+    // table that would otherwise run past its box (T-304). It defaults to the same 12px.
+    expect(css).toMatch(/\.kms-table :is\(th, td\) \{ padding: 12px var\(--kms-cell-pad, 12px\); text-align: start; \}/);
     expect(css).not.toMatch(/\.kms-table \.kms-[a-z]+\s*\{[^}]*text-align:\s*(end|right)/);
     // No caps and no one-pixel columns: those are what parked the spare width in one block.
     expect(css).not.toMatch(/--kms-cap/);
@@ -182,5 +187,282 @@ describe("sharing a table's width", () => {
 
   it("changes nothing when the content fills the table exactly", () => {
     expect(shareTableWidth([300, 300], 600)).toEqual([300, 300]);
+  });
+});
+
+/**
+ * T-269: when a table is short of room, a short column's heading wraps before any text column gives
+ * up width (conductor's ruling, 2026-09-19, from §5 rule 2), on two lines where two are enough, and
+ * the name column is never squeezed below its longest word. The figures are the ones measured on a
+ * purchase order in headless Chrome (docs/work/proof/T-269.md): Item needs 561 unwrapped and 105 at
+ * its longest word ("Cardamom"); Ordered 124 (a pack line), Delivered 86, "Rejected on delivery"
+ * 156 on one line, 98 on two and 80 one word to a line; Returned 84; the Return button 182.
+ */
+describe("sharing a table's width when a heading is what is wide", () => {
+  const need = [561, 124, 86, 156, 84, 182];
+  const shrink = {
+    min: [105, 62, 54, 39, 39, 182],
+    flexible: [true, false, false, false, false, false],
+    wrapHead: [561, 124, 86, 98, 84, 182],
+    wrapHeadFully: [561, 124, 86, 80, 84, 182],
+  };
+
+  it("wraps a short column's heading before it narrows the name column", () => {
+    // A name needing 300 and a short column whose heading needs 150 but whose figures need 80, in
+    // 400px. Before T-269 the name gave up 50px; now the heading wraps and the name keeps it all,
+    // with the 20px left over going to the gap between them.
+    const widths = shareTableWidth([300, 150], 400, { min: [100, 60], flexible: [true, false], wrapHead: [300, 80] });
+    expect(widths).toEqual([320, 80]);
+  });
+
+  it("gives the purchase order's Item column room at 1060px with the heading on two lines", () => {
+    // The card is 714px wide at 1060. Two-line "Rejected on delivery" (98) leaves Item 140.
+    expect(shareTableWidth(need, 714, shrink)).toEqual([140, 124, 86, 98, 84, 182]);
+  });
+
+  it("at 1024px wraps the heading further rather than squeeze Item below its longest word", () => {
+    // 678px: on two lines the short columns take 574 and leave 104, 1px under Item's 105, so the
+    // heading goes one word to a line (80) and Item gets 122. Before T-269 Item got 46.
+    const widths = shareTableWidth(need, 678, shrink)!;
+    expect(widths).toEqual([122, 124, 86, 80, 84, 182]);
+    expect(widths[0]).toBeGreaterThanOrEqual(shrink.min[0]);
+    expect(widths.reduce((a, b) => a + b, 0)).toBe(678);
+  });
+
+  it("only wraps as many headings as it has to, the biggest saving first", () => {
+    // Two wide headings (200 over 60, and 150 over 100), 50px short: only the first wraps, and the
+    // 90px it frees beyond the 50 is shared between the gaps.
+    const widths = shareTableWidth([300, 200, 150], 600, {
+      min: [100, 60, 100],
+      flexible: [true, false, false],
+      wrapHead: [300, 60, 100],
+    });
+    expect(widths).toEqual([345, 105, 150]);
+  });
+
+  it("still gives up when even the wrapped headings and the name's longest word cannot fit", () => {
+    expect(shareTableWidth(need, 600, shrink)).toBeNull();
+  });
+
+  it("measures every text column at its longest whole word, not at a single letter", () => {
+    // T-269 did this for the name column; T-278 for every text column (`kms-flex`).
+    const css = fs.readFileSync(path.join(ROOT, "app/globals.css"), "utf8");
+    expect(css).toMatch(/\.table\.kms-measuring-min > \* > tr > \.kms-flex \{ overflow-wrap: normal !important; \}/);
+  });
+});
+
+/**
+ * T-278. The figures are the ones the fitter measured on the local app, signed in as the Temple
+ * Admin, at 1024px (docs/work/proof/T-278.md). Before T-278 every one of these returned `null`, and
+ * the browser's own layout squeezed the name column to 36–45px and broke its words mid-letter.
+ */
+describe("sharing a table's width when the short columns alone are too wide (T-278)", () => {
+  it("(a) keeps every heading on one line when the table has room", () => {
+    // Nothing is short, so every column gets at least what it needs with its heading unwrapped,
+    // however much a `shrink` offers: a heading wraps only when the table genuinely lacks room.
+    const need = [266, 107, 168, 166, 106];
+    const shrink = {
+      min: [148, 107, 168, 166, 106],
+      flexible: [true, false, false, false, false],
+      wrapHead: [266, 107, 168, 104, 106],
+      stack: [266, 107, 120, 104, 106],
+      wrapHeadFully: [266, 107, 120, 104, 106],
+    };
+    const widths = shareTableWidth(need, 886, shrink)!;
+    widths.forEach((w, i) => expect(w).toBeGreaterThanOrEqual(need[i]));
+    expect(widths.reduce((a, b) => a + b, 0)).toBe(886);
+  });
+
+  it("(a) sizes a dropdown in a table to the option it shows, which is what wrapped headings at 1280", () => {
+    // On a vendor's Other ingredients grid at 1280 the "Sells it as" dropdown was 183px, the width
+    // of "Add a pack size…", while showing "gm". That made the grid 19px short, and "LEAD TIME
+    // (DAYS)" wrapped with room to spare.
+    const css = fs.readFileSync(path.join(ROOT, "app/globals.css"), "utf8");
+    expect(css).toMatch(/\.table td select \{ field-sizing: content; width: auto; min-width: max-content; \}/);
+  });
+
+  it("(b) never gives a text column less than its longest word while short cells can still break", () => {
+    // Shopping list, Kalasipalya group, 628px: Include, Ingredient, Why, On hand, Suggested, Order by.
+    // Short columns alone need 482 of it; Ingredient's longest word is 92, Why's badge 124.
+    const widths = shareTableWidth([80, 171, 124, 75, 124, 203], 628, {
+      min: [80, 92, 124, 75, 124, 203],
+      flexible: [false, true, true, false, false, false],
+      wrapHead: [80, 171, 124, 58, 124, 203],
+      stack: [80, 109, 124, 58, 104, 150],
+      wrapHeadFully: [80, 109, 124, 58, 104, 150],
+    })!;
+    // "On hand" on two lines, "Won't arrive in time" above "assumed", Suggested left whole: the
+    // text columns get their longest word and the short columns narrow no further than that needs.
+    expect(widths).toEqual([80, 92, 124, 58, 124, 150]);
+    expect(widths[1]).toBeGreaterThanOrEqual(92);
+    expect(widths[2]).toBeGreaterThanOrEqual(124);
+  });
+
+  it("(c) fits a vendor's Supplies at 1024 by putting the two buttons one above the other", () => {
+    // VERIFY-B Grains, 630px: Ingredient, Sells it as, List price, Lead time, Preferred, actions.
+    const widths = shareTableWidth([190, 101, 174, 84, 91, 168], 630, {
+      min: [100, 101, 174, 84, 91, 168],
+      flexible: [true, false, false, false, false, false],
+      wrapHead: [190, 101, 174, 53, 91, 168],
+      stack: [190, 101, 174, 53, 91, 106],
+      wrapHeadFully: [190, 101, 174, 53, 91, 106],
+    });
+    expect(widths).toEqual([105, 101, 174, 53, 91, 106]);
+  });
+
+  it("(c) fits the Sri Balaji group of the Shopping list at 1024", () => {
+    const widths = shareTableWidth([80, 107, 116, 75, 121, 203], 628, {
+      min: [80, 92, 116, 75, 121, 203],
+      flexible: [false, true, true, false, false, false],
+      wrapHead: [80, 107, 116, 56, 121, 203],
+      stack: [80, 107, 116, 56, 104, 150],
+      wrapHeadFully: [80, 107, 116, 56, 104, 150],
+    });
+    expect(widths).toEqual([80, 105, 116, 56, 121, 150]);
+  });
+
+  it("(c) fits the Invoices list at 1024 with a short cell wrapped at its spaces, words whole", () => {
+    // Invoice, Vendor, Against, Amount, Due, Status in 678px. Broken between pieces only, the short
+    // columns still leave Vendor under "Kalasipalya" (98); wrapped at any space, Amount's
+    // "less ₹3,000 credited" goes to 91 and Vendor gets 106.
+    const widths = shareTableWidth([160, 216, 223, 187, 172, 85], 678, {
+      min: [160, 98, 223, 187, 172, 85],
+      flexible: [false, true, false, false, false, false],
+      wrapHead: [160, 216, 223, 187, 172, 85],
+      stack: [160, 216, 126, 133, 110, 85],
+      wrapHeadFully: [160, 216, 126, 133, 110, 85],
+      words: [140, 98, 93, 91, 92, 85],
+    });
+    expect(widths).toEqual([160, 106, 126, 91, 110, 85]);
+  });
+
+  it("(c) in the last resort takes the width from the widest text column first, down to its floor", () => {
+    // The arithmetic, on /inventory's figures at 1024 (seven columns, the short ones 476px at their
+    // narrowest, leaving 202 for Item, longest word 127, and Location, 79): Location keeps its 79
+    // and Item takes 123. The fitter itself passes floors at which every word is still whole, so on
+    // the page this step narrows a column only as far as a badge in it can take two lines.
+    const need = [299, 123, 132, 108, 132, 80, 82];
+    const shrink = {
+      min: [127, 79, 132, 108, 132, 80, 82],
+      flexible: [true, true, false, false, false, false, false],
+      wrapHead: need,
+      stack: need,
+      wrapHeadFully: need,
+      words: [127, 79, 112, 90, 112, 80, 82],
+    };
+    expect(shareTableWidth(need, 678, shrink)).toBeNull();
+    const widths = shareTableWidth(need, 678, { ...shrink, lastResort: { floor: [40, 40, 0, 0, 0, 0, 0], force: false } });
+    expect(widths).toEqual([123, 79, 112, 90, 112, 80, 82]);
+  });
+
+  it("(c) in the last resort never takes a text column below what can never break", () => {
+    // A dropdown needing 164 cannot give way; without `force` it gives up, with it the table keeps
+    // the floors and runs past its box rather than cut the dropdown.
+    const shrink = {
+      min: [92, 164],
+      flexible: [true, true],
+      lastResort: { floor: [40, 164], force: false },
+    };
+    expect(shareTableWidth([172, 348], 190, shrink)).toBeNull();
+    expect(shareTableWidth([172, 348], 190, { ...shrink, lastResort: { floor: [40, 164], force: true } })).toEqual([40, 164]);
+  });
+
+  it("lets an address break after its @ and full stops, and leaves every other word alone", () => {
+    const zw = "\u200B";
+    expect(withAddressBreaks("ikms.volunteer.5@trading4good.org")).toBe(`ikms.${zw}volunteer.${zw}5@${zw}trading4good.${zw}org`);
+    expect(withAddressBreaks("https://example.org/a")).toContain(`example.${zw}org/${zw}a`);
+    for (const plain of ["Coconut, fresh grated", "VERIFY-B Sugar 100.2kg", "Dr.Rao", "1,07,817.147 Kg"]) {
+      expect(withAddressBreaks(plain)).toBe(plain);
+    }
+  });
+
+  it("says in the stylesheet how a short cell breaks between its pieces", () => {
+    const css = fs.readFileSync(path.join(ROOT, "app/globals.css"), "utf8");
+    expect(css).toMatch(/\.table td\[data-kms-stack\] \{ white-space: normal !important; \}/);
+    expect(css).toMatch(/\.table td\[data-kms-stack\] > \* \{ white-space: nowrap; \}/);
+    expect(css).toMatch(/\.table td\[data-kms-stack="words"\] > :not\(\.whitespace-nowrap\) \{ white-space: normal; \}/);
+    // An entry grid has the same edges as every other table.
+    expect(css).toMatch(/\.kms-entry-grid :is\(th, td\) \{ padding-inline: var\(--kms-cell-pad, 12px\); \}/);
+  });
+});
+
+describe("a hyphenated word in a table stays whole (T-299)", () => {
+  const wj = "\u2060";
+
+  it("joins a PO number or any code with a figure in it at its hyphens, so it cannot break there", () => {
+    // VERIFY2-D: "PO-2026-0026" read "PO-" / "2026-" / "0026" in an 85px Against column at 1024.
+    expect(withWholeWords("PO-2026-0026")).toBe(`PO-${wj}2026-${wj}0026`);
+    expect(withWholeWords("VERIFY2-C Rice")).toBe(`VERIFY2-${wj}C Rice`);
+    expect(withWholeWords("Against PO-2026-0054, INV-E")).toBe(`Against PO-${wj}2026-${wj}0054, INV-E`);
+  });
+
+  it("changes nothing else: an address, a minus sign, a dash between words, a compound of words, text with no hyphen", () => {
+    // A compound of words still wraps at its hyphen like any text: joined, "VERIFY-A" held the
+    // Location column on /inventory at 1024 and the table ran 4px past its box.
+    for (const plain of ["ikms.kitchen-staff.1@trading4good.org", "https://kms-app.example.org/a-b", "-5 Kg", "rice - dal", "Top-up", "VERIFY-A Store", "Coconut, fresh grated"]) {
+      expect(withWholeWords(plain)).toBe(plain);
+    }
+  });
+
+  it("is safe to run on every fit: text already joined is left as it is", () => {
+    const once = withWholeWords("PO-2026-0054");
+    expect(withWholeWords(once)).toBe(once);
+  });
+
+  it("joins a table's hyphens before it measures anything, at every width, and copies them out again", () => {
+    const source = fs.readFileSync(path.join(ROOT, "components/ds/table.ts"), "utf8");
+    const fit = source.slice(source.indexOf("function fitTable("));
+    // Before the 1024 check, so a phone card gets it too, and before the first measurement.
+    expect(fit.indexOf("joinHyphens(table);")).toBeGreaterThan(0);
+    expect(fit.indexOf("joinHyphens(table);")).toBeLessThan(fit.indexOf('matchMedia("(min-width: 1024px)")'));
+    expect(source).toMatch(/split\(BREAK\)\.join\(""\)\.split\(JOIN\)\.join\(""\)/);
+  });
+});
+
+describe("a table never runs past its box (T-304)", () => {
+  const zw = "\u200B";
+  const wj = "\u2060";
+
+  it("breaks a long pasted token after its separators first", () => {
+    // An email address, a reference, a name typed without spaces: 21 characters or more.
+    expect(withLongTokenBreaks("accounts.receivable@sri-lakshmi-traders.co.in", "separators")).toBe(
+      `accounts.${zw}receivable@${zw}sri-${zw}lakshmi-${zw}traders.${zw}co.${zw}in`,
+    );
+    expect(withLongTokenBreaks("Paid by NEFT ref/2026/09/SBIN0226019876543210", "separators")).toBe(
+      `Paid by NEFT ref/${zw}2026/${zw}09/${zw}SBIN0226019876543210`,
+    );
+  });
+
+  it("breaks one with no separators anywhere, as the last resort", () => {
+    const token = "SBIN000000000000000000000000";
+    expect(withLongTokenBreaks(token, "anywhere")).toBe(Array.from(token).join(zw));
+    expect(withLongTokenBreaks(token, "anywhere").split(zw).join("")).toBe(token);
+  });
+
+  it("never touches a word shorter than a pasted token: a PO number, a UTR-sized code, a name", () => {
+    for (const plain of ["PO-2026-0054", `PO-${wj}2026-${wj}0054`, "VERIFY2-B Methi", "ikms.ta@kms.org", "Coconut, fresh grated", "UTR SBIN02260198765432"]) {
+      expect(withLongTokenBreaks(plain, "separators")).toBe(plain);
+      expect(withLongTokenBreaks(plain, "anywhere")).toBe(plain);
+    }
+  });
+
+  it("drops the word joiner inside a long token so its hyphens can break", () => {
+    const joined = withWholeWords("ORDER-2026-0000000054-REPLACEMENT");
+    expect(joined).toContain(wj);
+    expect(withLongTokenBreaks(joined, "separators")).toBe(`ORDER-${zw}2026-${zw}0000000054-${zw}REPLACEMENT`);
+  });
+
+  it("closes the gaps first, then breaks long tokens at separators, then anywhere, and never forces the table past its box", () => {
+    const source = fs.readFileSync(path.join(ROOT, "components/ds/table.ts"), "utf8");
+    const fit = source.slice(source.indexOf("function fitTable("), source.indexOf("export function withLongTokenBreaks"));
+    const order = ["fitOnce(table, {})", "fitOnce(table, { pad })", 'fitOnce(table, { breaks: "separators" })', 'fitOnce(table, { breaks: "separators", pad })', 'fitOnce(table, { breaks: "anywhere" })'];
+    const at = order.map((step) => fit.indexOf(step));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    // The gaps close to no less than 6px a side (a 12px gap), from the 12px of §5 rule 4.
+    expect(source).toMatch(/const CELL_PAD = 12;/);
+    expect(source).toMatch(/const CELL_PAD_MIN = 6;/);
+    // Every fit starts from the stylesheet's own gaps.
+    expect(source).toMatch(/table\.style\.removeProperty\("--kms-cell-pad"\)/);
   });
 });

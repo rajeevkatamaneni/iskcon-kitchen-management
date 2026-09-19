@@ -60,7 +60,7 @@ const DETAIL: PurchaseOrderDetailView = {
     // `description: null` is stated rather than left off. PurchaseOrderLineView declares it
     // required-and-nullable (T-024), so a fixture that omits it does not compile — which is the
     // point of the convention: every construction site says which kind of line this is.
-    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 30, unit: "KG", expectedPrice: 45, arrivedOn: null },
+    { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 30, unit: "KG", expectedPrice: 45, arrivedOn: null, packSizeId: null, packLabel: null, packQuantity: null, packCount: null },
   ],
   events: [
     { eventType: "SENT", detail: "PO-2026-0042 sent to vendor", actorName: "Staff A", createdAt: "2026-08-01T10:00:00Z" },
@@ -73,8 +73,8 @@ const DETAIL: PurchaseOrderDetailView = {
 
 const RECEIPTS: GoodsReceiptView[] = [];
 const INGREDIENTS: IngredientView[] = [
-  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
-  { id: "ing2", name: "Toor Dal", category: "Pulses", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing1", name: "Rice", category: "Grains", unit: "KG", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null, ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing2", name: "Toor Dal", category: "Pulses", unit: "KG", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null, ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
 ];
 
 function withDetail(detail: PurchaseOrderDetailView) {
@@ -143,9 +143,11 @@ describe("purchase order detail", () => {
     render(<PurchaseOrderDetailPage />);
     expect(screen.getByRole("heading", { name: "PO-2026-0042" })).toBeInTheDocument();
     expect(screen.getByText("Rice")).toBeInTheDocument();
-    // A sent PO can be received, sent on WhatsApp, and cancelled — but not "marked sent" again.
+    // A sent PO can be sent on WhatsApp and cancelled — but not "marked sent" again. It is no
+    // longer received here: "Receive delivery" and its form went with R-PO-4, and deliveries are
+    // recorded on the Deliveries screen (T-265, po-merged-table.test.tsx).
     expect(screen.getByRole("button", { name: /send on whatsapp/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /receive delivery/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /receive delivery/i })).not.toBeInTheDocument();
     // Cancelling reads "Cancel order" now, inside its own block at the foot of the page. The bare
     // "Cancel" that used to sit in the header bank is gone: Rajeev asked what it cancelled, the
     // screen or the order, and a button nobody can answer that about is not a button (T-135).
@@ -188,36 +190,6 @@ describe("purchase order detail", () => {
 
     // The vendor is not among what can be changed — the form offers no way to choose another.
     expect(screen.queryByLabelText(/vendor/i)).not.toBeInTheDocument();
-  });
-
-  it("pre-fills the received price from the order and shows what was expected", () => {
-    render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /receive delivery/i }));
-
-    // The order's expected price is the starting point, because it is usually right and retyping a
-    // figure that has not changed is how a storekeeper stops filling the field in at all.
-    const price = screen.getByLabelText(/price paid per Kg of Rice/i) as HTMLInputElement;
-    expect(price.value).toBe("45");
-    // What was budgeted stays visible beside it, so a bill of ₹80 is visibly not the ₹45 expected.
-    // Information, not a gate: nothing blocks recording it.
-    expect(screen.getByText("expected ₹45 / Kg")).toBeInTheDocument();
-  });
-
-  it("sends a blank price as null, never as zero", async () => {
-    const receive = vi.spyOn(api, "receiveDelivery").mockResolvedValue({} as GoodsReceiptView);
-    render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /receive delivery/i }));
-
-    fireEvent.change(screen.getByLabelText("Received Rice"), { target: { value: "30" } });
-    fireEvent.change(screen.getByLabelText(/price paid per Kg of Rice/i), { target: { value: "" } });
-    await act(async () => {
-      fireEvent.submit(screen.getByRole("form", { name: /record a delivery/i }));
-    });
-
-    // A delivery that arrived ahead of its bill is not a delivery that cost nothing. A zero here
-    // would be written back as the vendor's price and quietly wreck every costing figure.
-    expect(receive).toHaveBeenCalledTimes(1);
-    expect(receive.mock.calls[0][1].lines[0].unitPrice).toBeNull();
   });
 
   /**
@@ -364,7 +336,8 @@ describe("purchase order detail", () => {
     // The vendor has been told this date and the scorecard measures them against it, so there is
     // no field here at all — not a field that refuses when pressed.
     expect(screen.queryByLabelText("Needed by")).not.toBeInTheDocument();
-    expect(screen.getByText(/fixed when the order was sent/i)).toBeInTheDocument();
+    // "Fixed when the order was sent" was removed by R-PO-4 (T-265).
+    expect(screen.queryByText(/fixed when the order was sent/i)).not.toBeInTheDocument();
   });
 
   it("offers the needed-by date on a draft, pre-filled with what is already there", () => {
@@ -488,7 +461,7 @@ describe("purchase order detail", () => {
    * The order's lines are on the screen once (T-134).
    *
    * <p>They were on it twice in edit mode: the editable table inside the form, and the read-only
-   * "What was ordered" table still rendered underneath it — same order, same line, and the one
+   * "What was ordered" table (the merged "Items" table since T-265) still rendered underneath it — same order, same line, and the one
    * underneath showing the saved figure while the box above showed the one being typed. Found by
    * driving the deployed app as a Temple Admin, on Wave A as shipped.
    *
@@ -505,11 +478,11 @@ describe("purchase order detail", () => {
     withDetail(DRAFT);
     render(<PurchaseOrderDetailPage />);
 
-    expect(screen.getByRole("table", { name: "What was ordered" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Items" })).toBeInTheDocument();
     expect(screen.getAllByText("Rice")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
-    expect(screen.queryByRole("table", { name: "What was ordered" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Items" })).not.toBeInTheDocument();
     // One Rice on the screen, and it is the one with a box beside it.
     expect(screen.getAllByText("Rice")).toHaveLength(1);
     expect(screen.getByLabelText("Quantity of Rice")).toBeInTheDocument();
@@ -519,7 +492,7 @@ describe("purchase order detail", () => {
     expect(screen.getByLabelText("Needed by")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
-    expect(screen.getByRole("table", { name: "What was ordered" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Items" })).toBeInTheDocument();
     expect(screen.getByText(/^Needed by \d/)).toBeInTheDocument();
   });
 
@@ -535,7 +508,7 @@ describe("purchase order detail", () => {
     render(<PurchaseOrderDetailPage />);
 
     const heading = screen.getByRole("heading", { name: /cancel this purchase order/i });
-    const table = screen.getByRole("table", { name: "What was ordered" });
+    const table = screen.getByRole("table", { name: "Items" });
     expect(table.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByLabelText("Reason")).toBeRequired();
 
@@ -579,7 +552,8 @@ describe("purchase order detail", () => {
     expect(screen.queryByRole("button", { name: /send on whatsapp/i })).not.toBeInTheDocument();
     // Everything else on the bank is untouched: this gate is about WhatsApp and nothing else.
     expect(screen.getByRole("button", { name: "Generate PDF" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /receive delivery/i })).toBeInTheDocument();
+    // "Receive delivery" used to be asserted here too; it left the bank with R-PO-4 (T-265).
+    expect(screen.getByRole("button", { name: "Print" })).toBeInTheDocument();
   });
 
   it("treats a missing WhatsApp fact as 'never sent', which hides the button", () => {
@@ -655,26 +629,6 @@ describe("purchase order detail", () => {
     expect(cancel).not.toHaveBeenCalled();
   });
 
-  it("names a negative received figure and an over-precise price, and records nothing (T-162)", async () => {
-    const receive = vi.spyOn(api, "receiveDelivery").mockResolvedValue({} as GoodsReceiptView);
-    render(<PurchaseOrderDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /receive delivery/i }));
-
-    // Nothing on this form is `required`: a delivery is whatever arrived on at least one line, and
-    // the page says so in words. What the boxes do carry is min="0", and step="0.01" on the price.
-    fireEvent.change(screen.getByLabelText("Received Rice"), { target: { value: "-1" } });
-    fireEvent.change(screen.getByLabelText(/price paid per Kg of Rice/i), { target: { value: "45.505" } });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^record delivery$/i }));
-    });
-
-    expect(screen.getByText("Received Rice must be at least 0")).toBeInTheDocument();
-    expect(
-      screen.getByText("Price paid per Kg of Rice, optional can have at most 2 decimal places")
-    ).toBeInTheDocument();
-    expect(receive).not.toHaveBeenCalled();
-  });
-
   it("keeps the editor's Save and the cancellation apart: each names only its own box (T-162)", async () => {
     // The editor is its own component mounted inside this page, beside the cancellation's form.
     // `Form` checks only the controls of the form that was submitted, so a blank Reason further
@@ -706,5 +660,76 @@ describe("purchase order detail", () => {
     });
     expect(update).toHaveBeenCalledTimes(1);
     expect(cancel).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The screen's own refusals say their one sentence and nothing else (T-303, as T-298 did on
+   * /orders/new). They used to go through `toApiError(null, …)`, which is for a request that never
+   * reached the server, so "Check your connection and try again." and "If you need help, quote
+   * KMS-0000" appeared under a sentence that already says what to do.
+   */
+  describe("the screen's own refusals (T-303)", () => {
+    function onlyAlert(): HTMLElement {
+      const alerts = screen.getAllByRole("alert");
+      expect(alerts).toHaveLength(1);
+      return alerts[0];
+    }
+
+    it("nothing ticked as arrived says only that, with no connection advice and no code", async () => {
+      const arrivals = vi.spyOn(api, "recordArrivals").mockResolvedValue(undefined as never);
+      withDetail({
+        ...DETAIL,
+        lines: [
+          { id: "l2", ingredientId: null, ingredientName: null, description: "Mixer motor repair", quantity: 1, unit: "PIECES", expectedPrice: 900, arrivedOn: null, packSizeId: null, packLabel: null, packQuantity: null, packCount: null },
+        ],
+      } as PurchaseOrderDetailView);
+      render(<PurchaseOrderDetailPage />);
+
+      await act(async () => {
+        fireEvent.submit(screen.getByRole("form", { name: "Record what arrived" }));
+      });
+
+      expect(arrivals).not.toHaveBeenCalled();
+      const alert = onlyAlert();
+      expect(alert.textContent).toBe("Tick what arrived. Leave a line unticked if it hasn’t.");
+      expect(alert.querySelectorAll("p")).toHaveLength(1);
+      expect(document.body.textContent).not.toMatch(/connection|KMS-/);
+    });
+
+    it("the edit form's refusal says only its sentence, with no connection advice and no code", async () => {
+      const update = vi.spyOn(api, "updatePurchaseOrder").mockResolvedValue(undefined);
+      withDetail(DRAFT);
+      render(<PurchaseOrderDetailPage />);
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /remove rice/i }));
+
+      await act(async () => {
+        fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
+      });
+
+      expect(update).not.toHaveBeenCalled();
+      const alert = onlyAlert();
+      expect(alert.textContent).toBe(
+        "An order needs at least one line. Add what is being bought, or cancel the order at the foot of the page."
+      );
+      expect(alert.querySelectorAll("p")).toHaveLength(1);
+      expect(document.body.textContent).not.toMatch(/connection|KMS-/);
+    });
+
+    it("goes when the next action starts", async () => {
+      withDetail(DRAFT);
+      render(<PurchaseOrderDetailPage />);
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /remove rice/i }));
+      await act(async () => {
+        fireEvent.submit(screen.getByRole("form", { name: /edit the draft order/i }));
+      });
+      expect(onlyAlert()).toBeInTheDocument();
+
+      // Cancelling the edit and pressing Edit again starts over, as it did for the notice it replaced.
+      fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
   });
 });

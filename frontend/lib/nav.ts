@@ -90,14 +90,18 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/shopping-list", label: "Shopping list", icon: "clipboard-list", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/orders", label: "Purchase orders", icon: "truck-delivery", roles: [ADMIN, MANAGER, KITCHEN] },
+      // Right after Purchase orders (R-DEL-1). Needs RECEIVE_DELIVERIES: Temple Admin, Kitchen
+      // Manager and Kitchen Staff (Rajeev answered Q-1 on 2026-09-19: Kitchen Staff by default).
+      { href: "/deliveries", label: "Deliveries", icon: "package-import", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/vendors", label: "Vendors", icon: "building-store", roles: [ADMIN, MANAGER, KITCHEN] },
       // Directly under the vendors it judges. Its own destination rather than a tab on a vendor,
       // because the question it answers — who should we keep buying from — is asked across all of
       // them at once, and cannot be seen one vendor at a time.
       { href: "/vendor-performance", label: "Vendor performance", icon: "gauge", roles: [ADMIN, MANAGER, KITCHEN] },
       { href: "/invoices", label: "Invoices", icon: "file-invoice", roles: [ADMIN, MANAGER, KITCHEN] },
-      // Paying those invoices belongs with the ordering it settles, not with the devotees who give.
-      { href: "/money", label: "Payments", icon: "receipt", roles: [ADMIN] },
+      // No Payments item (R-PAY-4, 2026-09-19): invoices are paid from the invoice itself, and what
+      // the Payments page listed (unpaid invoices by age, and the total owed) is the Invoices list's
+      // Unpaid and overdue filters now. /money redirects to /invoices?filter=unpaid.
     ],
   },
   {

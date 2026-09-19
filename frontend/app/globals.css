@@ -549,6 +549,13 @@ tbody tr {
    room. Words still break at spaces first; a word is split only when it alone is wider than the
    column. */
 .kms-table .kms-flex { white-space: normal; overflow-wrap: anywhere; }
+/* T-278. A name and the small note written straight after it with no space between them
+   ("Amla (gooseberry)" then a "Vegetables" span, "VERIFY-B Rava" then "edited") may part at the
+   join: a zero-width space at the start of each inline piece gives the browser a place to break.
+   Without it the pair is one unbreakable word, measured at 183px on /inventory, and the column
+   could not give way without breaking a word mid-letter. Not on a flex or grid piece, where the
+   pseudo-element would become an item of its own and take a gap. */
+.kms-table .kms-flex > :not(div, .flex, .inline-flex, .grid, input, select, textarea, button)::before { content: "\200B"; }
 .kms-table .kms-num  { font-variant-numeric: tabular-nums; }
 .kms-table .kms-fixed { white-space: nowrap; }
 .kms-table .kms-lead  { white-space: nowrap; }
@@ -562,6 +569,11 @@ tbody tr {
    so an empty or short one keeps its size and only a long figure widens it. A browser without
    `field-sizing` gives the box its default width, about twenty characters, which also fits. */
 .table td input[type="number"] { field-sizing: content; }
+/* T-278. A dropdown in a table is as wide as the option it shows, not as its longest option:
+   "Choose vendor…" in a 208px box on the Shopping list, "gm" in a 183px one on a vendor's grid.
+   The list it opens may be wider (conductor's ruling, 2026-09-19, from §5 rule 2: "a box must be
+   wide enough to show its value"). */
+.table td select { field-sizing: content; width: auto; min-width: max-content; }
 
 /* Only for the instant table.ts measures the columns: each cell on its own, at the width its
    content needs unwrapped, so the widest one is what the column needs. Removed before anything is
@@ -571,12 +583,65 @@ tbody tr {
 /* The same at each cell's narrowest (every word on a line of its own), measured only when the
    table is short of room, so table.ts knows how far each text column can give way. */
 .table.kms-measuring-min > * > tr > * { display: block !important; width: min-content !important; }
+/* A dropdown or box capped at its cell's width (`max-w-full`) counts as able to shrink to nothing
+   when the browser works out how narrow the cell can go, so while measuring the cap is lifted: the
+   narrowest is the width that still shows its value. Measured on the Shopping list's "No vendor
+   yet" group at 1024 (T-278): without this the "Choose vendor…" dropdown was squeezed to 87px of
+   the 130 it needs. */
+.table.kms-measuring-min td :is(select, input) { max-width: none !important; }
+/* T-269. In that narrowest state a primary column (the name) is measured at its longest whole
+   word, not at the single letter `overflow-wrap: anywhere` would allow: that is the narrowest it
+   may be squeezed to. Measured on a purchase order at 1024 before this, the Item column was given
+   46px and broke every few letters. (How far a short column's heading can wrap is measured by
+   table.ts from the words of the heading, not by a state here.) */
+.table.kms-measuring-min > * > tr > .kms-flex { overflow-wrap: normal !important; }
+/* T-278: every text column, not only the name, so that a secondary column (a location, a reason)
+   is held to its longest word too and the fitter never hands it less. */
+
+/* T-278. A short cell the fitter has had to narrow (`data-kms-stack`, set by table.ts only when the
+   table still lacks room with its headings wrapped) may break between its pieces: the figure on
+   the first line, the note beside it ("less ₹3,000 credited", "Overdue", "assumed") on the next,
+   two buttons one above the other. Each piece stays whole; the fitter never makes the column
+   narrower than its widest piece. Conductor's ruling, 2026-09-19, from §5 rule 2. */
+.table td[data-kms-stack] { white-space: normal !important; }
+.table td[data-kms-stack] > * { white-space: nowrap; }
+/* In a column the fitter has had to narrow, each note goes under its figure in every row, not only
+   in the rows too long for one line, and starts at the same left edge as the figure: its usual gap
+   beside the figure (`ml-2`) would otherwise indent it 8px on its own line. Measured on the Invoices
+   list at 1024: "Overdue" and "less ₹3,000 credited" sat 8px right of the dates and amounts above
+   them. A note written straight after its figure with no space between them needs this too, or
+   the browser has nowhere to break. */
+.table td[data-kms-stack] > :not(div, .flex, .inline-flex) { display: block; width: fit-content; margin-inline-start: 0; }
+/* A row of separate things (two buttons, a price and its trend) may wrap; a label never, or its
+   tick box would sit on a line above its words. */
+.table td[data-kms-stack] :is(.flex, .inline-flex):not(label) { flex-wrap: wrap; }
+/* Further still, only when even that leaves the table short: the cell wraps at any space like
+   ordinary text, each word whole ("1,07,817.147" above its "Kg" on /inventory at 1024). A badge
+   (`whitespace-nowrap`) still stays in one piece. */
+.table td[data-kms-stack="words"] > :not(.whitespace-nowrap) { white-space: normal; }
+/* The fitter's last resort, on a text column: a badge in it may take two lines too. Words stay
+   whole: `overflow-wrap: normal` here overrides the text column's `anywhere`. */
+.table td[data-kms-stack="all"],
+.table td[data-kms-stack="all"] * { white-space: normal !important; overflow-wrap: normal !important; }
+
+/* T-278. An entry grid keeps the edges of every other table (§5 rule 4): 20px at the ends of a
+   row, 12px either side of every other cell. It had the old 20px on both sides of every cell,
+   which on a vendor's Other ingredients grid at 1024 was the 3px it lacked to show "(gooseberry)"
+   whole. */
+@media (min-width: 1024px) {
+  .kms-entry-grid :is(th, td) { padding-inline: var(--kms-cell-pad, 12px); }
+  .kms-entry-grid tr > :first-child { padding-inline-start: 20px; }
+  .kms-entry-grid tr > :last-child  { padding-inline-end: 20px; }
+}
 
 /* The wide table. Scoped to lg and up so the card layout below never has to out-shout it. */
 @media (min-width: 1024px) {
   .kms-table { table-layout: auto; }
 
-  .kms-table :is(th, td) { padding: 12px; text-align: start; }
+  /* `--kms-cell-pad` is 12px (§5 rule 4) unless table.ts sets it lower on one table: only when that
+     table would otherwise run past its box, by as little as fits and never below 6px (T-304). The
+     20px at the ends of a row never change. */
+  .kms-table :is(th, td) { padding: 12px var(--kms-cell-pad, 12px); text-align: start; }
   .kms-table tr > :first-child { padding-inline-start: 20px; }
   .kms-table tr > :last-child  { padding-inline-end: 20px; }
 }

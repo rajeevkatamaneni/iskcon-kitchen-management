@@ -99,11 +99,11 @@ function order(o: Partial<PurchaseOrderView> = {}): PurchaseOrderView {
 }
 
 const LINES = [
-  { id: "l1", ingredientId: "ing1", ingredientName: "Curd", description: null, quantity: 20, unit: "KG", expectedPrice: 60, arrivedOn: null },
+  { id: "l1", ingredientId: "ing1", ingredientName: "Curd", description: null, quantity: 20, unit: "KG", expectedPrice: 60, arrivedOn: null, packSizeId: null, packLabel: null, packQuantity: null, packCount: null },
 ];
 const RECEIPTS: GoodsReceiptView[] = [];
 const INGREDIENTS: IngredientView[] = [
-  { id: "ing1", name: "Curd", category: "Dairy", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing1", name: "Curd", category: "Dairy", unit: "KG", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null, ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
 ];
 
 function detail(o: Partial<PurchaseOrderView> = {}): PurchaseOrderDetailView {

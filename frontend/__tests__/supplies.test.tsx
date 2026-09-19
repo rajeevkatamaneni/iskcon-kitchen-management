@@ -81,6 +81,8 @@ vi.mock("@/lib/api", async (orig) => {
       createIngredient: createMock,
       createInventoryItem: createItemMock,
       adjustStock: adjustMock,
+      // The stock-value pre-fill (R-ING-3). Nothing to suggest, and never a real request from jsdom.
+      getStockValueSuggestion: vi.fn().mockResolvedValue({ pricePerUnit: null, source: null }),
     },
   };
 });
@@ -98,6 +100,10 @@ function ingredient(o: Partial<IngredientView> = {}): IngredientView {
     name: "Rice",
     category: "Grains",
     unit: "KG",
+    packSizes: [],
+    marketRate: null,
+    marketRateOn: null,
+    marketRateSource: null,
     ekadashiProhibited: false,
     supply: false,
     libraryDerived: false,

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
 import { HintedField } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
@@ -63,6 +64,8 @@ interface Line {
   ingredientId: string;
   quantity: string;
   unit: string;
+  /** How it is prepared for this recipe — "slit", "halved" (R-DUP-1). Empty means none. */
+  preparationNote: string;
 }
 
 /**
@@ -120,8 +123,13 @@ export function RecipeForm({
   const [serveWith, setServeWith] = useState((initial?.serveWith ?? []).join(", "));
   const [lines, setLines] = useState<Line[]>(
     initial
-      ? initial.ingredients.map((l) => ({ ingredientId: l.ingredientId, quantity: String(l.quantity), unit: l.unit }))
-      : [{ ingredientId: "", quantity: "", unit: "KG" }]
+      ? initial.ingredients.map((l) => ({
+          ingredientId: l.ingredientId,
+          quantity: String(l.quantity),
+          unit: l.unit,
+          preparationNote: l.preparationNote ?? "",
+        }))
+      : [{ ingredientId: "", quantity: "", unit: "KG", preparationNote: "" }]
   );
 
   /*
@@ -153,7 +161,7 @@ export function RecipeForm({
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
   }
   function addLine() {
-    setLines((prev) => [...prev, { ingredientId: "", quantity: "", unit: "KG" }]);
+    setLines((prev) => [...prev, { ingredientId: "", quantity: "", unit: "KG", preparationNote: "" }]);
   }
   function removeLine(index: number) {
     setLines((prev) => prev.filter((_, i) => i !== index));
@@ -187,7 +195,13 @@ export function RecipeForm({
       serveWith: splitList(serveWith),
       ingredients: lines
         .filter((l) => l.ingredientId && l.quantity)
-        .map((l) => ({ ingredientId: l.ingredientId, quantity: Number(l.quantity), unit: l.unit })),
+        // A blank note is left out, which the server stores as null: "no note", never a note of spaces.
+        .map((l) => ({
+          ingredientId: l.ingredientId,
+          quantity: Number(l.quantity),
+          unit: l.unit,
+          preparationNote: l.preparationNote.trim() || undefined,
+        })),
     });
   }
 
@@ -320,10 +334,21 @@ export function RecipeForm({
       <section aria-labelledby="ingredients-heading" className="space-y-3">
         <h2 id="ingredients-heading" className="text-lg">Ingredients</h2>
         {lines.map((line, i) => (
-          // On a phone the ingredient takes its own line and the amount, unit and Remove sit under
-          // it. Held on one line, the select could not shrink below its longest option and pushed
-          // the whole form 200px past the right edge of the screen.
-          <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_6rem_auto]">
+          /*
+            On a phone the ingredient takes its own line and the amount, unit and Remove sit under
+            it. Held on one line, the select could not shrink below its longest option and pushed
+            the whole form 200px past the right edge of the screen.
+
+            The preparation note (R-DUP-1: "slit", "halved") sits right after the ingredient, so the
+            line reads the way it prints — "Green chilli · slit". Where it goes is set by what fits
+            without cutting a name short:
+            - a phone: a row of its own under the ingredient; beside it, both boxes were narrower
+              than "Coconut, dry grated (kopra)".
+            - a tablet up to xl: beside the ingredient, with the amount, unit and Remove under them.
+            - xl and up (1280, the width it was measured at): the whole line on one row, the
+              ingredient getting the larger share because it is the longer text.
+          */
+          <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_6rem_6rem_auto]">
             <select aria-label={`Ingredient ${i + 1}`} value={line.ingredientId}
               onChange={(e) => setLine(i, { ingredientId: e.target.value })}
               className="col-span-3 min-h-touch min-w-0 rounded-control border border-hairline px-3 text-base text-ink sm:col-span-1">
@@ -334,6 +359,9 @@ export function RecipeForm({
                 </option>
               ))}
             </select>
+            <input aria-label={`Preparation ${i + 1}`} value={line.preparationNote} maxLength={200}
+              onChange={(e) => setLine(i, { preparationNote: e.target.value })} placeholder="Preparation, e.g. slit"
+              className="col-span-3 min-h-touch min-w-0 rounded-control border border-hairline px-3 text-base text-ink sm:col-span-2 xl:col-span-1" />
             <input aria-label={`Quantity ${i + 1}`} type="number" min="0" step="any" value={line.quantity}
               onChange={(e) => setLine(i, { quantity: e.target.value })} placeholder="Qty"
               className="min-h-touch rounded-control border border-hairline px-3 text-base text-ink" />
@@ -342,15 +370,14 @@ export function RecipeForm({
               {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
             </select>
             <button type="button" onClick={() => removeLine(i)} aria-label={`Remove ingredient ${i + 1}`}
-              className="min-h-touch rounded-control border border-hairline-strong px-3 text-sm text-ink-secondary hover:bg-raised">
+              className="btn btn-secondary min-h-touch px-3 text-sm">
               Remove
             </button>
           </div>
         ))}
-        <button type="button" onClick={addLine}
-          className="min-h-touch rounded-control border border-hairline-strong px-4 text-sm hover:bg-raised">
+        <Button variant="secondary" onClick={addLine}>
           + Add ingredient
-        </button>
+        </Button>
       </section>
 
       <section className="space-y-5">

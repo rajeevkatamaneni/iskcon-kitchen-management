@@ -221,7 +221,9 @@ function asReadable(recipe: RecipeDetail | MasterRecipeDetail) {
       mine.fastingCompatible ? [EKADASHI_FRIENDLY] : []
     ),
     ingredients: mine.ingredients.map((line) => ({
-      name: line.ingredientName,
+      // With its preparation note, "Green chilli · slit" (R-DUP-1), exactly as the recipe's own page
+      // and the printed cards say it. A library recipe's lines above keep the book's own wording.
+      name: line.preparationNote ? `${line.ingredientName} · ${line.preparationNote}` : line.ingredientName,
       // The cook's form: this panel is read to decide whether to cook something, and it has to
       // agree line for line with the recipe's own page, which says it the same way.
       quantity: cooksQuantity(line.quantity, line.unit),

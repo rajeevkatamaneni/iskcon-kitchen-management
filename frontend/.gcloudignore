@@ -19,3 +19,8 @@ tsconfig.tsbuildinfo
 # honours .gcloudignore when it uploads the source, and Cloud Build's BuildKit then looks for the
 # Dockerfile *inside* that uploaded context. A local `docker build` reads it from the path and
 # never noticed.
+
+# Local-only playground pages (frontend/app/dev-*), e.g. the menu-order playground. They are kept
+# out of git by .git/info/exclude, but deploy.sh uploads the working tree, so they must be excluded
+# here too or they would ship to staging.
+app/dev-*/

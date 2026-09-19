@@ -3,9 +3,12 @@ import {
   convertQuantity,
   crossesMidnight,
   dayRange,
+  entryQuantity,
+  fromEntry,
   leadTimeWarning,
   moment,
   money,
+  pricePer,
   shiftWindow,
   templeDay,
   todayIso,
@@ -259,5 +262,61 @@ describe("convertQuantity (T-217)", () => {
     expect(convertQuantity(200, "ML", "KG")).toBeNull();
     expect(convertQuantity(3, "PIECES", "KG")).toBeNull();
     expect(convertQuantity(1, "GM", "L")).toBeNull();
+  });
+});
+
+// T-264 (R-SL-1). The Suggested box shows kg/L from 1,000 up, and what is typed is read in the unit
+// shown beside the box. entryQuantity and fromEntry are the two halves; they come from the reverted
+// T-243 patch and are re-verified here, at the boundaries.
+describe("a box's figure and its unit (T-264)", () => {
+  it("promotes 1,000 and above to the large unit, and keeps below it small", () => {
+    expect(entryQuantity(2792, "GM")).toEqual({ value: 2.792, unit: "KG" });
+    expect(entryQuantity(3000, "GM")).toEqual({ value: 3, unit: "KG" });
+    expect(entryQuantity(1000, "GM")).toEqual({ value: 1, unit: "KG" });
+    expect(entryQuantity(999, "GM")).toEqual({ value: 999, unit: "GM" });
+    expect(entryQuantity(1500, "ML")).toEqual({ value: 1.5, unit: "L" });
+  });
+
+  it("moves a small figure kept in the large unit down, so no box reads 0.4 Kg", () => {
+    expect(entryQuantity(0.4, "KG")).toEqual({ value: 400, unit: "GM" });
+    expect(entryQuantity(0.3, "L")).toEqual({ value: 300, unit: "ML" });
+    expect(entryQuantity(100, "KG")).toEqual({ value: 100, unit: "KG" });
+  });
+
+  it("leaves pieces, zero and an unknown unit as they are", () => {
+    expect(entryQuantity(1500, "PIECES")).toEqual({ value: 1500, unit: "PIECES" });
+    expect(entryQuantity(0, "GM")).toEqual({ value: 0, unit: "GM" });
+    expect(entryQuantity(5, "BUNDLE")).toEqual({ value: 5, unit: "BUNDLE" });
+  });
+
+  it("reads what was typed in the unit shown, back into the stored unit, exactly", () => {
+    expect(fromEntry(3, "KG", "GM")).toBe(3000);
+    expect(fromEntry(2.5, "KG", "GM")).toBe(2500);
+    expect(fromEntry(2.792, "KG", "GM")).toBe(2792);
+    expect(fromEntry(0.3, "KG", "GM")).toBe(300);
+    expect(fromEntry(400, "GM", "KG")).toBe(0.4);
+    expect(fromEntry(7, "PIECES", "PIECES")).toBe(7);
+  });
+
+  it("round-trips every figure a box can show", () => {
+    for (const stored of [1, 50, 999, 1000, 1001, 2792, 3000, 12345, 100000]) {
+      const shown = entryQuantity(stored, "GM");
+      expect(fromEntry(shown.value, shown.unit, "GM")).toBe(stored);
+    }
+  });
+});
+
+describe("a price restated per another unit (T-264)", () => {
+  it("follows the unit the quantity is shown in", () => {
+    expect(pricePer(0.0712, "GM", "KG")).toBe(71.2);
+    expect(pricePer(60, "KG", "GM")).toBe(0.06);
+    expect(pricePer(60, "KG", "KG")).toBe(60);
+    expect(pricePer(0.4, "ML", "L")).toBe(400);
+  });
+
+  it("has no answer without a price, or across families", () => {
+    expect(pricePer(null, "KG", "GM")).toBeNull();
+    expect(pricePer(60, "KG", "L")).toBeNull();
+    expect(pricePer(5, "PIECES", "KG")).toBeNull();
   });
 });

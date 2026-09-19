@@ -216,7 +216,10 @@ function caveatTitle(report: CostByMealKind): string {
       report.ingredientsWithoutPrice === 1 ? "ingredient has" : "ingredients have"
     } no known price`;
   }
-  return "Estimated, materials only — from vendors’ last-known prices";
+  // Says what the costing reads now (R-ING-3): the list price (R-VEN-1's name for it, in every
+  // view), and the market rate where no vendor has one. It said "vendors’ last-known prices", from
+  // before either existed (T-310).
+  return "Estimated, materials only — from list prices, or the market rate";
 }
 
 function caveatDetail(report: CostByMealKind): string {
@@ -231,8 +234,8 @@ function caveatDetail(report: CostByMealKind): string {
         .slice(0, 6)
         .map((ingredient) => ingredient.name)
         .join(", ")}${report.unpriced.length > 6 ? " and others" : ""} ${
-        report.ingredientsWithoutPrice === 1 ? "is" : "are"
-      } left out until a vendor price is recorded.`
+        report.ingredientsWithoutPrice === 1 ? "has" : "have"
+      } no list price or market rate, so ${report.ingredientsWithoutPrice === 1 ? "it is" : "they are"} left out.`
     );
   }
   if (report.mealsWithoutServings > 0) {
@@ -288,7 +291,7 @@ function costBasis(cost: {
  * <p>The shared `money` helper shows paise only where there are any, which is right for a
  * settlement that must not be rounded away, and wrong here. A column read top to bottom mixed
  * "₹12,185.65" with "₹20,375", so the eye compared lengths rather than amounts; and every figure on
- * this screen is an estimate built from vendors' last-known prices, so the paise were precision the
+ * this screen is an estimate built from list prices and market rates, so the paise were precision the
  * number does not have.
  *
  * <p>Half up, which is `Math.round` for the positive amounts a cost can be ("₹9.50" reads "₹10").
