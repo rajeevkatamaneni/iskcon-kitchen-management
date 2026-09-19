@@ -133,14 +133,14 @@ function actionFor(
   }
   if (s.callerState === "WAITLISTED") {
     return (
-      <button type="button" disabled={busy} onClick={leave} className="min-h-touch rounded-control border border-hairline px-3 text-sm hover:bg-sunken disabled:opacity-60">
+      <button type="button" disabled={busy} onClick={leave} className="btn btn-secondary min-h-touch px-4 text-sm transition-colors duration-state disabled:opacity-60">
         Leave waitlist
       </button>
     );
   }
   if (s.callerState === "FULL") {
     return (
-      <button type="button" disabled={busy} onClick={join} className="min-h-touch rounded-control border border-hairline px-3 text-sm hover:bg-sunken disabled:opacity-60">
+      <button type="button" disabled={busy} onClick={join} className="btn btn-secondary min-h-touch px-4 text-sm transition-colors duration-state disabled:opacity-60">
         Join waitlist
       </button>
     );

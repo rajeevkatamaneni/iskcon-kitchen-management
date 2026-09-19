@@ -171,7 +171,7 @@ export function BanFindings({
           type="button"
           disabled={busy}
           onClick={onStop}
-          className="min-h-touch rounded-control border border-hairline px-4 hover:bg-sunken disabled:opacity-60"
+          className="btn btn-secondary min-h-touch px-5 transition-colors duration-state disabled:opacity-60"
         >
           Don’t hire them
         </button>

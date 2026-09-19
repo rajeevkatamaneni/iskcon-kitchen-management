@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   ACTIVITY_KEY,
+  DEFAULT_IDLE_LIMIT_MINUTES,
   IDLE_LIMIT_MS,
+  MAX_IDLE_LIMIT_MINUTES,
+  MIN_IDLE_LIMIT_MINUTES,
+  idleLimitMinutesFrom,
   REASON_VALID_FOR_MS,
   SIGNED_OUT_REASON_KEY,
   WARN_BEFORE_MS,
@@ -37,8 +41,42 @@ describe("the idle clock", () => {
     expect(secondsUntilSignOut(now, now - 2 * IDLE_LIMIT_MS)).toBe(0);
   });
 
-  it("is sixty minutes — the figure the story fixed", () => {
+  it("is sixty minutes — the figure the story fixed — when nothing configures it", () => {
+    // The test run has no NEXT_PUBLIC_KMS_IDLE_LIMIT_MINUTES, exactly like staging and production.
+    expect(process.env.NEXT_PUBLIC_KMS_IDLE_LIMIT_MINUTES).toBeUndefined();
     expect(IDLE_LIMIT_MS).toBe(60 * 60 * 1000);
+  });
+});
+
+// The local-only longer clock (T-242): the variable is parsed, defaulted and clamped here, so a
+// typo in someone's .env.local can never sign people out after a minute or not at all.
+describe("reading the idle limit from the environment", () => {
+  it("defaults to sixty when unset or empty", () => {
+    expect(DEFAULT_IDLE_LIMIT_MINUTES).toBe(60);
+    expect(idleLimitMinutesFrom(undefined)).toBe(60);
+    expect(idleLimitMinutesFrom("")).toBe(60);
+    expect(idleLimitMinutesFrom("   ")).toBe(60);
+  });
+
+  it("takes a plain whole number, allowing surrounding spaces", () => {
+    expect(idleLimitMinutesFrom("480")).toBe(480);
+    expect(idleLimitMinutesFrom(" 90 ")).toBe(90);
+  });
+
+  it("defaults to sixty for anything that is not a plain whole number", () => {
+    for (const bad of ["abc", "8h", "480m", "1e3", "-30", "12.5", "0x20", "Infinity", "NaN"]) {
+      expect(idleLimitMinutesFrom(bad)).toBe(60);
+    }
+  });
+
+  it("clamps to five minutes at the bottom and twelve hours at the top", () => {
+    expect(MIN_IDLE_LIMIT_MINUTES).toBe(5);
+    expect(MAX_IDLE_LIMIT_MINUTES).toBe(720);
+    expect(idleLimitMinutesFrom("0")).toBe(5);
+    expect(idleLimitMinutesFrom("1")).toBe(5);
+    expect(idleLimitMinutesFrom("5")).toBe(5);
+    expect(idleLimitMinutesFrom("720")).toBe(720);
+    expect(idleLimitMinutesFrom("100000")).toBe(720);
   });
 });
 

@@ -23,8 +23,48 @@
  * without a clock, a browser or a rendered tree.
  */
 
-/** Sixty minutes of inactivity ends the session. One constant — a temple wanting a different figure changes it here. */
-export const IDLE_LIMIT_MS = 60 * 60 * 1000;
+/** The figure E1-S16 fixed: sixty minutes of inactivity ends the session. */
+export const DEFAULT_IDLE_LIMIT_MINUTES = 60;
+
+/**
+ * The bounds a configured figure is held to. Five minutes is the shortest that still leaves the
+ * one-minute warning room to be read; twelve hours is a whole working day, past which "idle
+ * sign-out" stops meaning anything.
+ */
+export const MIN_IDLE_LIMIT_MINUTES = 5;
+export const MAX_IDLE_LIMIT_MINUTES = 720;
+
+/**
+ * Turns the raw environment value into minutes.
+ *
+ * <p>Unset, empty, or anything that is not a plain whole number falls back to the story's sixty,
+ * rather than to some surprising figure: a typo in a config file must not quietly sign people out
+ * after one minute or never. A number outside the bounds is clamped to the nearest bound, because
+ * someone who wrote "1000" plainly meant "as long as allowed".
+ */
+export function idleLimitMinutesFrom(raw: string | undefined): number {
+  const trimmed = raw?.trim() ?? "";
+  if (!/^\d+$/.test(trimmed)) return DEFAULT_IDLE_LIMIT_MINUTES;
+  const minutes = Number(trimmed);
+  return Math.min(MAX_IDLE_LIMIT_MINUTES, Math.max(MIN_IDLE_LIMIT_MINUTES, minutes));
+}
+
+/**
+ * How long without activity ends the session.
+ *
+ * <p>Read from `NEXT_PUBLIC_KMS_IDLE_LIMIT_MINUTES` so a developer's own machine can run with a
+ * longer clock (Rajeev asked for 480 locally, 2026-09-19, so a day of building is not broken up by
+ * sign-ins). That value lives only in `frontend/.env.local`, which is gitignored. Staging and
+ * production keep sixty minutes because the variable is not set there at all — not in
+ * `.env.local.example`, CI, the Dockerfile or the deploy scripts — so the default applies. Setting
+ * it in any of those would change the limit for real temples; that is a product decision, not a
+ * config tweak.
+ *
+ * <p>It must be read as the literal `process.env.NEXT_PUBLIC_...` expression: Next inlines public
+ * variables at build time by matching that exact text, and a computed lookup would find nothing in
+ * the browser.
+ */
+export const IDLE_LIMIT_MS = idleLimitMinutesFrom(process.env.NEXT_PUBLIC_KMS_IDLE_LIMIT_MINUTES) * 60 * 1000;
 
 /** The warning appears a minute before, so nobody loses a half-typed delivery mid-sentence. */
 export const WARN_BEFORE_MS = 60 * 1000;

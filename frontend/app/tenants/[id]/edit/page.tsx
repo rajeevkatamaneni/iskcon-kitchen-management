@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { useParams, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { Field } from "@/components/Field";
@@ -267,12 +268,9 @@ function EditTenantForm({ id, temple }: { id: string; temple: TenantDetail }) {
             {saving ? "Saving…" : "Save changes"}
           </button>
 
-          <Link
-            href={`/tenants/${id}`}
-            className="flex min-h-touch items-center rounded-control border border-hairline-strong px-5 transition-colors duration-state hover:bg-raised"
-          >
+          <ButtonLink href={`/tenants/${id}`} variant="secondary">
             Cancel
-          </Link>
+          </ButtonLink>
         </div>
       </Form>
     </>

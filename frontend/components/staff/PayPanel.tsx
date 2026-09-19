@@ -262,13 +262,9 @@ export function PayPanel({
           <input name="advanceNote" className={FIELD} />
         </label>
         <div className="col-span-full flex items-end justify-end xl:col-span-1">
-          <button
-            type="submit"
-            disabled={busy}
-            className="min-h-touch w-full rounded-control border border-hairline px-5 hover:bg-sunken sm:w-auto xl:w-full disabled:opacity-60"
-          >
+          <Button type="submit" variant="secondary" disabled={busy} className="w-full sm:w-auto xl:w-full">
             Record advance
-          </button>
+          </Button>
         </div>
       </Form>
 

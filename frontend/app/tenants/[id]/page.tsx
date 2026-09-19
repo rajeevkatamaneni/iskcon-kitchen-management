@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { Button } from "@/components/ds/Button";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
@@ -72,12 +74,9 @@ function TenantDetailView() {
                   SUPER_ADMIN guard as this page: D-13 put a temple's profile on the operator's
                   side entirely, so there is nobody who can read this page and not use this link.
                 */}
-                <Link
-                  href={`/tenants/${id}/edit`}
-                  className="min-h-touch shrink-0 rounded-control border border-hairline-strong px-5 py-2.5 text-sm transition-colors duration-state hover:bg-raised"
-                >
+                <ButtonLink href={`/tenants/${id}/edit`} variant="secondary" className="shrink-0">
                   Edit details
-                </Link>
+                </ButtonLink>
               </header>
 
               <section className="card px-6 py-5">
@@ -113,13 +112,9 @@ function TenantDetailView() {
                   Permanently removes {data.name} and <strong>all</strong> of its data. This cannot
                   be undone.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setConfirming(true)}
-                  className="mt-4 min-h-touch rounded-control border border-danger px-5 text-sm text-danger transition-colors duration-state hover:bg-danger-bg"
-                >
+                <Button variant="danger" onClick={() => setConfirming(true)} className="mt-4">
                   Delete temple
-                </button>
+                </Button>
               </section>
 
               {confirming && (
@@ -261,12 +256,7 @@ function WhatsAppTemplatesSection({ id }: { id: string }) {
             <>
               {view && (
                 <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={refresh}
-                    disabled={refreshing}
-                    className="min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-canvas disabled:opacity-60"
-                  >
+                  <Button variant="secondary" onClick={refresh} busy={refreshing}>
                     {refreshing ? (
                       <span className="inline-flex items-center gap-2">
                         <BusyPot />
@@ -275,7 +265,7 @@ function WhatsAppTemplatesSection({ id }: { id: string }) {
                     ) : (
                       "Refresh from Meta"
                     )}
-                  </button>
+                  </Button>
                   <span className="text-sm text-ink-muted">
                     {view.asOf ? `As of ${moment(view.asOf)}.` : "Meta has not been asked for this temple yet."}
                   </span>
@@ -388,14 +378,9 @@ function ExportButton({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={download}
-        disabled={busy}
-        className="min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-canvas disabled:opacity-60"
-      >
+      <Button variant="secondary" onClick={download} busy={busy}>
         {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing…</span>) : "Download data export"}
-      </button>
+      </Button>
       {error && (
         <div className="w-full">
           <ErrorNotice error={error} />
@@ -509,21 +494,12 @@ function DeleteConfirm({
             />
 
             <div className="mt-6 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={onCancel}
-                className="min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
-              >
+              <Button variant="secondary" onClick={onCancel}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={doDelete}
-                disabled={!armed}
-                className="min-h-touch rounded-control bg-danger px-5 text-sm text-ink-inverse transition-colors duration-state hover:opacity-90 disabled:opacity-40"
-              >
+              </Button>
+              <Button variant="danger" onClick={doDelete} disabled={!armed}>
                 Delete temple
-              </button>
+              </Button>
             </div>
           </>
         )}

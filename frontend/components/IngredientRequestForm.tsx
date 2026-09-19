@@ -362,21 +362,20 @@ export function IngredientRequestForm({
                 type="button"
                 onClick={() => setLines((prev) => prev.filter((_, at) => at !== i))}
                 aria-label={`Remove ingredient ${i + 1}`}
-                className="min-h-touch rounded-control border border-hairline-strong px-3 text-sm text-ink-secondary hover:bg-raised"
+                className="btn btn-secondary min-h-touch px-3 text-sm"
               >
                 Remove
               </button>
             </div>
           ))}
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() =>
               setLines((prev) => [...prev, { ingredientId: "", quantity: "", unit: DEFAULT_LINE_UNIT }])
             }
-            className="min-h-touch rounded-control border border-hairline-strong px-4 text-sm hover:bg-raised"
           >
             + Add ingredient
-          </button>
+          </Button>
         </section>
 
         <section aria-labelledby="request-dishes-heading" className="space-y-3">
@@ -421,21 +420,20 @@ export function IngredientRequestForm({
                 type="button"
                 onClick={() => setDishes((prev) => prev.filter((_, at) => at !== i))}
                 aria-label={`Remove dish ${i + 1}`}
-                className="min-h-touch rounded-control border border-hairline-strong px-3 text-sm text-ink-secondary hover:bg-raised"
+                className="btn btn-secondary min-h-touch px-3 text-sm"
               >
                 Remove
               </button>
             </div>
           ))}
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() =>
               setDishes((prev) => [...prev, { dishName: "", quantity: "", unit: DEFAULT_DISH_UNIT }])
             }
-            className="min-h-touch rounded-control border border-hairline-strong px-4 text-sm hover:bg-raised"
           >
             + Add dish
-          </button>
+          </Button>
         </section>
       </Form>
     </FocusScreen>

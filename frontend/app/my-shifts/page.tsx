@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { Button } from "@/components/ds/Button";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -121,9 +122,9 @@ function MyShiftsView() {
                     <p className="text-sm text-ink-secondary tabular-nums">{dateWithYear(s.shiftDate)} · {shiftWindow(s.startTime, s.endTime)}</p>
                     {s.location && <p className="text-sm text-ink-muted">{s.location}</p>}
                   </div>
-                  <button type="button" disabled={busy} onClick={() => run((t) => api.releaseShift(s.shiftId, t), "We couldn’t release your spot.")} className="min-h-touch rounded-control border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60">
+                  <Button variant="secondary" disabled={busy} onClick={() => run((t) => api.releaseShift(s.shiftId, t), "We couldn’t release your spot.")}>
                     Release my spot
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -169,9 +170,9 @@ function MyShiftsView() {
                       <p className="font-medium">{w.title} <span className="ml-2 text-sm text-ink-secondary">Position {w.position}</span></p>
                       <p className="text-sm text-ink-secondary tabular-nums">{dateWithYear(w.shiftDate)} · {shiftWindow(w.startTime, w.endTime)}</p>
                     </div>
-                    <button type="button" disabled={busy} onClick={() => run((t) => api.leaveWaitlist(w.shiftId, t), "We couldn’t remove you from the waitlist.")} className="min-h-touch rounded-control border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60">
+                    <Button variant="secondary" disabled={busy} onClick={() => run((t) => api.leaveWaitlist(w.shiftId, t), "We couldn’t remove you from the waitlist.")}>
                       Leave waitlist
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>

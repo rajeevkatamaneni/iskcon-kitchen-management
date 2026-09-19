@@ -128,12 +128,16 @@ export default function SignInPage() {
         Accent-tinted, not solid olive: the same treatment the active nav item uses. It makes the
         recommended passwordless path the eye-catching option without claiming the screen’s one
         solid-accent primary slot, which stays with the email/phone submit.
+
+        So it keeps its own accent tint rather than taking a Button variant — none of them is this
+        look — but it carries the base `btn` class, for the corner and the press every other button
+        has (T-242).
       */}
       <button
         type="button"
         onClick={handleGoogle}
         disabled={!firebaseConfigured}
-        className="mb-6 min-h-touch w-full rounded-control border border-accent-border bg-accent-bg font-medium text-accent-text transition-colors duration-state hover:bg-accent-border disabled:opacity-60"
+        className="btn mb-6 min-h-touch w-full border border-accent-border bg-accent-bg font-medium text-accent-text transition-colors duration-state hover:bg-accent-border disabled:opacity-60"
       >
         Continue with Google
       </button>
@@ -361,7 +365,7 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
           <button
             type="button"
             onClick={() => setConfirmation(null)}
-            className="min-h-touch w-full rounded-control border border-hairline-strong transition-colors duration-state hover:bg-raised"
+            className="btn btn-secondary min-h-touch w-full px-6 transition-colors duration-state"
           >
             Use a different number
           </button>

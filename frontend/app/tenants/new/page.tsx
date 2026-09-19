@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { Field } from "@/components/Field";
@@ -398,12 +399,9 @@ function NewTenantForm() {
                 {submitting ? "Adding temple…" : "Add temple"}
               </button>
 
-              <Link
-                href="/tenants"
-                className="flex min-h-touch items-center rounded-control border border-hairline-strong px-5 transition-colors duration-state hover:bg-raised"
-              >
+              <ButtonLink href="/tenants" variant="secondary">
                 Cancel
-              </Link>
+              </ButtonLink>
             </div>
           </Form>
         </div>

@@ -335,14 +335,9 @@ function DonationsLedger() {
         <div>
           <h2 id="ledger-heading" className="text-lg">Every gift received</h2>
         </div>
-        <button
-          type="button"
-          onClick={exportCsv}
-          disabled={exporting}
-          className="min-h-touch rounded-control border border-hairline px-5 py-2 text-sm hover:bg-sunken disabled:opacity-60"
-        >
+        <Button variant="secondary" onClick={exportCsv} disabled={exporting}>
           {exporting ? "Preparing…" : "Export CSV"}
-        </button>
+        </Button>
       </header>
 
       {exportError && <div className="mb-4"><ErrorNotice error={exportError} /></div>}

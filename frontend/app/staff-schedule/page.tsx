@@ -204,9 +204,9 @@ function StaffScheduleView() {
           </header>
 
           <div className="mb-4 flex items-center gap-3">
-            <button type="button" onClick={() => setWeekStart(shiftWeek(weekStart, -7))} className="min-h-touch rounded-control border border-hairline px-3 hover:bg-sunken">← Prev</button>
+            <Button variant="secondary" onClick={() => setWeekStart(shiftWeek(weekStart, -7))}>← Prev</Button>
             <span className="text-sm text-ink-secondary tabular-nums">Week of {dateWithYear(weekStart)}</span>
-            <button type="button" onClick={() => setWeekStart(shiftWeek(weekStart, 7))} className="min-h-touch rounded-control border border-hairline px-3 hover:bg-sunken">Next →</button>
+            <Button variant="secondary" onClick={() => setWeekStart(shiftWeek(weekStart, 7))}>Next →</Button>
           </div>
 
           {actionError && <div className="mb-4"><ErrorNotice error={actionError} /></div>}

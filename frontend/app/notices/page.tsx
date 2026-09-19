@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
+import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { Form } from "@/components/ds/Form";
@@ -154,20 +155,15 @@ function NoticesView() {
                             placeholder="Why is it being withdrawn?"
                             className="min-h-9 min-w-64 rounded-control border border-hairline px-3 text-sm"
                           />
-                          <button
-                            type="submit"
-                            disabled={busy}
-                            className="min-h-9 rounded-control bg-danger-bg px-3 text-sm text-danger disabled:opacity-60"
-                          >
+                          {/* Small (36px) to sit level with the 36px reason box beside them. "Keep it"
+                              was bare text; it takes the secondary look so the pair reads as two
+                              buttons of one size (T-242). */}
+                          <Button type="submit" variant="danger" size="sm" disabled={busy}>
                             Withdraw
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setWithdrawing(null)}
-                            className="min-h-9 rounded-control px-3 text-sm text-ink-secondary hover:bg-sunken"
-                          >
+                          </Button>
+                          <Button variant="secondary" size="sm" onClick={() => setWithdrawing(null)}>
                             Keep it
-                          </button>
+                          </Button>
                         </Form>
                       ) : (
                         <button

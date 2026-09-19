@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ds/Button";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -120,14 +121,9 @@ function LibraryView() {
                 </p>
               )}
             </div>
-            <button
-              type="button"
-              onClick={load}
-              disabled={busy}
-              className="flex min-h-touch items-center rounded-control border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
-            >
+            <Button variant="secondary" onClick={load} disabled={busy}>
               {busy ? "Loading…" : "Load the books"}
-            </button>
+            </Button>
           </header>
 
           {loaded && (
@@ -197,7 +193,7 @@ function LibraryView() {
                     onClick={() => remove(row)}
                     disabled={busy}
                     aria-label={`Take ${row.displayName} out of the library`}
-                    className="flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-control border border-hairline-strong text-sm text-ink-secondary transition-colors duration-state hover:bg-raised disabled:opacity-60"
+                    className="btn btn-secondary flex min-h-touch min-w-touch shrink-0 items-center justify-center text-sm disabled:opacity-60"
                   >
                     ×
                   </button>

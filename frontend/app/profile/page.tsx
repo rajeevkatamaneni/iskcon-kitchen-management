@@ -386,11 +386,14 @@ function MyLeave() {
                 <div role="alertdialog" aria-label="Withdraw this leave" className="basis-full rounded-lg bg-sunken px-5 py-4">
                   <p className="text-sm font-medium text-ink">{withdrawQuestion(row)}</p>
                   <div className="mt-4 flex gap-2">
+                    {/* A plain <button> with the button classes rather than Button, because it takes
+                        a ref for focus and Button does not forward one. Sized like the Button beside
+                        it (T-242). */}
                     <button
                       ref={cancelRef}
                       type="button"
                       onClick={() => setConfirming(null)}
-                      className="min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
+                      className="btn btn-secondary inline-flex min-h-touch items-center justify-center gap-2 px-4 text-sm font-medium"
                     >
                       Cancel
                     </button>

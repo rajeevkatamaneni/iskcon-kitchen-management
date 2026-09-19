@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { Button } from "@/components/ds/Button";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -104,14 +105,9 @@ function MyDonationsView() {
                   {/* Only where a receipt has been issued. A gift without one has nothing to download,
                       and a button that could only refuse would be the wrong thing to offer. */}
                   {gift.receiptNumber && (
-                    <button
-                      type="button"
-                      disabled={downloading !== null}
-                      onClick={() => download(gift)}
-                      className="min-h-touch rounded-control border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60"
-                    >
+                    <Button variant="secondary" disabled={downloading !== null} onClick={() => download(gift)}>
                       {downloading === gift.id ? "Downloading…" : "Download receipt"}
-                    </button>
+                    </Button>
                   )}
                 </li>
               ))}
