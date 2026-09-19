@@ -76,6 +76,16 @@ class ReturnToVendorIT extends AbstractIntegrationTest {
 				VALUES (?, 'uid-staff-a', 'Staff A', 'staff-a@example.com', '+919876500081', 'KITCHEN_STAFF', 'ACTIVE')
 				RETURNING id
 				""", UUID.class, tenant);
+		// The goods are received by a Kitchen Manager since T-261: recording a delivery moved to
+		// RECEIVE_DELIVERIES, which Kitchen Staff did not hold while Rajeev's open question Q-1 was
+		// unanswered. He answered it on 2026-09-19: Kitchen Staff get it by default (T-282), and
+		// DeliveriesIT asserts that. The manager still receives here because who receives is not what
+		// this class is about. The returns themselves are made by Staff A above, so what this class
+		// proves about who may return goods is unchanged.
+		admin.update("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'uid-manager-a', 'Manager A', 'manager-a@example.com', '+919876500082', 'KITCHEN_MANAGER', 'ACTIVE')
+				""", tenant);
 		rice = admin.queryForObject("""
 				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
 				VALUES (?, 'Rice', 'Grains', 'KG') RETURNING id
@@ -295,12 +305,16 @@ class ReturnToVendorIT extends AbstractIntegrationTest {
 				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit)
 				VALUES (?, ?, ?, ?::numeric, 'KG') RETURNING id
 				""", UUID.class, tenant, poId, rice, qty);
+		// Received as the Kitchen Manager (RECEIVE_DELIVERIES, T-261), then back to Staff A, who
+		// makes every return in this class.
+		stubVerifier.accept("uid-manager-a");
 		String json = mvc.perform(authed(post("/api/v1/purchase-orders/{poId}/receipts", poId))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"idempotencyKey\":\"" + poNumber + "\",\"lines\":[{\"poLineId\":\"" + poLine
 								+ "\",\"receivedQty\":" + qty + ",\"rejectedQty\":0}]}"))
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
+		stubVerifier.accept("uid-staff-a");
 		var tree = JSON.readTree(json);
 		return new Receipt(
 				poId,

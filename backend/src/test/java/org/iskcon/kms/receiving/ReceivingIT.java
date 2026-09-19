@@ -25,9 +25,17 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * with a batch, rejected goods are recorded but never touch stock, the PO status auto-derives, the
  * outstanding quantity re-feeds the shopping list, and a duplicate submission cannot double-book.
  *
- * <p>Also the price the delivery was paid at (INV1): recorded on the line at insert time, because
- * the table is append-only and nothing can come back for it, and written through to the vendor's
- * last-known price — but only where a price was actually given and something was actually received.
+ * <p><strong>No price is taken at delivery any more</strong> (R-DEL-5, T-261). These tests used to
+ * assert that a price given on a receipt line was stored and written through to the vendor's list
+ * price (INV1). They now assert the opposite: a price a client still sends is stored nowhere, the
+ * list price does not move, and no price history row is written. A price belongs to the invoice.
+ *
+ * <p><strong>Signed in as a Kitchen Manager since T-261</strong>, not Kitchen Staff. Recording a
+ * delivery moved to {@code RECEIVE_DELIVERIES}, which Kitchen Staff did not hold while Rajeev's open
+ * question Q-1 was unanswered. He answered it on 2026-09-19: Kitchen Staff get it by default (T-282),
+ * and {@code DeliveriesIT} now asserts a Kitchen Staff member records a delivery on both routes. The
+ * Kitchen Manager stays here because nothing asserted is about the role — every assertion is about
+ * what a receipt does — so switching back would prove nothing new.
  */
 @AutoConfigureMockMvc
 class ReceivingIT extends AbstractIntegrationTest {
@@ -54,7 +62,7 @@ class ReceivingIT extends AbstractIntegrationTest {
 				""", UUID.class);
 		staffId = admin.queryForObject("""
 				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
-				VALUES (?, 'uid-staff-a', 'Staff A', 'staff-a@example.com', '+919876500081', 'KITCHEN_STAFF', 'ACTIVE')
+				VALUES (?, 'uid-staff-a', 'Staff A', 'staff-a@example.com', '+919876500081', 'KITCHEN_MANAGER', 'ACTIVE')
 				RETURNING id
 				""", UUID.class, tenant);
 		rice = admin.queryForObject("""
@@ -182,28 +190,27 @@ class ReceivingIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a received price is recorded on the line and becomes the vendor's last price")
-	void receivedPriceWritesBack() throws Exception {
+	@DisplayName("a price sent with a delivery is stored nowhere and does not become the vendor's list price")
+	void aPriceSentWithADeliveryIsIgnored() throws Exception {
 		UUID poId = sentPo("PO-2026-0050");
 		UUID line = poLine(poId, rice, "36");
 
+		// REVERSED AT T-261 (R-DEL-5). This used to assert that ₹58.50 was stored on the line and
+		// written back as the vendor's last price, creating the supply row. A client that still sends
+		// the field is not refused, but the figure must go nowhere at all.
 		mvc.perform(receive(poId, "{\"idempotencyKey\":\"k1\",\"lines\":[{\"poLineId\":\"" + line
 						+ "\",\"receivedQty\":30,\"rejectedQty\":0,\"unitPrice\":58.50}]}"))
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.lines[0].unitPrice").value(58.50));
+				.andExpect(jsonPath("$.lines[0].unitPrice").doesNotExist());
 
-		// No supply row existed; the delivery is proof this vendor supplies this ingredient.
-		assert lastPrice(vendor, rice).compareTo(new BigDecimal("58.50")) == 0
-				: "last price should be what was paid, was " + lastPrice(vendor, rice);
-		// A delivery says what a thing cost, not who the temple would rather buy it from.
-		Boolean preferred = admin.queryForObject(
-				"SELECT preferred FROM vendor_supplies WHERE vendor_id = ? AND ingredient_id = ?",
-				Boolean.class, vendor, rice);
-		assert Boolean.FALSE.equals(preferred) : "receiving must not designate a preferred vendor";
+		assert storedUnitPrice(line) == null : "no price may be stored on a new receipt line";
+		assert admin.queryForObject("SELECT count(*) FROM vendor_supplies", Integer.class) == 0
+				: "a delivery must not create a supply row, nor price one";
+		assert priceHistoryRows() == 0 : "a delivery must not write the vendor's price history";
 	}
 
 	@Test
-	@DisplayName("a receipt with no price leaves the last price standing and stores no zero")
+	@DisplayName("a receipt leaves an existing list price standing and stores no zero")
 	void unpricedReceiptChangesNothing() throws Exception {
 		supply(vendor, rice, "45.00");
 		UUID poId = sentPo("PO-2026-0051");
@@ -214,48 +221,51 @@ class ReceivingIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.lines[0].unitPrice").doesNotExist());
 
 		// A delivery that arrived ahead of its bill, or a gift in kind, is not a price of zero.
-		BigDecimal stored = admin.queryForObject(
-				"SELECT unit_price FROM goods_receipt_lines WHERE po_line_id = ?", BigDecimal.class, line);
+		BigDecimal stored = storedUnitPrice(line);
 		assert stored == null : "an unpriced line must store NULL, was " + stored;
 		assert lastPrice(vendor, rice).compareTo(new BigDecimal("45.00")) == 0
-				: "an unpriced receipt must not overwrite a price somebody gave";
+				: "a receipt must not overwrite a price somebody gave";
 	}
 
 	@Test
-	@DisplayName("a price on a line rejected in full is recorded but never written back")
+	@DisplayName("a price sent on a line rejected in full is stored nowhere either")
 	void fullyRejectedLineDoesNotWriteBack() throws Exception {
 		supply(vendor, rice, "45.00");
 		UUID poId = sentPo("PO-2026-0052");
 		UUID line = poLine(poId, rice, "36");
 
+		// Until T-261 the ₹80 was recorded on the line (but not written back). Now it is neither.
 		mvc.perform(receive(poId, "{\"idempotencyKey\":\"k1\",\"lines\":[{\"poLineId\":\"" + line
 						+ "\",\"receivedQty\":0,\"rejectedQty\":36,\"rejectReason\":\"SPOILED\","
 						+ "\"unitPrice\":80}]}"))
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.lines[0].unitPrice").value(80));
+				.andExpect(jsonPath("$.lines[0].unitPrice").doesNotExist());
 
-		// Nothing was bought at that price, so nothing about the vendor's price has been learned.
+		assert storedUnitPrice(line) == null : "no price may be stored on a new receipt line";
 		assert lastPrice(vendor, rice).compareTo(new BigDecimal("45.00")) == 0
 				: "a rejected delivery must not reprice the vendor";
+		assert priceHistoryRows() == 0 : "a delivery must not write the vendor's price history";
 	}
 
 	@Test
-	@DisplayName("a price per gram is written back as a price per the ingredient's own Kg")
-	void priceIsConvertedToTheIngredientsCanonicalUnit() throws Exception {
+	@DisplayName("a price per gram sent with a delivery does not reprice a vendor who has a list price")
+	void aPriceInAnotherUnitIsIgnoredToo() throws Exception {
+		supply(vendor, rice, "45.00");
 		UUID poId = sentPo("PO-2026-0053");
 		UUID line = poLine(poId, rice, "5000", "GM");
 
-		// Rice is held in Kg. ₹0.05 per gram is ₹50 per Kg, and writing the 0.05 into a per-Kg
-		// column would be wrong by a factor of a thousand.
+		// REVERSED AT T-261. This used to assert that ₹0.05 per gram was converted and written back
+		// as ₹50 per Kg. The conversion went with the write-back; what is left to prove is that a
+		// line in another unit still receives, in its own unit, and moves no price.
 		mvc.perform(receive(poId, "{\"idempotencyKey\":\"k1\",\"lines\":[{\"poLineId\":\"" + line
 						+ "\",\"receivedQty\":5000,\"rejectedQty\":0,\"unitPrice\":0.05}]}"))
 				.andExpect(status().isCreated())
-				// The line keeps the figure as it was given — per gram, the unit the line is in.
-				.andExpect(jsonPath("$.lines[0].unitPrice").value(0.05))
+				.andExpect(jsonPath("$.lines[0].unitPrice").doesNotExist())
 				.andExpect(jsonPath("$.lines[0].unit").value("GM"));
 
-		assert lastPrice(vendor, rice).compareTo(new BigDecimal("50.00")) == 0
-				: "₹0.05/gm is ₹50/Kg, was " + lastPrice(vendor, rice);
+		assert lastPrice(vendor, rice).compareTo(new BigDecimal("45.00")) == 0
+				: "the list price must stay ₹45/Kg, was " + lastPrice(vendor, rice);
+		assert priceHistoryRows() == 0 : "a delivery must not write the vendor's price history";
 	}
 
 	@Test
@@ -289,6 +299,9 @@ class ReceivingIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a duplicate submission does not reprice the vendor a second time")
 	void duplicateSubmissionDoesNotReprice() throws Exception {
+		// Since T-261 the first submission writes no price either, so the supply row is set up here
+		// rather than created by the receipt; the replay must still leave the edited figure alone.
+		supply(vendor, rice, "45.00");
 		UUID poId = sentPo("PO-2026-0055");
 		UUID line = poLine(poId, rice, "36");
 		String priced = "{\"idempotencyKey\":\"same\",\"lines\":[{\"poLineId\":\"" + line
@@ -354,6 +367,15 @@ class ReceivingIT extends AbstractIntegrationTest {
 		return admin.queryForObject(
 				"SELECT last_price FROM vendor_supplies WHERE vendor_id = ? AND ingredient_id = ?",
 				BigDecimal.class, vendorId, ingredient);
+	}
+
+	private BigDecimal storedUnitPrice(UUID poLine) {
+		return admin.queryForObject(
+				"SELECT unit_price FROM goods_receipt_lines WHERE po_line_id = ?", BigDecimal.class, poLine);
+	}
+
+	private int priceHistoryRows() {
+		return admin.queryForObject("SELECT count(*) FROM vendor_price_history", Integer.class);
 	}
 
 	private BigDecimal onHand(UUID ingredient) {

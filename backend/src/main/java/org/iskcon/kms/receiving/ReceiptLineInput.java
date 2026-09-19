@@ -12,10 +12,10 @@ import java.util.UUID;
  * rejected must be positive, and a rejection must name a reason — both enforced in the service and
  * by CHECK constraints.
  *
- * <p>{@code unitPrice} is what was actually paid, in rupees per one of the PO line's unit — the same
- * reading as the expected price it is pre-filled from. It is <strong>optional</strong>, and null is
- * not zero: a delivery can arrive ahead of its bill, and donated goods have no purchase price at
- * all. A null leaves {@code vendor_supplies.last_price} exactly as it was.
+ * <p><strong>No price</strong> (R-DEL-5, T-261). This record used to carry {@code unitPrice}, what
+ * was paid, which the service stored on the line and wrote back as the vendor's list price. A price
+ * now belongs to the invoice (R-VEN-4). A client that still sends {@code unitPrice} is not refused —
+ * Spring Boot leaves Jackson's {@code FAIL_ON_UNKNOWN_PROPERTIES} off — but the figure goes nowhere.
  */
 public record ReceiptLineInput(
 		@NotNull(message = "Say which line of the order this is.") UUID poLineId,
@@ -27,6 +27,5 @@ public record ReceiptLineInput(
 		BigDecimal rejectedQty,
 		RejectReason rejectReason,
 		LocalDate expiryDate,
-		LocalDate receivedDate,
-		@PositiveOrZero(message = "A price cannot be less than nothing.") BigDecimal unitPrice) {
+		LocalDate receivedDate) {
 }
