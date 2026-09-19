@@ -288,7 +288,7 @@ public class TodayService {
 			boolean fast = day.isEkadashi();
 			return new TodayView.Ahead(
 					day.date(),
-					fast ? (day.ekadashiName() != null ? day.ekadashiName() : "Ekadasi") : festival,
+					fast ? (day.ekadashiName() != null ? day.ekadashiName() : "Ekadashi") : festival,
 					fast ? "FAST" : "FESTIVAL",
 					(int) ChronoUnit.DAYS.between(today, day.date()));
 		}

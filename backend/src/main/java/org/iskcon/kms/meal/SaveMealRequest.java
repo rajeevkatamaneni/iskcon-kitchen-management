@@ -112,6 +112,17 @@ public record SaveMealRequest(
 	/**
 	 * One dish as the composer holds it.
 	 *
+	 * <p><strong>The ceiling on the amount (T-217).</strong> 50,000 in the recipe's own yield unit is
+	 * the figure {@code RecipeService.MAX_TARGET_YIELD} and {@code DocumentService.MAX_TARGET_YIELD}
+	 * already refuse to scale beyond, and the Today screen scales every planned dish through
+	 * {@code RecipeService.scaleAll}. Before this check a meal could be saved with a target those two
+	 * refuse, and it was: the planner multiplied 600 people by a 350 ml portion and saved 210,000 on
+	 * a recipe measured in litres. The save went through, and every Today screen that included the
+	 * day then failed with KMS-400001 for everyone — a fault planted by one meal and paid for by the
+	 * whole kitchen. Refusing it here puts the error on the one box that caused it, at the moment the
+	 * planner can still fix it. The literal repeats the other two rather than reading them, because an
+	 * annotation value must be a constant and those two are private; the three must move together.
+	 *
 	 * @param id null for a dish being added; the dish's own id for one already on the meal, which is
 	 *           only meaningful on an update ({@link UpdateMealRequest}) and refused on a plan.
 	 */
@@ -120,6 +131,7 @@ public record SaveMealRequest(
 			@NotNull(message = "Choose a recipe.") UUID recipeId,
 			@NotNull(message = "Enter how much is being made.")
 			@Positive(message = "Enter an amount greater than zero.")
+			@DecimalMax(value = "50000", message = "Amount can be at most 50,000.")
 			BigDecimal targetYield) {
 	}
 }

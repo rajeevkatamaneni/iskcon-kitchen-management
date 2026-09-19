@@ -60,7 +60,12 @@ class UnitLabelAgreementTest {
 
 			// An error message about a unit mismatch — "Rice is kept in Kg; this asks for L". It names
 			// two units and counts neither.
-			"ingredient/IngredientUnits.java|ref.name(), ref.canonical().label(), given.label(), ref.canonical().label())));"
+			"ingredient/IngredientUnits.java|ref.name(), ref.canonical().label(), given.label(), ref.canonical().label())));",
+
+			// The recipe form's refusal when the portion unit is from another family (T-218) — "A
+			// recipe measured in Litres takes its portion in L or ml." It names the recipe's unit, with
+			// no count beside it.
+			"recipe/PortionFitsYieldValidator.java|\"A recipe measured in \" + yield.label() + \" takes its portion in \" + fits + \".\")"
 
 			// ---- Removed by T-148, and why, so nobody puts them back. ----------------------------
 			//

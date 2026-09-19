@@ -14,7 +14,11 @@ import java.util.UUID;
  * A request to create a recipe. At least one ingredient line and a positive base yield are
  * required; the category and units are validated in the service against the tenant's own data and
  * the fixed vocabularies. A prohibited ingredient is refused here unless overridden (E2-S4).
+ *
+ * <p>{@link PortionFitsYield} sits on the record because no one field can see the pair: a portion
+ * must be in the same family of unit as the recipe itself (T-218).
  */
+@PortionFitsYield
 public record CreateRecipeRequest(
 
 		@NotBlank(message = "Enter the recipe's name.")
@@ -24,11 +28,11 @@ public record CreateRecipeRequest(
 		@NotNull(message = "Choose a category.")
 		UUID categoryId,
 
-		@NotNull(message = "Enter the base yield.")
+		@NotNull(message = "Enter how much this recipe makes.")
 		@DecimalMin(value = "0.0", inclusive = false, message = "Yield must be greater than zero.")
 		BigDecimal baseYieldQty,
 
-		@NotBlank(message = "Choose a yield unit.")
+		@NotBlank(message = "Choose what this recipe is measured in.")
 		String baseYieldUnit,
 
 		String method,
@@ -61,5 +65,5 @@ public record CreateRecipeRequest(
 
 		@NotEmpty(message = "A recipe needs at least one ingredient.")
 		@Valid
-		List<RecipeIngredientLine> ingredients) {
+		List<RecipeIngredientLine> ingredients) implements YieldAndPortion {
 }

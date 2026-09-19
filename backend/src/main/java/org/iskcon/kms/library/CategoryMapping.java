@@ -55,7 +55,10 @@ public final class CategoryMapping {
 		BY_KEY.put("jam-pickles", new Target("Jam & pickles", false));
 		BY_KEY.put("soups-salads", new Target("Soups & salads", false));
 		BY_KEY.put("economical-recipes", new Target("Economical", false));
-		BY_KEY.put("fhc-sabjis", new Target("Catering sabjis", false));
+		// The book calls it FHC Sabjis: sabjis made by the kilogram for bulk distribution. It was
+		// "Catering sabjis" until catering left the product; V143 renamed the rows already created
+		// under that name (Rajeev, 2026-09-18, T-230).
+		BY_KEY.put("fhc-sabjis", new Target("Bulk sabjis", false));
 		BY_KEY.put("vegan", new Target("Vegan", false));
 		BY_KEY.put("jain", new Target("Jain", false));
 	}

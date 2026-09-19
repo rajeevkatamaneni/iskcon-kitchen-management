@@ -79,8 +79,8 @@ public enum ErrorCode {
 			"Enter the cheque number or the payroll reference so this can be traced later."),
 
 	SERVINGS_NOT_VALID(400009, 400,
-			"Those servings don't look right.",
-			"Enter how many were actually served, or mark the dish as not made."),
+			"An amount cooked or eaten can't be used.",
+			"Enter 0 or more, or tick Not made."),
 
 	BAN_REASON_REQUIRED(400010, 400,
 			"A record like this needs both a category and your own account of it.",
@@ -299,11 +299,11 @@ public enum ErrorCode {
 
 	CANNOT_CANCEL_COOKED_MEAL(400045, 409,
 			"This meal has already been cooked, so it can't be cancelled.",
-			"If the stock was wrong, correct it with an inventory adjustment."),
+			"A Temple Admin can correct its figures from the day."),
 
 	MEAL_PLAN_NOT_OPEN(400046, 409,
-			"This meal can no longer be changed.",
-			"Only a planned meal can be edited or cooked; this one is already cooked or cancelled."),
+			"This meal can't be changed.",
+			"It is already cooked or cancelled."),
 
 	MEAL_KIND_ALREADY_EXISTS(400047, 409,
 			"That kind of meal already exists.",
@@ -434,7 +434,7 @@ public enum ErrorCode {
 
 	READY_BY_TIME_REQUIRED(400072, 409,
 			"This kind of meal needs the time it has to be ready.",
-			"Enter the time the food must be ready. Everyday meals suggest one; occasional meals always ask."),
+			"Enter the time the food must be ready."),
 
 	/**
 	 * <strong>Retired, not reused (E4-S15).</strong> This was the catering refusal, and the
@@ -465,11 +465,11 @@ public enum ErrorCode {
 
 	EVENT_NAME_REQUIRED(400075, 409,
 			"An event needs a name.",
-			"Give it the name people would call it — \"Children's Bhagavad-gita Reading\". It is how you will find it again."),
+			"Give it the name people would call it — \"Children's Bhagavad-gita Reading\"."),
 
 	EVENT_CONTACT_REQUIRED(400076, 409,
-			"Food going outside the temple needs somebody to contact.",
-			"Enter the contact's name and phone number. Both: a contact you can't ring isn't a contact."),
+			"Food going out needs a contact.",
+			"Enter their name and phone number."),
 
 	EVENT_DELIVERY_DETAILS_REQUIRED(400077, 409,
 			"A delivery needs an address and the time the guests eat.",
@@ -481,7 +481,7 @@ public enum ErrorCode {
 	 */
 	DELIVERY_ADDRESS_NOT_FOUND(400078, 409,
 			"We couldn't find that address on the map.",
-			"The plan is saved. Check the address if you want a travel estimate for it — a landmark and a pin code usually help."),
+			"The plan is saved. Check the address if you want a travel estimate for it."),
 
 	/**
 	 * The van is still on the road when the guests sit down.
@@ -499,7 +499,7 @@ public enum ErrorCode {
 	 */
 	DELIVERY_CANNOT_ARRIVE_IN_TIME(400079, 409,
 			"The food cannot get there before the guests sit down.",
-			"Cook it earlier, serve it later, or check the travel allowance — and leave time to load it."),
+			"Make it ready earlier, or change when guests eat."),
 
 	/**
 	 * A meal that is cooking something has to say how many people it is cooking for. Everything the
@@ -508,8 +508,8 @@ public enum ErrorCode {
 	 * nobody had said. A meal with nothing in it yet is fine: nobody has said what or for how many.
 	 */
 	MEAL_HEAD_COUNT_REQUIRED(400080, 409,
-			"This meal has something being cooked, so it needs to know how many people are expected.",
-			"Enter how many adults, children or seniors are coming. Every preparation is worked out from that number."),
+			"Enter how many people are expected.",
+			"Add adults, children or seniors."),
 
 	EXPORT_REQUIRED_BEFORE_DELETE(400081, 409,
 			"Take a data export before deleting this temple.",
@@ -613,7 +613,7 @@ public enum ErrorCode {
 
 	MEAL_NOT_RECORDABLE(400099, 409,
 			"This meal can't be recorded.",
-			"A cancelled meal never went to the kitchen, so there is nothing to record against it."),
+			"This meal was cancelled, so there is nothing to record."),
 
 	// Bans and the check at hire (B9)
 	BAN_ALREADY_EXISTS(400100, 409,
@@ -626,8 +626,8 @@ public enum ErrorCode {
 
 	// Recipes
 	RECIPE_IN_USE(400102, 409,
-			"This recipe has been cooked, so it can't be deleted.",
-			"Archive it instead — it will stop appearing when you plan a meal, and the record of what was cooked stays intact."),
+			"This recipe is on a meal, so it can't be deleted.",
+			"Archive it instead. It will stop appearing in the planner."),
 
 	// The shared recipe library (E2-S12)
 	RECIPE_ALREADY_ADDED(400103, 409,

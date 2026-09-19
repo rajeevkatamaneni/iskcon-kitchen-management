@@ -10,7 +10,12 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-/** A request to edit a recipe. Full replacement of the editable fields and the ingredient lines. */
+/**
+ * A request to edit a recipe. Full replacement of the editable fields and the ingredient lines.
+ *
+ * <p>Carries {@link PortionFitsYield} for the reason {@link CreateRecipeRequest} does (T-218).
+ */
+@PortionFitsYield
 public record UpdateRecipeRequest(
 
 		@NotBlank(message = "Enter the recipe's name.")
@@ -20,11 +25,11 @@ public record UpdateRecipeRequest(
 		@NotNull(message = "Choose a category.")
 		UUID categoryId,
 
-		@NotNull(message = "Enter the base yield.")
+		@NotNull(message = "Enter how much this recipe makes.")
 		@DecimalMin(value = "0.0", inclusive = false, message = "Yield must be greater than zero.")
 		BigDecimal baseYieldQty,
 
-		@NotBlank(message = "Choose a yield unit.")
+		@NotBlank(message = "Choose what this recipe is measured in.")
 		String baseYieldUnit,
 
 		String method,
@@ -57,5 +62,5 @@ public record UpdateRecipeRequest(
 
 		@NotEmpty(message = "A recipe needs at least one ingredient.")
 		@Valid
-		List<RecipeIngredientLine> ingredients) {
+		List<RecipeIngredientLine> ingredients) implements YieldAndPortion {
 }

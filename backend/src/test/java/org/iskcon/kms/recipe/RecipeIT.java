@@ -189,6 +189,59 @@ class RecipeIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a portion from another family of unit is refused on the portion, on create and on edit (T-218)")
+	void refusesAPortionFromAnotherFamily() throws Exception {
+		// Kilos of khichdi with a portion in millilitres: no density, so no head count, and the
+		// planner could only guess. Refused as an ordinary field error on the portion unit.
+		mvc.perform(recipeRequest(withPortion("KG", "200", "ML")))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("perHeadUnit"))
+				.andExpect(jsonPath("$.fieldErrors[0].message")
+						.value("A recipe measured in Kg takes its portion in Kg or gm."));
+
+		// Pieces are a family of one.
+		mvc.perform(recipeRequest(withPortion("PIECES", "0.2", "KG")))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("perHeadUnit"))
+				.andExpect(jsonPath("$.fieldErrors[0].message")
+						.value("A recipe measured in pieces takes its portion in pieces."));
+
+		// The same rule on the edit path, which is the one a stale browser tab would use.
+		String id = createKhichdi();
+		mvc.perform(authed(put("/api/v1/recipes/{id}", id))
+				.contentType(MediaType.APPLICATION_JSON).content(withPortion("L", "350", "GM")))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("perHeadUnit"))
+				.andExpect(jsonPath("$.fieldErrors[0].message")
+						.value("A recipe measured in L takes its portion in L or ml."));
+		assertThat(auditCount("RECIPE_UPDATED")).isZero();
+	}
+
+	@Test
+	@DisplayName("a portion in the recipe's own family saves, and so does no portion at all (T-218)")
+	void acceptsAPortionFromTheSameFamilyOrNone() throws Exception {
+		// The recipe that started it: 270 L of rasam at 350 ml each.
+		mvc.perform(recipeRequest(withPortion("L", "350", "ML").replace("Khichdi", "Rasam")))
+				.andExpect(status().isCreated());
+		mvc.perform(recipeRequest(withPortion("KG", "150", "GM").replace("Khichdi", "Pulao")))
+				.andExpect(status().isCreated());
+		// Blank stays allowed: the planner asks where a recipe states no portion.
+		mvc.perform(recipeRequest(khichdiBody())).andExpect(status().isCreated());
+		// An older recipe measured in grams still saves; the form only stopped offering grams.
+		mvc.perform(recipeRequest(withPortion("GM", "50", "KG").replace("Khichdi", "Podi")))
+				.andExpect(status().isCreated());
+	}
+
+	/** The khichdi body with a yield unit and a portion put in, for the family rule above. */
+	private String withPortion(String yieldUnit, String perHeadQty, String perHeadUnit) {
+		return ("{\"name\":\"Khichdi\",\"categoryId\":\"%s\",\"baseYieldQty\":270,"
+				+ "\"baseYieldUnit\":\"%s\",\"perHeadQty\":%s,\"perHeadUnit\":\"%s\","
+				+ "\"ingredients\":[{\"ingredientId\":\"%s\",\"quantity\":2,\"unit\":\"KG\"}]}")
+				.formatted(categoryRice, yieldUnit, perHeadQty, perHeadUnit, rice);
+	}
+
+	@Test
 	@DisplayName("archiving is a soft delete: gone from the default list, still fetchable")
 	void archiveSoftDeletes() throws Exception {
 		String id = createKhichdi();

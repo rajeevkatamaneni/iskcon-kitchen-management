@@ -718,8 +718,10 @@ class JobCardIT extends AbstractIntegrationTest {
 				""", tenant);
 
 		// Not a badge, and not a colour: a cook reading this at speed in a hot room needs the sentence.
+		// The engine stores GCAL's "Ekadasi"; the card prints the app's one spelling (2026-09-18).
 		assertThat(print(null))
-				.contains("Papamocani Ekadasi")
+				.contains("Papamocani Ekadashi")
+				.doesNotContain("Ekadasi")
 				.contains("No grains, dal or beans");
 	}
 

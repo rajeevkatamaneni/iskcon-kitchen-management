@@ -228,6 +228,21 @@ public class CalendarService {
 		}
 	}
 
+	/**
+	 * "Ekadashi", never "Ekadasi", in anything a person reads (Rajeev, 2026-09-18).
+	 *
+	 * <p>The engine is a port of GCAL and stores GCAL's transliteration — "Pavitraropana Ekadasi",
+	 * "(Fasting for Ekadasi)" — while every screen the kitchen wrote says "Ekadashi", and two spellings
+	 * of the one day the planner is built around read as two different things. The stored rows are
+	 * left exactly as the engine wrote them, so a regenerated year still matches the old one row for
+	 * row; the spelling is settled here, where every day leaves this service, so the calendar screen,
+	 * Today, the job card and the planner's reuse preview all say it the same way without each of
+	 * them having to remember to. The client applies the same rule in {@code lib/vaishnava-day.ts}.
+	 */
+	static String ekadashiSpelling(String text) {
+		return text == null ? null : text.replaceAll("\\b([Ee])kadasi", "$1kadashi");
+	}
+
 	private static String blankToNull(String s) {
 		return s == null || s.isBlank() ? null : s;
 	}
@@ -257,6 +272,10 @@ public class CalendarService {
 				}
 			}
 
+			festivals = festivals.stream()
+					.map(f -> new CalendarDayView.CalendarFestivalView(ekadashiSpelling(f.text()), f.priority()))
+					.toList();
+
 			return new CalendarDayView(
 					rs.getObject("cal_date", LocalDate.class),
 					tithi, paksa,
@@ -264,7 +283,7 @@ public class CalendarService {
 					(Integer) rs.getObject("gaurabda_year"),
 					(Integer) rs.getObject("naksatra"),
 					isEkadashi,
-					ekadashiName,
+					ekadashiSpelling(ekadashiName),
 					rs.getString("mahadvadashi"),
 					rs.getString("fast_type"),
 					rs.getObject("sunrise", LocalTime.class),

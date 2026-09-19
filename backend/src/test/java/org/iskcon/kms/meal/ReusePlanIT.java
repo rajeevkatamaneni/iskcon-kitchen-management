@@ -242,7 +242,8 @@ class ReusePlanIT extends AbstractIntegrationTest {
 
 		mvc.perform(reuse("/reuse/preview", 1))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.days[0].fastName").value("Papamocani Ekadasi"))
+				// Stored as GCAL spells it, read out as the app spells it (Rajeev, 2026-09-18).
+				.andExpect(jsonPath("$.days[0].fastName").value("Papamocani Ekadashi"))
 				// Rice carries grain and is refused; sago does not and survives. Both are named on the
 				// screen before the button is pressed, which is the whole reason the screen exists.
 				.andExpect(jsonPath("$.days[0].meals[?(@.recipeName == 'Plain Rice')].copied").value(false))

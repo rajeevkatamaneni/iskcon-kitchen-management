@@ -366,6 +366,66 @@ class MealSaveIT extends AbstractIntegrationTest {
 				any(NotificationRecipient.class), eq(NotificationTemplate.SHIFT_CANCELLED), anyMap(), any());
 	}
 
+	// ---- The ceiling on a dish's amount (T-217) -------------------------------
+
+	/**
+	 * The bug this was written for, found on staging: 600 people at a 350 ml portion saved as 210,000
+	 * on a recipe measured in litres. The meal saved; the Today screen, which scales every planned dish
+	 * and refuses anything past 50,000, then failed for the whole kitchen. The save is where it is
+	 * refused now, against the one dish's amount, so the planner sees which box to fix.
+	 */
+	@Test
+	@DisplayName("a dish amount over 50,000 is refused on that dish's amount, and nothing is saved")
+	void aDishAmountOverTheCeilingIsRefused() throws Exception {
+		String body = """
+				{"planDate":"%s","mealKindId":"%s","adults":600,
+				 "dishes":[{"recipeId":"%s","targetYield":100},{"recipeId":"%s","targetYield":210000}]}
+				""".formatted(DAY, lunch, khichdi, payasam);
+
+		mvc.perform(authed(post("/api/v1/meals")).contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400001"))
+				.andExpect(jsonPath("$.fieldErrors.length()").value(1))
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("dishes[1].targetYield"))
+				.andExpect(jsonPath("$.fieldErrors[0].message").value("Amount can be at most 50,000."));
+
+		assertThat(count("meals")).isZero();
+		assertThat(count("meal_dishes")).isZero();
+	}
+
+	@Test
+	@DisplayName("a dish amount of exactly 50,000 saves, because that is what the Today screen can still scale")
+	void aDishAmountAtTheCeilingSaves() throws Exception {
+		save("""
+				{"planDate":"%s","mealKindId":"%s","adults":600,
+				 "dishes":[{"recipeId":"%s","targetYield":50000}]}
+				""".formatted(DAY, lunch, khichdi));
+
+		assertThat(count("meal_dishes")).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("editing a meal refuses a dish amount over 50,000 in the same words")
+	void anEditOverTheCeilingIsRefused() throws Exception {
+		UUID meal = save(lunchWithShift(6));
+		UUID dish = admin.queryForObject(
+				"SELECT id FROM meal_dishes WHERE meal_id = ? AND recipe_id = ?", UUID.class, meal, khichdi);
+		UUID other = admin.queryForObject(
+				"SELECT id FROM meal_dishes WHERE meal_id = ? AND recipe_id = ?", UUID.class, meal, payasam);
+
+		mvc.perform(authed(put("/api/v1/meals/{id}", meal)).contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"adults":100,
+								 "dishes":[{"id":"%s","recipeId":"%s","targetYield":50000.01},{"id":"%s","recipeId":"%s","targetYield":50}]}
+								""".formatted(dish, khichdi, other, payasam)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors[0].field").value("dishes[0].targetYield"))
+				.andExpect(jsonPath("$.fieldErrors[0].message").value("Amount can be at most 50,000."));
+
+		assertThat(admin.queryForObject("SELECT target_yield FROM meal_dishes WHERE id = ?",
+				java.math.BigDecimal.class, dish)).isEqualByComparingTo("100");
+	}
+
 	// ---------------------------------------------------------------------
 
 	/** Lunch on the day, two dishes, a hundred adults and a shift asking for this many volunteers. */
