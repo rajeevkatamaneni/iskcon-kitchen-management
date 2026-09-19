@@ -506,8 +506,9 @@ describe("an event, and what it is asked", () => {
       // Tight but possible: ready at 12:10, driving 38, leaves 12 minutes to carry it out and load.
       // Nobody here knows this temple's courtyard, so that is a warning and the save goes through.
       fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "12:10" } });
-      expect(screen.getByText(/only 12 minutes/i)).toBeInTheDocument();
-      expect(screen.getByText(/to load the van\. Make it ready earlier if you need more\./i)).toBeInTheDocument();
+      expect(
+        screen.getByText("You’ll only have 12 minutes to load the van and set up for service at the destination."),
+      ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
       fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
       await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));

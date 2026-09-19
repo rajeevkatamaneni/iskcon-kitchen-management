@@ -118,32 +118,62 @@ public class MealController {
 	}
 
 	/**
-	 * Cancels a meal and its volunteer shift (D-27, answer 5). The body is optional. Answers with how
-	 * many volunteers are being told, which is zero for a meal with no shift.
+	 * Cancels a meal and its volunteer shift (D-27, answer 5) — or, with {@code scope}
+	 * {@code THIS_AND_LATER}, this meal and every later occurrence of its repeating event (T-307). The
+	 * body is optional, and without one this is exactly the cancel it always was.
+	 *
+	 * <p>Answers {@code {volunteersTold, mealsCancelled, lastDate}}. {@code volunteersTold} is what it
+	 * always answered; the other two are new and say how many meals were cancelled and, for a meal in
+	 * a series, the date of the last occurrence still standing.
 	 */
 	@PostMapping("/{id}/cancel")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
-	public Map<String, Object> cancel(
+	public CancelledMeals cancel(
 			@PathVariable UUID id,
 			@Valid @RequestBody(required = false) CancelMealRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
-		int told = mealPlanService.cancel(actor, id, request == null ? null : request.reason());
-		return Map.of("volunteersTold", told);
+		return mealPlanService.cancel(actor, id, request);
 	}
 
 	/**
-	 * Repeats a meal forward for a number of weeks (E4-S15 D8). Copies, each editable and cancellable
-	 * on its own; no volunteer shift is copied.
+	 * What "Cancel this and every later one" would cancel, for the confirmation (T-307). Refused with
+	 * KMS-400178 for a meal that is not a repeating event.
+	 */
+	@GetMapping("/{id}/later-in-series")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public LaterInSeries laterInSeries(@PathVariable UUID id) {
+		return mealPlanService.laterInSeries(id);
+	}
+
+	/**
+	 * Repeats an event "once every N weeks until a date" (Rajeev, 2026-09-19), as a series: the source
+	 * and every copy share it, and each copy is still an ordinary meal, editable and cancellable on its
+	 * own. No volunteer shift is copied. Supersedes E4-S15 D8's "copies, not a series".
 	 */
 	@PostMapping("/{id}/repeat")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public RepeatEventResult repeat(
 			@PathVariable UUID id,
-			@RequestParam int weeks,
+			@Valid @RequestBody RepeatEventRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
-		return mealPlanService.repeatForward(actor, id, weeks);
+		return mealPlanService.repeat(actor, id, request.everyWeeks(), request.until());
+	}
+
+	/**
+	 * What {@code POST /{id}/repeat} would do with the same two answers, writing nothing: the dates it
+	 * would make, the ones it would skip and why, and the series afterwards. Refused exactly as the
+	 * repeat is, because it is the same walk.
+	 */
+	@GetMapping("/{id}/repeat-preview")
+	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
+	public RepeatEventResult repeatPreview(
+			@PathVariable UUID id,
+			@RequestParam int everyWeeks,
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate until) {
+
+		return mealPlanService.previewRepeat(id, everyWeeks, until);
 	}
 
 	/** When to leave the temple for this meal's delivery (E4-S16). Always 200. */

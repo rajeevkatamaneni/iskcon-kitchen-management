@@ -151,14 +151,20 @@ public final class MealFixture {
 	}
 
 	/**
-	 * Removes every meal, dish, day, card counter and meal kind, children first. Shifts pointing at a
-	 * meal must be removed before this (their foreign key is RESTRICT); job-card documents go with
-	 * their meal (CASCADE). Kinds are last because a meal holds its kind (RESTRICT), and removing them
-	 * here means a class that created a kind on demand cannot leave it behind to hold its temple down.
+	 * Removes every meal, dish, series, day, card counter and meal kind, children first. Shifts
+	 * pointing at a meal must be removed before this (their foreign key is RESTRICT); job-card
+	 * documents go with their meal (CASCADE). Kinds are last because a meal holds its kind (RESTRICT),
+	 * and removing them here means a class that created a kind on demand cannot leave it behind to hold
+	 * its temple down.
+	 *
+	 * <p>Series (T-307) go straight after the meals that point at them, and for the same reason as the
+	 * kinds: a series holds its temple with a RESTRICT key, so a test that repeated an event and cleaned
+	 * up with this helper alone used to fail at {@code DELETE FROM tenants} (T-310).
 	 */
 	public static void deleteAll(JdbcTemplate admin) {
 		admin.execute("DELETE FROM meal_dishes");
 		admin.execute("DELETE FROM meals");
+		admin.execute("DELETE FROM meal_series");
 		admin.execute("DELETE FROM meal_plan_days");
 		admin.execute("DELETE FROM meal_card_sequence");
 		admin.execute("DELETE FROM meal_kinds");

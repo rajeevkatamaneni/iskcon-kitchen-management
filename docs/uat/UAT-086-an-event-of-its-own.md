@@ -6,7 +6,7 @@
 | **Technical stories** | E4-S15 (events, and the end of catering) · E4-S16 (travel time for a delivered event, in **§travel**) |
 | **Roles exercised** | Kitchen staff, temple admin |
 | **Depends on** | UAT-032 (plan a meal), UAT-015 (recipes), UAT-034 (sufficiency) |
-| **Environment needs** | None for steps 1–48. **§travel** is written to be run **twice** — once with no map provider configured, once with one |
+| **Environment needs** | None for steps 1–70. Steps 64–67 need a volunteer account and a second browser window. **§travel** is written to be run **twice** — once with no map provider configured, once with one |
 
 > **This test replaces UAT-033**, which tested a *Catering order* kind that no longer exists. If you
 > are holding a printed pack with UAT-033 in it, throw that page away.
@@ -52,16 +52,24 @@ and its own job card. And the *Catering order* kind is gone: a temple that does 
   order, with cancelled ones dropping out. It is keyed off *is this going outside*, not off
   *is this catering*, so the school delivery and the community programme are in it too. Those are
   exactly as easy to forget on the morning as a wedding.
-- **An event repeats forward** for a chosen number of weeks. What that makes is **copies, not a
-  series** — each one is a plan in its own right and can be edited or cancelled without touching the
-  others.
+- **An event repeats as a series**: once every 1 to 12 weeks, until a date no more than a year from
+  today. Each occurrence is a plan in its own right and can be edited or cancelled on its own, but the
+  occurrences stay linked, so cancelling one that has later ones asks whether to cancel **just this
+  event** or **this and all later ones**. A date where the event is already planned, or where a dish
+  doesn't suit a fasting day, is skipped and named.
+  *Amended 2026-09-19.* This bullet used to say that repeating makes **copies, not a series**, with
+  no link between them and no question on cancelling. Rajeev replaced that decision on 2026-09-19,
+  after temple users asked for it: *"Let us change for many weeks to 'until' a date and also give them
+  the option to pick the duration between repeats, and a cancel of this repeating event should ask
+  JUST this event OR all events from this point onwards."* The story's record of both decisions is
+  E4-S15 D8 and D8b.
 - **`KMS-400073` is retired, not reused.** Somebody may still quote it from an old screenshot, so it
   keeps its old meaning and is never handed to anything new.
 
 ## Before you start
 
-- **Sign in as:** `ikms.kitchen-staff.1@trading4good.org` (kitchen staff). Steps 43–48 are easier as
-  `ikms.temple-admin.1@trading4good.org`.
+- **Sign in as:** `ikms.kitchen-staff.1@trading4good.org` (kitchen staff). Steps 43–69 are easier as
+  `ikms.temple-admin.1@trading4good.org`; step 70 goes back to kitchen staff.
 - **Start at:** **/planner** (menu: **Meal plan**)
 - You need at least one recipe (UAT-015). Use **Khichdi** where a preparation is called for, and
   anything sweet you have for the laddus.
@@ -149,40 +157,72 @@ and its own job card. And the *Catering order* kind is gone: a temple that does 
 | 43 | As the temple admin, provision or open a **brand-new** temple and look at its meal-kind list | **Breakfast, Lunch, Dinner, Festival feast, Deity Offering, Event.** No *Catering order* and no *Outside event* on a fresh temple either |
 | 44 | Look at any place that shows a **day type** — the day panel, a filter, a report | **CATERING** appears nowhere in the vocabulary. Days that used to carry it now read as an ordinary weekday or weekend |
 
-### Repeating it forward
+### Repeating it forward, as a series
+
+> *Amended 2026-09-19.* Until this date the section tested **copies, not a series**: repeat for a
+> number of weeks, and a cancel that never asked about the others. Rajeev replaced that on
+> 2026-09-19 (see *How it is supposed to work*). The old four steps are in git history; the steps
+> below test what was built instead (T-307, T-308, T-310).
+>
+> Do these as the **temple admin**. Call the date of the reading you saved at step 8 **R**. **R+2**
+> is the same weekday two weeks later, **R+4** four weeks later, and so on. Dates on screen are
+> written like `Sat 26 Dec 2026`, and the end date in the series line like `31 Dec 2026`. Words in
+> `code` are the exact words on screen; *&lt;angle brackets&gt;* stand for a number or a date.
 
 | # | Do this | You should see |
 |---|---|---|
-| 45 | Open the in-house `Children's Bhagavad-gita Reading` and find the option to **repeat it forward**, giving a number of weeks — say **6** | Six copies land on the next six matching weekdays, each with the name, the dishes, the amounts and the ready-by time |
-| 46 | Open the third copy and change its amount — 50 pieces instead of 30 | Saved |
-| 47 | Open the first, second and fourth copies | **Unchanged at 30.** These are copies, not a series: editing one must not edit the rest, and no *this one or all of them?* question should appear |
-| 48 | **Cancel** the fifth copy | It goes, and the other five stay. Check the sixth especially |
+| 45 | Plan `Children's Bhagavad-gita Reading` by hand on **R+4**, exactly as at steps 3–8 (the name autocompletes) | Saved. R+4 has one reading on it |
+| 46 | Go back to **R**. Look at the reading's card, and at the Breakfast card from step 14 | The reading's card has a button `Repeat this event`. The Breakfast card has none: only an event repeats |
+| 47 | Press `Repeat this event` | One sentence opens: `Repeat Children's Bhagavad-gita Reading` `once every` **[1]** `week` `until` **[a date]**, then an **i**, `Repeat` and `Close`. The box holds **1** and the word after it is `week`, singular. The end date is six weeks after R. Under the sentence: `Makes 5 copies · last one` *&lt;R+6&gt;*, and `Skips` *&lt;R+4&gt;*`: this event is already planned that day.` |
+| 48 | Press the **i** | `Each copy can be edited or cancelled on its own. The copies stay linked, so you can cancel the later ones together.` |
+| 49 | Change **1** to **2** | The word changes to `weeks`. You have not picked an end date yet, so it moves out to twelve weeks after R, and the line reads `Makes 5 copies · last one` *&lt;R+12&gt;*, still skipping R+4. **If an Ekadashi falls on one of those dates** (check the Vaishnava calendar) it is skipped too, because Chiwda is a grain: `Skips` *&lt;date&gt;*`: a dish doesn’t suit the fasting day.` Take one off every count below for each such date |
+| 50 | Pick an end date yourself: the **day before** R+12 | The count changes as you pick, without pressing anything: `Makes 4 copies · last one` *&lt;R+10&gt;*. The last copy is never after the end date |
+| 51 | Now pick **R+12** itself. Then change the gap to 1 and back to 2 | `Makes 5 copies · last one` *&lt;R+12&gt;*: an end date that lands on a copy's date includes it. Changing the gap does **not** move a date you picked yourself |
+| 52 | Type **0** in the gap box, then **13** | Both times, in red text under the sentence (not a banner at the top of the page): `An event can repeat every 1 to 12 weeks. Choose a number from 1 to 12.` `Repeat` is dead. The server's code for this is **`KMS-400175`** |
+| 53 | Put the gap back to **2** and clear the end date | `Choose the date to repeat until.` `Repeat` is dead |
+| 54 | Set the end date to **R+1**, before the first copy could land | `No copies fit before that end date. Choose a later end date, or repeat more often.` `Repeat` is dead. Code **`KMS-400177`** |
+| 55 | Set the end date to **exactly one year from today**, then to **one day more** (type it if the date box won't let you pick it) | One year from today is accepted and counted. One day more: `The end date has to be within a year from today. Choose an earlier end date.` `Repeat` is dead. Code **`KMS-400176`** |
+| 56 | Set the end date back to **R+12**, gap **2**, and press `Repeat` | The panel closes and a green notice stays on the card: `Made 5 copies · last one` *&lt;R+12&gt;*`.` and under it `Skipped` *&lt;R+4&gt;*`: this event is already planned that day.` The same numbers and dates the preview promised |
+| 57 | Open **R+2, R+6, R+8, R+10 and R+12** | The reading is on each one, with the same name, dishes, 30 pieces and ready-by time. **R+4 still has exactly one reading**, the one you planned at step 45, with nothing added to it |
+| 58 | Read the line under the reading's name on the **R+6** card, then on the **R** card | Grey text with a repeat icon, not a coloured pill: `Repeats every 2 weeks until` *&lt;R+12&gt;* `· event 3 of 6` on R+6, and `· event 1 of 6` on R |
+| 59 | Open **R+6** to edit it | Under the heading: `Repeats every 2 weeks until` *&lt;R+12&gt;* `· event 3 of 6. Changes here apply to this date only.` |
+| 60 | Change the sweet from 30 pieces to **50** and save | Saved. **No question** about the other dates |
+| 61 | Open **R+2 and R+8** | **Still 30.** Editing one occurrence changes that one only |
+| 62 | On **R+10**, press **Cancel** | The dialog asks `This event repeats. Which do you want to cancel?` with two choices, `Just this event` (already chosen) and `This and all later ones`. The focus is on `Keep it`. The body reads `Its preparations come off the plan.` and the button `Cancel this meal`. Press it: `Children's Bhagavad-gita Reading was cancelled.` |
+| 63 | Look at **R+8 and R+12** | Both still planned. The count only counts what still stands: R+12 now reads `· event 5 of 5`, and R+10's line has no *event N of M* at all |
+| 64 | Post a volunteer shift on **R+12** and have `ikms.volunteer.1@trading4good.org` sign up for it (UAT-048, UAT-049) | The shift shows one volunteer |
+| 65 | On **R+2**, press **Cancel** and choose `This and all later ones`. **Do not confirm yet** | The body changes to three lines: `Cancels this event and 3 later ones, the last on` *&lt;R+12&gt;*`.` / *&lt;R+6&gt;* `was changed on its own and will be cancelled too.` / `1 volunteer is signed up or waiting across these events, and will be told.` The button reads `Cancel 4 events`. R+10, cancelled already, is not counted |
+| 66 | Leave that dialog open. In a **second browser window**, signed in the same way, cancel **R+8** alone with `Just this event`. Go back to the first window and press `Cancel 4 events` | The dialog **stays open** and says `The later events changed while you were deciding, so nothing was cancelled.` `Look at the list again, then confirm.` `If you need help, quote KMS-400179`. The body now reads `Cancels this event and 2 later ones, …` and the button `Cancel 3 events`. Check in the second window: **R+2 is still planned** |
+| 67 | Press `Cancel 3 events` | `Children's Bhagavad-gita Reading was cancelled on 3 dates. 1 volunteer was told.` R+2, R+6 and R+12 are cancelled. **R is untouched**: nothing before the one you started from is ever cancelled. R+4, planned by hand, was never part of the series and is still planned. The volunteer is told the shift is off, as UAT-048 describes. R's series line now ends at R's own date: the end date shrinks to the last one still standing |
+| 68 | Cancel the `Vidyaranyapura School Gita Reading` you saved at step 32, which was never repeated | **No question.** The dialog is the one it always was: `Its preparations come off the plan.` and `Cancel this meal` |
+| 69 | Cancel the reading on **R**, now the only one left standing in its series | **No question** either: there is nothing later to ask about |
+| 70 | Sign in as **kitchen staff**. Open the reading on **R+4**, repeat it `once every` **1** `week` until R+6, then cancel the first copy with `This and all later ones` | Both work exactly as they did for the temple admin, with the same sentences. Kitchen staff plan meals, so they hold the same permission. A refusal here is **Major** |
 
 ### §travel — Leave the temple by
 
-> Run this section **twice**: once with **no map provider configured** (steps 49–51), and once with
-> one (steps 52–58). The first run is the more important of the two — it proves a map service the
+> Run this section **twice**: once with **no map provider configured** (steps 71–73), and once with
+> one (steps 74–80). The first run is the more important of the two — it proves a map service the
 > temple does not have cannot stop a cook planning a meal.
 
 **With no provider configured**
 
 | # | Do this | You should see |
 |---|---|---|
-| 49 | Plan a **delivered** event exactly as at step 27 | It saves, in the same number of clicks and the same time as it did before any of this existed |
-| 50 | Open it and look where the travel estimate would be | **A quiet line saying it is unavailable** — one sentence, in the ordinary text colour. Not a red error, not a spinner that never stops, and not a blank space where something clearly should be |
-| 51 | Plan a pickup event, an in-house event, a Lunch and a Deity Offering | All four behave exactly as they always have. **Nothing about the planner is different** because a map service is absent |
+| 71 | Plan a **delivered** event exactly as at step 27 | It saves, in the same number of clicks and the same time as it did before any of this existed |
+| 72 | Open it and look where the travel estimate would be | **A quiet line saying it is unavailable** — one sentence, in the ordinary text colour. Not a red error, not a spinner that never stops, and not a blank space where something clearly should be |
+| 73 | Plan a pickup event, an in-house event, a Lunch and a Deity Offering | All four behave exactly as they always have. **Nothing about the planner is different** because a map service is absent |
 
 **With a provider configured**
 
 | # | Do this | You should see |
 |---|---|---|
-| 52 | Open the delivered event from step 27 — guests eat at **13:00**, address in Rajajinagar | A line reading **Leave the temple by _HH:MM_**, and a **range** beside it — *35 to 45 minutes*, or whatever the drive actually is |
-| 53 | Do the arithmetic: guests' serving time minus the slower end of the range | The leave-by time agrees with your sum. It is worked **backwards from when the guests eat**, not forwards from the ready-by |
-| 54 | Read what the estimate says about itself | It is plainly an estimate with a range, not a single confident number. A driver can act on *leave by 11:15*; nobody can act on *37 minutes* |
-| 55 | Open a **pickup** event, and an **in-house** one | **No estimate on either**, and neither was ever asked for an address. Nothing to travel to |
-| 56 | Plan a delivery to a **nonsense address** — `Zzzz Qqqq, 999999` | The plan **still saves**. You are told the address could not be found, quoting **`KMS-400078`** — the one failure worth telling somebody about, because they can fix it |
-| 57 | Re-open that plan | It is there, whole, with everything you typed. A map service that could not find a street has not cost you the meal plan |
-| 58 | Plan a delivery to somewhere **hours away** — another city — and save | **Accepted.** The estimate is advice, never a rule. A temple that wants to send food two hours away may. If a long drive is ever *refused*, that is a **Major** defect |
+| 74 | Open the delivered event from step 27 — guests eat at **13:00**, address in Rajajinagar | A line reading **Leave the temple by _HH:MM_**, and a **range** beside it — *35 to 45 minutes*, or whatever the drive actually is |
+| 75 | Do the arithmetic: guests' serving time minus the slower end of the range | The leave-by time agrees with your sum. It is worked **backwards from when the guests eat**, not forwards from the ready-by |
+| 76 | Read what the estimate says about itself | It is plainly an estimate with a range, not a single confident number. A driver can act on *leave by 11:15*; nobody can act on *37 minutes* |
+| 77 | Open a **pickup** event, and an **in-house** one | **No estimate on either**, and neither was ever asked for an address. Nothing to travel to |
+| 78 | Plan a delivery to a **nonsense address** — `Zzzz Qqqq, 999999` | The plan **still saves**. You are told the address could not be found, quoting **`KMS-400078`** — the one failure worth telling somebody about, because they can fix it |
+| 79 | Re-open that plan | It is there, whole, with everything you typed. A map service that could not find a street has not cost you the meal plan |
+| 80 | Plan a delivery to somewhere **hours away** — another city — and save | **Accepted.** The estimate is advice, never a rule. A temple that wants to send food two hours away may. If a long drive is ever *refused*, that is a **Major** defect |
 
 ## It passes if
 
@@ -197,7 +237,14 @@ and its own job card. And the *Catering order* kind is gone: a temple that does 
 - [ ] Upcoming outside commitments lists future ones in date order, drops cancelled ones, and shows no past ones.
 - [ ] A pre-existing catering plan survives as an outside event with its client, contact and venue intact.
 - [ ] No *Catering order* kind exists for an existing temple **or a newly provisioned one**, and `CATERING` appears nowhere as a day type.
-- [ ] An event repeats forward for a chosen number of weeks and **each copy is independently editable**.
+- [ ] An event repeats **once every 1 to 12 weeks until a date**, the sentence says `week` at 1 and `weeks` above it, and the count and last date shown before pressing `Repeat` are what it makes.
+- [ ] A date where the event is already planned, or a fasting day a dish doesn't suit, is skipped and named, before and after `Repeat`.
+- [ ] A gap outside 1 to 12, an end date past a year from today, or one that fits no copy is refused beside the control and `Repeat` stays dead (`KMS-400175`, `KMS-400176`, `KMS-400177` behind it).
+- [ ] Every occurrence shows `Repeats every … until … · event N of M`, on its card and on its edit page, and **each occurrence is still editable on its own**.
+- [ ] Cancelling an occurrence that has later ones asks `Just this event` or `This and all later ones`; "later" names the count, the last date, the ones changed on their own and the volunteers, and never touches an earlier occurrence.
+- [ ] If the later ones change while the question is open, nothing is cancelled and the fresh list is shown (`KMS-400179`).
+- [ ] An event never repeated, or the last one standing, cancels with no question.
+- [ ] Kitchen staff can repeat and cancel a series as the temple admin can.
 - [ ] **§travel** — a delivered event shows a leave-by time and a range, derived from the guests' serving time.
 - [ ] **§travel** — a pickup event and an in-house event show no estimate and are asked for no address.
 - [ ] **§travel** — with no provider configured, the planner works exactly as before and shows a quiet unavailable line.
@@ -211,6 +258,12 @@ says what is missing, which is the pattern the planner has used since UAT-032. S
 by hand will usually see the hint, not the code. The codes are real and are what the server answers —
 they are covered by automated tests, and they appear on screen if a save ever reaches the server
 without them. **Record the hint you saw; do not log a defect merely because no `KMS-` code appeared.**
+
+The repeat control works the same way (steps 52–55): its refusals show as red text under the
+sentence with `Repeat` dead, in the server's words where the server has answered, and with no code on
+screen. `KMS-400175`, `KMS-400176` and `KMS-400177` are what the server answers behind them. The one
+repeat-series refusal that does show its code is `KMS-400179` (step 66), because it happens after you
+confirm.
 
 ## Watch out for
 
@@ -230,10 +283,18 @@ without them. **Record the hint you saw; do not log a defect merely because no `
   the exact message.
 - **An event that saves with a name and nothing else.** Note what happens: no preparation at all is
   a different refusal (UAT-032 step 19) and should say so in its own words.
-- **Repeat-forward growing a series.** If cancelling one copy offers *this one or all of them?*, or
-  if editing one changes the others, that is not what was built — copies were chosen deliberately
-  over a recurrence rule. Record which behaviour you saw.
-- **A travel estimate that blocks or slows the save.** Step 49 with no provider is the check that
+- **A cancel that reaches too far.** `This and all later ones` must cancel only the occurrence you
+  started from and the ones after it that are still to cook. An earlier occurrence cancelled, a date
+  cancelled that the dialog did not count, or a meal already cooked or recorded coming off the plan is
+  a **Blocker**: it is food the kitchen was going to make, or made. Write down the dates.
+  *Amended 2026-09-19.* This point replaces one that said the opposite: that a cancel asking *this one or all of
+  them?* was a defect, because copies had been chosen over a series. Rajeev reversed that decision on
+  2026-09-19, and that question is now what was built.
+- **Editing one occurrence changing the others.** The series links the dates for cancelling; it does
+  not make them one plan. If an edit on one date shows up on another, record it as Major.
+- **A count that lies.** The number in `Makes … copies`, `Made … copies` and `Cancel … events` has to
+  match what you then find on the planner, date by date. Count them.
+- **A travel estimate that blocks or slows the save.** Step 71 with no provider is the check that
   matters: if planning a delivery is any slower than planning a Lunch, or ever hangs, the map call
   is standing between a cook and a meal plan. Time both and write the two numbers down.
 - **A travel estimate that never changes.** Look at the same delivery on two different days at two

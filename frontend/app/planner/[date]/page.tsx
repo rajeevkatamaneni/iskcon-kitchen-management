@@ -10,6 +10,7 @@ import { Screen } from "@/components/ds/Screen";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { DayView } from "@/components/planner/DayView";
+import { savedNotice } from "@/components/planner/savedNotice";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
@@ -48,10 +49,11 @@ function PlannerDayScreen() {
   const captured = useRef(false);
   useEffect(() => {
     if (captured.current) return;
-    const kind = search.get("saved");
-    if (!kind) return;
+    // Phrased by the same function the planner uses, so one save reads the same on both (T-311).
+    const notice = savedNotice(search.get("saved"));
+    if (!notice) return;
     captured.current = true;
-    setSaved(kind);
+    setSaved(notice);
     if (date) router.replace(`/planner/${date}`);
   }, [search, router, date]);
 
@@ -78,7 +80,7 @@ function PlannerDayScreen() {
                 // and date stepper are the way to a week, and the sidebar is the way to the calendar.
               />
               {/* No margin of its own: the screen's 24px gap already separates it (it was 48). */}
-              {saved && <InlineNotice tone="success" autoDismiss title={`${saved} was saved.`} />}
+              {saved && <InlineNotice tone="success" autoDismiss title={saved} />}
               {/* Its own address, so a meal opened from here comes back here (T-219). */}
               <DayView date={date} returnTo={`/planner/${date}`} />
             </>

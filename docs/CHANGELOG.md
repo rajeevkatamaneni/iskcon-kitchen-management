@@ -784,6 +784,31 @@ small canonical unit loses precision.
 No UAT stories were written with these. Five of them touch screens a person has to drive, and the
 UAT pack is written from what Rajeev's own pass finds (Commandment 6).
 
+### 2026-09-19 — EPIC-4, E4-S15: a repeated event is a series, once every N weeks until a date (D8 superseded by D8b)
+
+**Amended at Rajeev's request in the terminal, 2026-09-19.** Temple users asked him for it, and he
+decided, in his words: *"Let us change for many weeks to 'until' a date and also give them the option
+to pick the duration between repeats, and a cancel of this repeating event should ask JUST this event
+OR all events from this point onwards. … Let us build it now… I want it to have all the bells and
+whistles possible."* The conductor's ledger (`docs/work/PROCUREMENT-PROGRESS.md`, 11:33 PDT) records
+the same instruction.
+
+**What changed in the story.** D8 said a repeat was *"a copy, not a series"* and deferred a true
+recurrence rule. It is struck through, not deleted, and D8b replaces it: an event repeats once every
+1 to 12 weeks until a date no more than a year ahead, as a linked series (`meal_series`, V149,
+tenant-owned with row-level security). The count, last date and skipped dates show before anything is
+made. Each occurrence is still edited on its own. Cancelling one with later occurrences asks *Just
+this event* or *This and all later ones*. The second never touches an earlier, cooked or recorded
+occurrence, and cancels nothing if the later ones changed while the question was open. Error codes
+KMS-400175 to 400179. The acceptance criterion *"repeats forward for a chosen number of weeks"* is
+struck and replaced by two criteria that say the above.
+
+**What D8 feared, and why it is answered.** D8's worry was edit-this-versus-edit-all. The built series
+never asks it: editing is always this date only, and only cancelling reaches the later ones.
+
+UAT-086 gains the repeat steps (45 to 70) and `docs/uat/TRACEABILITY.md` its rows (task T-309). Built
+by T-307, T-308 and T-340. Not seen working by Rajeev.
+
 ---
 
 ## Error codes

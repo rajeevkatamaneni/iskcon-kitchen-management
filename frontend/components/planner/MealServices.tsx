@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
@@ -18,18 +18,22 @@ import { withReturn } from "@/components/planner/plannerAddress";
 import {
   api,
   toApiError,
-  type ApiError,
+  ApiError,
+  type CancelScope,
+  type LaterInSeries,
   type MealCrewView,
   type MealDishView,
+  type MealSeries,
   type MealSufficiency,
   type MealView,
   type RecipeSummary,
+  type RepeatEventResult,
   type ShiftView,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { generateAndDownload } from "@/lib/document-download";
-import { cooksQuantity, hhmm, shortDate, templeDay, unitLabelFor } from "@/lib/format";
+import { cooksQuantity, dateWithYear, hhmm, shortDate, templeDay, todayIso, unitLabelFor } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 
 /**
@@ -262,6 +266,15 @@ function MealBlock({
   const [cancelling, setCancelling] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState<ApiError | null>(null);
+  /**
+   * The later occurrences "this and all later ones" would reach, read when Cancel is pressed on a
+   * meal in a series. Null for a meal in no series, or one with nothing later still to cook — and
+   * then the question is never asked and the cancel is exactly what it was before series existed.
+   */
+  const [later, setLater] = useState<LaterInSeries | null>(null);
+  const [scope, setScope] = useState<CancelScope>("THIS");
+  /** True while the later occurrences are being read, between the press and the question. */
+  const [readingLater, setReadingLater] = useState(false);
 
   /**
    * Correcting a recorded meal is the Temple Admin's alone (D-4), unlike recording it, which admin,
@@ -289,6 +302,51 @@ function MealBlock({
    */
   const canCancel = !readOnly && !meal.recorded && meal.status === "PLANNED";
 
+  /** The series this meal is one of, or null. `?? null` because an older fixture may leave it out. */
+  const series = meal.series ?? null;
+
+  /**
+   * Whether "this and all later ones" is a real choice: the series goes on past this meal and at
+   * least one of the later ones is still to cook. Past, cooked, recorded and cancelled ones are never
+   * in the server's list, so a series whose later dates have all gone asks nothing.
+   */
+  const offerLater = later !== null && later.later.length > 0;
+  const allLater = scope === "THIS_AND_LATER" && offerLater;
+
+  /**
+   * Reads what "this and all later ones" would cancel. A failure reads as "nothing later", which asks
+   * nothing and cancels just this meal — the behaviour from before series existed, and never more
+   * than the person could see.
+   */
+  async function readLater(): Promise<LaterInSeries | null> {
+    try {
+      const found = await api.laterInSeries(meal.mealId, await getToken());
+      setLater(found);
+      return found;
+    } catch {
+      setLater(null);
+      return null;
+    }
+  }
+
+  /**
+   * Opens the question. For a meal in a series with dates after this one, the later ones are read
+   * first and the question opens once they are in, so it opens already knowing whether to ask "just
+   * this one or all later ones" and never changes shape under the reader's eyes. A meal in no series
+   * opens at once, as before.
+   */
+  async function askToCancel() {
+    setCancelError(null);
+    setScope("THIS");
+    setLater(null);
+    if (series && series.position != null && series.position < series.count) {
+      setReadingLater(true);
+      await readLater();
+      setReadingLater(false);
+    }
+    setCancelling(true);
+  }
+
   /**
    * Cancels the meal and its volunteer shift in one go (D-27 answer 5). Nothing is sent until the
    * warning has been read, and the server tells signed-up and waiting volunteers after it commits.
@@ -297,16 +355,34 @@ function MealBlock({
     setCancelBusy(true);
     setCancelError(null);
     try {
-      const result = await api.cancelMeal(meal.mealId, null, await getToken());
+      const token = await getToken();
+      // "Just this event" sends exactly what a cancel sent before series existed. "This and all later
+      // ones" sends the ids the question showed, so the server cancels those and nothing else — and
+      // cancels nothing at all if the set has changed since (KMS-400179).
+      const result = allLater
+        ? await api.cancelMeal(meal.mealId, null, token, {
+            scope: "THIS_AND_LATER",
+            expectedMealIds: later!.later.map((l) => l.mealId),
+          })
+        : await api.cancelMeal(meal.mealId, null, token);
       setCancelling(false);
       const told = result.volunteersTold;
+      const toldLine =
+        told > 0 ? ` ${told} ${told === 1 ? "volunteer was" : "volunteers were"} told.` : "";
       onCancelled(
-        told > 0
-          ? `${name} was cancelled. ${told} ${told === 1 ? "volunteer was" : "volunteers were"} told.`
-          : `${name} was cancelled.`
+        allLater
+          ? `${name} was cancelled on ${result.mealsCancelled} ${result.mealsCancelled === 1 ? "date" : "dates"}.${toldLine}`
+          : `${name} was cancelled.${toldLine}`
       );
     } catch (e) {
-      setCancelError(toApiError(e, "We couldn’t cancel that meal."));
+      const error = toApiError(e, "We couldn’t cancel that meal.");
+      if (error instanceof ApiError && error.code === "KMS-400179") {
+        // The later dates changed while the question was open. Nothing was cancelled; the fresh list
+        // is shown under the server's own sentence, and the person confirms again against it.
+        const fresh = await readLater();
+        if (!fresh || fresh.later.length === 0) setScope("THIS");
+      }
+      setCancelError(error);
     } finally {
       setCancelBusy(false);
     }
@@ -450,6 +526,9 @@ function MealBlock({
               ))}
           </div>
 
+          {/* Which series this meal belongs to, and which of it this is. A fact, so plain text. */}
+          {series && <SeriesLine series={series} />}
+
           <TravelLine meal={meal} />
 
           {meal.kitchenNotes && <p className="text-sm text-ink-secondary">{meal.kitchenNotes}</p>}
@@ -488,10 +567,9 @@ function MealBlock({
                 size="sm"
                 variant="ghost"
                 aria-haspopup="dialog"
-                onClick={() => {
-                  setCancelError(null);
-                  setCancelling(true);
-                }}
+                busy={readingLater}
+                disabled={readingLater}
+                onClick={() => void askToCancel()}
               >
                 Cancel this meal
               </Button>
@@ -506,14 +584,47 @@ function MealBlock({
       {cancelling && (
         <ConfirmLayer
           title={`Cancel ${name}?`}
-          confirmLabel="Cancel this meal"
+          confirmLabel={allLater ? `Cancel ${later!.later.length + 1} events` : "Cancel this meal"}
           dismissLabel="Keep it"
           danger
           busy={cancelBusy}
           onDismiss={() => setCancelling(false)}
           onConfirm={cancelMeal}
         >
-          <p>{shift ? cancelWarning(shift) : "Its preparations come off the plan."}</p>
+          {/* Asked only when there is a later one still to cook (Rajeev, 2026-09-19: "JUST this event
+              OR all events from this point onwards"). Two radios in a fieldset rather than two act
+              buttons: the act stays the one red button at the foot, whose label changes to say how
+              many it will cancel, so nothing is cancelled by pressing the answer to a question. */}
+          {offerLater && (
+            <fieldset className="grid gap-1">
+              <legend className="mb-1 font-medium text-ink">This event repeats. Which do you want to cancel?</legend>
+              <label className="flex min-h-touch cursor-pointer items-center gap-3 text-ink">
+                <input
+                  type="radio"
+                  name={`cancel-scope-${meal.mealId}`}
+                  checked={scope === "THIS"}
+                  onChange={() => setScope("THIS")}
+                  className="h-4 w-4 flex-none accent-accent"
+                />
+                Just this event
+              </label>
+              <label className="flex min-h-touch cursor-pointer items-center gap-3 text-ink">
+                <input
+                  type="radio"
+                  name={`cancel-scope-${meal.mealId}`}
+                  checked={scope === "THIS_AND_LATER"}
+                  onChange={() => setScope("THIS_AND_LATER")}
+                  className="h-4 w-4 flex-none accent-accent"
+                />
+                This and all later ones
+              </label>
+            </fieldset>
+          )}
+          {allLater ? (
+            <LaterWarning later={later!} />
+          ) : (
+            <p>{shift ? cancelWarning(shift) : "Its preparations come off the plan."}</p>
+          )}
           {cancelError && <ErrorNotice error={cancelError} />}
         </ConfirmLayer>
       )}
@@ -521,7 +632,7 @@ function MealBlock({
       {/* Only an event repeats, and only one that is still to be cooked. There is nothing to say
           about repeating a Lunch: the temple cooks one every day of the year already. */}
       {!readOnly && !meal.recorded && meal.eventName && open.length > 0 && (
-        <RepeatForward meal={meal} onChanged={onChanged} onError={onError} />
+        <RepeatForward meal={meal} onChanged={onChanged} />
       )}
 
       <div className="mt-4 grid">
@@ -736,8 +847,9 @@ function MealBlock({
  *
  * <p>It is not <em>also</em> passed to `onError`. The page banner has no way to clear itself, so a
  * refusal followed by a successful retry would leave a red notice contradicting the green one. The
- * two acts that still hand their failures upwards — the job card and repeating an event forward —
- * are on the meal's header, where the top of the screen is at least in the same view.
+ * one act that still hands its failures upwards — the job card — is on the meal's header, where the
+ * top of the screen is at least in the same view. Repeating an event used to be the second, and since
+ * T-308 says its refusals beside its own control.
  */
 function RecordMeal({
   meal,
@@ -1298,6 +1410,39 @@ function cancelWarning(shift: ShiftView): string {
   return `This meal has a volunteer shift. ${who}. Cancelling the meal cancels the shift too, and they will be told.`;
 }
 
+/**
+ * What "this and all later ones" will reach, said before it is pressed: how many, until when, which
+ * of them somebody had changed on their own, and how many volunteers will hear about it.
+ *
+ * <p>The edited ones are named by date because they are the surprise. A copy somebody took the time to
+ * change — a different menu for Janmashtami week, say — is the one a planner would want to think about
+ * before cancelling it with the rest.
+ */
+function LaterWarning({ later }: { later: LaterInSeries }) {
+  const n = later.later.length;
+  const edited = later.later.filter((l) => l.edited).map((l) => dayWithYear(l.planDate));
+  const told = later.volunteersToTell;
+  return (
+    <>
+      <p>
+        Cancels this event and {n} later {n === 1 ? "one" : "ones"}
+        {later.lastDate ? `, the last on ${dayWithYear(later.lastDate)}` : ""}.
+      </p>
+      {edited.length > 0 && (
+        <p>
+          {andList(edited)} {edited.length === 1 ? "was" : "were"} changed on {edited.length === 1 ? "its" : "their"} own
+          and will be cancelled too.
+        </p>
+      )}
+      <p>
+        {told > 0
+          ? `${told} ${told === 1 ? "volunteer is" : "volunteers are"} signed up or waiting across these events, and will be told.`
+          : "No volunteers are signed up for any of them."}
+      </p>
+    </>
+  );
+}
+
 /** "200 adults, 40 children, 30 seniors" — the count the servings were worked out from. */
 /** What each preparation had left, for the line under the figures. */
 function leftovers(
@@ -1391,99 +1536,407 @@ function unavailableLine(reason: string | null): string {
 }
 
 /**
- * Repeating an event forward for a number of weeks (E4-S15 D8).
+ * The widest gap an event can repeat at, in weeks. The server refuses anything outside 1 to 12
+ * (KMS-400175); the box says the same so the refusal is rarely needed.
+ */
+const MOST_WEEKS_APART = 12;
+
+/**
+ * A calendar date some whole days on — "YYYY-MM-DD" in, "YYYY-MM-DD" out.
  *
- * <p>What it makes is <strong>copies, not a series.</strong> Each one is a plan in its own right:
- * edit the third and the other five are untouched, cancel the fifth and nothing asks *this one or
- * all of them?* A true recurrence rule with per-occurrence exceptions was considered and deferred —
- * it is a feature that grows teeth, and the temple's actual problem is not wanting to type the same
- * Saturday reading fifty-two times.
+ * <p>Worked in UTC over a moment built in UTC, so no reader's zone takes part: a wall date plus seven
+ * days is a wall date, and running it through the browser's clock would move it across a daylight
+ * saving change for somebody reading from Europe. The temple's own zone is not needed either, for the
+ * same reason — there is no instant here, only a date.
+ */
+function plusDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const at = new Date(Date.UTC(y, m - 1, d + days));
+  return [
+    at.getUTCFullYear(),
+    String(at.getUTCMonth() + 1).padStart(2, "0"),
+    String(at.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/**
+ * A year after a date, the way the server counts it (`LocalDate.plusYears(1)`): the same day next
+ * year, and 29 February becomes 28 February. The end date may be this and not a day more (KMS-400176).
+ */
+function plusOneYear(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const day = m === 2 && d === 29 ? 28 : d;
+  return `${y + 1}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/**
+ * The dates a repeat would make, worked out here from the arithmetic alone: the event's date plus
+ * every whole multiple of the gap, up to and including the end date, and none before today at the
+ * temple.
+ *
+ * <p>This is the instant answer the repeat control shows while the preview is still on its way. It
+ * does not know which dates are fasting days or already have this event planned, so the preview
+ * replaces it as soon as it arrives. The server walks the same arithmetic (T-307), so apart from
+ * those two kinds of skipped date the two agree. The past-date floor matches T-310, which makes the
+ * server skip past dates too.
+ *
+ * <p>Exported for its test only.
+ */
+export function repeatDates(planDate: string, everyWeeks: number, until: string, today: string): string[] {
+  const dates: string[] = [];
+  if (!Number.isInteger(everyWeeks) || everyWeeks < 1) return dates;
+  // A year of weekly copies is 53 at most; the bound is only there so a nonsense date cannot spin.
+  for (let k = 1; k <= 60; k += 1) {
+    const date = plusDays(planDate, 7 * everyWeeks * k);
+    if (date > until) break;
+    if (date >= today) dates.push(date);
+  }
+  return dates;
+}
+
+/**
+ * "Sat 26 Dec 2026". The day of the week leads, because a repeating event is thought of by its day —
+ * the Saturday reading — and a list of dates that did not say so would leave the reader to check each
+ * one against a calendar. The rest is the app's one short date with a year.
+ */
+export function dayWithYear(iso: string): string {
+  const weekday = new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short" });
+  return `${weekday} ${dateWithYear(iso)}`;
+}
+
+/** "A", "A and B", "A, B and C" — dates named in a sentence rather than counted. */
+function andList(items: string[]): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** "8 copies", "1 copy". */
+function copiesOf(n: number): string {
+  return `${n} ${n === 1 ? "copy" : "copies"}`;
+}
+
+/**
+ * The line that says a meal is one of a repeating series — "Repeats every 2 weeks until 31 Dec 2026 ·
+ * event 3 of 8".
+ *
+ * <p>Plain text in the secondary colour, not a pill. Belonging to a series is a fact about the meal,
+ * not a warning and not the result of anything the reader just did, so it takes no colour (Rajeev,
+ * 2026-09-18: amber warns, red is serious, green is only the reader's own success). "Event 3 of 8"
+ * rather than a bare "3 of 8", which the crew count beside the name already says in the same shape.
+ *
+ * <p>The until date is the end date that was asked for, as the series records it. After "this and all
+ * later ones" the server shrinks it to the last one still standing, so the line stays true.
+ *
+ * <p>Exported for the meal's own edit screen, which shows the same line.
+ */
+export function seriesLine(series: MealSeries): string {
+  const every = series.everyWeeks === 1 ? "every week" : `every ${series.everyWeeks} weeks`;
+  const which = series.position != null ? ` · event ${series.position} of ${series.count}` : "";
+  return `Repeats ${every} until ${dateWithYear(series.until)}${which}`;
+}
+
+/**
+ * {@link seriesLine}, drawn: a repeat icon, then the sentence, with the date and "event 3 of 8" each
+ * held together so a phone never breaks "event 1" from "of 7" or "31 Dec" from "2026" (measured at
+ * 390px, T-308). `note` follows on the same line where a screen has something to add.
+ */
+export function SeriesLine({ series, note }: { series: MealSeries; note?: string }) {
+  const every = series.everyWeeks === 1 ? "every week" : `every ${series.everyWeeks} weeks`;
+  return (
+    <p className="flex items-baseline gap-1.5 text-sm text-ink-secondary">
+      <i aria-hidden="true" className="ti ti-repeat self-center" />
+      <span>
+        Repeats {every} until <span className="whitespace-nowrap">{dateWithYear(series.until)}</span>
+        {series.position != null && (
+          <span className="whitespace-nowrap">
+            {" "}· event {series.position} of {series.count}
+          </span>
+        )}
+        {note ? `. ${note}` : ""}
+      </span>
+    </p>
+  );
+}
+
+/**
+ * The dates the server left out, one sentence per reason, each date named (Rajeev, 2026-09-19: all
+ * the bells and whistles). A planner told only "2 skipped" has to go and find out which two, and will
+ * otherwise find out on the day.
+ *
+ * <p>`done` switches the tense: the control says what pressing Repeat will do, and the outcome says
+ * what it did.
+ */
+function skippedLines(result: RepeatEventResult, done: boolean): string[] {
+  const lines: string[] = [];
+  const fasting = result.skippedFasting ?? [];
+  const planned = result.skippedAlreadyPlanned ?? [];
+  const verb = done ? "Skipped" : "Skips";
+  if (fasting.length > 0) {
+    lines.push(
+      `${verb} ${andList(fasting.map(dayWithYear))}: a dish doesn’t suit the fasting day.`
+    );
+  }
+  if (planned.length > 0) {
+    lines.push(
+      `${verb} ${andList(planned.map(dayWithYear))}: this event is already planned ${
+        planned.length === 1 ? "that day" : "those days"
+      }.`
+    );
+  }
+  return lines;
+}
+
+/**
+ * Repeating an event as a series: "Repeat Children's Bhagavad-gita Reading once every [1] week until
+ * [31 Dec 2026]" (Rajeev, 2026-09-19, T-308). It replaced "every week for [6] weeks", which could not
+ * say every other Saturday and made the planner count weeks to reach a date they already knew.
+ *
+ * <p><strong>Still copies, now linked.</strong> Each date is an ordinary meal, edited or cancelled on
+ * its own exactly as before (E4-S15 D8). What changed is that the copies remember they belong
+ * together, so cancelling one can offer "this and all later ones", and each card can say which of the
+ * series it is. A true recurrence rule with per-occurrence exceptions is still not what this is.
+ *
+ * <p><strong>The count is answered before the button is pressed, twice.</strong> First from the
+ * arithmetic, instantly, as the number or the date changes. Then from the server's preview, a moment
+ * later, which knows the two things arithmetic cannot: which dates are fasting days that a dish does
+ * not suit, and which already have this event planned. The preview wins wherever the two differ, and
+ * an answer to an older question is thrown away rather than shown over the newer one.
+ *
+ * <p><strong>A refusal is said beside the control, not in the page banner.</strong> The banner is at
+ * the top of a long day and the control may be the fourth meal down; the reader is looking here.
  */
 function RepeatForward({
   meal,
   onChanged,
-  onError,
 }: {
-  /** The event to copy forward, whole, by its own id (D-27). */
+  /** The event to repeat, whole, by its own id (D-27). */
   meal: MealView;
   onChanged: () => void;
-  onError: (e: ApiError) => void;
 }) {
   const { getToken } = useAuth();
   const [open, setOpen] = useState(false);
-  const [weeks, setWeeks] = useState(6);
+  // Held as typed, so the box can be emptied on the way to typing a new number.
+  const [gapText, setGapText] = useState("1");
+  const gap = /^\d+$/.test(gapText.trim()) ? Number(gapText.trim()) : NaN;
+  const gapOk = Number.isInteger(gap) && gap >= 1 && gap <= MOST_WEEKS_APART;
+
+  const today = todayIso();
+  const latest = plusOneYear(today);
+  // The earliest end date that makes anything: the first copy on or after today.
+  const earliest = gapOk ? repeatDates(meal.planDate, gap, latest, today)[0] ?? latest : latest;
+  /** Six repeats at the chosen gap, kept between the first copy and a year from today. */
+  const suggested = (weeks: number) => {
+    const six = plusDays(meal.planDate, 7 * weeks * 6);
+    const first = repeatDates(meal.planDate, weeks, latest, today)[0] ?? latest;
+    return six > latest ? latest : six < first ? first : six;
+  };
+  // The end date follows the gap until the planner picks one of their own; after that it is theirs.
+  const [untilPicked, setUntilPicked] = useState<string | null>(null);
+  const until = untilPicked ?? (gapOk ? suggested(gap) : suggested(1));
+
   const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<ApiError | null>(null);
+  const [outcome, setOutcome] = useState<RepeatEventResult | null>(null);
+
+  // The preview, tagged with the question it answers. Anything tagged differently is an old answer.
+  const asked = `${gap}|${until}`;
+  const [preview, setPreview] = useState<
+    { asked: string; result: RepeatEventResult | null; error: ApiError | null } | null
+  >(null);
+  const latestAsk = useRef(0);
+  // Read through a ref: the auth hook hands out a new function on every render, and an effect that
+  // depended on it would ask again after every answer, for ever.
+  const token = useRef(getToken);
+  token.current = getToken;
+
+  useEffect(() => {
+    if (!open || !gapOk || !until) return;
+    const ask = ++latestAsk.current;
+    const question = `${gap}|${until}`;
+    // A short pause, so typing "12" does not ask about 1 and then 12.
+    const timer = setTimeout(async () => {
+      try {
+        const result = await api.previewRepeat(meal.mealId, gap, until, await token.current());
+        if (ask === latestAsk.current) setPreview({ asked: question, result, error: null });
+      } catch (e) {
+        if (ask === latestAsk.current) {
+          setPreview({ asked: question, result: null, error: toApiError(e, "We couldn’t work out the dates.") });
+        }
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [open, gapOk, gap, until, meal.mealId]);
+
+  const fresh = preview && preview.asked === asked ? preview : null;
+  const local = gapOk && until ? repeatDates(meal.planDate, gap, until, today) : [];
+  const count = fresh?.result ? fresh.result.copies : local.length;
+  const last = fresh?.result ? fresh.result.lastDate : local[local.length - 1] ?? null;
+  /** Why nothing can be pressed yet, in the reader's words — the server's where it has spoken. */
+  const blocked: { message: string; action: string } | null = !gapOk
+    ? { message: "An event can repeat every 1 to 12 weeks.", action: "Choose a number from 1 to 12." }
+    : !until
+      ? { message: "Choose the date to repeat until.", action: "" }
+      : fresh?.error
+        ? { message: fresh.error.message, action: fresh.error.action }
+        : null;
 
   async function repeat() {
     setBusy(true);
-    setOutcome(null);
+    setRefusal(null);
     try {
-      const result = await api.repeatEvent(meal.mealId, weeks, await getToken());
-      // What it declined to do, said out loud. A planner who asked for six weeks and got four has
-      // to know which two are missing, or they will find out on the day.
-      const parts = [
-        `${result.weeksCopied} ${result.weeksCopied === 1 ? "week" : "weeks"} copied`,
-        `${result.copied} ${result.copied === 1 ? "preparation" : "preparations"}`,
-      ];
-      if (result.refusedOnFast > 0) {
-        parts.push(
-          `${result.refusedOnFast} skipped: fasting days`
-        );
-      }
-      setOutcome(parts.join(" · ") + ".");
+      const result = await api.repeatEvent(meal.mealId, gap, until, await getToken());
+      setOutcome(result);
+      setOpen(false);
+      setPreview(null);
       onChanged();
     } catch (e) {
-      onError(toApiError(e, "We couldn’t repeat that event."));
+      setRefusal(toApiError(e, "We couldn’t repeat that event."));
     } finally {
       setBusy(false);
     }
   }
 
+  // What the repeat did, kept after the panel closes: the new dates are on other days of the
+  // planner, and this is the only place that says which ones were left out.
+  const said = outcome && (
+    <InlineNotice
+      tone="success"
+      title={
+        outcome.copies > 0
+          ? `Made ${copiesOf(outcome.copies)} · last one ${dayWithYear(outcome.lastDate ?? until)}.`
+          : "No copies were made."
+      }
+    >
+      {skippedLines(outcome, true).map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+    </InlineNotice>
+  );
+
   if (!open) {
     return (
-      <div className="mt-3">
-        <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-          Repeat weekly
+      <div className="mt-3 grid justify-items-start gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            setOutcome(null);
+            setRefusal(null);
+            setOpen(true);
+          }}
+        >
+          Repeat this event
         </Button>
-        {outcome && <span className="ml-3 text-sm text-ink-secondary">{outcome}</span>}
+        {said}
       </div>
     );
   }
 
+  const skips = fresh?.result ? skippedLines(fresh.result, false) : [];
+
   return (
     <div className="mt-3 grid gap-2 rounded-lg bg-sunken p-4">
-      <span className="flex flex-wrap items-center gap-3 text-sm text-ink">
-        <label className="flex items-center gap-2">
-          <span>Repeat {meal.eventName} every week for</span>
+      {/*
+        One sentence, with the two boxes where their words are. It is laid out as a line of text
+        rather than as a row of flex items, so it wraps the way a sentence does: a long event name
+        breaks between its words, and the next phrase carries on beside the name's last word when it
+        fits there, rather than starting a new row under a half-empty one. Each box is held to the
+        words either side of it — "once every [2] weeks", "until [date]" — as one unbreakable phrase,
+        so a wrap falls between phrases and never leaves a box alone at the start of a line, cut off
+        from what it means. The "i" and the two buttons are the last such phrase: beside the sentence
+        when there is room, and together on the next line when there is not.
+
+        `my-1` on each phrase is what spaces two wrapped lines apart; `mr-1` plus the space after it
+        is the gap between phrases, the same 8px as the gap between a word and its box.
+      */}
+      <div className="text-sm leading-6 text-ink">
+        <span className="mr-1">Repeat {meal.eventName}</span>{" "}
+        <span className={PHRASE}>
+          once every
           <input
             type="number"
+            inputMode="numeric"
             min={1}
-            max={52}
-            aria-label="How many weeks"
-            value={weeks}
-            onChange={(e) => setWeeks(Math.max(1, Number(e.target.value) || 1))}
-            className="min-h-touch w-20 rounded-control border border-hairline px-2 tabular-nums"
+            max={MOST_WEEKS_APART}
+            step={1}
+            aria-label="Weeks between repeats"
+            value={gapText}
+            onChange={(e) => setGapText(e.target.value)}
+            className="min-h-touch w-16 rounded-control border border-hairline px-2 text-right tabular-nums"
           />
-          <span>weeks</span>
-        </label>
-        {/* What repeating actually makes, in the "i" beside the control that does it. Outside the
-            `<label>` rather than in it: the "i" is a button, and a button inside a label can become
-            the labelled thing in place of the box. */}
-        <InfoHint
-          text="Each week is a separate copy you can edit or cancel."
-          label="Repeat weekly"
-        />
-        <Button size="sm" disabled={busy} onClick={repeat} busy={busy}>
-          {busy ? "Repeating…" : "Repeat"}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          Close
-        </Button>
-      </span>
-      {/* Said here rather than as a banner: copies are plans, and the ones that landed are already
-          on the days they landed on. */}
-      {outcome && <span className="text-sm text-ink-secondary">{outcome}</span>}
+          {/* The unit agrees with the number in the box, whatever it is (VERIFY3, A3-2): "13 week"
+              was said beside the refusal of 13, because an unusable number fell back to "week".
+              An empty box, or anything but 1, reads "weeks". */}
+          {Number(gapText.trim()) === 1 && gapText.trim() !== "" ? "week" : "weeks"}
+        </span>{" "}
+        <span className={PHRASE}>
+          until
+          <input
+            type="date"
+            aria-label="Repeat until"
+            value={until}
+            min={earliest}
+            max={latest}
+            onChange={(e) => setUntilPicked(e.target.value)}
+            className="min-h-touch rounded-control border border-hairline px-2 tabular-nums"
+          />
+        </span>{" "}
+        <span className={PHRASE}>
+          {/* Outside any label: a button inside a label can become the labelled thing. */}
+          <InfoHint
+            text="Each copy can be edited or cancelled on its own. The copies stay linked, so you can cancel the later ones together."
+            label="repeating an event"
+          />
+          <Button size="sm" disabled={busy || blocked !== null || count === 0} onClick={repeat} busy={busy}>
+            {busy ? "Repeating…" : "Repeat"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+            Close
+          </Button>
+        </span>
+      </div>
+
+      {/* What pressing Repeat will make, said as the boxes change. Polite, so a screen reader hears
+          the new count after the typing rather than over it. */}
+      <div aria-live="polite" className="grid gap-1 text-sm">
+        {blocked ? (
+          <p className={FIELD_ERROR_TEXT}>
+            {blocked.message}
+            {blocked.action ? ` ${blocked.action}` : ""}
+          </p>
+        ) : (
+          <>
+            <p className="text-ink">
+              {count > 0 && last
+                ? `Makes ${copiesOf(count)} · last one ${dayWithYear(last)}`
+                : "Makes no copies. Choose a later end date."}
+            </p>
+            {skips.map((line) => (
+              <p key={line} className="text-ink-secondary">
+                {line}
+              </p>
+            ))}
+          </>
+        )}
+      </div>
+
+      {refusal && <ErrorNotice error={refusal} />}
     </div>
   );
 }
+
+/**
+ * One unbreakable phrase of the repeat sentence: words and the box they describe.
+ *
+ * <p>Sat on the sentence's baseline, not its middle (VERIFY3, A3-3). An inline-flex box's baseline
+ * is its first item's, here the words ("once every", "until"), so `align-baseline` puts those
+ * words on the same line as "Repeat <event name>" before them. `align-middle` centred the 44px box
+ * on the line's x-height instead, which left the words inside it 1.6px lower than the event's name
+ * at 1280 (bottoms at 401.0 against 399.4). The last phrase, the "i" and the two buttons, takes the
+ * same class: measured at 1280, its buttons' centres then sit level with the two boxes' (393.0
+ * each), where a middle-aligned last phrase put them 1.6px below.
+ */
+const PHRASE = "my-1 mr-1 inline-flex items-center gap-2 whitespace-nowrap align-baseline";
+
+/** An inline refusal's colour, as every field error in the app draws it (`FIELD_ERROR`, less its inset). */
+const FIELD_ERROR_TEXT = "text-danger";

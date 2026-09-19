@@ -111,6 +111,13 @@ public record ServedMeal(
 		String correctedByName,
 		String correctionNote,
 
+		/**
+		 * The repeating event this meal is one occurrence of (T-307), or null for a meal that was never
+		 * repeated. Always sent, so a reader never has to tell "not in a series" apart from "this
+		 * endpoint does not say". Read in the meal's own statement; see {@link MealSeriesView}.
+		 */
+		MealSeriesView series,
+
 		List<MealDishView> dishes,
 
 		ShiftView volunteerShift) {
@@ -127,6 +134,6 @@ public record ServedMeal(
 				contactPhone, deliveryAddress, deliverySubLocation, deliveryPlaceId, deliveryLatitude,
 				deliveryLongitude, guestsEatAt, travelMinutes, travelMinutesSource, purpose, kitchenNotes,
 				serverNotes, status, cardNumber, cardIssuedAt, recorded, recordedAt, recordedByName,
-				recordingNote, corrected, correctedAt, correctedByName, correctionNote, dishes, shift);
+				recordingNote, corrected, correctedAt, correctedByName, correctionNote, series, dishes, shift);
 	}
 }

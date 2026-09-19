@@ -16,6 +16,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { MealServices } from "@/components/planner/MealServices";
 import { plannerUrl, withReturn, type PlannerView } from "@/components/planner/plannerAddress";
+import { savedNotice } from "@/components/planner/savedNotice";
 import {
   api,
   type ApiError,
@@ -98,10 +99,11 @@ function PlannerView() {
   const captured = useRef(false);
   useEffect(() => {
     if (captured.current) return;
-    const kind = params.get("saved");
-    if (!kind) return;
+    // Phrased by the same function the day page uses, so one save reads the same on both (T-311).
+    const notice = savedNotice(params.get("saved"));
+    if (!notice) return;
     captured.current = true;
-    setSaved(kind === "planned" ? "The meal was planned." : `${kind} was saved.`);
+    setSaved(notice);
     router.replace(plannerUrl(view, anchor));
   }, [params, router, view, anchor]);
 

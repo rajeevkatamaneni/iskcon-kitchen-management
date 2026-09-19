@@ -749,7 +749,7 @@ export function MealComposer({
     if (spare < LOADING_MINUTES) {
       return {
         blocking: null,
-        warning: `Only ${spare} ${spare === 1 ? "minute" : "minutes"} to load the van. Make it ready earlier if you need more.`,
+        warning: `You’ll only have ${spare} ${spare === 1 ? "minute" : "minutes"} to load the van and set up for service at the destination.`,
       };
     }
     return null;

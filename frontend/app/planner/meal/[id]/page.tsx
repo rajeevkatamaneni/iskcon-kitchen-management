@@ -10,6 +10,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { Loading } from "@/components/Loading";
 import { RequireRole } from "@/components/RequireRole";
 import { MealComposer, type ComposerStatus } from "@/components/planner/MealComposer";
+import { SeriesLine } from "@/components/planner/MealServices";
 import { FROM, plannerUrl, safeReturn, withParam } from "@/components/planner/plannerAddress";
 import { api } from "@/lib/api";
 import { hhmm, longDate, todayIso } from "@/lib/format";
@@ -156,6 +157,10 @@ function EditMealScreen() {
         </>
       }
     >
+      {/* The series this date belongs to, under the heading (T-308). Said with what editing here
+          does, because a planner who sees "repeats every week" is right to wonder whether changing
+          this Saturday changes every Saturday. It does not: each date is its own meal. */}
+      {meal.series && <SeriesLine series={meal.series} note="Changes here apply to this date only." />}
       {status.hint && <p className="text-sm text-ink-secondary">{status.hint}</p>}
 
       <MealComposer

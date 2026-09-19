@@ -887,10 +887,41 @@ though, requires an answer — because that answer is what decides whether an ad
 outside event, they must say pickup or delivery before it will save again.** That is a one-time
 question about a real fact the old data never recorded, which is better than inventing it now.
 
-**D8 — Recurrence is a copy, not a series.** A weekly Bhajan Prasadam repeats forward for a chosen
-number of weeks, reusing `duplicate-week`'s machinery. **A true recurrence rule with per-occurrence
-exceptions and edit-this-versus-edit-all was considered and deferred**: it is a feature that grows
-teeth, and the temple's actual problem is not wanting to type the same event fifty-two times.
+**D8 — Recurrence is a copy, not a series.** *Superseded 2026-09-19 by D8b; kept as the record of
+what was decided first.* ~~A weekly Bhajan Prasadam repeats forward for a chosen number of weeks,
+reusing `duplicate-week`'s machinery. **A true recurrence rule with per-occurrence exceptions and
+edit-this-versus-edit-all was considered and deferred**: it is a feature that grows teeth, and the
+temple's actual problem is not wanting to type the same event fifty-two times.~~
+
+**D8b — Recurrence is a series: once every N weeks until a date.** *Amended 2026-09-19 at Rajeev's
+request (terminal).* Temple users asked him for it, and he decided, in his words: *"Let us change for
+many weeks to 'until' a date and also give them the option to pick the duration between repeats, and
+a cancel of this repeating event should ask JUST this event OR all events from this point onwards. An
+example of how it would look on screen: 'Repeat Children's Bhagavad-gita Reading once every [1] week /
+weeks (if the selected value is more than 1) until 31 Dec 2026'. Let us build it now… I want it to have
+all the bells and whistles possible."*
+
+What was built (T-307 server, T-308 screens, T-310 no copy on a past date):
+- **Repeat** reads as one sentence on an event's card: `Repeat <name>` `once every` [N] `week`/`weeks`
+  `until` [date]. N is 1 to 12 (`KMS-400175`); the end date is at most a year from the temple's today
+  (`KMS-400176`); an end date that fits no copy is refused (`KMS-400177`). Copies are never made on a
+  date that has passed.
+- **Before pressing**, a live count and last date (`Makes 8 copies · last one Sat 26 Dec 2026`), from
+  a preview that writes nothing. A date where the same event is already planned, or where a dish
+  doesn't suit an Ekadashi, is skipped and named, before and after.
+- **Occurrences are linked** in `meal_series` (V149, tenant-owned, RLS). Each still edits on its own;
+  an edited one is marked so the cancel can name it. Every occurrence shows `Repeats every 2 weeks
+  until 31 Dec 2026 · event 3 of 8`, on its card and its edit page. Repeating from an occurrence
+  extends the same series.
+- **Cancel asks only when there are later ones still to cook**: `Just this event` or `This and all
+  later ones`. The second says how many, the last date, which were changed on their own and how many
+  volunteers will be told, and never touches an earlier, cooked or recorded occurrence. It is one
+  transaction. If the later ones changed while the question was open, nothing is cancelled
+  (`KMS-400179`). `KMS-400178` refuses "later ones" for an event that never repeated.
+
+**What D8 feared, and what answers it.** D8 deferred a series because edit-this-versus-edit-all
+"grows teeth". The built series does not have that question for edits: editing is always this date
+only, and only cancelling can reach the later ones. That keeps the part D8 was worried about out.
 
 **D8a — A job card is per event, not per kind.** Found after the first build and fixed before it
 shipped: `meal_services` and `meal_card_sequence` were keyed on `(plan_date, meal_kind)`, and every
@@ -912,7 +943,8 @@ as the 750-plate lunch E4-S14 D2 fixed.
 event register of any kind** — no dates, no head counts, no client, no venue, anywhere. We are not
 digitising a practice, we are introducing one. If entering a Saturday reading costs three minutes it
 will stop being entered, and the data will be worse than if events had never been split out. The
-autocomplete carrying a previous event's defaults forward, and D8's copy, are not conveniences; they
+autocomplete carrying a previous event's defaults forward, and D8's copy (D8b's series since
+2026-09-19), are not conveniences; they
 are what makes D1 survive contact with a kitchen.
 
 **Requirements:**
@@ -948,7 +980,14 @@ are what makes D1 survive contact with a kitchen.
 - [ ] A pre-existing catering plan survives the migration as an outside event with its client, contact and venue intact.
 - [ ] No *Catering order* kind exists for an existing temple or a newly provisioned one.
 - [ ] `CATERING` appears nowhere in the day-type vocabulary.
-- [ ] An event repeats forward for a chosen number of weeks and each copy is independently editable.
+- [ ] ~~An event repeats forward for a chosen number of weeks and each copy is independently editable.~~
+  *Amended 2026-09-19 at Rajeev's request (terminal), replaced by the two below (D8b).*
+- [ ] An event repeats once every 1 to 12 weeks until a date no more than a year ahead, as a linked
+  series; the count, last date and skipped dates are shown before it is made, and each occurrence is
+  still editable on its own.
+- [ ] Cancelling an occurrence with later ones asks *just this event* or *this and all later ones*;
+  the second never touches an earlier, cooked or recorded occurrence, and cancels nothing if the later
+  ones changed while the question was open.
 - [ ] Two events on the same day are two recordings and two job cards, each headed by its own name.
 - [ ] A main meal's recording and card number are unchanged by the re-key.
 - [ ] Today lists two events on one day as two meals, and counts their plates separately.

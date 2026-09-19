@@ -46,8 +46,14 @@ const { authRef, routeRef, searchRef, api } = vi.hoisted(() => ({
       guestsEatAt: null as string | null,
       reason: "NO_MAP_SERVICE" as string | null,
     })),
-    repeatEvent: vi.fn(async (_id: string, _weeks: number, _t?: string) => ({
-      copied: 0, weeksCopied: 0, refusedOnFast: 0,
+    // T-308: an event repeats once every N weeks until a date, and says what it would make first.
+    repeatEvent: vi.fn(async (_id: string, _weeks: number, _until: string, _t?: string) => ({
+      copies: 0, preparations: 0, dates: [] as string[], skippedFasting: [] as string[],
+      skippedAlreadyPlanned: [] as string[], lastDate: null as string | null, series: null as unknown,
+    })),
+    previewRepeat: vi.fn(async (_id: string, _weeks: number, _until: string, _t?: string) => ({
+      copies: 0, preparations: 0, dates: [] as string[], skippedFasting: [] as string[],
+      skippedAlreadyPlanned: [] as string[], lastDate: null as string | null, series: null as unknown,
     })),
     eventNameSuggestions: vi.fn(async (_q: string, _t?: string) => [] as unknown[]),
     // T-165. Correcting the calendar for a day, which a blank reason must never reach.
@@ -314,25 +320,26 @@ describe("an event on the day", () => {
     expect(api.travelEstimate).not.toHaveBeenCalled();
   });
 
-  it("repeats an event forward as copies, and says what it declined to copy", async () => {
+  it("repeats an event as a series, and names the date it declined to copy", async () => {
+    // T-308. The control and its arithmetic are covered in repeat-series.test.tsx; this is the day
+    // screen end to end: the event, by its own id, with the gap and the end date it was given.
     api.meals.mockResolvedValue([event()]);
-    api.repeatEvent.mockResolvedValue({ copied: 5, weeksCopied: 5, refusedOnFast: 1 });
+    const skipped = isoIn(8);
+    api.repeatEvent.mockResolvedValue({
+      copies: 5, preparations: 5, dates: [], skippedFasting: [skipped],
+      skippedAlreadyPlanned: [], lastDate: isoIn(43), series: null,
+    });
     render(<PlannerDayPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /repeat weekly/i }));
-    fireEvent.change(screen.getByLabelText(/how many weeks/i), { target: { value: "6" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Repeat this event" }));
+    fireEvent.change(screen.getByLabelText("Repeat until"), { target: { value: isoIn(43) } });
     fireEvent.click(screen.getByRole("button", { name: /^repeat$/i }));
 
     // The whole meal is copied, by its id (D-27) — not from one of its preparations.
-    await vi.waitFor(() => expect(api.repeatEvent).toHaveBeenCalledWith("meal-reading", 6, "t"));
-    // A planner who asked for six weeks and got five has to be told which one is missing, or they
-    // find out on the day.
-    expect(
-      await screen.findByText(/5 weeks copied · 5 preparations · 1 skipped/)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "More about Repeat weekly" })
-    ).toBeInTheDocument();
+    await vi.waitFor(() => expect(api.repeatEvent).toHaveBeenCalledWith("meal-reading", 1, isoIn(43), "t"));
+    // A planner who asked for six and got five has to be told which one is missing, by its date.
+    expect(await screen.findByText(/^Made 5 copies · last one/)).toBeInTheDocument();
+    expect(screen.getByText(/^Skipped .*: a dish doesn’t suit the fasting day\.$/)).toBeInTheDocument();
   });
 
   it("offers nothing of the sort on a Lunch", async () => {
@@ -340,7 +347,7 @@ describe("an event on the day", () => {
     render(<PlannerDayPage />);
 
     await screen.findByText("Lunch");
-    expect(screen.queryByRole("button", { name: /repeat weekly/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /repeat this event/i })).not.toBeInTheDocument();
     expect(api.travelEstimate).not.toHaveBeenCalled();
   });
 });
@@ -392,6 +399,31 @@ describe("editing one meal, at its own id", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: "Edit Vidyaranyapura School Gita Reading" })
     ).toBeInTheDocument();
+  });
+
+  it("says which series an event belongs to, and that changes here are for this date only", async () => {
+    // T-308. The same line the day's card shows, and the one thing a planner needs to know before
+    // editing one date of a repeating event: the other dates are not touched.
+    api.getMeal.mockResolvedValue(
+      event({ series: { seriesId: "s-1", everyWeeks: 2, until: "2026-12-31", position: 3, count: 8 } })
+    );
+    routeRef.current = { id: "meal-reading" };
+    render(<EditMealPage />);
+
+    expect(
+      await screen.findByText(
+        (_, el) =>
+          el?.tagName === "P" &&
+          el.textContent ===
+            "Repeats every 2 weeks until 31 Dec 2026 · event 3 of 8. Changes here apply to this date only."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing of a series on a meal that never repeated", async () => {
+    render(<EditMealPage />);
+    await screen.findByRole("heading", { level: 1, name: "Edit Lunch" });
+    expect(screen.queryByText((_, el) => el?.tagName === "P" && /^Repeats every/.test(el.textContent ?? ""))).toBeNull();
   });
 
   it("saves the whole meal in one request and returns to the day with the confirmation waiting", async () => {

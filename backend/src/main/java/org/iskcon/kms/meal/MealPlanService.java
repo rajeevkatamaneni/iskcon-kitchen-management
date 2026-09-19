@@ -476,6 +476,11 @@ public class MealPlanService {
 		}
 
 		saveShift(actor, mealId, request.volunteerShift());
+		if (existing != null) {
+			// Planning onto a meal that is already there changes that one occurrence; the repeat, which
+			// also comes through here, clears the mark again on the copies it makes.
+			markEditedInSeries(mealId);
+		}
 
 		auditService.record(actor, AuditAction.MEAL_PLANNED, AuditEntityType.MEAL, mealId,
 				before, snapshot(mealId), null);
@@ -582,6 +587,7 @@ public class MealPlanService {
 		}
 
 		saveShift(actor, mealId, request.volunteerShift());
+		markEditedInSeries(mealId);
 
 		auditService.record(actor, AuditAction.MEAL_PLAN_UPDATED, AuditEntityType.MEAL, mealId,
 				before, snapshot(mealId), null);
@@ -590,7 +596,7 @@ public class MealPlanService {
 
 	/**
 	 * Cancels a meal and, with it, the meal's volunteer shift (D-27, answer 5: <em>"Yes, warn then
-	 * cancel both."</em>). Answers with how many volunteers are being told.
+	 * cancel both."</em>) — or, for a repeating event, this meal and every later one (T-307).
 	 *
 	 * <p>Both in this transaction. {@link ShiftService#cancelForMeal} closes the shift here and sends
 	 * the existing cancellation message to everyone signed up or waitlisted only after this commits,
@@ -600,14 +606,76 @@ public class MealPlanService {
 	 * <p>A meal that has been cooked cannot be cancelled: its stock has moved. Cancelling a meal that
 	 * is already cancelled is a quiet no-op, as it always was for a dish, apart from a shift somebody
 	 * left open on it, which is closed.
+	 *
+	 * <p><strong>This and every later one.</strong> Rajeev, 2026-09-19: <em>"a cancel of this repeating
+	 * event should ask JUST this event OR all events from this point onwards"</em>. With
+	 * {@code THIS_AND_LATER} this meal is cancelled and so is every occurrence {@link #laterInSeries}
+	 * names — each one exactly as a cancel of it alone would be, with its own shift closed and its own
+	 * audit entry — in this one transaction, so a refusal or a failure on the fifth leaves the first
+	 * four standing too. What "later" means is that method's, and nothing else is ever touched: an
+	 * occurrence in the past, cooked, recorded or already cancelled stays exactly as it is.
+	 *
+	 * <p>The confirmation showed the planner a list; {@code expectedMealIds} is that list. The later
+	 * set is recomputed here under the row locks, and if it is not the same set — somebody cooked one,
+	 * cancelled one or repeated the event further while the dialog was open — nothing is cancelled
+	 * (KMS-400179), because the planner would otherwise cancel meals they were never shown.
+	 *
+	 * <p>Afterwards the series ends on the last occurrence still standing, so it no longer claims to
+	 * run to a date nothing is planned on. Absent a scope, this is exactly the cancel it always was.
 	 */
 	@Transactional
-	public int cancel(AuthenticatedUser actor, UUID mealId, String reason) {
-		lockMeal(mealId);
-		ServedMeal meal = servedMealService.require(mealId);
-		if (meal.recorded() || meal.dishes().stream().anyMatch(d -> d.status() == MealStatus.COOKED)) {
-			throw new ApplicationException(ErrorCode.CANNOT_CANCEL_COOKED_MEAL, Map.of("mealId", mealId));
+	public CancelledMeals cancel(AuthenticatedUser actor, UUID mealId, CancelMealRequest request) {
+		String reason = request == null ? null : request.reason();
+		CancelMealRequest.Scope scope = request == null ? CancelMealRequest.Scope.THIS : request.scopeOrThis();
+		MealRow row = lockMeal(mealId);
+
+		if (scope == CancelMealRequest.Scope.THIS) {
+			Cancelled one = cancelOne(actor, mealId, reason);
+			return new CancelledMeals(one.told(), one.count(),
+					row.seriesId() == null ? null : lastStanding(row.seriesId()));
 		}
+
+		if (row.seriesId() == null) {
+			throw new ApplicationException(ErrorCode.MEAL_NOT_IN_SERIES, Map.of("mealId", mealId));
+		}
+		requireNotCooked(mealId);
+		List<LaterRow> later = laterRows(row, true);
+		if (request.expectedMealIds() != null) {
+			Set<UUID> expected = new LinkedHashSet<>(request.expectedMealIds());
+			Set<UUID> actual = later.stream().map(LaterRow::mealId).collect(Collectors.toCollection(LinkedHashSet::new));
+			if (!expected.equals(actual)) {
+				throw new ApplicationException(ErrorCode.SERIES_CHANGED_SINCE_CHECKED,
+						Map.of("mealId", mealId, "expected", expected.size(), "found", actual.size()));
+			}
+		}
+
+		Cancelled first = cancelOne(actor, mealId, reason);
+		int told = first.told();
+		int cancelled = first.count();
+		for (LaterRow occurrence : later) {
+			Cancelled next = cancelOne(actor, occurrence.mealId(), reason);
+			told += next.told();
+			cancelled += next.count();
+		}
+
+		LocalDate last = lastStanding(row.seriesId());
+		if (last != null) {
+			jdbc.update("UPDATE meal_series SET until_date = ?, updated_at = now() WHERE id = ?",
+					last, row.seriesId());
+		}
+		return new CancelledMeals(told, cancelled, last);
+	}
+
+	/** What cancelling one meal did: how many volunteers are told, and whether it had a dish to cancel. */
+	private record Cancelled(int told, int count) {
+	}
+
+	/**
+	 * One meal cancelled, exactly as {@link #cancel} always did it for one: its planned dishes, its
+	 * shift, and an audit entry read back from the rows. The caller holds the meal's lock.
+	 */
+	private Cancelled cancelOne(AuthenticatedUser actor, UUID mealId, String reason) {
+		requireNotCooked(mealId);
 		Map<String, Object> before = snapshot(mealId);
 		int dishes = jdbc.update("""
 				UPDATE meal_dishes SET status = 'CANCELLED', updated_at = now()
@@ -624,7 +692,120 @@ public class MealPlanService {
 			auditService.record(actor, AuditAction.MEAL_PLAN_CANCELLED, AuditEntityType.MEAL, mealId,
 					before, snapshot(mealId), trimToNull(reason));
 		}
-		return told;
+		return new Cancelled(told, dishes > 0 ? 1 : 0);
+	}
+
+	/** Refuses a meal whose stock has moved: recorded, or with any dish cooked. */
+	private void requireNotCooked(UUID mealId) {
+		ServedMeal meal = servedMealService.require(mealId);
+		if (meal.recorded() || meal.dishes().stream().anyMatch(d -> d.status() == MealStatus.COOKED)) {
+			throw new ApplicationException(ErrorCode.CANNOT_CANCEL_COOKED_MEAL, Map.of("mealId", mealId));
+		}
+	}
+
+	/**
+	 * What "Cancel this and every later one" would cancel, for the confirmation to show (T-307).
+	 *
+	 * <p>Read-only, and the same {@link #laterRows} the cancel itself recomputes under its locks, so
+	 * the list shown and the list acted on are one definition. A meal in no series is refused
+	 * (KMS-400178): there is nothing later to show.
+	 */
+	@Transactional(readOnly = true)
+	public LaterInSeries laterInSeries(UUID mealId) {
+		MealRow row = jdbc.query(ROW_SELECT + " WHERE m.id = ?", ROW_MAPPER, mealId).stream().findFirst()
+				.orElseThrow(() -> new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealId", mealId)));
+		if (row.seriesId() == null) {
+			throw new ApplicationException(ErrorCode.MEAL_NOT_IN_SERIES, Map.of("mealId", mealId));
+		}
+		List<LaterRow> later = laterRows(row, false);
+		int toTell = volunteersToTell(mealId) + later.stream().mapToInt(LaterRow::toTell).sum();
+		return new LaterInSeries(row.seriesId(),
+				later.stream().map(l -> new LaterInSeries.Later(
+						l.mealId(), l.planDate(), l.edited(), l.signedUp())).toList(),
+				later.isEmpty() ? null : later.get(later.size() - 1).planDate(),
+				toTell);
+	}
+
+	/** One later occurrence, with what the confirmation says about it and whom its cancel would tell. */
+	private record LaterRow(UUID mealId, LocalDate planDate, boolean edited, int signedUp, int toTell) {
+	}
+
+	/**
+	 * The later occurrences of this meal's series that "this and every later one" means (T-307).
+	 *
+	 * <p>Every condition is one Rajeev's wording or the kitchen's facts demand. <em>From this point
+	 * onwards</em>: dated after this meal, and not before today at the temple — an occurrence last
+	 * month that nobody recorded is history to be recorded, not a plan to call off. <em>Still to
+	 * cook</em>: at least one dish PLANNED, none COOKED and the meal not recorded, because a cooked
+	 * meal's stock has moved (the same rule {@link #cancel} refuses on) and an already-cancelled one has
+	 * nothing left to cancel. So a past, cooked, recorded or cancelled occurrence is never in this list
+	 * and never touched.
+	 *
+	 * <p>The volunteer counts are read in the same statement rather than asked of the shift service
+	 * once per meal. They use the two predicates {@code ShiftService.rosterToTellOfCancellation} uses
+	 * — a signup not released, a waitlist place neither promoted nor left — on the meal's shift that is
+	 * not cancelled, so the number the confirmation shows is the number {@code cancelForMeal} tells.
+	 *
+	 * @param lock {@code FOR UPDATE} on the meals, for the cancel: the set compared with what the
+	 *             planner was shown must not change between the comparison and the cancelling.
+	 */
+	private List<LaterRow> laterRows(MealRow row, boolean lock) {
+		return jdbc.query("""
+				SELECT m.id, pd.plan_date, m.series_edited_at IS NOT NULL AS edited,
+					   (SELECT count(*) FROM shifts sh JOIN shift_signups ss ON ss.shift_id = sh.id
+						WHERE sh.meal_id = m.id AND sh.status <> 'CANCELLED' AND ss.released_at IS NULL) AS signed_up,
+					   (SELECT count(*) FROM shifts sh JOIN shift_waitlist sw ON sw.shift_id = sh.id
+						WHERE sh.meal_id = m.id AND sh.status <> 'CANCELLED'
+						  AND sw.promoted_at IS NULL AND sw.left_at IS NULL) AS waitlisted
+				FROM meals m
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				WHERE m.series_id = ?
+				  AND m.id <> ?
+				  AND pd.plan_date > ?
+				  AND pd.plan_date >= ?
+				  AND m.recorded_at IS NULL
+				  AND EXISTS (SELECT 1 FROM meal_dishes d WHERE d.meal_id = m.id AND d.status = 'PLANNED')
+				  AND NOT EXISTS (SELECT 1 FROM meal_dishes d WHERE d.meal_id = m.id AND d.status = 'COOKED')
+				ORDER BY pd.plan_date, m.ready_by, m.id
+				""" + (lock ? " FOR UPDATE OF m" : ""),
+				(rs, n) -> new LaterRow(
+						rs.getObject("id", UUID.class),
+						rs.getObject("plan_date", LocalDate.class),
+						rs.getBoolean("edited"),
+						rs.getInt("signed_up"),
+						rs.getInt("signed_up") + rs.getInt("waitlisted")),
+				row.seriesId(), row.id(), row.planDate(), clock.today());
+	}
+
+	/** Whom cancelling this one meal's shift would tell, counted as {@link #laterRows} counts. */
+	private int volunteersToTell(UUID mealId) {
+		Integer n = jdbc.queryForObject("""
+				SELECT (SELECT count(*) FROM shifts sh JOIN shift_signups ss ON ss.shift_id = sh.id
+						WHERE sh.meal_id = ? AND sh.status <> 'CANCELLED' AND ss.released_at IS NULL)
+					 + (SELECT count(*) FROM shifts sh JOIN shift_waitlist sw ON sw.shift_id = sh.id
+						WHERE sh.meal_id = ? AND sh.status <> 'CANCELLED'
+						  AND sw.promoted_at IS NULL AND sw.left_at IS NULL)
+				""", Integer.class, mealId, mealId);
+		return n == null ? 0 : n;
+	}
+
+	/** The date of the series' last occurrence still standing — a dish PLANNED or COOKED — or null. */
+	private LocalDate lastStanding(UUID seriesId) {
+		return jdbc.queryForObject("""
+				SELECT max(pd.plan_date) FROM meals m
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				WHERE m.series_id = ?
+				  AND EXISTS (SELECT 1 FROM meal_dishes d WHERE d.meal_id = m.id AND d.status <> 'CANCELLED')
+				""", LocalDate.class, seriesId);
+	}
+
+	/**
+	 * Notes that one occurrence of a repeating event was changed on its own (T-307), so the "cancel this
+	 * and every later one" confirmation can say so before it cancels it. A meal in no series is left
+	 * alone by the predicate; V149's CHECK refuses the mark on one anyway.
+	 */
+	private void markEditedInSeries(UUID mealId) {
+		jdbc.update("UPDATE meals SET series_edited_at = now() WHERE id = ? AND series_id IS NOT NULL", mealId);
 	}
 
 	/** Hands the meal's shift draft to the shift service, inside the caller's transaction. */
@@ -953,47 +1134,196 @@ public class MealPlanService {
 	}
 
 	/**
-	 * Repeats a meal forward for a number of weeks (E4-S15 D8).
+	 * The furthest ahead a repeat may run: a year from today at the temple (T-307, KMS-400176). The
+	 * calendar that decides the fast days is computed about that far ahead, and a plan further out than
+	 * that is a guess about a kitchen nobody has staffed yet.
+	 */
+	private static final int REPEAT_HORIZON_YEARS = 1;
+
+	/** The gaps the screen offers between occurrences, in weeks (KMS-400175). */
+	private static final int MIN_REPEAT_WEEKS = 1;
+	private static final int MAX_REPEAT_WEEKS = 12;
+
+	/**
+	 * Repeats an event "once every N weeks until a date" as a series (T-307).
 	 *
-	 * <p><strong>Copies, not a series.</strong> Each is a meal in its own right: editing the third does
-	 * not touch the first, and there is no rule anywhere that has to be reasoned about later. Every
-	 * copy goes through {@link #create}, so a week whose dishes do not suit an Ekadashi falling there
-	 * is skipped whole and counted, never acknowledged on the planner's behalf.
+	 * <p><strong>A series, where it used to be copies.</strong> E4-S15 D8 made repeating produce
+	 * unrelated copies, precisely so that no screen would ever have to ask "this one or all of them?".
+	 * Rajeev asked for that question on 2026-09-19: <em>"Let us change for many weeks to 'until' a date
+	 * and also give them the option to pick the duration between repeats, and a cancel of this
+	 * repeating event should ask JUST this event OR all events from this point onwards."</em> So the
+	 * source and every copy now share a {@code meal_series} row (V149). What did not change is what a
+	 * copy is: an ordinary meal, made through {@link #create} so every rule that governs a meal governs
+	 * it, editable and cancellable on its own, and read by everything else like any other meal.
 	 *
-	 * <p>The meal is the one named by its id, with every dish it still has — before D-27 this found
-	 * "the event's dishes" by matching the clicked dish's date, kind and event name, which is the
-	 * text matching Rajeev ruled out. No volunteer shift is copied.
+	 * <p>Which meal, by its id, with every dish it still has — never "the event's dishes" found by
+	 * matching text, which is what D-27 ruled out. No volunteer shift is copied: a shift is somebody
+	 * asking for help with one meal, and nobody has asked for these yet.
+	 *
+	 * <p>Everything is decided by {@link #repeatWalk}, which {@link #previewRepeat} also runs, so the
+	 * dates the confirmation shows are the dates this makes. All of it is one transaction.
 	 */
 	@Transactional
-	public RepeatEventResult repeatForward(AuthenticatedUser actor, UUID mealId, int weeks) {
-		if (weeks < 1 || weeks > 52) {
-			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
-					Map.of("field", "weeks", "weeks", weeks));
+	public RepeatEventResult repeat(AuthenticatedUser actor, UUID mealId, int everyWeeks, LocalDate until) {
+		return repeatWalk(actor, mealId, everyWeeks, until, false);
+	}
+
+	/** What {@link #repeat} would do with the same answers, writing nothing (T-307). */
+	@Transactional(readOnly = true)
+	public RepeatEventResult previewRepeat(UUID mealId, int everyWeeks, LocalDate until) {
+		return repeatWalk(null, mealId, everyWeeks, until, true);
+	}
+
+	/**
+	 * The one walk behind both the preview and the repeat — the reuse screen's rule, for the same
+	 * reason: a preview computed a second way is a preview that can disagree with what it previews.
+	 *
+	 * <p><strong>The dates</strong> are the source's date plus every {@code everyWeeks} weeks, for as
+	 * long as they fall on or before {@code until} and not before the temple's today. None at all is
+	 * refused (KMS-400177) — the planner chose an end date before the first copy that could still be
+	 * cooked. Each date is then either made or skipped, and every skip
+	 * is named by its date so the screen can say which Saturday and why:
+	 *
+	 * <ul>
+	 *   <li><strong>Already planned.</strong> This same event — the day, kind and event name compared
+	 *       as {@link #findMeal} compares them — is already there with a dish to cook or cooked, or has
+	 *       been recorded. Planning it again would have {@link #create} add a second set of the same
+	 *       dishes to it, which is what the old repeat did and what nobody meant. A same-named meal that
+	 *       was cancelled is not in the way: {@code create} brings it back, as it always has, and it
+	 *       joins the series as a fresh copy.
+	 *   <li><strong>Fasting.</strong> A dish does not suit an Ekadashi falling there. Refused rather
+	 *       than acknowledged on the planner's behalf — nobody is looking at that meal to say it is all
+	 *       right.
+	 * </ul>
+	 *
+	 * <p><strong>The series.</strong> A source in no series starts one and joins it. A source already
+	 * in one — somebody repeating from the third occurrence to run it further — extends it: the gap
+	 * becomes the one just chosen, and the end date the later of the two, so extending never shortens.
+	 * Where every date was skipped nothing is written at all, not even a series of one.
+	 */
+	private RepeatEventResult repeatWalk(
+			AuthenticatedUser actor, UUID mealId, int everyWeeks, LocalDate until, boolean dryRun) {
+
+		if (everyWeeks < MIN_REPEAT_WEEKS || everyWeeks > MAX_REPEAT_WEEKS) {
+			throw new ApplicationException(ErrorCode.REPEAT_INTERVAL_OUT_OF_RANGE,
+					Map.of("everyWeeks", everyWeeks));
 		}
+		LocalDate latest = clock.today().plusYears(REPEAT_HORIZON_YEARS);
+		if (until.isAfter(latest)) {
+			throw new ApplicationException(ErrorCode.REPEAT_END_DATE_TOO_FAR,
+					Map.of("until", until.toString(), "latest", latest.toString()));
+		}
+
+		// The real run locks the source first, so two planners repeating it at once make one series
+		// between them rather than two, and neither sees the other's copies half-made.
+		MealRow row = dryRun
+				? jdbc.query(ROW_SELECT + " WHERE m.id = ?", ROW_MAPPER, mealId).stream().findFirst()
+						.orElseThrow(() -> new ApplicationException(
+								ErrorCode.RESOURCE_NOT_FOUND, Map.of("mealId", mealId)))
+				: lockMeal(mealId);
 		ServedMeal source = servedMealService.require(mealId);
 		List<MealDishView> dishes = live(source);
+		if (dishes.isEmpty()) {
+			// A cancelled meal has nothing to repeat. The old repeat quietly made no copies; a series of
+			// nothing is not something to confirm, so it is refused with the meal's own state.
+			throw new ApplicationException(ErrorCode.MEAL_PLAN_NOT_OPEN, Map.of("mealId", mealId));
+		}
 
-		int copied = 0;
-		int weeksCopied = 0;
-		int refusedOnFast = 0;
-		for (int week = 1; week <= weeks; week++) {
-			LocalDate target = source.planDate().plusWeeks(week);
-			boolean fasts = dishes.stream().anyMatch(d -> {
+		// Never a copy in the past (T-310). Repeating last month's event would otherwise plan meals on
+		// days already gone — meals nobody can cook, which then sit in the history as if they had been
+		// planned then. Past dates are simply not candidates: not made, not named as skipped, not
+		// counted, because a skip is something the planner can act on and a day gone is not. The grid
+		// stays anchored on the source's own date, so the first copy is the first date on that grid
+		// that is today or later — today itself included, since today's meal can still be cooked. The
+		// frontend mirrors this rule; the walk is still the one place that decides.
+		LocalDate today = clock.today();
+		List<LocalDate> candidates = new ArrayList<>();
+		for (LocalDate d = source.planDate().plusWeeks(everyWeeks); !d.isAfter(until); d = d.plusWeeks(everyWeeks)) {
+			if (!d.isBefore(today)) {
+				candidates.add(d);
+			}
+		}
+		if (candidates.isEmpty()) {
+			throw new ApplicationException(ErrorCode.REPEAT_MAKES_NO_COPIES,
+					Map.of("from", source.planDate().toString(), "until", until.toString(), "everyWeeks", everyWeeks));
+		}
+
+		Set<LocalDate> taken = sameEventTaken(source, candidates.get(0), candidates.get(candidates.size() - 1));
+		List<LocalDate> dates = new ArrayList<>();
+		List<LocalDate> skippedFasting = new ArrayList<>();
+		List<LocalDate> skippedAlreadyPlanned = new ArrayList<>();
+		for (LocalDate target : candidates) {
+			if (taken.contains(target)) {
+				skippedAlreadyPlanned.add(target);
+			} else if (dishes.stream().anyMatch(d -> {
 				EkadashiCheck check = ekadashiCheck(target, d.recipeId());
 				return check.isEkadashi() && !check.compatible();
-			});
-			if (fasts) {
-				refusedOnFast++;
-				continue;
+			})) {
+				skippedFasting.add(target);
+			} else {
+				dates.add(target);
 			}
-			if (dishes.isEmpty()) {
-				continue;
-			}
-			create(actor, copyOf(source, dishes, target));
-			copied += dishes.size();
-			weeksCopied++;
 		}
-		return new RepeatEventResult(copied, weeksCopied, refusedOnFast);
+
+		MealSeriesView series;
+		if (dates.isEmpty()) {
+			series = source.series();
+		} else if (dryRun) {
+			MealSeriesView current = source.series();
+			series = current == null
+					? new MealSeriesView(null, everyWeeks, until, 1, 1 + dates.size())
+					: new MealSeriesView(current.seriesId(), everyWeeks,
+							until.isAfter(current.until()) ? until : current.until(),
+							current.position(), current.count() + dates.size());
+		} else {
+			UUID seriesId = row.seriesId();
+			if (seriesId == null) {
+				seriesId = jdbc.queryForObject("""
+						INSERT INTO meal_series (tenant_id, every_weeks, until_date, created_by)
+						VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?)
+						RETURNING id
+						""", UUID.class, everyWeeks, until, actor.getUserId());
+				jdbc.update("UPDATE meals SET series_id = ?, updated_at = now() WHERE id = ?", seriesId, mealId);
+			} else {
+				jdbc.update("""
+						UPDATE meal_series
+						SET every_weeks = ?, until_date = GREATEST(until_date, ?), updated_at = now()
+						WHERE id = ?
+						""", everyWeeks, until, seriesId);
+			}
+			for (LocalDate target : dates) {
+				UUID copy = create(actor, copyOf(source, dishes, target)).id();
+				// A cancelled meal brought back is a fresh copy, whatever series it was in before and
+				// whatever was done to it there.
+				jdbc.update("""
+						UPDATE meals SET series_id = ?, series_edited_at = NULL, updated_at = now()
+						WHERE id = ?
+						""", seriesId, copy);
+			}
+			// Read back rather than worked out, so the answer is what the database now says.
+			series = servedMealService.require(mealId).series();
+		}
+
+		return new RepeatEventResult(
+				dates.size(), dates.size() * dishes.size(), List.copyOf(dates), List.copyOf(skippedFasting),
+				List.copyOf(skippedAlreadyPlanned), dates.isEmpty() ? null : dates.get(dates.size() - 1), series);
+	}
+
+	/**
+	 * The dates in a window on which this same event already stands: the same kind and event name as
+	 * {@link #findMeal} compares them, with a dish that is not cancelled, or recorded. One statement for
+	 * the whole window rather than one per date.
+	 */
+	private Set<LocalDate> sameEventTaken(ServedMeal source, LocalDate from, LocalDate to) {
+		return new LinkedHashSet<>(jdbc.queryForList("""
+				SELECT pd.plan_date FROM meals m
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				WHERE m.meal_kind_id = ?
+				  AND lower(COALESCE(m.event_name, '')) = lower(COALESCE(?::text, ''))
+				  AND pd.plan_date BETWEEN ? AND ?
+				  AND (m.recorded_at IS NOT NULL
+					   OR EXISTS (SELECT 1 FROM meal_dishes d WHERE d.meal_id = m.id AND d.status <> 'CANCELLED'))
+				""", LocalDate.class, source.mealKindId(), source.eventName(), from, to));
 	}
 
 	private static boolean sameEvent(String a, String b) {
@@ -1337,12 +1667,12 @@ public class MealPlanService {
 	private record MealRow(
 			UUID id, UUID mealPlanDayId, UUID mealKindId, LocalDate planDate, String eventName,
 			Instant recordedAt, String deliveryAddress, BigDecimal deliveryLatitude,
-			BigDecimal deliveryLongitude, OffsetDateTime geocodedAt) {
+			BigDecimal deliveryLongitude, OffsetDateTime geocodedAt, UUID seriesId) {
 	}
 
 	private static final String ROW_SELECT = """
 			SELECT m.id, m.meal_plan_day_id, m.meal_kind_id, pd.plan_date, m.event_name, m.recorded_at,
-				   m.delivery_address, m.delivery_latitude, m.delivery_longitude, m.geocoded_at
+				   m.delivery_address, m.delivery_latitude, m.delivery_longitude, m.geocoded_at, m.series_id
 			FROM meals m
 			JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
 			""";
@@ -1357,7 +1687,8 @@ public class MealPlanService {
 			rs.getString("delivery_address"),
 			rs.getBigDecimal("delivery_latitude"),
 			rs.getBigDecimal("delivery_longitude"),
-			rs.getObject("geocoded_at", OffsetDateTime.class));
+			rs.getObject("geocoded_at", OffsetDateTime.class),
+			rs.getObject("series_id", UUID.class));
 
 	/**
 	 * The event fields as they will actually be stored, after the chain of D6 has been walked.

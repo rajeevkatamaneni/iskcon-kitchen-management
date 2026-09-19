@@ -75,7 +75,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E4-S12 | Swapping or editing a planned dish | *No UAT test* |
 | E4-S13 | What an outside event is for | *Superseded by E4-S15* — **UAT-086** |
 | E4-S14 | Today, rewritten around the meal, including what is waiting for you (`fb52eba`) | *No UAT test.* UAT-062 (2026-08-14) predates it |
-| E4-S15 | Events, and the end of catering | **UAT-086**; the meal-kind picker it changes in UAT-032 |
+| E4-S15 | Events, and the end of catering; since 2026-09-19 an event repeats as a series (D8b, replacing D8's copies) | **UAT-086**; the meal-kind picker it changes in UAT-032. Repeating and cancelling a series: **UAT-086 steps 45–70**, rewritten 2026-09-19 (they tested unlinked copies before) |
 | E4-S16 | Travel time for a delivered event | **UAT-086** §travel |
 | E5-S1 | Vendor management | **UAT-037**; D2, the contract-end horizon as a temple setting, in **UAT-080** |
 | E5-S2 | Auto-generated shopping list | **UAT-038**, UAT-039 |
@@ -202,6 +202,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | T-195, T-196, T-197, T-198, T-199 | The D-27 meal rebuild: a meal is a row of its own with its volunteer shift saved alongside it; the planner, recording, job cards, Today and Volunteer shifts moved onto it; the old meal data reset (E4-S7, E4-S10, E4-S11, E4-S14, E6-S2) | *No UAT test.* UAT-032, UAT-035, UAT-048, UAT-062, UAT-078 and UAT-086 were written for the old model. T-195's reset automated only |
 | T-213, T-214, T-215 | Phase A fixes: every shift form box named by its label; Today names an event meal by its own name; a new, unsaved meal counts who is rostered so Volunteers requested prefills | *No UAT test* |
 | T-209 | Equipment taken off the job card, on screen, print and PDF (E4-S11) | *No UAT test* — E4-S11 has none |
+| T-307, T-308, T-310 | An event repeats once every 1 to 12 weeks until a date, as a linked series: a live count and the skipped dates before pressing, the series line on every occurrence, and cancel *just this event* or *this and all later ones*; no copy on a past date (E4-S15 D8b) | **UAT-086** steps 45–56 (repeat, preview, skips, `KMS-400175`–`400177`), 57–61 (the copies, the series line, editing one alone), 62–69 (both cancels, the edited one named, volunteers, `KMS-400179`, no question when nothing is later), 70 (kitchen staff). `KMS-400178` and "never a cooked or recorded one" automated only (`MealSeriesIT`) |
 | T-022, T-062, T-064 (with T-065), T-075, T-076, T-078, T-092, T-093, T-145, T-152, T-189, T-210 | Tests for five screens that had none; CI heap and Spring context counts; flaky tests fixed; the linter, and rules-of-hooks linting; local development migrates as `kms_migration` | *Automated tests only — no manual surface* |
 | T-058 | Held cleanups: four fixed, five dropped, three sent back to Rajeev | *No UAT step* |
 | T-017, T-018, T-091 | Stopped before building; nothing shipped | *Nothing built — no test* |

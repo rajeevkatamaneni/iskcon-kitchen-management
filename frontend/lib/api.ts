@@ -1527,6 +1527,9 @@ export interface MealView {
    * list and on the single meal; the answer to a recording or a correction carries null.
    */
   volunteerShift: ShiftView | null;
+
+  /** The repeating series this meal belongs to, or null for one never repeated. Always present. */
+  series: MealSeries | null;
 }
 
 /**
@@ -4112,19 +4115,64 @@ export interface DonationPageInfo {
  */
 
 /**
- * What repeating an event forward actually did (E4-S15 D8).
- *
- * <p>What it makes is **copies, not a series.** Each one is a plan in its own right and can be
- * edited or cancelled without touching the others, so no screen ever has to ask *this one or all of
- * them?* A true recurrence rule was considered and deferred: the temple's problem is not wanting to
- * type the same Saturday reading fifty-two times.
+ * The repeating series an event belongs to (Rajeev, 2026-09-19: "once every [N] weeks until [date]").
+ * Each occurrence is still an ordinary meal, edited or cancelled on its own; the series is what lets
+ * "this and all later ones" find the rest. Built by T-307; shapes copied from its live responses.
+ */
+export interface MealSeries {
+  /** Null only on a repeat preview of an event that is not yet in a series. */
+  seriesId: string | null;
+  /** 1 to 12. The last gap asked for — repeating from any occurrence extends the series. */
+  everyWeeks: number;
+  /** "YYYY-MM-DD". The end date asked for; shrinks to the last standing one after "this and later". */
+  until: string;
+  /** 1-based among the series' occurrences still standing, by date. Null on a cancelled one. */
+  position: number | null;
+  /** How many occurrences still stand. */
+  count: number;
+}
+
+/**
+ * What repeating an event did — or, from `previewRepeat`, would do. The preview and the repeat run the
+ * same walk, so the preview's dates are exactly the dates the repeat makes.
  */
 export interface RepeatEventResult {
-  /** How many preparations were written. Six weekly copies of a two-dish event is twelve. */
-  copied: number;
-  weeksCopied: number;
-  /** Weeks skipped because an Ekadashi falls there and the recipe does not suit it. */
-  refusedOnFast: number;
+  /** Meals made (one per date). */
+  copies: number;
+  /** Dishes written across them. */
+  preparations: number;
+  /** "YYYY-MM-DD" of every copy made, in order. */
+  dates: string[];
+  /** Dates skipped because an Ekadashi falls there and a dish does not suit it. Never acknowledged for the planner. */
+  skippedFasting: string[];
+  /** Dates skipped because this event is already planned (or recorded) there; nothing is added to it. */
+  skippedAlreadyPlanned: string[];
+  /** The last copy's date, or null when none is made. */
+  lastDate: string | null;
+  /** The series after the repeat. Null only when nothing is made and the event is in no series. */
+  series: MealSeries | null;
+}
+
+/** One later occurrence that "this and all later ones" would cancel. */
+export interface LaterOccurrence {
+  mealId: string;
+  planDate: string;
+  /** Changed on its own after it was made — named in the confirm so nothing is cancelled by surprise. */
+  edited: boolean;
+  volunteersSignedUp: number;
+}
+
+/**
+ * What "this and all later ones" would cancel: later occurrences still to be cooked (never past,
+ * cooked, recorded or already cancelled ones). `expectedMealIds` on the cancel must be these ids.
+ */
+export interface LaterInSeries {
+  seriesId: string;
+  later: LaterOccurrence[];
+  /** The last of `later`, or null when there is none. */
+  lastDate: string | null;
+  /** Everyone signed up or waiting on this meal's shift and every later one's — who will be told. */
+  volunteersToTell: number;
 }
 
 /**
@@ -4274,7 +4322,14 @@ export interface SavedMeal {
 /** What cancelling a meal did: how many signed-up and waitlisted volunteers were told (D-27 answer 5). */
 export interface CancelledMeal {
   volunteersTold: number;
+  /** 1 for "just this event"; this one plus the later ones for "this and all later ones". */
+  mealsCancelled: number;
+  /** The last occurrence of the series still standing afterwards, or null (also null outside a series). */
+  lastDate: string | null;
 }
+
+/** Which occurrences a cancel reaches. Absent means just this one, exactly as before series existed. */
+export type CancelScope = "THIS" | "THIS_AND_LATER";
 
 export interface PaymentSettingsView {
   configured: boolean;
@@ -5574,14 +5629,27 @@ export const api = {
     ),
 
   /**
-   * Repeats an event forward for a number of weeks (E4-S15 D8). Copies, not a series: each one is
-   * editable and cancellable on its own.
+   * Repeats an event once every `everyWeeks` weeks (1–12) until `until` ("YYYY-MM-DD", within a year
+   * of today at the temple). Copies join the event's series, which is made or extended. Refusals:
+   * KMS-400175 gap, KMS-400176 end date too far, KMS-400177 no copy fits.
    */
-  repeatEvent: (mealId: string, weeks: number, token?: string) =>
-    request<RepeatEventResult>(`/api/v1/meals/${mealId}/repeat?weeks=${weeks}`, {
+  repeatEvent: (mealId: string, everyWeeks: number, until: string, token?: string) =>
+    request<RepeatEventResult>(`/api/v1/meals/${mealId}/repeat`, {
       method: "POST",
+      body: JSON.stringify({ everyWeeks, until }),
       token,
     }),
+
+  /** What `repeatEvent` would do with these values, writing nothing. Same refusals. */
+  previewRepeat: (mealId: string, everyWeeks: number, until: string, token?: string) =>
+    request<RepeatEventResult>(
+      `/api/v1/meals/${mealId}/repeat-preview?everyWeeks=${everyWeeks}&until=${encodeURIComponent(until)}`,
+      { method: "GET", token }
+    ),
+
+  /** The later occurrences "this and all later ones" would cancel. KMS-400178 when not in a series. */
+  laterInSeries: (mealId: string, token?: string) =>
+    request<LaterInSeries>(`/api/v1/meals/${mealId}/later-in-series`, { method: "GET", token }),
 
   /**
    * "Save this meal" (D-27): the meal, its dishes and any volunteer shift in one transaction. A meal
@@ -5609,11 +5677,18 @@ export const api = {
   /**
    * Cancels every planned dish of the meal and its volunteer shift, in one transaction. Volunteers
    * signed up or waiting are sent the existing `shift_cancelled` message after it commits.
+   * With `series.scope` "THIS_AND_LATER" it also cancels the later occurrences, all in one transaction;
+   * `expectedMealIds` are the ids the confirm showed, and a mismatch cancels nothing (KMS-400179).
    */
-  cancelMeal: (mealId: string, reason?: string | null, token?: string) =>
+  cancelMeal: (
+    mealId: string,
+    reason?: string | null,
+    token?: string,
+    series?: { scope: CancelScope; expectedMealIds?: string[] }
+  ) =>
     request<CancelledMeal>(`/api/v1/meals/${mealId}/cancel`, {
       method: "POST",
-      body: JSON.stringify(reason ? { reason } : {}),
+      body: JSON.stringify({ ...(reason ? { reason } : {}), ...(series ?? {}) }),
       token,
     }),
 

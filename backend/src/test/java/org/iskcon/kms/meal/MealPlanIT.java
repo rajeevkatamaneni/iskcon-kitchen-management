@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.AbstractIntegrationTest;
@@ -409,43 +410,62 @@ class MealPlanIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("an event repeats forward as copies, and editing one leaves the others alone")
-	void repeatForwardMakesCopiesNotASeries() throws Exception {
+	@DisplayName("an event repeats weekly until a date as a series, and editing one occurrence leaves the others alone")
+	void repeatForwardMakesASeriesOfOrdinaryMeals() throws Exception {
+		// Relative to today at the temple rather than the 2025 calendar the rest of this class plans on
+		// (T-310): a repeat never makes a copy on a day already gone, so a source in 2025 would now make
+		// nothing. The source is a week out, so all six copies are in the future and inside the
+		// one-year cap. The tenant's zone is Asia/Kolkata, the zone TempleClock answers for it.
+		LocalDate s = LocalDate.now(ZoneId.of("Asia/Kolkata")).plusWeeks(1);
 		UUID first = create("""
-				{"planDate":"2025-03-22","mealKind":"Event","recipeId":"%s","targetYield":30,
+				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":30,
 				 "readyBy":"17:00","eventName":"Children's Bhagavad-gita Reading"}
-				""".formatted(khichdi));
+				""".formatted(s, khichdi));
 
-		mvc.perform(post("/api/v1/meals/{id}/repeat", first).param("weeks", "6")
+		// "once every [1] week … until" six weeks on (T-307, Rajeev 2026-09-19): six copies, and the
+		// source and its copies now share a series. The arithmetic of the gap, the end date, the skips
+		// and the cancel are MealSeriesIT's; this keeps the case this class always had.
+		mvc.perform(post("/api/v1/meals/{id}/repeat", first)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"everyWeeks\":1,\"until\":\"%s\"}".formatted(s.plusWeeks(6)))
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.copied").value(6))
-				.andExpect(jsonPath("$.weeksCopied").value(6));
+				.andExpect(jsonPath("$.copies").value(6))
+				.andExpect(jsonPath("$.preparations").value(6))
+				.andExpect(jsonPath("$.lastDate").value(s.plusWeeks(6).toString()))
+				.andExpect(jsonPath("$.series.count").value(7));
 
-		// Six copies on the next six Saturdays, each a meal of its own carrying the name, the amount
-		// and the hour.
-		mvc.perform(get("/api/v1/meals").param("from", "2025-03-22").param("to", "2025-05-10")
+		// Six copies on the next six weeks, each a meal of its own carrying the name, the amount and the
+		// hour.
+		mvc.perform(get("/api/v1/meals").param("from", s.toString()).param("to", s.plusWeeks(7).toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$.length()").value(7))
 				.andExpect(jsonPath("$[3].eventName").value("Children's Bhagavad-gita Reading"))
-				.andExpect(jsonPath("$[3].planDate").value("2025-04-12"))
-				.andExpect(jsonPath("$[3].dishes[0].targetYield").value(30.0));
+				.andExpect(jsonPath("$[3].planDate").value(s.plusWeeks(3).toString()))
+				.andExpect(jsonPath("$[3].dishes[0].targetYield").value(30.0))
+				.andExpect(jsonPath("$[3].series.position").value(4));
 
-		UUID third = mealOn("2025-04-05");
+		UUID third = mealOn(s.plusWeeks(2).toString());
 		mvc.perform(updateRequest(third, """
-				{"planDate":"2025-04-05","mealKind":"Event","recipeId":"%s","targetYield":50,
+				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":50,
 				 "readyBy":"17:00","eventName":"Children's Bhagavad-gita Reading"}
-				""".formatted(khichdi)))
+				""".formatted(s.plusWeeks(2), khichdi)))
 				.andExpect(status().isOk());
 
-		// Copies, not a series: the others are untouched, and nothing asked "this one or all of them?"
-		mvc.perform(get("/api/v1/meals").param("from", "2025-04-12").param("to", "2025-04-12")
+		// Each occurrence is still an ordinary meal: changing one touches no other.
+		mvc.perform(get("/api/v1/meals").param("from", s.plusWeeks(3).toString())
+						.param("to", s.plusWeeks(3).toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$[0].dishes[0].targetYield").value(30.0));
-		mvc.perform(get("/api/v1/meals").param("from", "2025-03-29").param("to", "2025-03-29")
+		mvc.perform(get("/api/v1/meals").param("from", s.plusWeeks(1).toString())
+						.param("to", s.plusWeeks(1).toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(jsonPath("$[0].dishes[0].targetYield").value(30.0));
 		mvc.perform(meal(third)).andExpect(jsonPath("$.dishes[0].targetYield").value(50.0));
+		assertThat(admin.queryForObject("SELECT series_edited_at IS NOT NULL FROM meals WHERE id = ?",
+				Boolean.class, third)).isTrue();
+		assertThat(admin.queryForObject("SELECT count(DISTINCT series_id) FROM meals WHERE series_id IS NOT NULL",
+				Integer.class)).isEqualTo(1);
 	}
 
 	@Test

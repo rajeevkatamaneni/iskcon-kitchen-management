@@ -634,8 +634,23 @@ public class ServedMealService {
 				m.cardNumber(), m.cardIssuedAt(),
 				m.recordedAt() != null, m.recordedAt(), m.recordedByName(), m.recordingNote(),
 				m.correctedAt() != null, m.correctedAt(), m.correctedByName(), m.correctionNote(),
+				seriesOf(m, dishes),
 				Collections.unmodifiableList(dishes),
 				null);
+	}
+
+	/**
+	 * The meal's series summary, from the columns its own statement already read (T-307). The position
+	 * is withheld from a cancelled occurrence: the SQL counts only the ones still standing, and a
+	 * cancelled one being "3 of 7" would be a place it does not hold. "Cancelled" is decided here by
+	 * the same {@link #statusOf} every screen shows, so the summary and the badge cannot disagree.
+	 */
+	private static MealSeriesView seriesOf(MealRow m, List<MealDishView> dishes) {
+		if (m.seriesId() == null) {
+			return null;
+		}
+		Integer position = statusOf(dishes) == MealStatus.CANCELLED ? null : m.seriesPosition();
+		return new MealSeriesView(m.seriesId(), m.seriesEveryWeeks(), m.seriesUntil(), position, m.seriesCount());
 	}
 
 	/** The meal's state as its dishes say it; see {@link ServedMeal#status()}. */
@@ -704,7 +719,8 @@ public class ServedMealService {
 			LocalTime guestsEatAt, Integer travelMinutes, String travelMinutesSource, String purpose,
 			String kitchenNotes, String serverNotes, String cardNumber, java.time.Instant cardIssuedAt,
 			java.time.Instant recordedAt, String recordedByName, String recordingNote,
-			java.time.Instant correctedAt, String correctedByName, String correctionNote) {
+			java.time.Instant correctedAt, String correctedByName, String correctionNote,
+			UUID seriesId, int seriesEveryWeeks, LocalDate seriesUntil, Integer seriesPosition, int seriesCount) {
 	}
 
 	/**
@@ -717,6 +733,14 @@ public class ServedMealService {
 	 *
 	 * <p>No tenant predicate, because there must not be one: row-level security on all three tables
 	 * answers that from the verified token.
+	 *
+	 * <p><strong>The series summary is read here, in this one statement (T-307).</strong> The week view
+	 * reads every meal of a week at once, and asking for each meal's series separately would be one
+	 * more statement per meal. The two counts are correlated subqueries that run only for a meal that
+	 * is in a series ({@code CASE}), over {@code meals_by_series} (V149). "Still standing" is a dish
+	 * that is PLANNED or COOKED — exactly when {@code statusOf} does not say CANCELLED. The position
+	 * orders by date, then ready-by, then id, so two occurrences on one day (possible only if one was
+	 * renamed onto the other's day) still have a stable order.
 	 */
 	private static final String MEAL_SELECT = """
 			SELECT m.id, m.meal_kind_id, pd.plan_date, k.name AS meal_kind, pd.day_type, m.ready_by,
@@ -726,12 +750,28 @@ public class ServedMealService {
 				   m.guests_eat_at, m.travel_minutes, m.travel_minutes_source, m.purpose,
 				   m.kitchen_notes, m.server_notes, m.card_number, m.card_issued_at,
 				   m.recorded_at, m.recording_note, u.full_name AS recorded_by_name,
-				   m.corrected_at, m.correction_note, c.full_name AS corrected_by_name
+				   m.corrected_at, m.correction_note, c.full_name AS corrected_by_name,
+				   m.series_id, s.every_weeks AS series_every_weeks, s.until_date AS series_until,
+				   CASE WHEN m.series_id IS NOT NULL THEN (
+					   SELECT count(*) FROM meals sm
+					   WHERE sm.series_id = m.series_id
+						 AND EXISTS (SELECT 1 FROM meal_dishes sd
+									 WHERE sd.meal_id = sm.id AND sd.status <> 'CANCELLED'))
+				   END AS series_count,
+				   CASE WHEN m.series_id IS NOT NULL THEN (
+					   SELECT count(*) FROM meals sm
+					   JOIN meal_plan_days spd ON spd.id = sm.meal_plan_day_id
+					   WHERE sm.series_id = m.series_id
+						 AND EXISTS (SELECT 1 FROM meal_dishes sd
+									 WHERE sd.meal_id = sm.id AND sd.status <> 'CANCELLED')
+						 AND (spd.plan_date, sm.ready_by, sm.id) <= (pd.plan_date, m.ready_by, m.id))
+				   END AS series_position
 			FROM meals m
 			JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
 			JOIN meal_kinds k ON k.id = m.meal_kind_id
 			LEFT JOIN users u ON u.id = m.recorded_by
 			LEFT JOIN users c ON c.id = m.corrected_by
+			LEFT JOIN meal_series s ON s.id = m.series_id
 			""";
 
 	/** The order the kitchen works in: the day, then when each meal is due, then the kinds' own order. */
@@ -786,7 +826,12 @@ public class ServedMealService {
 			rs.getString("recording_note"),
 			instant(rs, "corrected_at"),
 			rs.getString("corrected_by_name"),
-			rs.getString("correction_note"));
+			rs.getString("correction_note"),
+			rs.getObject("series_id", UUID.class),
+			rs.getInt("series_every_weeks"),
+			rs.getObject("series_until", LocalDate.class),
+			rs.getObject("series_position") == null ? null : rs.getInt("series_position"),
+			rs.getInt("series_count"));
 
 	private static final RowMapper<MealDishView> DISH_MAPPER = (rs, n) -> new MealDishView(
 			rs.getObject("id", UUID.class),
