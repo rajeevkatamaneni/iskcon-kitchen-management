@@ -12,7 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { money } from "@/lib/format";
 import { Loading } from "@/components/Loading";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 
 export default function WishlistAdminPage() {
@@ -67,7 +67,7 @@ function WishlistAdminView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/wishlist" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -97,28 +97,28 @@ function WishlistAdminView() {
             </div>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
-                    <th className={TH_NUM}>Price</th>
-                    <th className={TH_NUM}>Received</th>
-                    <th className={TH_TEXT}>Status</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_PRIMARY}>Item</th>
+                    <th className={TH_FIXED}>Price</th>
+                    <th className={TH_FIXED}>Received</th>
+                    <th className={TH_FIXED}>Status</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((i) => (
                     <tr key={i.id} className={TR}>
-                      <td className={`${TD_TEXT} ${WRAP} font-medium`}>{i.title}<span className="ml-2 text-xs text-ink-muted">{sentence(i.category)}</span></td>
-                      <td className={TD_NUM}>{money(i.priceInr, "INR")}</td>
-                      <td className={TD_NUM}>{money(i.paidInr, "INR")} of {money(i.priceInr * i.quantityWanted, "INR")}</td>
-                      <td className={TD_TEXT}>
-                        <span className={`rounded-sm px-2 py-1 text-xs ${i.status === "FULFILLED" ? "bg-success-bg text-success" : i.status === "ARCHIVED" ? "bg-sunken text-ink-muted" : "bg-accent-bg text-accent-text"}`}>
+                      <td className={`${TD_PRIMARY} font-medium`}>{i.title}<span className="ml-2 text-xs text-ink-muted">{sentence(i.category)}</span></td>
+                      <td className={TD_FIXED_NUM} data-label="Price">{money(i.priceInr, "INR")}</td>
+                      <td className={TD_FIXED_NUM} data-label="Received">{money(i.paidInr, "INR")} of {money(i.priceInr * i.quantityWanted, "INR")}</td>
+                      <td className={TD_FIXED}>
+                        <span className={`rounded-control px-2 py-1 text-xs ${i.status === "FULFILLED" ? "bg-sunken text-ink-secondary" : i.status === "ARCHIVED" ? "bg-sunken text-ink-muted" : "bg-accent-bg text-accent-text"}`}>
                           {sentence(i.status)}
                         </span>
                       </td>
-                      <td className={TD_ACTIONS}>
+                      <td className={TD_ACTIONS_FIXED}>
                         <Button variant="ghost" size="sm" disabled={busy} onClick={() => run((t) => api.archiveWishlistItem(i.id, t), "We couldn’t archive that item.")}>
                           Archive
                         </Button>

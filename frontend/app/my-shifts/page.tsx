@@ -116,12 +116,12 @@ function MyShiftsView() {
                   <div>
                     <p className="font-medium">
                       {s.title}
-                      {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">From waitlist</span>}
+                      {s.source === "PROMOTION" && <span className="ml-2 rounded-control bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">From waitlist</span>}
                     </p>
                     <p className="text-sm text-ink-secondary tabular-nums">{dateWithYear(s.shiftDate)} · {shiftWindow(s.startTime, s.endTime)}</p>
                     {s.location && <p className="text-sm text-ink-muted">{s.location}</p>}
                   </div>
-                  <button type="button" disabled={busy} onClick={() => run((t) => api.releaseShift(s.shiftId, t), "We couldn’t release your spot.")} className="min-h-touch rounded border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60">
+                  <button type="button" disabled={busy} onClick={() => run((t) => api.releaseShift(s.shiftId, t), "We couldn’t release your spot.")} className="min-h-touch rounded-control border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60">
                     Release my spot
                   </button>
                 </li>
@@ -169,7 +169,7 @@ function MyShiftsView() {
                       <p className="font-medium">{w.title} <span className="ml-2 text-sm text-ink-secondary">Position {w.position}</span></p>
                       <p className="text-sm text-ink-secondary tabular-nums">{dateWithYear(w.shiftDate)} · {shiftWindow(w.startTime, w.endTime)}</p>
                     </div>
-                    <button type="button" disabled={busy} onClick={() => run((t) => api.leaveWaitlist(w.shiftId, t), "We couldn’t remove you from the waitlist.")} className="min-h-touch rounded border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60">
+                    <button type="button" disabled={busy} onClick={() => run((t) => api.leaveWaitlist(w.shiftId, t), "We couldn’t remove you from the waitlist.")} className="min-h-touch rounded-control border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60">
                       Leave waitlist
                     </button>
                   </li>

@@ -12,17 +12,7 @@ import { EmptyState } from "@/components/ds/EmptyState";
 import { FieldRow } from "@/components/ds/FieldRow";
 import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
-import {
-  ACTIONS_ROW,
-  TABLE,
-  TD_ACTIONS,
-  TD_TEXT,
-  THEAD,
-  TH_ACTIONS,
-  TH_TEXT,
-  TR,
-  WRAP,
-} from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { api, toApiError, type ApiError, type OccasionView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -197,7 +187,7 @@ function OccasionsView() {
     <div className="flex min-h-screen">
       <Sidebar activeHref="/settings/occasions" />
 
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-8">
             <h1>Festival occasions</h1>
@@ -292,19 +282,19 @@ function OccasionsView() {
             </EmptyState>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Occasion</th>
-                    <th className={`${TH_TEXT} ${WRAP}`}>When it falls</th>
-                    <th className={TH_TEXT}>Usual servings</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_PRIMARY}>Occasion</th>
+                    <th className={TH_SECOND}>When it falls</th>
+                    <th className={TH_FIXED}>Usual servings</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {occasions.map((o) => (
                     <tr key={o.id} className={TR}>
-                      <td className={`${TD_TEXT} ${WRAP}`}>
+                      <td className={TD_PRIMARY}>
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{o.name}</span>
                           {o.seeded && <Badge>Standard</Badge>}
@@ -313,11 +303,11 @@ function OccasionsView() {
                           <span className="mt-0.5 block text-sm text-ink-secondary">{o.notes}</span>
                         )}
                       </td>
-                      <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{whenItFalls(o)}</td>
-                      <td className={`${TD_TEXT} text-ink-secondary`}>
+                      <td className={`${TD_SECOND} text-ink-secondary`}>{whenItFalls(o)}</td>
+                      <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="Usual servings">
                         {o.defaultServings === null ? "Not set" : o.defaultServings}
                       </td>
-                      <td className={TD_ACTIONS}>
+                      <td className={TD_ACTIONS_FIXED}>
                         <div className={ACTIONS_ROW}>
                           <Button
                             variant="ghost"

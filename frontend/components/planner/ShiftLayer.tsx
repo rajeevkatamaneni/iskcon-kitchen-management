@@ -134,7 +134,7 @@ export function ShiftLayer({
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-hairline px-8 py-4">
           <div className="min-w-0">
             <h2 id="shift-layer-title" className="text-xl font-semibold text-ink">
-              {saved ? "Edit a shift" : "Post a shift"}
+              {saved ? "Edit a shift" : "Ask for volunteers"}
             </h2>
             {/* The meal it is for and the day, said once — there is no meal field, so this is the only
                 place a planner can see which meal the shift will belong to. */}

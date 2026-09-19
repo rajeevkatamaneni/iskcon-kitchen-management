@@ -125,7 +125,7 @@ function StaffRecordScreen() {
       ) : (
         <>
           <Card title="Employment">
-            <dl className="grid grid-cols-3 gap-4 text-sm">
+            <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
               <Fact label="Job">{staff.jobTitleLabel}</Fact>
               <Fact label="Employment">{employmentTypeLabel(staff.employmentType)}</Fact>
               <Fact label="Joined">{dayMonthYear(staff.dateOfJoining)}</Fact>
@@ -177,7 +177,7 @@ function StaffRecordScreen() {
           )}
 
           <Card title="Contact">
-            <dl className="grid grid-cols-3 gap-4 text-sm">
+            <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
               <Fact label="Phone">
                 {staff.phone ? <span className="tabular-nums">{staff.phone}</span> : <Absent>Not recorded</Absent>}
               </Fact>
@@ -205,7 +205,7 @@ function StaffRecordScreen() {
                 {!staff.panLast4 ? (
                   <Absent>Not recorded</Absent>
                 ) : (
-                  <span className="flex items-center gap-2">
+                  <span className="flex flex-wrap items-center gap-x-2">
                     <span className="tabular-nums">{revealedPan ?? `••••••${staff.panLast4}`}</span>
                     {!revealedPan && (
                       <button
@@ -224,7 +224,7 @@ function StaffRecordScreen() {
           </Card>
 
           <Card title="Pay">
-            <dl className="grid grid-cols-3 gap-4 text-sm">
+            <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
               <Fact label="Monthly salary">
                 {pay?.monthlySalary != null ? (
                   <span className="tabular-nums">{money(pay.monthlySalary, pay.currency)}</span>
@@ -303,7 +303,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
       <dt className="text-ink-secondary">{label}</dt>
-      <dd className="mt-1 text-ink">{children}</dd>
+      <dd className="mt-1 text-ink [overflow-wrap:anywhere]">{children}</dd>
     </div>
   );
 }

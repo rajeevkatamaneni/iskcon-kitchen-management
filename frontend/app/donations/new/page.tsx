@@ -186,7 +186,7 @@ function NewDonationView() {
       )}
 
       <Form id={FORM} className="grid gap-6" aria-label="Record a donation" onSubmit={submit}>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex min-h-touch items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={anonymous}
@@ -197,7 +197,7 @@ function NewDonationView() {
         </label>
 
         {!anonymous && (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             <label className="flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Donor name</span>
               <input name="donorName" required={!anonymous} className={FIELD} />
@@ -213,7 +213,7 @@ function NewDonationView() {
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid gap-4 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">Date</span>
             <input name="donatedOn" type="date" defaultValue={todayIso()} required className={FIELD} />
@@ -291,7 +291,7 @@ function NewDonationView() {
               type="button"
               onClick={addIngredientLine}
               disabled={hasCash}
-              className="text-sm text-accent-text hover:underline disabled:opacity-60 disabled:no-underline"
+              className="min-h-touch text-sm text-accent-text hover:underline disabled:opacity-60 disabled:no-underline"
             >
               Add a food item
             </button>
@@ -310,7 +310,7 @@ function NewDonationView() {
                       ls.map((l, i) => (i === idx ? { ...l, ingredientId, unit: chosen?.unit ?? l.unit } : l))
                     );
                   }}
-                  className={`col-span-5 ${FIELD} text-sm`}
+                  className={`col-span-12 sm:col-span-5 ${FIELD} text-sm`}
                 >
                   <option value="">Choose…</option>
                   {ingredients.map((i) => (
@@ -329,7 +329,7 @@ function NewDonationView() {
                   onChange={(e) =>
                     setIngredientLines((ls) => ls.map((l, i) => (i === idx ? { ...l, quantity: e.target.value } : l)))
                   }
-                  className={`col-span-2 ${FIELD} text-sm`}
+                  className={`col-span-3 sm:col-span-2 ${FIELD} text-sm`}
                 />
                 <select
                   aria-label={`Unit ${idx + 1}`}
@@ -337,7 +337,7 @@ function NewDonationView() {
                   onChange={(e) =>
                     setIngredientLines((ls) => ls.map((l, i) => (i === idx ? { ...l, unit: e.target.value } : l)))
                   }
-                  className={`col-span-2 ${FIELD} text-sm`}
+                  className={`col-span-3 sm:col-span-2 ${FIELD} text-sm`}
                 >
                   {FOOD_UNITS.map((u) => (
                     <option key={u} value={u}>
@@ -352,13 +352,15 @@ function NewDonationView() {
                   onChange={(e) =>
                     setIngredientLines((ls) => ls.map((l, i) => (i === idx ? { ...l, expiryDate: e.target.value } : l)))
                   }
-                  className={`col-span-2 ${FIELD} text-sm`}
+                  className={`col-span-5 sm:col-span-2 ${FIELD} text-sm`}
                 />
+                {/* Plain, not red: removing an unsaved line is trivial and undone by adding it again.
+                    Red is for something serious (Rajeev, 2026-09-18, T-227). */}
                 <button
                   type="button"
                   aria-label={`Remove food ${idx + 1}`}
                   onClick={() => setIngredientLines((ls) => ls.filter((_, i) => i !== idx))}
-                  className="col-span-1 text-danger hover:underline"
+                  className="col-span-1 text-ink-secondary hover:text-ink hover:underline"
                 >
                   ✕
                 </button>
@@ -375,7 +377,7 @@ function NewDonationView() {
               type="button"
               onClick={addEquipmentLine}
               disabled={hasCash}
-              className="text-sm text-accent-text hover:underline disabled:opacity-60 disabled:no-underline"
+              className="min-h-touch text-sm text-accent-text hover:underline disabled:opacity-60 disabled:no-underline"
             >
               Add a piece of equipment
             </button>
@@ -409,7 +411,7 @@ function NewDonationView() {
                   type="button"
                   aria-label={`Remove equipment ${idx + 1}`}
                   onClick={() => setEquipmentLines((ls) => ls.filter((_, i) => i !== idx))}
-                  className="col-span-1 text-danger hover:underline"
+                  className="col-span-1 text-ink-secondary hover:text-ink hover:underline"
                 >
                   ✕
                 </button>

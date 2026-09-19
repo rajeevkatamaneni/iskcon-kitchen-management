@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/wishlist" }));
 
@@ -61,7 +61,8 @@ describe("the menu stays where it was left", () => {
 
     // The temple's own name is the heading of its own app. "Temple Kitchen" told everyone the name
     // of the thing they were already looking at, and demoted the one word that says where they are.
-    expect(screen.getByText("ISKCON South Bengaluru")).toBeInTheDocument();
+    // Scoped to the column: below 1024px the phone bar (T-225) names the temple too.
+    expect(within(screen.getByLabelText("Main")).getByText("ISKCON South Bengaluru")).toBeInTheDocument();
     expect(screen.queryByText("Temple Kitchen")).not.toBeInTheDocument();
   });
 });
@@ -86,7 +87,8 @@ describe("the temple's mark and name", () => {
     // Centred in the column, mark and name alike.
     expect(mark.closest("div")!.className).toContain("justify-items-center");
 
-    const name = screen.getByText("ISKCON South Bengaluru");
+    // The column's name; the phone bar's (T-225) is a separate, smaller label.
+    const name = within(screen.getByLabelText("Main")).getByText("ISKCON South Bengaluru");
     expect(name.className).toContain("whitespace-nowrap");
     expect(name.className).toContain("text-center");
     // Deliberately NOT truncate: an ellipsis would hide the very failure the measurement prevents.

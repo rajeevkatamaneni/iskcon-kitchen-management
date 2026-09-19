@@ -106,11 +106,11 @@ function NewNoticeView() {
       </InlineNotice>
 
       <Form id={FORM} className="grid gap-4" aria-label="Raise a platform notice" onSubmit={raise}>
-        <fieldset className="grid gap-2">
+        <fieldset className="grid">
           <legend className="pl-field-inset text-sm font-medium text-ink">Severity</legend>
           {SEVERITIES.map((s, i) => (
-            <label key={s.value} className="flex items-baseline gap-2 text-sm">
-              <input type="radio" name="severity" value={s.value} defaultChecked={i === 0} className="mt-1 accent-accent" />
+            <label key={s.value} className="flex min-h-touch items-center gap-2 text-sm">
+              <input type="radio" name="severity" value={s.value} defaultChecked={i === 0} className="accent-accent" />
               <span>
                 <span className="text-ink">{s.label}</span> <span className="text-ink-muted">{s.hint}</span>
               </span>

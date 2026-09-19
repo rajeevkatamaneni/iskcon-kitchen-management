@@ -258,7 +258,11 @@ describe("meal planner", () => {
     // — same FocusScreen, same floating actions — and it is that screen rather than a second build
     // of it. The day travels in the address so the form knows which day it is planning.
     const add = screen.getByRole("link", { name: /add a meal/i });
-    expect(add).toHaveAttribute("href", `/planner/compose?date=${todayIso()}`);
+    const href = new URL(add.getAttribute("href") ?? "", "https://kms.invalid");
+    expect(href.pathname).toBe("/planner/compose");
+    expect(href.searchParams.get("date")).toBe(todayIso());
+    // And the way back to exactly this screen (T-219), so its Cancel does not land somewhere else.
+    expect(href.searchParams.get("from")).toBe(`/planner?view=day&date=${todayIso()}`);
 
     // And nothing opens over the page: it was never a dialog and is not one now.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -314,7 +318,14 @@ describe("a meal is the unit of planning", () => {
     expect(screen.getByText("Bisi Bele Bath")).toBeInTheDocument();
     expect(screen.getByText("Majjige")).toBeInTheDocument();
     // The whole meal is edited as one, at its own address — its id since D-27, not its date and kind.
-    expect(screen.getByRole("link", { name: /^edit$/i })).toHaveAttribute("href", "/planner/meal/meal-lunch");
+    // It carries the planner's own address with it as `from`, so leaving the meal comes back here
+    // (T-219).
+    const edit = new URL(
+      screen.getByRole("link", { name: /^edit$/i }).getAttribute("href") ?? "",
+      "https://kms.invalid"
+    );
+    expect(edit.pathname).toBe("/planner/meal/meal-lunch");
+    expect(edit.searchParams.get("from")).toMatch(/^\/planner\?view=day&date=\d{4}-\d{2}-\d{2}$/);
   });
 
   it("counts a week's tile in meals, and names the preparations beneath", () => {
@@ -757,3 +768,26 @@ function commitment(fields: Record<string, unknown> = {}) {
     ...fields,
   };
 }
+
+// --- T-219: coming back from a meal's screen --------------------------------
+
+describe("coming back to the planner from a meal's screen (T-219)", () => {
+  beforeEach(() => {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
+    };
+    queryRef.current = [];
+  });
+
+  it("says what was saved, in the view it was left in, and takes the flag out of the address", async () => {
+    urlRef.current?.write("view=week&date=2026-09-20&saved=Lunch");
+    render(<PlannerPage />);
+
+    expect(await screen.findByText("Lunch was saved.")).toBeInTheDocument();
+    // Still the week, still that date: only the one-shot flag has gone.
+    expect(urlRef.current?.read()).toBe("view=week&date=2026-09-20");
+    expect(within(views()).getByRole("tab", { name: "Week" })).toHaveAttribute("aria-selected", "true");
+  });
+});
+

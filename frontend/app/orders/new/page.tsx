@@ -136,7 +136,7 @@ function ChooseVendorView() {
 
           {vendors.length === 0 && !error && (
             <p className="max-w-prose text-ink-secondary">
-              No vendor is active yet. Add the shop or supplier this order goes to, then come back
+              No vendor is active yet. Add the vendor this order goes to, then come back
               and raise it.
             </p>
           )}

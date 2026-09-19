@@ -97,7 +97,7 @@ export function DonatePage() {
 
   if (loadError) {
     return (
-      <main className="mx-auto max-w-content px-6 py-16">
+      <main className="mx-auto max-w-content px-4 py-16 sm:px-6">
         <h1 className="text-2xl font-semibold text-ink">We couldn’t load this</h1>
         <p className="mt-2 text-ink-secondary">{loadError.message}</p>
       </main>
@@ -114,7 +114,7 @@ export function DonatePage() {
           would not know that. The floor matters as much as the ceiling: the menu does not yet give
           that space back on a narrow screen, and a size with no lower bound answered by shrinking
           the sentence to nothing. */}
-      <main className="mx-auto grid max-w-content gap-8 px-6 py-12 [container-type:inline-size]">
+      <main className="mx-auto grid max-w-content gap-8 px-4 py-12 sm:px-6 [container-type:inline-size]">
         <section className="grid gap-4">
           <h1 className="whitespace-nowrap text-[clamp(1.125rem,6.2cqi,2.25rem)] font-semibold leading-tight text-ink">
             No one leaves this temple hungry.
@@ -125,7 +125,7 @@ export function DonatePage() {
           </p>
         </section>
 
-        <div role="tablist" aria-label="Ways to give" className="flex w-fit gap-1 rounded-lg bg-sunken p-1">
+        <div role="tablist" aria-label="Ways to give" className="flex w-fit gap-1 rounded-control bg-sunken p-1">
           {(
             [
               ["money", "Donate money"],
@@ -139,7 +139,7 @@ export function DonatePage() {
               aria-selected={tab === value}
               onClick={() => setTab(value)}
               className={[
-                "min-h-touch rounded px-5 text-sm transition-colors duration-state",
+                "min-h-touch rounded-control px-5 text-sm transition-colors duration-state",
                 tab === value ? "bg-raised font-medium text-ink" : "text-ink-secondary",
               ].join(" ")}
             >
@@ -223,7 +223,7 @@ function MoneyTab({
 
   if (done) {
     return (
-      <section className="card px-8 py-10">
+      <section className="card px-5 py-10 sm:px-8">
         <h2 className="text-xl font-semibold text-ink">Thank you</h2>
         <p className="mt-2 text-ink-secondary">
           Your payment of {money(given, "INR")} went through, and your gift is on its way
@@ -235,7 +235,7 @@ function MoneyTab({
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[1.6fr_1fr]">
-      <Form onSubmit={submit} className="card grid gap-6 px-8 py-7">
+      <Form onSubmit={submit} className="card grid gap-6 px-5 py-7 sm:px-8">
         <p className="text-ink-secondary">
           The kitchen buys what that week’s menus are short of.
           {page.costPerPlateInr != null && (
@@ -398,7 +398,7 @@ function EquipmentTab({
 
   if (open.length === 0) {
     return (
-      <section className="card px-8 py-10">
+      <section className="card px-5 py-10 sm:px-8">
         <h2 className="text-lg font-medium text-ink">Nothing on the list just now</h2>
         <p className="mt-2 text-ink-secondary">
           Equipment the kitchen needs appears here with what it costs.
@@ -463,12 +463,9 @@ function EquipmentCard({
     <section className="card grid gap-3 px-6 py-5">
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-lg font-medium text-ink">{item.title}</h3>
-        <span
-          className={[
-            "rounded-full px-3 py-0.5 text-xs",
-            covered ? "bg-success-bg text-success" : "bg-warning-bg text-warning",
-          ].join(" ")}
-        >
+        {/* Neutral either way. Neither is the result of this donor's action, and "to go" is an
+            invitation, not a warning to them (Rajeev, 2026-09-18, T-227). */}
+        <span className="rounded-control bg-sunken px-3 py-0.5 text-xs text-ink-secondary">
           {covered ? "Fully covered" : `${money(outstanding, "INR")} to go`}
         </span>
       </div>

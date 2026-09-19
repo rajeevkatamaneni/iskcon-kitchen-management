@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Badge } from "@/components/ds/Badge";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { Loading } from "@/components/Loading";
@@ -13,7 +14,7 @@ import { PeriodNav, periodHeading, stepPeriod } from "@/components/ds/PeriodNav"
 import { Screen } from "@/components/ds/Screen";
 import { api, type VendorPerformance, type VendorPerformanceRow } from "@/lib/api";
 import { dayRange, todayIso } from "@/lib/format";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 
 /**
@@ -86,7 +87,7 @@ function VendorPerformanceView() {
         <Screen>
           <PageHeader
             title="Vendor performance"
-            subtitle="Whether each supplier delivers when they said, brings what was ordered, and what is still outstanding with them."
+            subtitle="Whether each vendor delivers when they said, brings what was ordered, and what is still outstanding with them."
             tabs={
               <PeriodNav
                 label="Period"
@@ -100,16 +101,19 @@ function VendorPerformanceView() {
           />
 
           {loading ? (
-            <Loading label="Reading what each supplier delivered…" />
+            <Loading label="Reading what each vendor delivered…" />
           ) : error ? (
             <ErrorNotice error={error} />
           ) : !data || data.vendors.length === 0 ? (
-            <EmptyState title="No orders with any supplier in this period">
-              Send a purchase order and record what arrives, and this will say who delivers on time.
+            <EmptyState
+              title="No orders in this period"
+              action={<ButtonLink href="/orders">Open purchase orders</ButtonLink>}
+            >
+              Figures appear once orders are sent and received.
             </EmptyState>
           ) : (
             <>
-              <InlineNotice tone="info" title="What these figures count">
+              <InlineNotice tone="info" title="How these are worked out">
                 {caveat(data)}
               </InlineNotice>
               <VendorTable report={data} />
@@ -128,45 +132,36 @@ function VendorPerformanceView() {
 function VendorTable({ report }: { report: VendorPerformance }) {
   return (
     <div className="table-wrap overflow-x-auto">
-      <table className={TABLE}>
+      <table className={RULED_TABLE}>
         <caption className="sr-only">
           {/* Read aloud as the table's name, so it is said the way the screen writes a date (T-194). */}
-          Supplier delivery record for orders placed {dayRange(report.from, report.to, false)}, with what is open
+          Vendor delivery record for orders placed {dayRange(report.from, report.to, false)}, with what is open
           with each of them today
         </caption>
-        {/* Fixed shares rather than letting the browser size to content.
-            "Open now" was so narrow that its overdue pill dropped onto a second line under the
-            count — the one column where the number and its warning belong together — so it takes
-            what it needs to keep them on one line. The vendor column keeps the room its names
-            actually want; a first pass cut it to 22% and Rajeev asked for half as much again
-            (2026-09-05), which is this. What is left over is split evenly across the three
-            measures, because nothing about them makes one wider than another. */}
-        <colgroup>
-          <col style={{ width: "33%" }} />
-          <col style={{ width: "16%" }} />
-          <col style={{ width: "16%" }} />
-          <col style={{ width: "16%" }} />
-          <col style={{ width: "19%" }} />
-        </colgroup>
+        {/* No column widths here. There used to be a colgroup of fixed shares (33% for the vendor,
+            16–19% for each measure), which held the columns apart whatever they held; since
+            2026-09-18 (T-236) every table is sized by the one rule in components/ds/table.ts —
+            each column as wide as its content, the spare width shared evenly between them — and
+            everything reads left, the percentages lined up the way the Vendor column is (Rajeev). */}
         <thead className={THEAD}>
           <tr>
-            <th scope="col" className={`${TH_TEXT} ${WRAP}`}>
+            <th scope="col" className={TH_PRIMARY}>
               Vendor
             </th>
             {/* "Orders on time" until T-124, and renamed with the arithmetic: the figure is no
                 longer a count of orders but the average of how much of each order was there in
                 time, and a header that says "orders" would send a reader looking for a fraction
                 that is not on the screen. */}
-            <th scope="col" className={TH_NUM}>
+            <th scope="col" className={TH_FIXED}>
               On time
             </th>
-            <th scope="col" className={TH_NUM}>
-              Fill rate
+            <th scope="col" className={TH_FIXED}>
+              Filled
             </th>
-            <th scope="col" className={TH_NUM}>
+            <th scope="col" className={TH_FIXED}>
               Rejected
             </th>
-            <th scope="col" className={TH_NUM}>
+            <th scope="col" className={TH_FIXED}>
               Open now
             </th>
           </tr>
@@ -174,7 +169,7 @@ function VendorTable({ report }: { report: VendorPerformance }) {
         <tbody>
           {report.vendors.map((vendor) => (
             <tr key={vendor.vendorId} className={TR}>
-              <th scope="row" className={`${TD_TEXT} ${WRAP} font-normal text-ink`}>
+              <th scope="row" className={`${TD_PRIMARY} font-normal text-ink`}>
                 {vendor.vendorName}
                 <span className="mt-1 flex flex-wrap gap-1">
                   {!vendor.active && <Badge tone="neutral">No longer used</Badge>}
@@ -186,15 +181,17 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                 The percentage and the counts it was made from, always together. A percentage with no
                 denominator is a lie, and this is the column somebody would quote in a meeting.
               */}
-              <td className={TD_NUM}>
+              <td data-label="On time" className={TD_FIXED_NUM}>
                 <span className="font-medium">{asPercent(vendor.onTimePercent)}</span>
                 <span className="mt-1 block text-xs text-ink-muted">{onTimeNote(vendor)}</span>
                 {/* Its own line and its own words, never folded into the note above. A supplier who
                     never came is the finding this column exists to surface, and it is the one thing
-                    here that is a fact rather than a threshold — so it is allowed a pill. */}
+                    here that is a fact rather than a threshold — so it is allowed a pill. A neutral
+                    one: it is a historical finding in a report, not something to act on today, and
+                    amber is kept for that (Rajeev, 2026-09-18, T-227). */}
                 {vendor.abandonedOrders > 0 && (
-                  <span className="mt-1 flex justify-end">
-                    <Badge tone="warning">{abandonedNote(vendor.abandonedOrders)}</Badge>
+                  <span className="mt-1 flex">
+                    <Badge>{abandonedNote(vendor.abandonedOrders)}</Badge>
                   </span>
                 )}
                 {/*
@@ -215,7 +212,7 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                   "never delivered" would read as a second black mark against them.
                 */}
                 {vendor.ordersSentLate > 0 && (
-                  <span className="mt-1 flex justify-end">
+                  <span className="mt-1 flex">
                     <Badge tone="neutral">{sentLateNote(vendor.ordersSentLate)}</Badge>
                   </span>
                 )}
@@ -233,18 +230,18 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                   thing the vendor did wrong.
                 */}
                 {vendor.ordersExcused > 0 && (
-                  <span className="mt-1 flex justify-end">
+                  <span className="mt-1 flex">
                     <Badge tone="neutral">{excusedNote(vendor.ordersExcused)}</Badge>
                   </span>
                 )}
               </td>
 
-              <td className={TD_NUM}>
+              <td data-label="Filled" className={TD_FIXED_NUM}>
                 {asPercent(vendor.fillRatePercent)}
                 {vendor.linesJudged > 0 && (
                   <span className="mt-1 block text-xs text-ink-muted">
                     across {vendor.linesJudged.toLocaleString("en-IN")}{" "}
-                    {vendor.linesJudged === 1 ? "line" : "lines"}
+                    {vendor.linesJudged === 1 ? "item" : "items"}
                   </span>
                 )}
                 {/*
@@ -259,28 +256,29 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                   to be visible right here rather than inferred from the column next door.
                 */}
                 {vendor.ordersExcused > 0 && (
-                  <span className="mt-1 flex justify-end">
+                  <span className="mt-1 flex">
                     <Badge tone="neutral">{excusedNote(vendor.ordersExcused)}</Badge>
                   </span>
                 )}
               </td>
 
-              <td className={TD_NUM}>
+              <td data-label="Rejected" className={TD_FIXED_NUM}>
                 {vendor.rejectedLines === 0 ? (
                   "—"
                 ) : (
                   <>
                     {vendor.rejectedLines.toLocaleString("en-IN")}
-                    {/* Four reasons and their counts would run the column the width of the table,
-                        so the breakdown is bounded and stacks downwards instead. */}
-                    <span className="mt-1 block max-w-[11rem] whitespace-normal text-xs text-ink-muted">
+                    {/* The breakdown by reason, on one line when the table has room for it and
+                        wrapping under the count only when it has not (the table rule, T-236). It
+                        used to be held to 11rem and so always stacked, beside empty space. */}
+                    <span className="mt-1 block text-xs text-ink-muted">
                       {rejectionNote(vendor)}
                     </span>
                   </>
                 )}
               </td>
 
-              <td className={TD_NUM}>
+              <td data-label="Open now" className={TD_FIXED_NUM}>
                 {vendor.openOrders === 0 ? (
                   "—"
                 ) : (
@@ -288,7 +286,7 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                     {/* On one line with the count, which is what the extra width bought. A pill on
                         its own line under a number reads as a second fact about the vendor rather
                         than as the warning attached to that number. */}
-                    <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                    <span className="inline-flex flex-wrap items-center gap-2">
                       {vendor.openOrders.toLocaleString("en-IN")}
                       {overdue(vendor) > 0 && (
                         <Badge tone="warning">{overdueNote(vendor)}</Badge>
@@ -302,10 +300,10 @@ function VendorTable({ report }: { report: VendorPerformance }) {
         </tbody>
         <tfoot>
           <tr className="border-t border-hairline bg-sunken">
-            <th scope="row" className={`${TD_TEXT} font-medium text-ink`}>
+            <th scope="row" className={`${TD_PRIMARY} font-medium text-ink`}>
               All vendors
             </th>
-            <td className={`${TD_NUM} font-medium`}>
+            <td data-label="On time" className={`${TD_FIXED_NUM} font-medium`}>
               {asPercent(report.onTimePercent)}
               <span className="mt-1 block text-xs font-normal text-ink-muted">
                 {itemsNote(report.itemsOnTime, report.itemsScored)} across{" "}
@@ -328,13 +326,13 @@ function VendorTable({ report }: { report: VendorPerformance }) {
                 </span>
               )}
             </td>
-            <td className={`${TD_NUM} font-medium`}>
+            <td data-label="Filled" className={`${TD_FIXED_NUM} font-medium`}>
               {asPercent(report.fillRatePercent)}
             </td>
-            <td className={TD_NUM}>
+            <td data-label="Rejected" className={TD_FIXED_NUM}>
               {report.rejectedLines === 0 ? "—" : report.rejectedLines.toLocaleString("en-IN")}
             </td>
-            <td className={TD_NUM}>
+            <td data-label="Open now" className={TD_FIXED_NUM}>
               {report.openOrders === 0 ? "—" : report.openOrders.toLocaleString("en-IN")}
             </td>
           </tr>
@@ -345,51 +343,72 @@ function VendorTable({ report }: { report: VendorPerformance }) {
 }
 
 /**
- * What the figures count, said before anybody reads one.
+ * How the figures are worked out, said before anybody reads one — in four short lines.
  *
- * <p>Three things a reader would otherwise get wrong: that on-time is per order and not per
- * ingredient, that it is measured at the first delivery and so needs the fill rate beside it, and
- * that the open column is today's position rather than the period's.
+ * <p>This used to be a 330-word paragraph that argued for each rule as well as stating it (T-224).
+ * Nobody reads that in a hot kitchen, so the screen now states the rules and the reasons live here:
+ *
+ * <ul>
+ * <li>On time is scored item by item, not order by order: eight of ten items there by the
+ * needed-by date is 80%. Bringing more of one item does not make up for another that never came,
+ * and an order split across two days is still fully on time if both days were inside the window —
+ * what is measured is whether the goods were there, not how many deliveries brought them.</li>
+ * <li>Filled is a different question: how much of the order arrived in the end, whenever it came.
+ * The two sit side by side because on time alone hides a half-empty lorry.</li>
+ * <li>Drafts are left out, and so is a cancellation nobody marked against the vendor; an order that
+ * was never sent cannot reach these figures at all. Open orders are today's position, whenever they
+ * were ordered.</li>
+ * <li>An order the temple sent inside the vendor's notice period is left out of on time (we asked
+ * for something their lead time could not deliver) but still counts in filled — ordering late
+ * excuses lateness, not a short delivery.</li>
+ * <li>An order the vendor made right is left out of both, because what an apology waives on a short
+ * delivery is mostly the shortfall itself. Nobody can change a percentage by hand; an admin closing
+ * an order chooses what the shortfall meant, and the figures follow.</li>
+ * <li>An order with no needed-by date has nothing to be late against.</li>
+ * </ul>
+ *
+ * <p>The "Not counted" line names each part only when its count is above zero, so a clean period
+ * shows no such line at all. The wording is Rajeev's (2026-09-18, T-236), replacing "Left out: 1
+ * order sent inside the vendor's notice period · 1 with no needed-by date", which he found
+ * unreadable: every part now says "order" or "orders" in full, and they are joined as a sentence.
+ * The made-right part was not in his example (his data had none); its wording follows the same
+ * pattern.
  */
-function caveat(report: VendorPerformance): string {
-  const parts = [
-    "On time is scored item by item. Each thing on an order counts how much of it was there on or before the day it was needed, so eight of ten items in time is 80% — and bringing more than was ordered does not make up for something that never came.",
-    "An order split across two days is still fully on time if both days were inside the window. What is measured is whether the goods were there in time, not how many deliveries brought them.",
-    "The fill rate beside it is a different question: how much of the order turned up in the end, whenever it turned up, and how much of that the temple kept.",
-    "Drafts are left out, and so is a cancellation nobody has marked against the vendor. An order that was sent and then cancelled because the vendor never delivered it does count, and scores nothing; an order that was never sent cannot be marked that way at all, so nothing a vendor was never told about reaches these figures. On time and the fill rate cover orders placed in this period whose needed-by date has passed; open orders are whatever is open today, whenever it was ordered.",
-  ];
+function caveat(report: VendorPerformance) {
+  const orders = (n: number) => `${n.toLocaleString("en-IN")} ${n === 1 ? "order" : "orders"}`;
+  const notCounted: string[] = [];
   if (report.ordersSentLate > 0) {
-    parts.push(
-      `${report.ordersSentLate.toLocaleString("en-IN")} ${
-        report.ordersSentLate === 1 ? "order was" : "orders were"
-      } sent after the vendor had asked to be given — later than the notice period they agreed at onboarding — so ${
-        report.ordersSentLate === 1 ? "it is" : "they are"
-      } left out of the on-time figure. We asked for something their lead time could not deliver, so a delay on ${
-        report.ordersSentLate === 1 ? "it" : "them"
-      } is not theirs to answer for. The fill rate still counts ${
-        report.ordersSentLate === 1 ? "it" : "them"
-      }: ordering late excuses lateness, not a half-empty delivery.`
-    );
+    notCounted.push(`${orders(report.ordersSentLate)} sent too late for the vendor to meet the date`);
   }
   if (report.ordersExcused > 0) {
-    parts.push(
-      `${report.ordersExcused.toLocaleString("en-IN")} ${
-        report.ordersExcused === 1 ? "order was" : "orders were"
-      } closed with part of the delivery never made, where the vendor put it right — so ${
-        report.ordersExcused === 1 ? "it is" : "they are"
-      } left out of the on-time figure and the fill rate alike. Unlike an order we sent late, this exclusion covers both: what an apology waives on a short delivery is mostly the shortfall itself. Nobody can change a percentage by hand anywhere in this application; an admin closing an order chooses what the shortfall meant, and the figures follow from that.`
-    );
+    notCounted.push(`${orders(report.ordersExcused)} the vendor made right`);
   }
   if (report.ordersWithoutNeededBy > 0) {
-    parts.push(
-      `${report.ordersWithoutNeededBy.toLocaleString("en-IN")} ${
-        report.ordersWithoutNeededBy === 1 ? "order has" : "orders have"
-      } no needed-by date, so there is nothing to be late against and ${
-        report.ordersWithoutNeededBy === 1 ? "it is" : "they are"
-      } outside these figures.`
-    );
+    notCounted.push(`${orders(report.ordersWithoutNeededBy)} with no needed-by date`);
   }
-  return parts.join(" ");
+  return (
+    <ul className="grid list-disc gap-1 pl-5">
+      <li>
+        <span className="font-medium">On time:</span> items that arrived by the needed-by date. 8 of
+        10 = 80%.
+      </li>
+      <li>
+        <span className="font-medium">Filled:</span> how much of the order arrived in the end,
+        whenever it came.
+      </li>
+      <li>Only orders that were sent and are now past their needed-by date are counted.</li>
+      {notCounted.length > 0 && <li>Not counted: {joinAsSentence(notCounted)}.</li>}
+    </ul>
+  );
+}
+
+/**
+ * "A", "A, and B", "A, B, and C" — the comma before "and" even with two parts, as in Rajeev's own
+ * wording of the line ("…to meet the date, and 1 order with no needed-by date").
+ */
+function joinAsSentence(parts: string[]): string {
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
 }
 
 /**
@@ -434,20 +453,20 @@ function abandonedNote(count: number): string {
 }
 
 /**
- * "1 order we sent late" — ours, and said so.
+ * "1 sent late (not counted)".
  *
- * <p>The word "we" is the whole sentence. This count is the one figure on this screen that is about
- * the temple rather than about the supplier, and a reader skimming a column of judgements needs to
- * see that immediately or it looks like one more thing the vendor did.
+ * <p>This count is the one figure on this screen that is about the temple rather than the vendor.
+ * It used to say "1 order we sent late — not counted"; the content audit (T-223) cut it to fit a
+ * badge, and "sent" still says who did it — the temple sends, the vendor delivers.
  */
 function sentLateNote(count: number): string {
   return count === 1
-    ? "1 order we sent late — not counted"
-    : `${count.toLocaleString("en-IN")} orders we sent late — not counted`;
+    ? "1 sent late (not counted)"
+    : `${count.toLocaleString("en-IN")} sent late (not counted)`;
 }
 
 /**
- * "1 order they made right — not counted".
+ * "1 made right (not counted)".
  *
  * <p>Deliberately not "excused" or "waived", which are the words the data uses and read as
  * paperwork. What happened is that a supplier rang up, apologised and put it right, and the temple
@@ -455,8 +474,8 @@ function sentLateNote(count: number): string {
  */
 function excusedNote(count: number): string {
   return count === 1
-    ? "1 order they made right — not counted"
-    : `${count.toLocaleString("en-IN")} orders they made right — not counted`;
+    ? "1 made right (not counted)"
+    : `${count.toLocaleString("en-IN")} made right (not counted)`;
 }
 
 function rejectionNote(vendor: VendorPerformanceRow): string {
@@ -470,17 +489,18 @@ function overdue(vendor: VendorPerformanceRow): number {
 }
 
 /**
- * The payables screen's own aging words, unchanged. A second vocabulary for "late" in one
- * application is something a person has to learn rather than read.
+ * How late the open orders are. This used to borrow the payables screen's aging words ("2 1–30
+ * days overdue"), but in a badge the count and the range ran together into one number. The content
+ * audit (T-223) changed it to words; the payables screen still says it its own way.
  */
 function overdueNote(vendor: VendorPerformanceRow): string {
   if (vendor.openOverdue31Plus > 0 && vendor.openDue1To30 > 0) {
-    return `${vendor.openDue1To30} 1–30 days overdue · ${vendor.openOverdue31Plus} 31+ days overdue`;
+    return `${vendor.openDue1To30} up to 30 days late · ${vendor.openOverdue31Plus} over 30 days late`;
   }
   if (vendor.openOverdue31Plus > 0) {
-    return `${vendor.openOverdue31Plus} 31+ days overdue`;
+    return `${vendor.openOverdue31Plus} over 30 days late`;
   }
-  return `${vendor.openDue1To30} 1–30 days overdue`;
+  return `${vendor.openDue1To30} up to 30 days late`;
 }
 
 /** A dash, never a zero: nothing judged is not the same statement as nothing delivered. */

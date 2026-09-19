@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { dateWithYear, money, moment } from "@/lib/format";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 
 /**
  * One vendor invoice in full (A8).
@@ -75,7 +75,7 @@ function InvoiceDetailView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/invoices" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <Link href="/invoices" className="text-sm text-accent-text hover:underline">← All invoices</Link>
 
@@ -93,14 +93,15 @@ function InvoiceDetailView() {
                       {invoice.vendorName}
                     </Link>
                     {voided ? (
-                      <span className="rounded-sm bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Voided</span>
+                      <span className="rounded-control bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Voided</span>
                     ) : invoice.status === "PAID" ? (
-                      <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">Paid</span>
+                      // Neutral: a settled state, not a fresh result (T-227).
+                      <span className="rounded-control bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Paid</span>
                     ) : (
-                      <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Pending</span>
+                      <span className="rounded-control bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Pending</span>
                     )}
                     {invoice.overdue && (
-                      <span className="rounded-sm bg-danger-bg px-2 py-1 text-xs text-danger font-semibold">Overdue</span>
+                      <span className="rounded-control bg-danger-bg px-2 py-1 text-xs text-danger font-semibold">Overdue</span>
                     )}
                   </p>
                 </div>
@@ -120,7 +121,8 @@ function InvoiceDetailView() {
                   it means something different once a bill was never owed. */}
               {voided && (
                 <div className="mb-6">
-                  <InlineNotice tone="warning" title="This bill was struck as never owed.">
+                  {/* Information: a settled state, explained, not something to act on (T-227). */}
+                  <InlineNotice tone="info" title="This bill was struck as never owed.">
                     {invoice.voidReason}
                     {invoice.voidedAt ? ` — ${moment(invoice.voidedAt)}` : ""}
                   </InlineNotice>
@@ -286,16 +288,22 @@ function PaymentHistory({
           {payments.length === 0 ? (
             <p className="mt-4 text-sm text-ink-muted">Nothing paid yet.</p>
           ) : (
-            <div className="table-wrap overflow-x-auto">
-              <table className={`mt-4 ${TABLE} text-sm`}>
+            <div className="table-wrap mt-4 overflow-x-auto">
+              {/* On the table rule since 2026-09-18 (T-233). The old "Action" column held either a
+                  button or the reversal's reason, which is somebody's own words and any length;
+                  Rajeev classified the reason as a secondary flexible column and the button as
+                  fixed, so they are two columns now (all reading left since T-236). Who recorded it is a person, the
+                  other secondary column. The payment's reference is a bank or UPI code, so fixed. */}
+              <table className={`${RULED_TABLE} text-sm`}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={TH_TEXT}>Paid on</th>
-                    <th className={TH_NUM}>Amount</th>
-                    <th className={TH_TEXT}>Method</th>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Reference</th>
-                    <th className={TH_TEXT}>Recorded by</th>
-                    <th className={TH_ACTIONS}>Action</th>
+                    <th className={TH_SECOND}>Reversal</th>
+                    <th className={TH_SECOND}>Recorded by</th>
+                    <th className={TH_FIXED}>Paid on</th>
+                    <th className={TH_FIXED}>Amount</th>
+                    <th className={TH_FIXED}>Method</th>
+                    <th className={TH_FIXED}>Reference</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -303,17 +311,16 @@ function PaymentHistory({
                     const spent = p.reverses != null || p.reversedBy != null;
                     return (
                       <tr key={p.id} className={`${TR} ${spent ? "opacity-50" : ""}`}>
-                        <td className={TD_DATE}>{dateWithYear(p.paidOn)}</td>
-                        <td className={TD_NUM}>{money(p.amount, "INR")}</td>
-                        <td className={TD_TEXT}>{p.method.replace(/_/g, " ").toLowerCase()}</td>
-                        <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{p.reference ?? "—"}</td>
-                        <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{p.recordedByName ?? "—"}</td>
-                        <td className={TD_ACTIONS}>
-                          {p.reverses != null ? (
-                            <span className="text-ink-secondary">{p.reverseReason}</span>
-                          ) : p.reversedBy != null ? (
-                            <span className="text-ink-secondary">Reversed</span>
-                          ) : p.amount > 0 ? (
+                        <td className={`${TD_SECOND} text-ink-secondary`}>
+                          {p.reverses != null ? p.reverseReason : p.reversedBy != null ? "Reversed" : null}
+                        </td>
+                        <td className={`${TD_SECOND} text-ink-secondary`}>{p.recordedByName ?? "—"}</td>
+                        <td className={TD_FIXED}>{dateWithYear(p.paidOn)}</td>
+                        <td className={TD_FIXED_NUM}>{money(p.amount, "INR")}</td>
+                        <td className={TD_FIXED}>{p.method.replace(/_/g, " ").toLowerCase()}</td>
+                        <td className={`${TD_FIXED} text-ink-secondary`} data-label="Reference">{p.reference ?? "—"}</td>
+                        <td className={TD_ACTIONS_FIXED}>
+                          {p.reverses == null && p.reversedBy == null && p.amount > 0 ? (
                             <Button variant="ghost" size="sm" onClick={() => setReversing(p)}>
                               Reverse
                             </Button>
@@ -616,7 +623,7 @@ function ReverseDialog({
 /** What this invoice was raised against: a purchase order to follow, or a cash-market buy. */
 function against(invoice: VendorInvoiceView) {
   if (invoice.direct) {
-    return <span className="rounded-sm bg-sunken px-2 py-1 text-xs font-semibold">Direct — no purchase order</span>;
+    return <span className="rounded-control bg-sunken px-2 py-1 text-xs font-semibold">Direct — no purchase order</span>;
   }
   if (!invoice.purchaseOrderId) {
     return <span className="text-ink-muted">—</span>;

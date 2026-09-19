@@ -8,7 +8,7 @@ import { api, toApiError, type ApiError, type UserStatus, type UserSummary } fro
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 import { moment } from "@/lib/format";
 
@@ -119,15 +119,15 @@ function DevoteesView() {
             </div>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Name</th>
-                    <th className={TH_TEXT}>Email</th>
-                    <th className={TH_TEXT}>Phone</th>
-                    <th className={TH_TEXT}>Registered</th>
-                    <th className={TH_TEXT}>Status</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_PRIMARY}>Name</th>
+                    <th className={TH_SECOND}>Email</th>
+                    <th className={TH_FIXED}>Phone</th>
+                    <th className={TH_FIXED}>Registered</th>
+                    <th className={TH_FIXED}>Status</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -135,20 +135,21 @@ function DevoteesView() {
                     const nextStatus: UserStatus = devotee.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
                     return (
                       <tr key={devotee.id} className={TR}>
-                        <td className={`${TD_TEXT}`}>{devotee.fullName}</td>
-                        <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{devotee.email || "—"}</td>
-                        <td className={`${TD_TEXT} text-ink-secondary tabular-nums`}>{devotee.phone || "—"}</td>
-                        <td className={`${TD_DATE} text-ink-secondary tabular-nums`}>
+                        <td className={TD_PRIMARY}>{devotee.fullName}</td>
+                        <td className={`${TD_SECOND} text-ink-secondary`}>{devotee.email || "—"}</td>
+                        <td className={`${TD_FIXED_NUM} text-ink-secondary`}>{devotee.phone || "—"}</td>
+                        <td className={`${TD_FIXED_NUM} text-ink-secondary`}>
                           {moment(devotee.createdAt)}
                         </td>
-                        <td className={TD_TEXT}>
+                        <td className={TD_FIXED}>
                           {devotee.status === "ACTIVE" ? (
-                            <span className="text-success">Active</span>
+                            // Plain: the ordinary state; only Disabled is set apart (T-227).
+                            <span className="text-ink-secondary">Active</span>
                           ) : (
                             <span className="text-ink-muted">Disabled</span>
                           )}
                         </td>
-                        <td className={TD_ACTIONS}>
+                        <td className={TD_ACTIONS_FIXED}>
                           <Button
                             variant="ghost"
                             size="sm"

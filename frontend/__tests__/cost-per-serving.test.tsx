@@ -102,13 +102,62 @@ describe("Cost per serving", () => {
     render(<CostPerServingPage />);
 
     const feast = rowFor("Festival feast");
-    // Whole rupees where the figure is whole, paise where there are any — the shared `money`
-    // helper's rule, so this column reads like every other money column in the application.
     expect(within(feast).getByText("₹18")).toBeInTheDocument();
     expect(within(feast).getByText("₹21,600")).toBeInTheDocument();
 
+    // Whole rupees throughout this screen (Rajeev, Decisions Desk, 2026-09-18): ₹9.30 reads ₹9.
     const lunch = rowFor("Lunch");
-    expect(within(lunch).getByText("₹9.30")).toBeInTheDocument();
+    expect(within(lunch).getByText("₹9")).toBeInTheDocument();
+  });
+
+  /**
+   * One money column used to mix "₹12,185.65" with "₹20,375". Every figure on the screen is now
+   * whole rupees, rounded half up, in Indian grouping — the rows, and the total beneath them.
+   */
+  it("shows every money figure in whole rupees, rounded half up, with Indian grouping", () => {
+    queryRef.current.data = report({
+      estimatedTotal: 120374.5,
+      kinds: [
+        kind({ mealKind: "Festival feast", estimatedTotal: 12185.65, costPerServing: 9.5 }),
+        kind({ mealKind: "Lunch", estimatedTotal: 20375, costPerServing: 12.49 }),
+      ],
+    });
+    render(<CostPerServingPage />);
+
+    const feast = rowFor("Festival feast");
+    expect(within(feast).getByText("₹12,186")).toBeInTheDocument();
+    expect(within(feast).getByText("₹10")).toBeInTheDocument();
+
+    const lunch = rowFor("Lunch");
+    expect(within(lunch).getByText("₹20,375")).toBeInTheDocument();
+    expect(within(lunch).getByText("₹12")).toBeInTheDocument();
+
+    expect(within(rowFor("All meals")).getByText("₹1,20,375")).toBeInTheDocument();
+    // No figure anywhere on the screen carries paise.
+    expect(document.body.textContent).not.toMatch(/₹[\d,]+\.\d/);
+  });
+
+  /**
+   * Whole rupees made a 30-paise serving read "₹0", as if it were free (Rajeev, 2026-09-18, T-237).
+   * Anything above zero that rounds to zero says "under ₹1"; a true zero stays "₹0"; and the line is
+   * exactly where rounding puts it, so ₹0.49 is "under ₹1" and ₹0.50 is "₹1".
+   */
+  it("says 'under ₹1' for a cost that rounds to nothing, and ₹0 only for nothing", () => {
+    queryRef.current.data = report({
+      kinds: [
+        kind({ mealKind: "Rice water", estimatedTotal: 0, costPerServing: 0.3 }),
+        kind({ mealKind: "Buttermilk", estimatedTotal: 12, costPerServing: 0.49 }),
+        kind({ mealKind: "Lemon water", estimatedTotal: 30, costPerServing: 0.5 }),
+      ],
+    });
+    render(<CostPerServingPage />);
+
+    const rice = rowFor("Rice water");
+    expect(within(rice).getByText("under ₹1")).toBeInTheDocument();
+    expect(within(rice).getByText("₹0")).toBeInTheDocument();
+    expect(within(rowFor("Buttermilk")).getByText("under ₹1")).toBeInTheDocument();
+    expect(within(rowFor("Lemon water")).getByText("₹1")).toBeInTheDocument();
+    expect(within(rowFor("Lemon water")).queryByText("under ₹1")).toBeNull();
   });
 
   /**

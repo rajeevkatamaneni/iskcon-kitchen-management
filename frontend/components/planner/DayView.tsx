@@ -4,23 +4,16 @@ import Link from "next/link";
 
 import { useCallback, useState } from "react";
 import { Badge } from "@/components/ds/Badge";
-import { Button } from "@/components/ds/Button";
 import { Card } from "@/components/ds/Card";
-import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { ErrorNotice } from "@/components/ErrorNotice";
-import {
-  api,
-  toApiError,
-  type ApiError,
-  type CalendarDayView,
-} from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { api, type ApiError, type CalendarDayView } from "@/lib/api";
 import { fullTithiName, masaName } from "@/lib/calendar-names";
+import { ekadashiLabel, ekadashiSpelling } from "@/lib/vaishnava-day";
 import { hhmm, todayIso } from "@/lib/format";
-import { BusyPot } from "@/components/Loading";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { MealServices } from "@/components/planner/MealServices";
+import { withReturn } from "@/components/planner/plannerAddress";
 
 /**
  * One day of the plan, at its own address — `/planner/2026-08-21`.
@@ -34,8 +27,7 @@ import { MealServices } from "@/components/planner/MealServices";
  * altogether instead of closing the day (item 22). A route closes on back, reloads, and can be sent
  * to somebody.
  */
-export function DayView({ date }: { date: string }) {
-  const { appUser } = useAuth();
+export function DayView({ date, returnTo }: { date: string; returnTo?: string }) {
   const [error, setError] = useState<ApiError | null>(null);
   const [nonce, setNonce] = useState(0);
 
@@ -51,19 +43,12 @@ export function DayView({ date }: { date: string }) {
   const day = calQ.data?.[0];
   const sufficiency = new Map((suffQ.data ?? []).map((s) => [s.dishId, s]));
   const readOnly = date < todayIso();
-  const canCorrect = appUser?.role === "TEMPLE_ADMIN" && !readOnly;
 
   return (
     <div className="grid gap-6">
       {error && <ErrorNotice error={error} />}
 
-      <DayContextPanel
-        date={date}
-        day={day}
-        canCorrect={canCorrect}
-        onChanged={() => setNonce((n) => n + 1)}
-        onError={setError}
-      />
+      <DayContextPanel day={day} />
 
       {/* One block per meal kind, not one row per preparation. The brief means a meal every time it
           says one — one job card per meal kind, recording per meal — so this reads the day the
@@ -74,6 +59,7 @@ export function DayView({ date }: { date: string }) {
         sufficiency={sufficiency}
         recipes={recipes ?? []}
         readOnly={readOnly}
+        returnTo={returnTo}
         onChanged={() => setNonce((n) => n + 1)}
         onError={setError}
       />
@@ -86,7 +72,7 @@ export function DayView({ date }: { date: string }) {
         // A link rather than an expand since 2026-09-05: planning a meal is the same screen as
         // correcting one, and it is that screen. See app/planner/compose/page.tsx.
         <Link
-          href={`/planner/compose?date=${date}`}
+          href={withReturn(`/planner/compose?date=${date}`, returnTo)}
           className="flex min-h-[3.5rem] items-center justify-center gap-2 rounded-lg border border-dashed border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-raised"
         >
           <span aria-hidden className="text-lg leading-none">+</span>
@@ -97,24 +83,16 @@ export function DayView({ date }: { date: string }) {
   );
 }
 
-/** What the engine worked out for this day — and, for a Temple Admin, the correction to it. */
-function DayContextPanel({
-  date,
-  day,
-  canCorrect,
-  onChanged,
-  onError,
-}: {
-  date: string;
-  day: CalendarDayView | undefined;
-  canCorrect: boolean;
-  onChanged: () => void;
-  onError: (e: ApiError) => void;
-}) {
-  const { getToken } = useAuth();
-  const [correcting, setCorrecting] = useState(false);
-  const [busy, setBusy] = useState(false);
-
+/**
+ * What the engine worked out for this day, read-only.
+ *
+ * <p>Correcting it lived here until T-219: a Temple Admin saw "Correct this date" and "Undo the
+ * correction" on this page and nowhere else, so it was reached only by landing here by accident from
+ * a meal's Cancel. Rajeev, 2026-09-17, moved it to the Vaishnava calendar, which is the screen about
+ * what day it is (see `DateCorrection` in app/calendar/page.tsx). What stays is what a cook planning
+ * the day needs to know — including that a person, not the engine, said what this day is.
+ */
+function DayContextPanel({ day }: { day: CalendarDayView | undefined }) {
   if (!day) {
     return (
       <Card tone="sunken">
@@ -125,146 +103,32 @@ function DayContextPanel({
     );
   }
 
-  async function run(fn: (t: string | undefined) => Promise<unknown>, failure: string) {
-    setBusy(true);
-    try {
-      await fn(await getToken());
-      setCorrecting(false);
-      onChanged();
-    } catch (e) {
-      onError(toApiError(e, failure));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function save(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const f = new FormData(event.currentTarget);
-    await run(
-      (t) =>
-        api.setCalendarOverride(
-          date,
-          {
-            isEkadashi: f.get("isEkadashi") === "on",
-            ekadashiName: String(f.get("ekadashiName") ?? "").trim() || null,
-            tithi: Number(f.get("tithi")),
-            festivalNote: String(f.get("festivalNote") ?? "").trim() || null,
-            reason: String(f.get("reason") ?? "").trim(),
-          },
-          t
-        ),
-      "We couldn’t correct that date."
-    );
-  }
-
   return (
     <Card tone="sunken">
-      <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-        <Fact label="Tithi" value={fullTithiName(day.tithi, day.paksa)} />
-        <Fact label="Month" value={masaName(day.masa)} />
-        <Fact label="Sunrise" value={hhmm(day.sunrise)} />
-        {day.isEkadashi && (
-          <Badge tone="accent">{day.ekadashiName || "Ekadashi"} — fasting day</Badge>
-        )}
-        {day.fastType && <Fact label="Fast" value={day.fastType} />}
-        {day.festivals.length > 0 && (
-          <Fact label="Festivals" value={day.festivals.map((f) => f.text).join(" · ")} />
+      {/* A grid so the note about a hand correction stands 16px off the facts; as plain blocks
+          it sat flush against them. */}
+      <div className="grid gap-4">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+          <Fact label="Tithi" value={fullTithiName(day.tithi, day.paksa)} />
+          <Fact label="Month" value={masaName(day.masa)} />
+          <Fact label="Sunrise" value={hhmm(day.sunrise)} />
+          {day.isEkadashi && (
+            // Blue, as Ekadashi is on the planner and the calendar; accent is not a day-kind colour.
+            <Badge tone="info">{ekadashiLabel(day.ekadashiName)} — fasting day</Badge>
+          )}
+          {day.fastType && <Fact label="Fast" value={day.fastType} />}
+          {day.festivals.length > 0 && (
+            <Fact label="Festivals" value={day.festivals.map((f) => ekadashiSpelling(f.text)).join(" · ")} />
+          )}
+        </div>
+
+        {day.overridden && (
+          // A record of an admin's correction, nothing for the reader to do, so information (T-227).
+          <InlineNotice tone="info" title="This date was corrected by hand">
+            {day.overrideReason}
+          </InlineNotice>
         )}
       </div>
-
-      {day.overridden && (
-        <InlineNotice tone="warning" title="This date was corrected by hand">
-          {day.overrideReason}
-          {canCorrect && (
-            <div className="mt-3">
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                onClick={() => run((t) => api.revertCalendarOverride(date, t), "We couldn’t undo that.")} busy={busy}>
-                {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Undoing…</span>) : "Undo the correction"}
-              </Button>
-            </div>
-          )}
-        </InlineNotice>
-      )}
-
-      {canCorrect && !correcting && (
-        <div className="mt-4">
-          <Button size="sm" variant="secondary" onClick={() => setCorrecting(true)}>
-            Correct this date
-          </Button>
-        </div>
-      )}
-
-      {canCorrect && correcting && (
-        <Form onSubmit={save} aria-label="Correct this date" className="mt-4 grid gap-4 border-t border-hairline pt-4">
-          <p className="text-sm text-ink-secondary">
-            Correct it only when you know it to be wrong here. Everyone will see the correction,
-            and why.
-          </p>
-          <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              name="isEkadashi"
-              defaultChecked={day.isEkadashi}
-              className="mt-1 h-5 w-5 rounded-sm border-hairline-strong accent-accent"
-            />
-            <span className="font-medium text-ink">This is an Ekadashi fasting day</span>
-          </label>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-1 text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">Ekadashi name</span>
-              <input
-                name="ekadashiName"
-                defaultValue={day.ekadashiName ?? ""}
-                className="min-h-touch rounded-control border border-hairline px-3"
-              />
-            </label>
-            <label className="grid gap-1 text-sm text-ink-secondary">
-              <span className="pl-field-inset font-medium text-ink">Tithi</span>
-              <select
-                name="tithi"
-                defaultValue={day.tithi}
-                className="min-h-touch rounded-control border border-hairline px-3"
-              >
-                {Array.from({ length: 30 }, (_, i) => (
-                  <option key={i} value={i}>
-                    {fullTithiName(i, i < 15 ? 0 : 1)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label className="grid gap-1 text-sm text-ink-secondary">
-            <span className="pl-field-inset font-medium text-ink">Festival note</span>
-            <input name="festivalNote" className="min-h-touch rounded-control border border-hairline px-3" />
-          </label>
-          <label className="grid gap-1 text-sm text-ink-secondary">
-            <span className="pl-field-inset font-medium text-ink">Why are you correcting this?</span>
-            {/* No "Required" under the box. The word said nothing the `required` attribute and the
-                refused submit do not, and on a four-field form where this is the only compulsory
-                one it read as decoration. What must not be lost is the sentence above the form —
-                that everyone sees the correction and the reason for it — which is a consequence,
-                not guidance, and stays where it is. */}
-            <textarea
-              name="reason"
-              required
-              rows={2}
-              className="rounded-control border border-hairline px-3 py-2"
-            />
-          </label>
-          <div className="flex items-center gap-3">
-            <Button type="submit" size="sm" disabled={busy} busy={busy}>
-              {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Saving…</span>) : "Save correction"}
-            </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setCorrecting(false)}>
-              Cancel
-            </Button>
-          </div>
-        </Form>
-      )}
     </Card>
   );
 }

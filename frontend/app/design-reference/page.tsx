@@ -78,20 +78,35 @@ export default function DesignReferencePage() {
       <section className="mb-10">
         <h2 className="mb-4">Status</h2>
         <div className="flex flex-wrap gap-2">
-          <span className="rounded-sm bg-warning-bg px-3 py-1 text-sm text-warning">
+          <span className="rounded-control bg-warning-bg px-3 py-1 text-sm text-warning">
             Low stock &middot; 4 kg
           </span>
-          <span className="rounded-sm bg-danger-bg px-3 py-1 text-sm text-danger">
+          <span className="rounded-control bg-danger-bg px-3 py-1 text-sm text-danger">
             Invoice overdue
           </span>
-          <span className="rounded-sm bg-success-bg px-3 py-1 text-sm text-success">
+          {/* Neutral, not green (DESIGN_SYSTEM v1.10, Rajeev 2026-09-18; brought into line here on
+              the Decisions Desk the same day). A fully staffed shift is a standing state that is
+              simply as expected — nothing the reader just did — and this page is the one people copy
+              from, so it showed green as the example of a good state for weeks after the rule
+              changed. */}
+          <span className="rounded-control bg-sunken px-3 py-1 text-sm text-ink-secondary">
             Shift fully staffed
+          </span>
+          {/* The one thing green is for: the reader's own action did what they expected. */}
+          <span className="rounded-control bg-success-bg px-3 py-1 text-sm text-success">
+            Meal plan saved
           </span>
         </div>
         <p className="mt-3 text-sm text-ink-secondary">
           Every badge carries text. Status is never colour alone — kitchens are bright,
           screens are cheap, and roughly one in twelve men has a colour vision
           deficiency.
+        </p>
+        <p className="mt-2 text-sm text-ink-secondary">
+          Each colour has one meaning. Amber asks the reader to act or take care, red is serious
+          and needs attention now, and green only confirms that the reader’s own action did
+          what they expected. A state that is merely good, like a fully staffed shift, stays
+          neutral.
         </p>
       </section>
 

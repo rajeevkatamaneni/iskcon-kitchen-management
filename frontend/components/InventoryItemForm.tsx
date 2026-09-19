@@ -201,7 +201,7 @@ function UnitControl({
 }) {
   if (!typedIn) {
     return (
-      <span className="flex min-h-touch items-center rounded border border-hairline bg-sunken px-3 text-ink-muted">
+      <span className="flex min-h-touch items-center rounded-control border border-hairline bg-sunken px-3 text-ink-muted">
         —
       </span>
     );
@@ -209,7 +209,7 @@ function UnitControl({
   if (units.length === 1) {
     // Grams convert to kilograms; nothing converts to a coconut.
     return (
-      <span className="flex min-h-touch items-center rounded border border-hairline bg-sunken px-3 text-ink-secondary">
+      <span className="flex min-h-touch items-center rounded-control border border-hairline bg-sunken px-3 text-ink-secondary">
         {unitLabel(typedIn.code)}
       </span>
     );

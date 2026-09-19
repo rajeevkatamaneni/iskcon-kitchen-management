@@ -225,7 +225,7 @@ describe("correcting a recorded meal", () => {
     await open([recordedLunch()]);
     openTheCorrectionForm();
 
-    const cookedBox = screen.getByLabelText(/how much Bisi Bele Bath was actually cooked/i);
+    const cookedBox = screen.getByLabelText(/Bisi Bele Bath cooked/i);
     expect((cookedBox as HTMLInputElement).value).toBe("400");
   });
 
@@ -240,11 +240,11 @@ describe("correcting a recorded meal", () => {
     openTheCorrectionForm();
 
     const submit = screen.getByRole("button", { name: /record this correction/i });
-    const reason = screen.getByLabelText(/why the figures are being changed/i);
+    const reason = screen.getByLabelText(/reason for the change/i);
     expect(submit).toBeEnabled();
 
     fireEvent.click(submit);
-    const said = screen.getByText("Why the figures are being changed is required");
+    const said = screen.getByText("Reason for the change is required");
     expect(reason).toHaveAttribute("aria-invalid", "true");
     expect(reason.getAttribute("aria-describedby")?.split(" ")).toContain(said.id);
     expect(correctRecordedMeal).not.toHaveBeenCalled();
@@ -252,7 +252,7 @@ describe("correcting a recorded meal", () => {
     fireEvent.change(reason, { target: { value: "   " } });
     fireEvent.click(submit);
     // Typing spaces re-checks the box; it is still blank, so the sentence stays rather than clearing.
-    expect(screen.getByText("Why the figures are being changed is required")).toHaveClass("text-danger");
+    expect(screen.getByText("Reason for the change is required")).toHaveClass("text-danger");
     expect(reason).toHaveAttribute("aria-invalid", "true");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(correctRecordedMeal).not.toHaveBeenCalled();
@@ -278,10 +278,10 @@ describe("correcting a recorded meal", () => {
     ]);
     openTheCorrectionForm();
 
-    fireEvent.change(screen.getByLabelText(/how much Bisi Bele Bath was actually cooked/i), {
+    fireEvent.change(screen.getByLabelText(/Bisi Bele Bath cooked/i), {
       target: { value: "640" },
     });
-    fireEvent.change(screen.getByLabelText(/why the figures are being changed/i), {
+    fireEvent.change(screen.getByLabelText(/reason for the change/i), {
       target: { value: "The card was read as 400; the kitchen confirms 640" },
     });
     fireEvent.click(screen.getByRole("button", { name: /record this correction/i }));
@@ -312,7 +312,7 @@ describe("correcting a recorded meal", () => {
     openTheCorrectionForm();
 
     fireEvent.click(screen.getByLabelText(/Bisi Bele Bath was not made after all/i));
-    fireEvent.change(screen.getByLabelText(/why the figures are being changed/i), {
+    fireEvent.change(screen.getByLabelText(/reason for the change/i), {
       target: { value: "The pot went to Tuesday's event" },
     });
     fireEvent.click(screen.getByRole("button", { name: /record this correction/i }));
@@ -411,7 +411,7 @@ describe("correcting a recorded meal", () => {
     await open([recordedLunch()]);
     openTheCorrectionForm();
 
-    fireEvent.change(screen.getByLabelText(/why the figures are being changed/i), {
+    fireEvent.change(screen.getByLabelText(/reason for the change/i), {
       target: { value: "640 went out" },
     });
     fireEvent.click(screen.getByRole("button", { name: /record this correction/i }));

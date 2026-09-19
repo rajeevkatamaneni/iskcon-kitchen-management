@@ -258,7 +258,7 @@ describe("shopping list", () => {
 
       const tile = screen.getByRole("table", { name: /ingredients from no vendor/i });
       expect(within(tile).getByText("Ghee")).toBeInTheDocument();
-      expect(screen.getByText(/no preferred supplier/i)).toBeInTheDocument();
+      expect(screen.getByText(/no preferred vendor/i)).toBeInTheDocument();
       expect(screen.getAllByRole("button", { name: /generate purchase order$/i })).toHaveLength(1);
     });
 

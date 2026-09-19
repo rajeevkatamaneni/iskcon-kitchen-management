@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useCallback, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
@@ -10,6 +10,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { Loading } from "@/components/Loading";
 import { RequireRole } from "@/components/RequireRole";
 import { MealComposer, type ComposerStatus } from "@/components/planner/MealComposer";
+import { FROM, plannerUrl, safeReturn, withParam } from "@/components/planner/plannerAddress";
 import { api } from "@/lib/api";
 import { hhmm, longDate, todayIso } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -29,6 +30,12 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
  * <p>It is the composer inside the focus screen: its own URL, the sidebar still there, the task as
  * the heading, and one pair of buttons top right. Leaving it with changes nothing has saved asks
  * first — that lives in the composer, which knows what changed.
+ *
+ * <p><b>Where every way out leads</b> (T-219). Back to the screen that opened it — the planner in the
+ * view and on the date it was showing, carried here as `?from=` — or, when nothing opened it, to the
+ * planner's day view on this meal's date. Cancel, the save and "Leave without saving?" all go to the
+ * same place, because the last of those simply follows whichever link was pressed. See
+ * `components/planner/plannerAddress.ts` for why `from` is checked before it is followed.
  */
 
 const FORM = "edit-meal";
@@ -36,7 +43,10 @@ const FORM = "edit-meal";
 export default function EditMealPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <EditMealScreen />
+      {/* The way back is read from the query string, and that needs a boundary. */}
+      <Suspense>
+        <EditMealScreen />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -44,6 +54,8 @@ export default function EditMealPage() {
 function EditMealScreen() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const search = useSearchParams();
+  const origin = safeReturn(search.get(FROM));
   const raw = params?.id;
   const id = (Array.isArray(raw) ? raw[0] : raw) ?? null;
 
@@ -76,7 +88,7 @@ function EditMealScreen() {
       <FocusScreen
         task="Edit a meal"
         activeHref="/planner"
-        actions={<ButtonLink href="/planner" variant="secondary">Open the planner</ButtonLink>}
+        actions={<ButtonLink href={origin ?? "/planner"} variant="secondary">Open the planner</ButtonLink>}
       >
         <ErrorNotice error={mealQ.error} />
       </FocusScreen>
@@ -94,7 +106,10 @@ function EditMealScreen() {
   }
 
   const name = meal.eventName || meal.mealKind;
-  const backToDay = `/planner/${meal.planDate}`;
+  // Where the person came from, or the planner's own day view on this meal's date. It used to be
+  // `/planner/<date>`, a separate page for one day without the planner's tabs or date stepper, so
+  // Cancel on a meal opened from the week left the person somewhere they had never been (T-219).
+  const backToDay = origin ?? plannerUrl("day", meal.planDate);
 
   // What was cooked drew stock against a figure, so this screen — which re-plans a meal — stops at the
   // moment the meal was recorded. That is not the same as saying the figures are permanent (T-007): a
@@ -155,7 +170,7 @@ function EditMealScreen() {
         onPlanned={() => undefined}
         // Back to the day, with the confirmation waiting there rather than on a screen that is
         // about to close.
-        onClose={() => router.push(`${backToDay}?saved=${encodeURIComponent(name)}`)}
+        onClose={() => router.push(withParam(backToDay, "saved", name))}
       />
     </FocusScreen>
   );

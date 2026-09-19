@@ -239,7 +239,7 @@ describe("Today tells a cook who is in without sending them at the schedule", ()
 
     const label = await screen.findByText(/working today/i);
     // The count is theirs to see — it answers one of the four questions this screen exists for.
-    expect(label.closest("div")).toHaveTextContent("4 · 3");
+    expect(label.closest("div")).toHaveTextContent("4 staff · 3 volunteers");
     // The door is not: /staff-schedule admits an admin and a kitchen manager only, and a tile that
     // lands on "Not your page" teaches its reader that the other three tiles lie too.
     expect(label.closest("a")).toBeNull();

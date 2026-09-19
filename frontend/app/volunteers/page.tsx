@@ -16,7 +16,7 @@ import { Loading } from "@/components/Loading";
 import { dateWithYear, shiftWindow } from "@/lib/format";
 import { mealLabel } from "./shift-form";
 import { Button } from "@/components/ds/Button";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 
 /**
  * Volunteer shifts, poster side (E6-S2) — what has been posted and how full it is.
@@ -136,30 +136,30 @@ function VolunteerShiftsView() {
             </div>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Shift</th>
-                    <th className={TH_TEXT}>When</th>
-                    <th className={TH_NUM}>Filled</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_PRIMARY}>Shift</th>
+                    <th className={TH_FIXED}>When</th>
+                    <th className={TH_FIXED}>Filled</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {shifts.map((s) => (
                     <tr key={s.id} className={TR}>
-                      <td className={`${TD_TEXT} ${WRAP}`}>
+                      <td className={TD_PRIMARY}>
                         <Link href={`/volunteers/${s.id}`} className="font-medium text-accent-text hover:underline">{s.title}</Link>
                         {s.location && <span className="ml-2 text-xs text-ink-muted">{s.location}</span>}
                         {mealLabel(s) && <span className="block text-sm text-ink-secondary">{mealLabel(s)}</span>}
                       </td>
-                      <td className={`${TD_DATE} text-ink-secondary tabular-nums`}>
+                      <td className={`${TD_FIXED_NUM} text-ink-secondary`}>
                         {dateWithYear(s.shiftDate)} {shiftWindow(s.startTime, s.endTime)}
                       </td>
-                      <td className={TD_NUM}>
+                      <td className={TD_FIXED_NUM} data-label="Filled">
                         {s.signedUpCount}/{s.capacity}{s.waitlistCount > 0 ? ` (+${s.waitlistCount})` : ""}
                       </td>
-                      <td className={TD_ACTIONS}>
+                      <td className={TD_ACTIONS_FIXED}>
                         <div className={ACTIONS_ROW}>
                           <ButtonLink href={`/volunteers/${s.id}/edit`} variant="ghost" size="sm">
                             Edit

@@ -246,8 +246,11 @@ describe("staff schedule", () => {
     const { container } = render(<StaffSchedulePage />);
     const short = screen.getByText("3 short");
     expect(short.parentElement?.className).toContain("bg-warning-bg");
-    // Nothing is coloured for merely being busy — the quiet days carry no status ground at all.
-    expect(container.querySelectorAll(".bg-success-bg").length).toBe(1);
+    // Nothing is coloured for merely being busy, and nothing green either: a covered day is a good
+    // standing state, and green is kept for the reader's own action succeeding (T-227). The one
+    // covered day is plain, and still says so in words.
+    expect(container.querySelectorAll(".bg-success-bg").length).toBe(0);
+    expect(screen.getByText("Covered").parentElement?.className).toContain("bg-sunken");
   });
 
   it("lists the days short of hands in the next thirty, worst case marked as such", () => {

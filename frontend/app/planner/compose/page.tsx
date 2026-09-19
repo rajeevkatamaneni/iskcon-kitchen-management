@@ -9,6 +9,7 @@ import { FocusScreen } from "@/components/ds/FocusScreen";
 import { Loading } from "@/components/Loading";
 import { RequireRole } from "@/components/RequireRole";
 import { MealComposer, type ComposerStatus } from "@/components/planner/MealComposer";
+import { FROM, plannerUrl, safeReturn, withParam } from "@/components/planner/plannerAddress";
 import { api } from "@/lib/api";
 import { longDate, todayIso } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -52,7 +53,9 @@ function ComposeMealScreen() {
   const params = useSearchParams();
   const router = useRouter();
   const date = asDate(params.get("date")) ?? todayIso();
-  const backToDay = `/planner?view=day&date=${date}`;
+  // Back to whichever planner screen opened this one, or the planner's day view on this date when
+  // nothing did (T-219). The same rule, and the same checks on `from`, as the edit screen.
+  const backToDay = safeReturn(params.get(FROM)) ?? plannerUrl("day", date);
 
   const recipesQ = useAuthedQuery(useCallback((t?: string) => api.listRecipes({}, t), []));
   const { data: mealKinds } = useAuthedQuery(api.listMealKinds);
@@ -120,7 +123,7 @@ function ComposeMealScreen() {
         onPlanned={() => undefined}
         // Back to the day, with the confirmation waiting there rather than on a screen that is
         // about to close.
-        onClose={() => router.push(`${backToDay}&saved=planned`)}
+        onClose={() => router.push(withParam(backToDay, "saved", "planned"))}
       />
     </FocusScreen>
   );

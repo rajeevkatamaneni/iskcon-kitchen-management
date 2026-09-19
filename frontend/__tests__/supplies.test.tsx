@@ -212,10 +212,12 @@ describe("one catalogue, split across two screens", () => {
     ingRef.current = { data: [LEAF_PLATES], error: null, loading: false };
     render(<SuppliesPage />);
     expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      // Flexible columns first, fixed ones grouped on the right (the table rule, T-228). The
+      // actions heading is still there for a screen reader, only hidden from sight.
       "Name",
       "Category",
-      "Unit",
       "Also called",
+      "Unit",
       "Actions",
     ]);
     expect(screen.queryByText(/^supply$/i)).not.toBeInTheDocument();

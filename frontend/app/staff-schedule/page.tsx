@@ -2,17 +2,18 @@
 
 import Link from "next/link";
 import { Form } from "@/components/ds/Form";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type DayCoverage, type LeaveType, type ResolvedDay, type StaffWeek } from "@/lib/api";
-import { longDay, shortDate, todayIso } from "@/lib/format";
+import { dateWithYear, longDay, shortDate, todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
+import { Card } from "@/components/ds/Card";
 import { HintedField } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { TABLE, THEAD, TR, TH_TEXT, TH_GRID, TD_TEXT, TD_GRID, WRAP } from "@/components/ds/table";
@@ -95,6 +96,7 @@ function StaffScheduleView() {
   );
 
   const [selected, setSelected] = useState<Selection | null>(null);
+  const narrow = useNarrow();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -128,10 +130,71 @@ function StaffScheduleView() {
     }
   }
 
+  // One editor for both layouts: the day the manager opened is the same fact whether it was
+  // pressed in the week table or in the stacked days a phone gets.
+  const editor = selected && openDay && (
+    <DayEditor
+      selection={selected}
+      day={openDay}
+      busy={busy}
+      onClose={() => setSelected(null)}
+      onChangeHours={(startTime, endTime) =>
+        run(
+          (t) => api.setStaffException(selected.staffProfileId, {
+            exceptionDate: selected.date, working: true, startTime, endTime, note: null,
+          }, t),
+          "That day was changed. The staff member was told.",
+          "We couldn’t change that day."
+        )
+      }
+      onMarkOff={(leaveType, reason) =>
+        run(
+          (t) => api.recordLeave({
+            staffProfileId: selected.staffProfileId,
+            leaveType,
+            fromDate: selected.date,
+            toDate: selected.date,
+            halfDay: false,
+            reason,
+          }, t),
+          "Recorded as approved leave.",
+          "We couldn’t record that leave."
+        )
+      }
+      onSwap={(toDate) =>
+        run(
+          (t) => api.swapStaffShift(selected.staffProfileId, { fromDate: selected.date, toDate }, t),
+          "Both days were changed together.",
+          "We couldn’t swap those days."
+        )
+      }
+      onUndo={() =>
+        openDay.exceptionId
+          ? run(
+              (t) => api.deleteStaffException(selected.staffProfileId, openDay.exceptionId as string, t),
+              openDay.swapLinkId ? "The swap was undone — both days are back." : "That day is back to the usual pattern.",
+              "We couldn’t undo that change."
+            )
+          : Promise.resolve()
+      }
+      onRevokeLeave={() =>
+        openDay.leaveId
+          ? run(
+              (t) => api.decideLeave(openDay.leaveId as string, "revoke", null, t),
+              "The leave was revoked. The staff member was told.",
+              "We couldn’t revoke that leave."
+            )
+          : Promise.resolve()
+      }
+    />
+  );
+
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/staff-schedule" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      {/* A 16px gutter on a phone, as the other list screens have (T-222): at 32px the week had
+          324px of a 390px screen. */}
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6">
             <h1>Staff schedule</h1>
@@ -141,9 +204,9 @@ function StaffScheduleView() {
           </header>
 
           <div className="mb-4 flex items-center gap-3">
-            <button type="button" onClick={() => setWeekStart(shiftWeek(weekStart, -7))} className="min-h-touch rounded border border-hairline px-3 hover:bg-sunken">← Prev</button>
-            <span className="text-sm text-ink-secondary tabular-nums">Week of {weekStart}</span>
-            <button type="button" onClick={() => setWeekStart(shiftWeek(weekStart, 7))} className="min-h-touch rounded border border-hairline px-3 hover:bg-sunken">Next →</button>
+            <button type="button" onClick={() => setWeekStart(shiftWeek(weekStart, -7))} className="min-h-touch rounded-control border border-hairline px-3 hover:bg-sunken">← Prev</button>
+            <span className="text-sm text-ink-secondary tabular-nums">Week of {dateWithYear(weekStart)}</span>
+            <button type="button" onClick={() => setWeekStart(shiftWeek(weekStart, 7))} className="min-h-touch rounded-control border border-hairline px-3 hover:bg-sunken">Next →</button>
           </div>
 
           {actionError && <div className="mb-4"><ErrorNotice error={actionError} /></div>}
@@ -166,6 +229,24 @@ function StaffScheduleView() {
                 will appear here.
               </p>
             </div>
+          ) : narrow ? (
+            <>
+              <StackedWeek
+                columnDates={columnDates}
+                rows={rows}
+                counts={counts}
+                coverageByDate={coverageByDate}
+                coverageLoading={coverage.loading}
+                selected={selected}
+                onOpen={(r, date) => {
+                  setActionError(null);
+                  setNotice(null);
+                  setSelected({ staffProfileId: r.staffProfileId, fullName: r.fullName, date });
+                }}
+                editor={editor || null}
+              />
+              <ShortAhead days={ahead.data ?? []} loading={ahead.loading} />
+            </>
           ) : (
             <>
               <div className="table-wrap overflow-x-auto">
@@ -173,8 +254,14 @@ function StaffScheduleView() {
                   <thead className={THEAD}>
                     <tr>
                       <th className={`${TH_TEXT} ${WRAP}`}>Staff</th>
+                      {/* Exempt from the table rule (Rajeev, 2026-09-18, T-233): this is a week
+                          calendar, not a list, and its seven days are one scale that has to read
+                          evenly. Each day is 12% of the table, so the seven are equal and the name
+                          column keeps the other 16%. Left to the browser they were not: a day with
+                          a longer coverage note ("Dinner — 2 of 20") took 120px beside 110px for
+                          the others, measured at 1280. */}
                       {DAY_LABELS.map((d, i) => (
-                        <th key={d} className={TH_GRID}>
+                        <th key={d} className={`${TH_GRID} w-[12%]`}>
                           {d}
                           <span className="block text-xs font-normal tabular-nums">{shortDate(columnDates[i])}</span>
                         </th>
@@ -239,68 +326,110 @@ function StaffScheduleView() {
 
               <ShortAhead days={ahead.data ?? []} loading={ahead.loading} />
 
-              {selected && openDay && (
-                <DayEditor
-                  selection={selected}
-                  day={openDay}
-                  busy={busy}
-                  onClose={() => setSelected(null)}
-                  onChangeHours={(startTime, endTime) =>
-                    run(
-                      (t) => api.setStaffException(selected.staffProfileId, {
-                        exceptionDate: selected.date, working: true, startTime, endTime, note: null,
-                      }, t),
-                      "That day was changed. The staff member was told.",
-                      "We couldn’t change that day."
-                    )
-                  }
-                  onMarkOff={(leaveType, reason) =>
-                    run(
-                      (t) => api.recordLeave({
-                        staffProfileId: selected.staffProfileId,
-                        leaveType,
-                        fromDate: selected.date,
-                        toDate: selected.date,
-                        halfDay: false,
-                        reason,
-                      }, t),
-                      "Recorded as approved leave.",
-                      "We couldn’t record that leave."
-                    )
-                  }
-                  onSwap={(toDate) =>
-                    run(
-                      (t) => api.swapStaffShift(selected.staffProfileId, { fromDate: selected.date, toDate }, t),
-                      "Both days were changed together.",
-                      "We couldn’t swap those days."
-                    )
-                  }
-                  onUndo={() =>
-                    openDay.exceptionId
-                      ? run(
-                          (t) => api.deleteStaffException(selected.staffProfileId, openDay.exceptionId as string, t),
-                          openDay.swapLinkId ? "The swap was undone — both days are back." : "That day is back to the usual pattern.",
-                          "We couldn’t undo that change."
-                        )
-                      : Promise.resolve()
-                  }
-                  onRevokeLeave={() =>
-                    openDay.leaveId
-                      ? run(
-                          (t) => api.decideLeave(openDay.leaveId as string, "revoke", null, t),
-                          "The leave was revoked. The staff member was told.",
-                          "We couldn’t revoke that leave."
-                        )
-                      : Promise.resolve()
-                  }
-                />
-              )}
+              {editor}
             </>
           )}
         </div>
       </main>
     </div>
   );
+}
+
+/**
+ * The phone's week (T-235, Rajeev 2026-09-18): the same seven days, stacked one above the next.
+ *
+ * <p>The grid is staff down the side and days across, and at 390px that was 884px of table in a
+ * 324px box, scrolled sideways. The Vaishnava calendar's Week view had already settled what a week
+ * does on a phone — the days stack, one card each — and Rajeev asked for the two to behave alike.
+ * So below `md`, the same breakpoint that calendar stacks at, each day becomes a card: its
+ * shortfall first (the question this screen exists to answer), then who is in, then each person
+ * with the same cell the grid draws, which opens the same editor.
+ *
+ * <p>A second rendering rather than CSS on the table, because a table cannot be turned on its side
+ * in CSS: its rows are people, and a phone needs the rows to be days. The editor is placed under
+ * the person it was opened for, not at the foot of seven cards where nobody would find it.
+ */
+function StackedWeek({
+  columnDates,
+  rows,
+  counts,
+  coverageByDate,
+  coverageLoading,
+  selected,
+  onOpen,
+  editor,
+}: {
+  columnDates: string[];
+  rows: StaffWeek[];
+  counts: { staffIn: number; volunteers: number }[];
+  coverageByDate: Map<string, DayCoverage>;
+  coverageLoading: boolean;
+  selected: Selection | null;
+  onOpen: (r: StaffWeek, date: string) => void;
+  editor: ReactNode;
+}) {
+  return (
+    <div className="grid gap-3">
+      {columnDates.map((date, i) => {
+        const count = counts[i];
+        return (
+          <Card key={date} tone="canvas" padding="p-4" className="grid content-start gap-3">
+            <h2 className="text-base font-medium text-ink">
+              {DAY_LABELS[i]} <span className="font-normal tabular-nums text-ink-secondary">{shortDate(date)}</span>
+            </h2>
+            <CoverageCell day={coverageByDate.get(date) ?? null} loading={coverageLoading} />
+            <p className="text-sm text-ink-secondary">
+              In that day: {count ? count.staffIn : 0} staff, {count ? count.volunteers : 0} volunteers
+            </p>
+            <ul className="grid divide-y divide-hairline border-t border-hairline text-sm">
+              {rows.map((r) => {
+                const day = r.days.find((d) => d.date === date);
+                if (!day) return null;
+                const open = selected?.staffProfileId === r.staffProfileId && selected?.date === date;
+                return (
+                  <li key={r.staffProfileId} className="py-1">
+                    <div className="flex items-center justify-between gap-3">
+                      {/* `overflow-wrap: anywhere`, not `break-words`: only `anywhere` lowers the
+                          name's minimum width, so a long one-word name wraps instead of holding the
+                          card wider than the phone (measured: 378px of card in a 358px box with
+                          `break-words`, at 390). */}
+                      <span className="min-w-0 [overflow-wrap:anywhere]">
+                        <Link href={`/staff-schedule/${r.staffProfileId}`} className="font-medium text-accent-text hover:underline">{r.fullName}</Link>
+                        {r.jobTitleLabel && <span className="block text-xs text-ink-muted">{r.jobTitleLabel}</span>}
+                      </span>
+                      <span className="w-32 shrink-0">
+                        <DayCell day={day} person={r} open={open} onOpen={() => onOpen(r, date)} />
+                      </span>
+                    </div>
+                    {open && editor}
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * True below `md` (768px), the width at which the calendar's Week view stacks its days.
+ *
+ * <p>False until the page has mounted and wherever `matchMedia` does not exist (jsdom, in the
+ * tests), so the first paint and the tests both get the week table, as they always have.
+ */
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(max-width: 767.98px)");
+    const update = () => setNarrow(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return narrow;
 }
 
 /**
@@ -325,7 +454,10 @@ function CoverageCell({ day, loading }: { day: DayCoverage | null; loading: bool
   }
   const read = coverageReading(day);
   return (
-    <div className={`rounded px-2 py-2 tabular-nums ${read.className}`}>
+    // `whitespace-normal`: the grid's cells refuse to wrap, and this note ("Dinner — 2 of 20") was
+    // the one thing in a day wider than the day's equal share, so it alone made Saturday wider
+    // than the rest (116px against 112 at 1280). It may take a second line instead.
+    <div className={`whitespace-normal rounded px-2 py-2 tabular-nums ${read.className}`}>
       <span className="block text-sm font-medium">{read.headline}</span>
       {read.detail && <span className="block text-xs">{read.detail}</span>}
     </div>
@@ -405,7 +537,9 @@ function coverageReading(day: DayCoverage | null): {
         className: day.shortAtRostered === 0 ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning",
       };
     case "COVERED":
-      return { headline: "Covered", detail: null, className: "bg-success-bg text-success" };
+      // Neutral, the Badge's own neutral: covered is the good standing state, but green is kept for
+      // the moment the reader's own action succeeds (Rajeev, 2026-09-18, T-227).
+      return { headline: "Covered", detail: null, className: "bg-sunken text-ink-secondary" };
     case "CREW_NOT_SET":
       // Not covered, and never drawn as though it were. Nobody has said what these meals take.
       return { headline: "Crew not set", detail: null, className: "text-ink-muted" };
@@ -416,8 +550,10 @@ function coverageReading(day: DayCoverage | null): {
 }
 
 /**
- * One day of one person. An adjusted day looks adjusted, and now says which kind of adjustment it
- * is: amber for an override the manager made, muted for leave, which is not the roster's doing.
+ * One day of one person. An adjusted day says which kind of adjustment it is, in words: "Changed" or
+ * "Swapped" under an override the manager made, and muted for leave, which is not the roster's doing.
+ * The override used to be amber; it is plain now, because a changed shift is a fact to the admin who
+ * made it, not a warning (Rajeev, 2026-09-18, T-227). The word under the hours carries it.
  */
 function DayCell({
   day,
@@ -431,7 +567,7 @@ function DayCell({
   onOpen: () => void;
 }) {
   const hours = `${(day.startTime ?? "").slice(0, 5)}–${(day.endTime ?? "").slice(0, 5)}`;
-  const tone = day.leaveId ? "text-ink-muted" : day.fromException ? "text-warning" : "";
+  const tone = day.leaveId ? "text-ink-muted" : "";
 
   return (
     <button
@@ -493,7 +629,8 @@ function DayEditor({
       </header>
 
       {day.leaveId ? (
-        <InlineNotice tone="warning" title={`On ${day.leaveLabel?.toLowerCase()}${day.halfDayLeave ? " for half the day" : ""}`}>
+        // Information: the leave is standing context, and revoking it is optional (T-227).
+        <InlineNotice tone="info" title={`On ${day.leaveLabel?.toLowerCase()}${day.halfDayLeave ? " for half the day" : ""}`}>
           <p>
             Revoke the leave first if they are in after all. They will be told.
           </p>

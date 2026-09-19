@@ -128,18 +128,19 @@ function actionFor(
   leave: () => void
 ) {
   if (s.callerState === "SIGNED_UP") {
-    return <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">You’re in</span>;
+    // Neutral: a standing state on a list. The green moment is the sign-up notice (T-227).
+    return <span className="rounded-control bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">You’re in</span>;
   }
   if (s.callerState === "WAITLISTED") {
     return (
-      <button type="button" disabled={busy} onClick={leave} className="min-h-touch rounded border border-hairline px-3 text-sm hover:bg-sunken disabled:opacity-60">
+      <button type="button" disabled={busy} onClick={leave} className="min-h-touch rounded-control border border-hairline px-3 text-sm hover:bg-sunken disabled:opacity-60">
         Leave waitlist
       </button>
     );
   }
   if (s.callerState === "FULL") {
     return (
-      <button type="button" disabled={busy} onClick={join} className="min-h-touch rounded border border-hairline px-3 text-sm hover:bg-sunken disabled:opacity-60">
+      <button type="button" disabled={busy} onClick={join} className="min-h-touch rounded-control border border-hairline px-3 text-sm hover:bg-sunken disabled:opacity-60">
         Join waitlist
       </button>
     );

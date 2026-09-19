@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ds/Badge";
@@ -15,6 +15,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
 import { MealServices } from "@/components/planner/MealServices";
+import { plannerUrl, withReturn, type PlannerView } from "@/components/planner/plannerAddress";
 import {
   api,
   type ApiError,
@@ -25,11 +26,10 @@ import {
   type RecipeSummary,
   type WorkforceCount,
 } from "@/lib/api";
-import {
-  TABLE, TD_DATE, TD_NUM, TD_TEXT, TH_DATE, TH_NUM, TH_TEXT, THEAD, TR, WRAP,
-} from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
+import { ekadashiLabel, ekadashiSpelling } from "@/lib/vaishnava-day";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { hhmm, longDate, longDay, todayIso } from "@/lib/format";
 
@@ -51,7 +51,9 @@ import { hhmm, longDate, longDay, todayIso } from "@/lib/format";
  * you out of it.
  */
 
-type View = "day" | "week" | "month";
+// The helper's type, so this screen and every screen that writes an address back to it agree on
+// which views exist (T-219).
+type View = PlannerView;
 
 const VIEWS = [
   { value: "day" as const, label: "Day" },
@@ -86,16 +88,31 @@ function PlannerView() {
   const [error, setError] = useState<ApiError | null>(null);
 
   /**
+   * The confirmation a meal's screen leaves on its way back here (T-219). Saving used to land on the
+   * separate day page, which said "Lunch was saved."; it lands here now, in the view and on the date
+   * the person left, so the sentence has to be said here too. Read once and taken out of the address,
+   * so a reload or a back-press does not say it again. Guarded by a ref: setting it re-renders, and a
+   * router that is a new object each render would otherwise run this in a loop.
+   */
+  const [saved, setSaved] = useState<string | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current) return;
+    const kind = params.get("saved");
+    if (!kind) return;
+    captured.current = true;
+    setSaved(kind === "planned" ? "The meal was planned." : `${kind} was saved.`);
+    router.replace(plannerUrl(view, anchor));
+  }, [params, router, view, anchor]);
+
+  /**
    * Moving to another view, or another date, is a change of what is on screen — so it is a `push`
    * and the back button undoes it. A filter narrowing the same thing would be a `replace`; the
    * planner has none.
    */
   const go = useCallback(
     (next: { view?: View; date?: string }) => {
-      const q = new URLSearchParams();
-      q.set("view", next.view ?? view);
-      q.set("date", next.date ?? anchor);
-      router.push(`/planner?${q.toString()}`);
+      router.push(plannerUrl(next.view ?? view, next.date ?? anchor));
     },
     [router, view, anchor]
   );
@@ -169,6 +186,9 @@ function PlannerView() {
             }
           />
 
+          {/* No margin of its own: the screen's 24px gap already separates it, and a margin on
+              top of that set the notice 48px off the day below. */}
+          {saved && <InlineNotice tone="success" autoDismiss title={saved} />}
           {calQ.error && <ErrorNotice error={calQ.error} />}
           {error && <ErrorNotice error={error} />}
 
@@ -181,6 +201,7 @@ function PlannerView() {
               sufficiency={sufficiency}
               recipes={recipes ?? []}
               readOnly={anchor < today}
+              returnTo={plannerUrl(view, anchor)}
               nonce={nonce}
               onChanged={() => setNonce((n) => n + 1)}
               onError={setError}
@@ -239,24 +260,39 @@ function OutsideCommitments() {
     <Card
       title="Upcoming outside commitments"
       meta="Food leaving the temple, soonest first"
-      padding="p-0"
+      // The table runs to the card's edges; the title is padded so it sits where every other
+      // card's title does rather than flush against the border.
+      padding="p-0 [&>header]:px-6 [&>header]:pt-6"
     >
       <div className="overflow-x-auto">
-        <table className={TABLE}>
+        <table className={RULED_TABLE}>
           <thead className={THEAD}>
             <tr>
-              <th className={TH_DATE}>When</th>
-              <th className={`${TH_TEXT} ${WRAP}`}>Event</th>
-              <th className={TH_TEXT}>Handover</th>
-              <th className={TH_TEXT}>Who to ring</th>
-              <th className={`${TH_TEXT} ${WRAP}`}>Where it is going</th>
-              <th className={TH_NUM}>Preparations</th>
+              <th className={TH_PRIMARY}>Event</th>
+              <th className={TH_SECOND}>Who to ring</th>
+              <th className={TH_SECOND}>Where it is going</th>
+              <th className={TH_FIXED}>When</th>
+              <th className={TH_FIXED}>Handover</th>
+              <th className={TH_FIXED}>Preparations</th>
             </tr>
           </thead>
           <tbody>
             {commitments.map((c) => (
               <tr key={c.mealId} className={TR}>
-                <td className={TD_DATE}>
+                <td className={TD_PRIMARY}>
+                  {c.eventName ?? c.mealKind}
+                  {c.eventName && (
+                    <span className="block text-xs text-ink-muted">{c.mealKind}</span>
+                  )}
+                </td>
+                <td className={TD_SECOND}>
+                  {c.contactName ?? "—"}
+                  {c.contactPhone && (
+                    <span className="block text-xs tabular-nums text-ink-muted">{c.contactPhone}</span>
+                  )}
+                </td>
+                <td className={TD_SECOND}>{c.deliveryAddress ?? "—"}</td>
+                <td className={TD_FIXED}>
                   {longDate(c.planDate)}
                   <span className="block text-xs tabular-nums text-ink-muted">
                     {/* The hour that matters to whoever reads this is the one the guests sit down
@@ -265,13 +301,7 @@ function OutsideCommitments() {
                     {c.guestsEatAt && ` · guests eat at ${hhmm(c.guestsEatAt)}`}
                   </span>
                 </td>
-                <td className={`${TD_TEXT} ${WRAP}`}>
-                  {c.eventName ?? c.mealKind}
-                  {c.eventName && (
-                    <span className="block text-xs text-ink-muted">{c.mealKind}</span>
-                  )}
-                </td>
-                <td className={TD_TEXT}>
+                <td className={TD_FIXED}>
                   {c.handover === "DELIVERY"
                     ? "We deliver it"
                     : c.handover === "PICKUP"
@@ -279,16 +309,9 @@ function OutsideCommitments() {
                       : // V88 carried the old catering and outside-event plans across with no
                         // handover, because nobody was ever asked. Saying so is better than
                         // picking one on their behalf.
-                        "Not said"}
+                        "Not set"}
                 </td>
-                <td className={TD_TEXT}>
-                  {c.contactName ?? "—"}
-                  {c.contactPhone && (
-                    <span className="block text-xs tabular-nums text-ink-muted">{c.contactPhone}</span>
-                  )}
-                </td>
-                <td className={`${TD_TEXT} ${WRAP}`}>{c.deliveryAddress ?? "—"}</td>
-                <td className={TD_NUM}>{c.preparations}</td>
+                <td className={TD_FIXED_NUM} data-label="Preparations">{c.preparations}</td>
               </tr>
             ))}
           </tbody>
@@ -322,7 +345,7 @@ function WorkforcePebbles({
   return (
     <span className={`flex flex-wrap items-center gap-1.5 ${text}`}>
       <span
-        className="inline-flex items-center gap-1.5 rounded-full bg-sunken px-2.5 py-1 font-semibold tabular-nums text-ink"
+        className="inline-flex items-center gap-1.5 rounded-control bg-sunken px-2.5 py-1 font-semibold tabular-nums text-ink"
         title={`${workforce.staffIn} staff in`}
       >
         <i aria-hidden="true" className="ti ti-id-badge-2 text-ink-secondary" />
@@ -330,7 +353,7 @@ function WorkforcePebbles({
         <span className="sr-only"> staff in</span>
       </span>
       <span
-        className="inline-flex items-center gap-1.5 rounded-full bg-sunken px-2.5 py-1 font-semibold tabular-nums text-ink"
+        className="inline-flex items-center gap-1.5 rounded-control bg-sunken px-2.5 py-1 font-semibold tabular-nums text-ink"
         title={`${workforce.volunteers} volunteers signed up`}
       >
         <i aria-hidden="true" className="ti ti-users text-ink-secondary" />
@@ -352,7 +375,7 @@ function WorkforcePebbles({
  * per preparation with an `Open` button on each, so a three-preparation lunch was three lunches.
  */
 function DayPanel({
-  date, isToday, workforce, day, sufficiency, recipes, readOnly, nonce,
+  date, isToday, workforce, day, sufficiency, recipes, readOnly, returnTo, nonce,
   onChanged, onError,
 }: {
   date: string;
@@ -362,6 +385,8 @@ function DayPanel({
   sufficiency: Map<string, MealSufficiency>;
   recipes: RecipeSummary[];
   readOnly: boolean;
+  /** This screen's own address, so the meal and compose screens it opens come back to it (T-219). */
+  returnTo: string;
   /** Bumped whenever anything on the day changes, so the meal blocks re-read themselves. */
   nonce: number;
   onChanged: () => void;
@@ -383,26 +408,30 @@ function DayPanel({
               then grew a box, which is a button pretending not to be one, and neither went
               anywhere this screen does not already reach. */}
           <span className="grid min-w-[16rem] flex-1 gap-1">
-            <span className="flex items-center gap-3">
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {isToday && <Badge tone="accent">Today</Badge>}
-              <span className="text-2xl font-semibold text-ink">{longDay(date)}</span>
+              <span className="text-xl font-semibold text-ink sm:text-2xl">{longDay(date)}</span>
             </span>
             {/* Directly under the date, because "is there anyone to cook this?" is the question a
                 planner asks straight after "what day is it?" (B3). */}
             <WorkforcePebbles workforce={workforce} />
           </span>
 
-          <span className="grid max-w-[26rem] justify-items-end gap-2 text-right">
+          {/* Right-aligned only while it sits beside the date. Once the row wraps on a phone it is
+              under the date, and right-aligned lines there read as a ragged column to nowhere. */}
+          <span className="grid max-w-[26rem] justify-items-start gap-2 sm:justify-items-end sm:text-right">
             {day && <span className="text-ink-secondary">{dayLabel(day)}</span>}
             {day?.sunrise && day?.sunset && (
               <span className="text-xs tabular-nums text-ink-muted">
                 Sunrise {hhmm(day.sunrise)} &middot; Sunset {hhmm(day.sunset)}
               </span>
             )}
-            {day?.isEkadashi && <Badge tone="warning">{day.ekadashiName || "Ekadashi"}</Badge>}
+            {/* Blue, as the week above and the Vaishnava calendar draw it (DESIGN_SYSTEM v1.2). This
+                badge was still amber, so the same Ekadashi changed colour between Week and Day. */}
+            {day?.isEkadashi && <Badge tone="info">{ekadashiLabel(day.ekadashiName)}</Badge>}
             {festivals.map((f) => (
-              <Badge key={f.text} tone="success">
-                {f.text}
+              <Badge key={f.text} tone="festival">
+                {ekadashiSpelling(f.text)}
               </Badge>
             ))}
             {!day?.isEkadashi && festivals.length === 0 && (
@@ -412,16 +441,18 @@ function DayPanel({
         </div>
       </Card>
 
+      {/* Blue like every other Ekadashi mark: the day is information, not a warning. The warning
+          comes when someone picks a grain dish, in the composer (Rajeev, 2026-09-18, T-227). */}
       {day?.isEkadashi && (
         <InlineNotice
-          tone="warning"
+          tone="info"
           action={
             <ButtonLink href="/calendar" size="sm" variant="ghost">
               Calendar
             </ButtonLink>
           }
         >
-          Grains, dal and beans come off every menu on {day.ekadashiName || "this fasting day"}.
+          Grains, dal and beans come off every menu on {day.ekadashiName ? ekadashiSpelling(day.ekadashiName) : "this fasting day"}.
         </InlineNotice>
       )}
 
@@ -432,6 +463,7 @@ function DayPanel({
           sufficiency={sufficiency}
           recipes={recipes}
           readOnly={readOnly}
+          returnTo={returnTo}
           onChanged={onChanged}
           onError={onError}
         />
@@ -440,7 +472,7 @@ function DayPanel({
           // A link, not an expand. Planning a meal is the same screen as correcting one, and it is
           // that screen — see app/planner/compose/page.tsx for why that is worth a navigation.
           <Link
-            href={`/planner/compose?date=${date}`}
+            href={withReturn(`/planner/compose?date=${date}`, returnTo)}
             className="flex min-h-[3.5rem] items-center justify-center gap-2 rounded-lg border border-dashed border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-raised"
           >
             <span aria-hidden className="text-lg leading-none">+</span>
@@ -468,12 +500,22 @@ function WeekGrid({
   const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
 
   return (
-    <div className="overflow-x-auto">
-      <div className="grid min-w-[900px] grid-cols-7 gap-3">
+    // `relative` holds the cells' screen-reader text inside this box: without it those absolutely
+    // placed spans measured from the page, and the whole page scrolled sideways on a phone and a
+    // tablet.
+    //
+    // The columns are the Vaishnava calendar's Week view, class for class (T-235, Rajeev
+    // 2026-09-18): one day under the next below `md`, four to a row up to `xl`, seven from there.
+    // This grid used to hold seven columns at a 900px minimum and scroll sideways inside its box,
+    // so on a phone the week was a strip you dragged while the calendar's week stacked — the same
+    // week, drawn two ways one menu item apart.
+    <div className="relative">
+      <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
         {days.map((date) => {
           const day = calendar.get(date);
           const planned = meals.get(date) ?? [];
-          const festival = day?.festivals?.[0]?.text;
+          const festivalText = day?.festivals?.[0]?.text;
+          const festival = festivalText && ekadashiSpelling(festivalText);
 
           return (
             <button
@@ -485,7 +527,8 @@ function WeekGrid({
                 : `${longDate(date)}, nothing planned`}
               className={[
                 // Radius, padding and gap are the prototype's, read from it rather than guessed.
-                "grid content-start gap-3 rounded-2xl border border-hairline p-4 text-left",
+                // `min-w-0` so a long recipe name truncates inside its column instead of widening it.
+                "grid min-w-0 content-start gap-3 rounded-2xl border border-hairline p-4 text-left",
                 "transition-[transform,box-shadow,background-color] duration-state ease-out",
                 "hover:-translate-y-0.5 hover:bg-raised hover:shadow-lift",
                 date === today ? "ring-2 ring-ink ring-inset" : "",
@@ -508,23 +551,23 @@ function WeekGrid({
                   narrow cell of small print, the fast is the one thing that must not be missed.
 
                   Kept to one line, which the prototype never had to think about — it only ever shows
-                  "Ekadasi". Real festival names run to "Sri Raghunandana Thakura -- Disappearance",
+                  "Ekadashi". Real festival names run to "Sri Raghunandana Thakura -- Disappearance",
                   and a name that wraps turns a pill into a four-line blob. Truncated with the whole
                   name on hover, and the day itself opens to read it properly. */}
               {day?.isEkadashi && (
                 <span
-                  title={day.ekadashiName || "Ekadashi"}
+                  title={ekadashiLabel(day.ekadashiName)}
                   // Blue, matching the calendar. These two screens had disagreed about the colour of the same
                   // day since they were built — the calendar said terracotta, this said gold.
-                  className="w-fit max-w-full truncate rounded-full bg-info-bg px-2 py-0.5 text-sm font-medium text-info"
+                  className="w-fit max-w-full truncate rounded-control bg-info-bg px-2 py-0.5 text-sm font-medium text-info"
                 >
-                  {day.ekadashiName || "Ekadashi"}
+                  {ekadashiLabel(day.ekadashiName)}
                 </span>
               )}
               {!day?.isEkadashi && festival && (
                 <span
                   title={festival}
-                  className="w-fit max-w-full truncate rounded-full bg-success-bg px-2 py-0.5 text-sm font-medium text-success"
+                  className="w-fit max-w-full truncate rounded-control bg-festival-bg px-2 py-0.5 text-sm font-medium text-festival-text"
                 >
                   {festival}
                 </span>
@@ -538,7 +581,9 @@ function WeekGrid({
                   return (
                     <span key={m.mealId} className="grid gap-px border-l-2 border-accent pl-2">
                       <span className="text-xs tabular-nums text-ink">
-                        {hhmm(m.readyBy)} {m.mealKind}
+                        {/* By the event's own name, as Month and Today already do — two events
+                            on one day both read "Event" here otherwise. */}
+                        {hhmm(m.readyBy)} {m.eventName ?? m.mealKind}
                       </span>
                       {/* One meal, one line. The servings are the meal’s own head count and never
                           the sum of its preparations — three preparations at 250 is 250 servings.
@@ -590,8 +635,9 @@ function PlannerMonth({
   const cells = Array.from({ length: 42 }, (_, i) => addDays(start, i));
 
   return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[720px]">
+    // 700, not 720: a portrait tablet has 704px here, and 720 made the month scroll 16px sideways.
+    <div className="relative overflow-x-auto">
+      <div className="min-w-[700px]">
         <MonthGrid
           weekdays={WEEKDAYS}
           cells={cells}
@@ -612,8 +658,9 @@ function PlannerMonth({
           {(date) => {
             const day = calendar.get(date);
             const planned = meals.get(date) ?? [];
-            const festival = day?.festivals?.[0]?.text;
-            const mark = day?.isEkadashi ? day.ekadashiName || "Ekadashi" : festival;
+            const festivalText = day?.festivals?.[0]?.text;
+            const festival = festivalText && ekadashiSpelling(festivalText);
+            const mark = day?.isEkadashi ? ekadashiLabel(day.ekadashiName) : festival;
 
             return (
               <>
@@ -622,9 +669,11 @@ function PlannerMonth({
                     {Number(date.slice(8, 10))}
                   </span>
                   {mark && (
+                    // Not right-aligned: Chrome drops the ellipsis from a clamped line that is, so
+                    // "Appearance of Lord Sri" read as the whole name with nothing to say it was cut.
                     <MonthCellLine
                       title={mark}
-                      className={`text-right ${day?.isEkadashi ? "text-warning" : "text-success"}`}
+                      className={day?.isEkadashi ? "text-info" : "text-festival-text"}
                     >
                       {mark}
                     </MonthCellLine>

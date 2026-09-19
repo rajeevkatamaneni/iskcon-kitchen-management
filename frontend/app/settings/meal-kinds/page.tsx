@@ -11,19 +11,7 @@ import { EmptyState } from "@/components/ds/EmptyState";
 import { FieldRow } from "@/components/ds/FieldRow";
 import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
-import {
-  ACTIONS_ROW,
-  TABLE,
-  TD_ACTIONS,
-  TD_NUM,
-  TD_TEXT,
-  THEAD,
-  TH_ACTIONS,
-  TH_NUM,
-  TH_TEXT,
-  TR,
-  WRAP,
-} from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { api, toApiError, type ApiError, type MealKindInput, type MealKindView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { hhmm } from "@/lib/format";
@@ -172,7 +160,7 @@ function MealKindsView() {
     <div className="flex min-h-screen">
       <Sidebar activeHref="/settings/meal-kinds" />
 
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-8">
             <h1>Meal kinds</h1>
@@ -222,32 +210,32 @@ function MealKindsView() {
             </EmptyState>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Meal kind</th>
-                    <th className={TH_TEXT}>Usually ready by</th>
-                    <th className={`${TH_TEXT} ${WRAP}`}>What the planner asks for</th>
-                    <th className={TH_NUM}>Order</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_PRIMARY}>Meal kind</th>
+                    <th className={TH_SECOND}>What the planner asks for</th>
+                    <th className={TH_FIXED}>Usually ready by</th>
+                    <th className={TH_FIXED}>Order</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {kinds.map((k) => (
                     <tr key={k.id} className={TR}>
-                      <td className={`${TD_TEXT} ${WRAP}`}>
+                      <td className={TD_PRIMARY}>
                         <span className="font-medium">{k.name}</span>
                       </td>
-                      <td className={`${TD_TEXT} tabular-nums text-ink-secondary`}>
+                      <td className={`${TD_SECOND} text-ink-secondary`}>{whatItAsksFor(k)}</td>
+                      <td className={`${TD_FIXED_NUM} text-ink-secondary`}>
                         {/* Not an em dash. "No usual time" is a decision the temple made, and the
                             planner behaves differently because of it — it asks every time — so the
                             column says it in words rather than leaving a blank to be read as
                             missing data. */}
                         {k.defaultReadyTime ? hhmm(k.defaultReadyTime) : "Asked every time"}
                       </td>
-                      <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{whatItAsksFor(k)}</td>
-                      <td className={`${TD_NUM} text-ink-secondary`}>{k.sortOrder}</td>
-                      <td className={TD_ACTIONS}>
+                      <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="Order">{k.sortOrder}</td>
+                      <td className={TD_ACTIONS_FIXED}>
                         <div className={ACTIONS_ROW}>
                           <Button
                             variant="ghost"

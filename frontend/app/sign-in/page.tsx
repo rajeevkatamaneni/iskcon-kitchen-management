@@ -75,16 +75,23 @@ export default function SignInPage() {
       picture or its words is covered.
       <p>Below a wide screen the painting cannot show that empty right-hand column at all, so the
       card centres over a scrim instead of hiding half the image behind itself.
+      <p>"Wide" is `xl`, and from there the painting is anchored to its right edge rather than its
+      centre (T-232). It is 16:9 (1672×941) and covers the window, so on anything squarer the sides
+      are cropped. Its words end at x=1041 of 1672 (measured on the file). Cropped evenly, at
+      1280×800 that edge landed at 814px and the card started at 806px, over it. Anchored right,
+      with the card 4vw rather than 7vw from the edge, the card clears it by 101px at 1280×800,
+      162px at 1440×900 and 264px at 1920×1080 (measured in the browser). At 1024×768 anchoring
+      right would crop 418px of the painting's left, so the card centres there as below it.
     */
     <div className="relative min-h-screen">
       <div
         aria-hidden
-        className="fixed inset-0 bg-[url('/brand/sign-in.jpg')] bg-cover bg-center"
+        className="fixed inset-0 bg-[url('/brand/sign-in.jpg')] bg-cover bg-center xl:bg-right"
       />
       {/* Only where the card has to sit over the painting rather than beside it. */}
-      <div aria-hidden className="fixed inset-0 bg-ink/40 lg:hidden" />
+      <div aria-hidden className="fixed inset-0 bg-ink/40 xl:hidden" />
 
-      <main className="relative mx-auto flex min-h-screen w-full items-center justify-center px-6 py-12 lg:justify-end lg:pb-[16vh] lg:pr-[7vw]">
+      <main className="relative mx-auto flex min-h-screen w-full items-center justify-center px-6 py-12 xl:justify-end xl:pb-[16vh] xl:pr-[4vw]">
         <div className="card w-full max-w-[24rem] px-8 py-8">
       <header className="mb-8">
         <h1>Sign in</h1>
@@ -126,7 +133,7 @@ export default function SignInPage() {
         type="button"
         onClick={handleGoogle}
         disabled={!firebaseConfigured}
-        className="mb-6 min-h-touch w-full rounded border border-accent-border bg-accent-bg font-medium text-accent-text transition-colors duration-state hover:bg-accent-border disabled:opacity-60"
+        className="mb-6 min-h-touch w-full rounded-control border border-accent-border bg-accent-bg font-medium text-accent-text transition-colors duration-state hover:bg-accent-border disabled:opacity-60"
       >
         Continue with Google
       </button>
@@ -140,7 +147,7 @@ export default function SignInPage() {
       <div
         role="tablist"
         aria-label="Sign-in method"
-        className="mb-6 flex gap-1 rounded-sm bg-sunken p-1"
+        className="mb-6 flex gap-1 rounded-control bg-sunken p-1"
       >
         {(["email", "phone"] as const).map((option) => (
           <button
@@ -149,7 +156,7 @@ export default function SignInPage() {
             aria-selected={method === option}
             onClick={() => setMethod(option)}
             className={[
-              "min-h-touch flex-1 rounded-sm text-sm transition-colors duration-state",
+              "min-h-touch flex-1 rounded-control text-sm transition-colors duration-state",
               method === option
                 ? "bg-raised font-medium text-ink"
                 : "text-ink-secondary hover:text-ink",
@@ -354,7 +361,7 @@ function PhoneSignIn({ onSignedIn }: { onSignedIn: () => void }) {
           <button
             type="button"
             onClick={() => setConfirmation(null)}
-            className="min-h-touch w-full rounded border border-hairline-strong transition-colors duration-state hover:bg-raised"
+            className="min-h-touch w-full rounded-control border border-hairline-strong transition-colors duration-state hover:bg-raised"
           >
             Use a different number
           </button>

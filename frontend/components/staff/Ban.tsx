@@ -36,7 +36,7 @@ export function BanOnTermination({ categories }: { categories: BanCategoryOption
   const [recording, setRecording] = useState(false);
 
   return (
-    <fieldset className="col-span-2 rounded border border-danger-bg px-4 py-3">
+    <fieldset className="col-span-full rounded border border-danger-bg px-4 py-3">
       <legend className="px-1 text-sm text-danger">Warn other temples about this person</legend>
 
       <label className="flex items-start gap-3 text-sm">
@@ -171,7 +171,7 @@ export function BanFindings({
           type="button"
           disabled={busy}
           onClick={onStop}
-          className="min-h-touch rounded border border-hairline px-4 hover:bg-sunken disabled:opacity-60"
+          className="min-h-touch rounded-control border border-hairline px-4 hover:bg-sunken disabled:opacity-60"
         >
           Don’t hire them
         </button>

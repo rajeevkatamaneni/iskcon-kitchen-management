@@ -118,7 +118,7 @@ function SettingsView() {
 
   if (loadError) {
     return (
-      <main className="mx-auto max-w-4xl px-10 py-12">
+      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-10 sm:py-12">
         <h1 className="text-3xl font-semibold text-ink">Settings</h1>
         <p className="mt-2 text-danger">{loadError.message}</p>
         <p className="text-sm text-ink-secondary">{loadError.action}</p>
@@ -130,7 +130,7 @@ function SettingsView() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-10 py-12">
+    <main className="mx-auto max-w-4xl px-4 py-8 sm:px-10 sm:py-12">
       <h1 className="text-3xl font-semibold text-ink">Settings</h1>
       <p className="mt-1 max-w-[56ch] text-ink-secondary">
         Only a temple administrator can see or change any of this.
@@ -336,6 +336,9 @@ function PaymentGatewaySection({
   const [busy, setBusy] = useState<"save" | "test" | "reveal" | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [saved, setSaved] = useState(false);
+  // True only between a Test connection that succeeded and the next thing pressed, so the keys
+  // check can be green as the answer to that press and neutral the rest of the time (T-227).
+  const [tested, setTested] = useState(false);
   const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
   const secretId = useId();
 
@@ -352,6 +355,7 @@ function PaymentGatewaySection({
     setBusy("save");
     setError(null);
     setSaved(false);
+    setTested(false);
     try {
       const next = await api.savePaymentSettings(
         { provider, keyId, keySecret: keySecret.trim() || undefined },
@@ -373,8 +377,10 @@ function PaymentGatewaySection({
     setBusy("test");
     setError(null);
     setSaved(false);
+    setTested(false);
     try {
       onChanged(await api.testPaymentSettings(await getToken()));
+      setTested(true);
     } catch (e) {
       setError(toApiError(e, "We couldn’t reach your provider."));
     } finally {
@@ -398,7 +404,7 @@ function PaymentGatewaySection({
   return (
     // Named, because the WhatsApp section below has a test button of its own, and a screen reader
     // — or a test — needs to know which one it is on.
-    <section className="card mt-10 px-7 py-7" aria-label="Payment gateway">
+    <section className="card mt-6 px-5 py-6 sm:px-7 sm:py-7" aria-label="Payment gateway">
       <h2 className="text-lg font-semibold text-ink">Payment gateway</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         The account donations are paid into. Paying vendors is under Payments.
@@ -407,6 +413,7 @@ function PaymentGatewaySection({
       <div className="mt-5 grid gap-3 rounded-card bg-sunken px-5 py-4">
         <Check
           ok={Boolean(settings.verifiedAt)}
+          justConfirmed={tested && Boolean(settings.verifiedAt)}
           okLabel="Working"
           waitLabel="Not yet"
           title={
@@ -500,7 +507,7 @@ function PaymentGatewaySection({
                 {/* mt-1, not mt-1.5: HintedField sets the Key ID's label-to-box gap beside this one
                     at gap-1, and the two boxes are in the same row of the same grid. */}
                 <div className="mt-1 flex gap-2">
-                  <div className="flex min-h-touch flex-1 items-center rounded border border-hairline bg-sunken px-3 tracking-masked text-ink-muted">
+                  <div className="flex min-h-touch flex-1 items-center rounded-control border border-hairline bg-sunken px-3 tracking-masked text-ink-muted">
                     ••••••••••••••••
                   </div>
                   {/* Replacing a secret is an edit, so it is offered only once Edit is pressed. */}
@@ -588,7 +595,7 @@ function PaymentGatewaySection({
                 <CopyRow value={webhookSecret} />
               ) : (
                 <div className="mt-1.5 flex gap-2">
-                  <div className="flex min-h-touch min-w-0 flex-1 items-center overflow-hidden rounded bg-sunken px-3 tracking-masked text-ink-muted">
+                  <div className="flex min-h-touch min-w-0 flex-1 items-center overflow-hidden rounded-control bg-sunken px-3 tracking-masked text-ink-muted">
                     ••••••••••••••••••••
                   </div>
                   <button
@@ -629,7 +636,7 @@ function PaymentGatewaySection({
                     {group.events.map((event) => (
                       <span
                         key={event}
-                        className="rounded bg-sunken px-2 py-1 font-mono text-xs text-ink-secondary"
+                        className="rounded-control bg-sunken px-2 py-1 font-mono text-xs text-ink-secondary"
                       >
                         {event}
                       </span>
@@ -733,14 +740,26 @@ function Step({
   );
 }
 
+/**
+ * One line of a setup checklist.
+ *
+ * <p>"Not yet" is amber, because the administrator has something to do. "Working" is neutral as a
+ * standing status, and green only as the immediate answer to the administrator pressing Test and it
+ * succeeding (`justConfirmed`), because green is kept for a user's own action doing what they
+ * expected (Rajeev, 2026-09-18, T-227). Open the page a week later and it is plain again. The plain
+ * chip sits on `raised` rather than the Badge's `sunken`, because the checklist itself is sunken and
+ * a sunken chip on it would vanish.
+ */
 function Check({
   ok,
+  justConfirmed = false,
   okLabel,
   waitLabel,
   title,
   detail,
 }: {
   ok: boolean;
+  justConfirmed?: boolean;
   okLabel: string;
   waitLabel: string;
   title: string;
@@ -750,8 +769,12 @@ function Check({
     <div className="flex items-start gap-3">
       <span
         className={[
-          "mt-0.5 rounded-full px-2.5 py-0.5 text-xs",
-          ok ? "bg-success-bg text-success" : "bg-warning-bg text-warning",
+          "mt-0.5 rounded-control px-2.5 py-0.5 text-xs",
+          !ok
+            ? "bg-warning-bg text-warning"
+            : justConfirmed
+              ? "bg-success-bg text-success"
+              : "bg-raised text-ink-secondary",
         ].join(" ")}
       >
         {ok ? okLabel : waitLabel}
@@ -779,7 +802,7 @@ function CopyRow({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="mt-1.5 flex gap-2">
-      <code className="min-h-touch min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded bg-sunken px-3 py-2.5 font-mono text-xs text-ink">
+      <code className="min-h-touch min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-control bg-sunken px-3 py-2.5 font-mono text-xs text-ink">
         {value}
       </code>
       <button
@@ -1016,7 +1039,7 @@ function MessagingSection({
   }
 
   return (
-    <section className="card mt-6 px-7 py-7" aria-label="WhatsApp">
+    <section className="card mt-6 px-5 py-6 sm:px-7 sm:py-7" aria-label="WhatsApp">
       <h2 className="text-lg font-semibold text-ink">WhatsApp</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         The temple sends as its own number, falling back to SMS.
@@ -1025,6 +1048,7 @@ function MessagingSection({
       <div className="mt-5 grid gap-3 rounded-card bg-sunken px-5 py-4">
         <Check
           ok={Boolean(settings.verifiedAt)}
+          justConfirmed={sentTo !== null && Boolean(settings.verifiedAt)}
           okLabel="Working"
           waitLabel="Not yet"
           title={
@@ -1130,7 +1154,7 @@ function MessagingSection({
               <div className="sm:col-span-2">
                 <p className="text-sm text-ink-secondary">Access token and app secret</p>
                 <div className="mt-1.5 flex gap-2">
-                  <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-masked text-ink-muted">
+                  <div className="flex min-h-touch flex-1 items-center rounded-control bg-sunken px-3 tracking-masked text-ink-muted">
                     ••••••••••••••••••••
                   </div>
                   {/* Replacing them is an edit, so it is offered only once Edit is pressed. */}
@@ -1217,7 +1241,7 @@ function MessagingSection({
                 <CopyRow value={verifyToken} />
               ) : (
                 <div className="mt-1.5 flex gap-2">
-                  <div className="flex min-h-touch flex-1 items-center rounded bg-sunken px-3 tracking-masked text-ink-muted">
+                  <div className="flex min-h-touch flex-1 items-center rounded-control bg-sunken px-3 tracking-masked text-ink-muted">
                     ••••••••••••••••••••
                   </div>
                   <button
@@ -1310,7 +1334,7 @@ function MessagingSection({
                   <li key={issue.name} className="flex items-start gap-3">
                     <span
                       className={[
-                        "mt-0.5 shrink-0 rounded-full px-2.5 py-0.5 text-xs",
+                        "mt-0.5 shrink-0 rounded-control px-2.5 py-0.5 text-xs",
                         note ? "bg-sunken text-ink-secondary" : "bg-warning-bg text-warning",
                       ].join(" ")}
                     >
@@ -1481,7 +1505,7 @@ function EmailSection({
   }
 
   return (
-    <section className="card mt-6 px-7 py-7" aria-label="Email">
+    <section className="card mt-6 px-5 py-6 sm:px-7 sm:py-7" aria-label="Email">
       <h2 className="text-lg font-semibold text-ink">Email</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         Where a devotee’s reply comes back to. There is nothing to set up.
@@ -1656,7 +1680,7 @@ function AppearanceSection({
   const unsaved = chosen !== saved;
 
   return (
-    <section className="card mt-6 px-7 py-7" aria-label="Appearance">
+    <section className="card mt-6 px-5 py-6 sm:px-7 sm:py-7" aria-label="Appearance">
       {/* Save lives up here, beside the heading, and not at the foot below fifteen cards. It was at
           the foot, and what a person reached for instead was the word "Save" printed on a button
           inside the sample card — which was decoration and did nothing (Rajeev, 2026-08-30). The
@@ -1705,7 +1729,7 @@ function AppearanceSection({
             return null;
           }
           return (
-            <fieldset key={family} className="mt-7">
+            <fieldset key={family} className="mt-7 min-w-0">
               {/* §5: the finish belongs in the heading. It is the half of the difference between
                   these three groups that somebody can actually put a word to. */}
               <legend className="pl-field-inset text-xs font-medium uppercase tracking-eyebrow text-ink-secondary">
@@ -1759,7 +1783,7 @@ function ThemeChoice({
 }) {
   return (
     <label
-      className={`flex h-full cursor-pointer flex-col rounded-card p-3 transition-colors duration-state ${
+      className={`flex h-full min-w-0 cursor-pointer flex-col rounded-card p-3 transition-colors duration-state ${
         checked
           ? "border-2 border-accent bg-accent-bg"
           : "border-2 border-hairline hover:border-hairline-strong"
@@ -1864,7 +1888,7 @@ function VolunteerMessagesSection({
   }
 
   return (
-    <section className="card mt-6 px-7 py-7" aria-label="Volunteer messages">
+    <section className="card mt-6 px-5 py-6 sm:px-7 sm:py-7" aria-label="Volunteer messages">
       <h2 className="text-lg font-semibold text-ink">Volunteer messages</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         How often a shift may message the volunteers on it.
@@ -2024,7 +2048,7 @@ function WarningsSection({
   }
 
   return (
-    <section className="card mt-6 px-7 py-7" aria-label="Warnings">
+    <section className="card mt-6 px-5 py-6 sm:px-7 sm:py-7" aria-label="Warnings">
       <h2 className="text-lg font-semibold text-ink">Warnings</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         How much notice you want before a date runs out on you.

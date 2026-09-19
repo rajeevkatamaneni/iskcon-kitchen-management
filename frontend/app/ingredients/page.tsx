@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { FOOD_UNITS, unitLabel } from "@/lib/format";
-import { TABLE, TD_ACTIONS, TD_TEXT, THEAD, TH_ACTIONS, TH_TEXT, TR, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 
 /**
@@ -180,10 +180,10 @@ function IngredientsView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/ingredients" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
-            <div>
+          <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 grow basis-60">
               <h1>Ingredients</h1>
               <p className="mt-1 text-ink-secondary">
                 The shared vocabulary for recipes, inventory and orders. Everything the temple
@@ -290,12 +290,12 @@ function IngredientsView() {
             </EmptyState>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Name</th>
-                    <th className={TH_TEXT}>Category</th>
-                    <th className={TH_TEXT}>Unit</th>
+                    <th className={TH_PRIMARY}>Name</th>
+                    <th className={TH_SECOND}>Category</th>
+                    <th className={TH_FIXED}>Unit</th>
                     {/*
                       There was a Type column here, reading "Supply" or "Food" on every row. T-089
                       took it out: with supplies on a screen of their own, every row on this one is
@@ -316,8 +316,8 @@ function IngredientsView() {
                       other pickers deliberately DO offer supplies. Take the field out of the
                       payload to match the screen and all three break. Display only.
                     */}
-                    <th className={TH_TEXT}>Ekadashi</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_FIXED}>Ekadashi</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -351,7 +351,7 @@ function IngredientsView() {
                           "keeps the editing row the same width as the header", which counts both
                           rather than trusting a number written down here.)
                         */}
-                        <td className={`${TD_TEXT} ${WRAP}`}>
+                        <td className={TD_PRIMARY}>
                           <span>{ing.name}</span>
                           {ing.libraryDerived && (
                             <span className="mt-1 flex">
@@ -359,8 +359,8 @@ function IngredientsView() {
                             </span>
                           )}
                         </td>
-                        <td className={`${TD_TEXT} text-ink-secondary`}>{ing.category}</td>
-                        <td className={`${TD_TEXT} text-ink-secondary`}>{unitLabel(ing.unit)}</td>
+                        <td className={`${TD_SECOND} text-ink-secondary`}>{ing.category}</td>
+                        <td className={`${TD_FIXED} text-ink-secondary`}>{unitLabel(ing.unit)}</td>
                         {/*
                           The only dietary flag a row carries, since D-18 deleted the other one that
                           used to sit beside it.
@@ -385,14 +385,16 @@ function IngredientsView() {
                           decides what this row looks like, because the state is the same fact
                           whoever is reading it.
                         */}
-                        <td className={TD_TEXT}>
+                        <td className={TD_FIXED}>
                           {ing.ekadashiProhibited ? (
-                            <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Prohibited</span>
+                            // Blue, Ekadashi's colour everywhere else: a classification, not a
+                            // warning (Rajeev, 2026-09-18, T-227). The grain confirm is the warning.
+                            <span className="rounded-control bg-info-bg px-2 py-1 text-xs text-info font-semibold">Prohibited</span>
                           ) : (
                             <span className="text-xs text-ink-muted">Allowed</span>
                           )}
                         </td>
-                        <td className={TD_ACTIONS}>
+                        <td className={TD_ACTIONS_FIXED}>
                           <div className={ACTIONS_ROW}>
                             <Button variant="ghost" size="sm" onClick={() => setEditing(ing.id)}>Edit</Button>
                             <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.deleteIngredient(ing.id, t), "That ingredient is in use, or couldn’t be removed.")}>Delete</Button>
@@ -497,7 +499,7 @@ function EditRow({
   return (
     <tr className="border-t border-hairline bg-sunken align-top">
       {/* Name, with Category beneath it — see the note above this component. */}
-      <td className={`${TD_TEXT} ${WRAP}`}>
+      <td className={TD_PRIMARY}>
         <label className={FIELD}>
           <span className={FIELD_LABEL}>Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} className={FIELD_INPUT} />
@@ -515,13 +517,13 @@ function EditRow({
 
         The hint is in the label rather than in a placeholder, so it survives somebody typing.
       */}
-      <td className={TD_TEXT}>
+      <td className={TD_SECOND}>
         <label className={FIELD}>
           <span className={FIELD_LABEL}>Aliases (comma-separated)</span>
           <input value={aliases} onChange={(e) => setAliases(e.target.value)} className={FIELD_INPUT} />
         </label>
       </td>
-      <td className={TD_TEXT}>
+      <td className={TD_FIXED}>
         <label className={FIELD}>
           <span className={FIELD_LABEL}>Unit</span>
           <select value={unit} onChange={(e) => setUnit(e.target.value)} className={FIELD_INPUT}>
@@ -534,7 +536,7 @@ function EditRow({
         because they are one: both are standing facts about the ingredient rather than edits to its
         text, and neither prints anything on a row that does not need it.
       */}
-      <td className={TD_TEXT}>
+      <td className={TD_FIXED}>
         {canSetEkadashi ? (
           <label className="flex items-center gap-2 text-xs text-ink-secondary">
             <input
@@ -547,7 +549,8 @@ function EditRow({
             Ekadashi-prohibited
           </label>
         ) : ingredient.ekadashiProhibited ? (
-          <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Prohibited</span>
+          // Blue, as in the list above: a classification, not a warning (T-227).
+          <span className="rounded-control bg-info-bg px-2 py-1 text-xs text-info font-semibold">Prohibited</span>
         ) : (
           <span className="text-xs text-ink-muted">Allowed</span>
         )}
@@ -562,7 +565,7 @@ function EditRow({
           Move to Supplies
         </label>
       </td>
-      <td className={TD_ACTIONS}>
+      <td className={TD_ACTIONS_FIXED}>
         <div className={ACTIONS_ROW}>
           <Button
             size="sm"

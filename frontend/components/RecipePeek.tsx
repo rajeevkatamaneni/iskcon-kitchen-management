@@ -7,6 +7,7 @@ import { Loading } from "@/components/Loading";
 import { api, type MasterRecipeDetail, type RecipeDetail } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { cooksQuantity, unitLabel } from "@/lib/format";
+import { EKADASHI_FRIENDLY, recipeTagLabels } from "@/lib/vaishnava-day";
 
 /**
  * A recipe read over whatever screen you were on, and closed to land you back on it.
@@ -105,7 +106,7 @@ export function RecipePeek({
             type="button"
             onClick={onClose}
             aria-label="Close the recipe"
-            className="flex min-h-touch min-w-touch items-center justify-center rounded text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
+            className="flex min-h-touch min-w-touch items-center justify-center rounded-control text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
           >
             <i className="ti ti-x text-lg" aria-hidden="true" />
           </button>
@@ -119,7 +120,8 @@ export function RecipePeek({
               {(data.badges.length > 0 || data.tags.length > 0) && (
                 <div className="flex flex-wrap gap-2">
                   {data.badges.map((badge) => (
-                    <Badge key={badge} tone="success">
+                    // Labels, not status, so neutral like the tags beside them (T-227).
+                    <Badge key={badge}>
                       {badge}
                     </Badge>
                   ))}
@@ -197,10 +199,11 @@ function asReadable(recipe: RecipeDetail | MasterRecipeDetail) {
       categoryName: master.categoryName,
       yieldText: master.yieldText,
       badges: [master.badge, master.state].filter(Boolean) as string[],
-      tags: master.tags,
+      tags: recipeTagLabels(master.tags),
       ingredients: master.ingredients.map((line) => ({ name: line.name, quantity: line.qty })),
       method: master.method,
-      notes: [master.why, master.cateringNote, master.noteStart, master.noteVessel, master.noteSeason]
+      // No catering note: catering is out of the product (Rajeev, 2026-09-18).
+      notes: [master.why, master.noteStart, master.noteVessel, master.noteSeason]
         .filter(Boolean) as string[],
     };
   }
@@ -212,8 +215,11 @@ function asReadable(recipe: RecipeDetail | MasterRecipeDetail) {
     yieldText: `${cooksQuantity(mine.baseYieldQty, mine.baseYieldUnit)}${
       mine.yieldNote ? ` — ${mine.yieldNote}` : ""
     }`,
-    badges: mine.fastingCompatible ? ["Suits a fasting day"] : [],
-    tags: [mine.regionTag, ...mine.tags].filter(Boolean) as string[],
+    badges: mine.fastingCompatible ? [EKADASHI_FRIENDLY] : [],
+    tags: recipeTagLabels(
+      [mine.regionTag, ...mine.tags].filter(Boolean) as string[],
+      mine.fastingCompatible ? [EKADASHI_FRIENDLY] : []
+    ),
     ingredients: mine.ingredients.map((line) => ({
       name: line.ingredientName,
       // The cook's form: this panel is read to decide whether to cook something, and it has to

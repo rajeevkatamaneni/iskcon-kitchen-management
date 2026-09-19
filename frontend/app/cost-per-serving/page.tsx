@@ -11,9 +11,9 @@ import { PageHeader } from "@/components/ds/PageHeader";
 import { PeriodNav, periodHeading, periodRange, stepPeriod } from "@/components/ds/PeriodNav";
 import { Screen } from "@/components/ds/Screen";
 import { api, type CostByMealKind, type MealKindCost } from "@/lib/api";
-import { dayRange, money, todayIso } from "@/lib/format";
+import { dayRange, todayIso } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { TABLE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 
 /**
  * What a serving costs, compared across the kinds of meal a temple cooks (E3-S9).
@@ -112,26 +112,26 @@ function CostPerServingView() {
 function KindTable({ report }: { report: CostByMealKind }) {
   return (
     <div className="table-wrap overflow-x-auto">
-      <table className={TABLE}>
+      <table className={RULED_TABLE}>
         <caption className="sr-only">
           {/* Read aloud as the table's name, so it is said the way the screen writes a date (T-194). */}
           Estimated materials cost per serving by kind of meal, {dayRange(report.from, report.to, false)}
         </caption>
         <thead className={THEAD}>
           <tr>
-            <th scope="col" className={TH_TEXT}>
+            <th scope="col" className={TH_PRIMARY}>
               Kind of meal
             </th>
-            <th scope="col" className={TH_NUM}>
+            <th scope="col" className={TH_FIXED}>
               Meals
             </th>
-            <th scope="col" className={TH_NUM}>
+            <th scope="col" className={TH_FIXED}>
               Servings
             </th>
-            <th scope="col" className={TH_NUM}>
+            <th scope="col" className={TH_FIXED}>
               Estimated materials
             </th>
-            <th scope="col" className={TH_NUM}>
+            <th scope="col" className={TH_FIXED}>
               Cost per serving
             </th>
           </tr>
@@ -139,60 +139,62 @@ function KindTable({ report }: { report: CostByMealKind }) {
         <tbody>
           {report.kinds.map((kind) => (
             <tr key={kind.mealKind} className={TR}>
-              <th scope="row" className={`${TD_TEXT} font-normal text-ink`}>
+              <th scope="row" className={`${TD_PRIMARY} font-normal text-ink`}>
                 {kind.mealKind}
                 {kind.ingredientsWithoutPrice > 0 && (
                   <span className="mt-1 block text-xs text-ink-muted">{noPriceNote(kind)}</span>
                 )}
               </th>
-              <td className={TD_NUM}>
+              <td data-label="Meals" className={TD_FIXED_NUM}>
                 {kind.meals.toLocaleString("en-IN")}
                 <BasisNote cost={kind} />
               </td>
-              <td className={TD_NUM}>
+              <td data-label="Servings" className={TD_FIXED_NUM}>
                 {kind.servings.toLocaleString("en-IN")}
-                {/* The figure above refuses to wrap; its note is a sentence and must be allowed to. */}
+                {/* The figure above refuses to wrap; its note is a sentence and may, but only when
+                    the table is short of room (the table rule, T-236). It was held to 10rem, which
+                    wrapped it beside empty space. */}
                 {kind.mealsWithoutServings > 0 && (
-                  <span className="mt-1 block max-w-[10rem] whitespace-normal text-xs text-ink-muted">
+                  <span className="mt-1 block text-xs text-ink-muted">
                     {noHeadCountNote(kind)}
                   </span>
                 )}
               </td>
-              <td className={TD_NUM}>
-                {money(kind.estimatedTotal, "INR")}
+              <td data-label="Estimated materials" className={TD_FIXED_NUM}>
+                {rupees(kind.estimatedTotal)}
               </td>
               {/*
                 A dash, never a zero and never a figure carried over from another kind. Where nobody
                 counted the people at any meal of this kind there is no denominator, and inventing
                 one would put a number under this heading that is not a cost per serving.
               */}
-              <td className={`${TD_NUM} font-medium`}>
-                {kind.costPerServing === null ? "—" : money(kind.costPerServing, "INR")}
+              <td data-label="Cost per serving" className={`${TD_FIXED_NUM} font-medium`}>
+                {kind.costPerServing === null ? "—" : rupees(kind.costPerServing)}
               </td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr className="border-t border-hairline bg-sunken">
-            <th scope="row" className={`${TD_TEXT} font-medium text-ink`}>
+            <th scope="row" className={`${TD_PRIMARY} font-medium text-ink`}>
               All meals
             </th>
-            <td className={TD_NUM}>
+            <td data-label="Meals" className={TD_FIXED_NUM}>
               {report.meals.toLocaleString("en-IN")}
               <BasisNote cost={report} />
             </td>
-            <td className={TD_NUM}>
+            <td data-label="Servings" className={TD_FIXED_NUM}>
               {report.servings.toLocaleString("en-IN")}
             </td>
-            <td className={`${TD_NUM} font-medium`}>
-              {money(report.estimatedTotal, "INR")}
+            <td data-label="Estimated materials" className={`${TD_FIXED_NUM} font-medium`}>
+              {rupees(report.estimatedTotal)}
             </td>
             {/*
               Deliberately blank. A cost per serving across every kind would average a feast plate
               with a breakfast one and read as a fact about neither, which is exactly the number the
               daily total already is and the reason this screen exists.
             */}
-            <td className={TD_NUM} />
+            <td data-label="Cost per serving" className={TD_FIXED_NUM} />
           </tr>
         </tfoot>
       </table>
@@ -247,13 +249,14 @@ function caveatDetail(report: CostByMealKind): string {
 
 /**
  * How many of a figure's meals are costed at what was cooked and how many at the plan, beneath the
- * meal count (T-212). Allowed to wrap, like the head-count note beside it, because it is a phrase.
+ * meal count (T-212). Allowed to wrap, like the head-count note beside it, because it is a phrase —
+ * but only when the table is short of room (T-236), so it carries no width cap of its own.
  */
 function BasisNote({ cost }: { cost: Pick<CostByMealKind, "mealsCostedAsCooked" | "mealsCostedAsPlanned"> }) {
   const text = costBasis(cost);
   if (!text) return null;
   return (
-    <span className="mt-1 block max-w-[10rem] whitespace-normal text-xs text-ink-muted">{text}</span>
+    <span className="mt-1 block text-xs text-ink-muted">{text}</span>
   );
 }
 
@@ -276,6 +279,35 @@ function costBasis(cost: {
   if (cooked > 0) return `${meals(cooked)} from what was cooked`;
   if (planned > 0) return `${meals(planned)} from the plan`;
   return "";
+}
+
+/**
+ * Every money figure on this screen, in whole rupees: "₹12,186", never "₹12,185.65" (Rajeev,
+ * Decisions Desk, 2026-09-18).
+ *
+ * <p>The shared `money` helper shows paise only where there are any, which is right for a
+ * settlement that must not be rounded away, and wrong here. A column read top to bottom mixed
+ * "₹12,185.65" with "₹20,375", so the eye compared lengths rather than amounts; and every figure on
+ * this screen is an estimate built from vendors' last-known prices, so the paise were precision the
+ * number does not have.
+ *
+ * <p>Half up, which is `Math.round` for the positive amounts a cost can be ("₹9.50" reads "₹10").
+ * Indian grouping comes from the `en-IN` locale, as everywhere else ("₹1,20,375").
+ *
+ * <p>A cost above nothing that rounds to nothing reads "under ₹1", not "₹0" (Rajeev, 2026-09-18,
+ * T-237). Whole rupees turned a 30-paise serving of rice water into "₹0", which says the food was
+ * free. Only a figure that really is zero — nothing priced, nothing cooked — keeps "₹0". Tested on
+ * `Math.round` itself rather than on "less than 0.5", so the line sits exactly where the rounding
+ * does and the two cannot drift apart.
+ */
+function rupees(amount: number): string {
+  if (amount > 0 && Math.round(amount) === 0) return "under ₹1";
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(amount));
 }
 
 function noPriceNote(kind: MealKindCost): string {

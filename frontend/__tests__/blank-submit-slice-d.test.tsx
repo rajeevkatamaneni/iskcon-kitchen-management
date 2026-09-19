@@ -381,7 +381,7 @@ describe("paying somebody (PayPanel's two forms)", () => {
     await refused(payment, 'input[name="amount"]', "Amount before deductions must be at least 1");
     // The box has no question of its own: its label is the advance's outstanding figure, so that is
     // the name. Listed in the proof as a label that reads poorly.
-    await refused(payment, 'input[name="deduct-a1"]', "₹3,000 still outstanding can be at most 3000");
+    await refused(payment, 'input[name="deduct-a1"]', "₹3,000 still outstanding can be at most 3,000");
     expect(mocks.recordStaffPayment).not.toHaveBeenCalled();
   });
 

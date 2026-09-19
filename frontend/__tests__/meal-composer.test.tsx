@@ -1,6 +1,6 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 // Typed like the real call, so the assertions below can read what was sent rather than casting
 // their way past an untyped mock — which is how this file passed locally and failed in CI.
@@ -92,6 +92,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
 });
 
 import { MealComposer, type ComposerStatus } from "@/components/planner/MealComposer";
+import { ApiError } from "@/lib/api";
 
 /** What the meal save and update send, read loosely enough to assert on and typed enough to index. */
 type MealBody = Record<string, unknown> & {
@@ -188,7 +189,7 @@ describe("planning a meal", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
 
-    const sweet = screen.getByLabelText("How much Kesari Bath to make");
+    const sweet = screen.getByLabelText("Amount of Kesari Bath");
     expect(sweet).toHaveValue(200);
 
     // The sweet always goes first, so the planner raises it deliberately.
@@ -196,8 +197,8 @@ describe("planning a meal", () => {
 
     // More people arrive: the untouched dish follows, the judged one holds.
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "250" } });
-    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(250);
-    expect(screen.getByLabelText("How much Kesari Bath to make")).toHaveValue(300);
+    expect(screen.getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(250);
+    expect(screen.getByLabelText("Amount of Kesari Bath")).toHaveValue(300);
   });
 
   it("saves the meal as one request, every preparation inside it with its own amount", async () => {
@@ -207,7 +208,7 @@ describe("planning a meal", () => {
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "100" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
-    fireEvent.change(screen.getByLabelText("How much Kesari Bath to make"), { target: { value: "150" } });
+    fireEvent.change(screen.getByLabelText("Amount of Kesari Bath"), { target: { value: "150" } });
     fireEvent.change(screen.getByLabelText(/notes for the kitchen/i), {
       target: { value: "Cook the kesari thin." },
     });
@@ -279,7 +280,7 @@ describe("an event, and what it is asked", () => {
     open(props);
     fireEvent.click(screen.getByRole("button", { name: "Event" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
-    fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), {
+    fireEvent.change(screen.getByLabelText("Amount of Bisi Bele Bath"), {
       target: { value: "30" },
     });
     fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "17:00" } });
@@ -432,7 +433,7 @@ describe("an event, and what it is asked", () => {
           "Mantri Serenity, Kanakapura Main Rd, Bengaluru, Karnataka 560062, India"
         )
       );
-      fireEvent.change(screen.getByLabelText(/once you are there/i, { selector: "input" }), {
+      fireEvent.change(screen.getByLabelText(/gate or building/i, { selector: "input" }), {
         target: { value: "Clubhouse" },
       });
 
@@ -498,7 +499,7 @@ describe("an event, and what it is asked", () => {
       fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "12:40" } });
       // The arithmetic sits under the field somebody has to move; the bar beside Save says only
       // that there is something to fix, so one screen does not carry the same long line twice.
-      expect(screen.getByText(/18 minutes after the guests sit down/i)).toBeInTheDocument();
+      expect(screen.getByText(/The food arrives 18 minutes late\. Make it ready earlier, or change when guests eat\./)).toBeInTheDocument();
       expect(screen.getByText("The delivery cannot arrive in time")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
 
@@ -506,7 +507,7 @@ describe("an event, and what it is asked", () => {
       // Nobody here knows this temple's courtyard, so that is a warning and the save goes through.
       fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "12:10" } });
       expect(screen.getByText(/only 12 minutes/i)).toBeInTheDocument();
-      expect(screen.getByText(/account for loading time/i)).toBeInTheDocument();
+      expect(screen.getByText(/to load the van\. Make it ready earlier if you need more\./i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
       fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
       await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
@@ -558,7 +559,7 @@ describe("an event, and what it is asked", () => {
     fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Children’s Bhagavad-gita Reading" },
     });
-    fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), {
+    fireEvent.change(screen.getByLabelText("Amount of Bisi Bele Bath"), {
       target: { value: "30" },
     });
 
@@ -737,7 +738,7 @@ describe("the head count is asked for, never assumed", () => {
 
     // Empty, not nought. A nought is an answer; this is the absence of one, and the box fills
     // itself the moment the counter is typed.
-    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(null);
+    expect(screen.getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(null);
   });
 
   it("rescales every preparation as the count is typed, which is what the plan is costed on", () => {
@@ -747,19 +748,19 @@ describe("the head count is asked for, never assumed", () => {
 
     // Each keystroke, not a press of anything. Both recipes are 1 KG a head here.
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "200" } });
-    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(200);
-    expect(screen.getByLabelText("How much Kesari Bath to make")).toHaveValue(200);
+    expect(screen.getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(200);
+    expect(screen.getByLabelText("Amount of Kesari Bath")).toHaveValue(200);
     expect(screen.getByText("200 people")).toBeInTheDocument();
 
     // Children weigh 0.6 of a portion, and the quantities follow that too — 200 + 40 × 0.6 = 224.
     fireEvent.change(screen.getByLabelText("Children"), { target: { value: "40" } });
     expect(screen.getByText("224 people")).toBeInTheDocument();
-    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(224);
+    expect(screen.getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(224);
 
     // And back to nothing empties them again, rather than leaving last minute's arithmetic behind.
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "0" } });
     fireEvent.change(screen.getByLabelText("Children"), { target: { value: "0" } });
-    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(null);
+    expect(screen.getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(null);
   });
 
   it("refuses to save something being cooked for nobody, and says which number is missing", () => {
@@ -809,6 +810,104 @@ describe("the head count is asked for, never assumed", () => {
     // weighting is the server's arithmetic as much as the screen's.
     expect(saveMeal.mock.calls[0][0]).toMatchObject({ adults: 200, children: 0, seniors: 10 });
     expect(saveMeal.mock.calls[0][0].dishes[0].targetYield).toBe(208);
+  });
+});
+
+describe("a portion in a smaller unit than the recipe (T-217)", () => {
+  beforeEach(() => saveMeal.mockClear());
+
+  // The staging recipe that found it: measured in litres, 350 ml a head.
+  const GHEE_RICE = { id: "g1", name: "Basmati Ghee Rice", categoryName: "Rice", fastingCompatible: false,
+    baseYieldQty: 10, baseYieldUnit: "L", perHeadQty: 350, perHeadUnit: "ML", status: "ACTIVE" };
+  const PULIYOGARE = { id: "g2", name: "Puliyogare", categoryName: "Rice", fastingCompatible: false,
+    baseYieldQty: 10, baseYieldUnit: "KG", perHeadQty: 150, perHeadUnit: "GM", status: "ACTIVE" };
+  // Millilitres of a dish weighed in kilos: no density, so no honest answer.
+  const ODD = { id: "g3", name: "Rasam Rice", categoryName: "Rice", fastingCompatible: false,
+    baseYieldQty: 10, baseYieldUnit: "KG", perHeadQty: 200, perHeadUnit: "ML", status: "ACTIVE" };
+
+  it("plans 600 people at 350 ml on a recipe in litres as 210 L, not 210,000", async () => {
+    open({ recipes: [GHEE_RICE] as never });
+    fireEvent.click(screen.getByRole("checkbox", { name: /basmati ghee rice/i }));
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "600" } });
+    expect(screen.getByLabelText("Amount of Basmati Ghee Rice")).toHaveValue(210);
+
+    fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+    expect(saveMeal.mock.calls[0][0].dishes[0].targetYield).toBe(210);
+  });
+
+  it("plans grams a head on a recipe in kilos in kilos", () => {
+    open({ recipes: [PULIYOGARE] as never });
+    fireEvent.click(screen.getByRole("checkbox", { name: /puliyogare/i }));
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "600" } });
+    expect(screen.getByLabelText("Amount of Puliyogare")).toHaveValue(90);
+  });
+
+  it("leaves the box empty when the portion and the recipe measure different things", () => {
+    open({ recipes: [ODD] as never });
+    fireEvent.click(screen.getByRole("checkbox", { name: /rasam rice/i }));
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "600" } });
+    expect(screen.getByLabelText("Amount of Rasam Rice")).toHaveValue(null);
+  });
+
+  it("refuses an amount over 50,000 under that dish's box, and sends nothing", async () => {
+    open();
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "100" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    fireEvent.change(screen.getByLabelText("Amount of Bisi Bele Bath"), { target: { value: "60000" } });
+
+    // The button stays live: the refusal is said on the press, in red, under the box.
+    const save = screen.getByRole("button", { name: /save this meal/i });
+    expect(save).not.toBeDisabled();
+    fireEvent.click(save);
+
+    const sentence = await screen.findByText("Amount of Bisi Bele Bath can be at most 50,000");
+    expect(sentence).toBeInTheDocument();
+    const box = screen.getByLabelText("Amount of Bisi Bele Bath");
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box.getAttribute("aria-describedby")).toContain(sentence.id);
+    expect(saveMeal).not.toHaveBeenCalled();
+
+    // Under the box, not beside it (Rajeev, 2026-09-18; T-234). jsdom has no layout, so what is
+    // pinned is the grid the placement was measured on in Chrome. Since T-237 the dish's name, its
+    // box and its unit share the first row (name, box, unit), and the error slot is sent to the row
+    // beneath, spanning the box's and the unit's columns from the box's edge, without widening them.
+    const row = box.parentElement!;
+    const slot = sentence.closest("[data-form-error-slot]")!;
+    expect(slot.parentElement).toBe(row);
+    expect(row.className).toContain("grid-cols-[minmax(0,1fr)_auto_auto]");
+    expect(row.className).toContain("[&>[data-form-error-slot]]:row-start-2");
+    expect(row.className).toContain("[&>[data-form-error-slot]]:col-start-2");
+    expect(row.className).toContain("[&>[data-form-error-slot]]:col-span-2");
+    expect(row.className).toContain("[&>[data-form-error-slot]]:w-0");
+    expect(box.className).toContain("col-start-2");
+    expect(box.className).toContain("row-start-1");
+    expect(row.querySelector("label.col-start-1.row-start-1")).toContainElement(
+      screen.getByRole("checkbox", { name: /bisi bele bath/i })
+    );
+    expect(row.querySelector(".col-start-3.row-start-1")).not.toBeNull();
+
+    // 50,000 itself is allowed — it is what the Today screen can still scale.
+    fireEvent.change(screen.getByLabelText("Amount of Bisi Bele Bath"), { target: { value: "50000" } });
+    fireEvent.click(save);
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+    expect(saveMeal.mock.calls[0][0].dishes[0].targetYield).toBe(50000);
+  });
+});
+
+describe("the notes are step 5, in a card like the other four (T-234)", () => {
+  it("puts both notes boxes in one card with the steps' own classes and a numbered heading", () => {
+    // They sat loose under the step cards (Rajeev, Decisions Desk, 2026-09-18). The same class string
+    // as step 4's card is what gives the same padding, gap and surface.
+    open();
+    const kitchen = screen.getByLabelText("Notes for the kitchen");
+    const card = kitchen.closest("section")!;
+    expect(card).toContainElement(screen.getByLabelText("Notes for the servers"));
+    expect(within(card).getByText("5")).toBeInTheDocument();
+    expect(within(card).getByText("Notes")).toBeInTheDocument();
+
+    const step4 = screen.getByText("Who will run it").closest("section")!;
+    expect(card.className).toBe(step4.className);
   });
 });
 
@@ -995,8 +1094,8 @@ describe("a festival feast", () => {
     fireEvent.click(screen.getByRole("button", { name: /use this menu/i }));
 
     // The preparation list carries. The servings do not — they follow this year's head count.
-    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(200);
-    expect(screen.getByLabelText("How much Kesari Bath to make")).toHaveValue(200);
+    expect(screen.getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(200);
+    expect(screen.getByLabelText("Amount of Kesari Bath")).toHaveValue(200);
   });
 
   it("offers nothing at all for the first ever Janmashtami", async () => {
@@ -1225,7 +1324,7 @@ describe("correcting a delivery event that was picked from the map", () => {
  * The picker on a fasting day (E4-S6, review item MP1).
  *
  * <p>The reviewers asked for a checkbox. What is built is the default: on a day the calendar
- * already knows is Ekadasi the picker opens filtered, and the way back to the whole list is a
+ * already knows is Ekadashi the picker opens filtered, and the way back to the whole list is a
  * button beside it. A checkbox would ask the planner to remember the fast, which is the thing
  * being forgotten.
  */
@@ -1246,7 +1345,7 @@ describe("planning a meal on a fasting day", () => {
     );
     expect(listRecipes).toHaveBeenCalledWith({ ekadashiCompatible: true }, "t");
     expect(screen.queryByRole("checkbox", { name: /bisi bele bath/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/Pavitraropana Ekadasi\. Grain and bean preparations are hidden\./))
+    expect(screen.getByText(/Pavitraropana Ekadashi\. Grain and bean preparations are hidden\./))
       .toBeInTheDocument();
   });
 
@@ -1257,7 +1356,7 @@ describe("planning a meal on a fasting day", () => {
     fireEvent.click(escape);
     expect(screen.getByRole("checkbox", { name: /bisi bele bath/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /kesari bath/i })).toBeInTheDocument();
-    expect(screen.getByText(/Pavitraropana Ekadasi\. Every preparation is listed\./)).toBeInTheDocument();
+    expect(screen.getByText(/Pavitraropana Ekadashi\. Every preparation is listed\./)).toBeInTheDocument();
 
     // And it goes back, without asking the server a second time — the short list is already held.
     fireEvent.click(screen.getByRole("button", { name: "Hide grain preparations" }));
@@ -1267,7 +1366,7 @@ describe("planning a meal on a fasting day", () => {
 
   it("names the day without repeating the word when the calendar has not", async () => {
     open({ isEkadashi: true, ekadashiName: null });
-    expect(await screen.findByText(/^Ekadasi\. Grain and bean preparations are hidden\./))
+    expect(await screen.findByText(/^Ekadashi\. Grain and bean preparations are hidden\./))
       .toBeInTheDocument();
   });
 
@@ -1308,10 +1407,46 @@ describe("planning a meal on a fasting day", () => {
     listRecipes.mockRejectedValue(new Error("offline"));
     open({ isEkadashi: true, ekadashiName: "Pavitraropana Ekadasi" });
 
-    expect(await screen.findByText(/Pavitraropana Ekadasi\. Every preparation is listed\./))
+    expect(await screen.findByText(/Pavitraropana Ekadashi\. Every preparation is listed\./))
       .toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /bisi bele bath/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /grain preparations/i })).not.toBeInTheDocument();
+  });
+
+  /**
+   * T-224. The grain warning's "Leave it out" used to close the warning and nothing else, so the
+   * grain dish stayed ticked and a cook who pressed it believed they had removed it. The words are
+   * the promise: pressing it unticks the dish the server objected to, and only that dish.
+   */
+  it("unticks the grain dish when the planner presses Leave it out", async () => {
+    saveMeal.mockRejectedValueOnce(new ApiError({
+      code: "KMS-400048",
+      message: "That preparation has grains, and this is a fasting day.",
+      action: "Choose another preparation, or confirm it.",
+      fieldErrors: [],
+    }, 409));
+    ekadashiCheck.mockImplementation(async (_date: string, recipeId: string) => ({
+      isEkadashi: true,
+      compatible: recipeId !== "r1",
+      offendingIngredients: recipeId === "r1" ? ["Rice"] : [],
+    }));
+    open({ isEkadashi: true, ekadashiName: "Pavitraropana Ekadasi" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Show grain preparations too" }));
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "100" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /sabudana khichadi/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Leave it out" }));
+
+    expect(screen.getByRole("checkbox", { name: /bisi bele bath/i })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /sabudana khichadi/i })).toBeChecked();
+    expect(screen.queryByRole("button", { name: "Leave it out" })).not.toBeInTheDocument();
+    // Nothing is saved behind the planner's back: the next save is theirs to press.
+    expect(saveMeal).toHaveBeenCalledTimes(1);
+    ekadashiCheck.mockReset();
+    ekadashiCheck.mockResolvedValue({ isEkadashi: true, compatible: true, offendingIngredients: [] });
   });
 
   it("leaves an ordinary day alone", () => {
@@ -1343,7 +1478,7 @@ describe("a figure out of range names its box (T-165)", () => {
     open();
     fireEvent.click(screen.getByRole("button", { name: "Event" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
-    fireEvent.change(screen.getByLabelText("How much Bisi Bele Bath to make"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("Amount of Bisi Bele Bath"), { target: { value: "30" } });
     fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "11:00" } });
     fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
       target: { value: "Rajajinagar community programme" },
@@ -1437,11 +1572,11 @@ describe("a festival day opens on its usual crowd (T-208)", () => {
 
     // A ticked preparation follows the default exactly as it follows a typed count.
     fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
-    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(500);
+    expect(screen.getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(500);
 
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "320" } });
     expect(screen.getByLabelText("Adults")).toHaveValue(320);
-    expect(screen.getByLabelText("How much Bisi Bele Bath to make")).toHaveValue(320);
+    expect(screen.getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(320);
 
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
     await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));

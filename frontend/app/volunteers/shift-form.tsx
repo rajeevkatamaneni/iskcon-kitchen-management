@@ -140,7 +140,7 @@ export function ShiftFields({
   return (
     <Form
       id={SHIFT_FORM}
-      className="grid grid-cols-2 gap-4"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
       aria-label={editing ? "Edit a shift" : "Post a shift"}
       onSubmit={(event) => {
         // Held here rather than in each of the two screens that use this form, so neither can
@@ -153,7 +153,7 @@ export function ShiftFields({
         onSubmit(event);
       }}
     >
-      <div className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+      <div className="col-span-full flex flex-col gap-1 text-sm text-ink-secondary">
         <label htmlFor={ids.title} className="pl-field-inset font-medium text-ink">Title</label>
         <input id={ids.title} name="title" required defaultValue={shift?.title ?? ""} className={FIELD} />
       </div>
@@ -256,7 +256,7 @@ export function ShiftFields({
           />
         )}
       </HintedField>
-      <div className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+      <div className="col-span-full flex flex-col gap-1 text-sm text-ink-secondary">
         <label htmlFor={ids.description} className="pl-field-inset font-medium text-ink">Description</label>
         <input id={ids.description} name="description" defaultValue={shift?.description ?? ""} className={FIELD} />
       </div>

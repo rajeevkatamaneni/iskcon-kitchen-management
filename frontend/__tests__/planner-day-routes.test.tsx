@@ -11,7 +11,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
  * rather than its date and its kind's name, which two events on one day shared.
  */
 
-const { authRef, routeRef, api } = vi.hoisted(() => ({
+const { authRef, routeRef, searchRef, api } = vi.hoisted(() => ({
   authRef: {
     current: {
       status: "signed-in",
@@ -19,6 +19,8 @@ const { authRef, routeRef, api } = vi.hoisted(() => ({
     } as { status: string; appUser: Record<string, unknown> | null },
   },
   routeRef: { current: {} as Record<string, string> },
+  // What the edit screen's own query string says — where it was opened from (T-219).
+  searchRef: { current: new URLSearchParams() },
   api: {
     meals: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
     getMeal: vi.fn(async (_id: string, _t?: string) => ({}) as unknown),
@@ -57,7 +59,7 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({
   useParams: () => routeRef.current,
   useRouter: () => ({ push, replace: vi.fn(), back: vi.fn(), refresh: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => searchRef.current,
 }));
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ ...authRef.current, getToken: async () => "t" }),
@@ -189,7 +191,20 @@ describe("a day of the plan, at its own address", () => {
     render(<PlannerDayPage />);
 
     await screen.findByText("Lunch");
-    expect(screen.getByRole("link", { name: /^edit$/i })).toHaveAttribute("href", "/planner/meal/meal-lunch");
+    // With this page's own address as the way back, so the meal's Cancel returns here (T-219).
+    expect(screen.getByRole("link", { name: /^edit$/i })).toHaveAttribute(
+      "href",
+      `/planner/meal/meal-lunch?from=${encodeURIComponent(`/planner/${TOMORROW}`)}`
+    );
+  });
+
+  it("has no way from its header to the week or the calendar (T-219)", async () => {
+    render(<PlannerDayPage />);
+
+    await screen.findByText("Lunch");
+    // Rajeev, 2026-09-17: if this page stays, these two go.
+    expect(screen.queryByRole("link", { name: /the week around it/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /open the calendar/i })).not.toBeInTheDocument();
   });
 
   it("refuses a date it cannot read rather than working from NaN", async () => {
@@ -304,9 +319,9 @@ describe("an event on the day", () => {
     api.repeatEvent.mockResolvedValue({ copied: 5, weeksCopied: 5, refusedOnFast: 1 });
     render(<PlannerDayPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /repeat it forward/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /repeat weekly/i }));
     fireEvent.change(screen.getByLabelText(/how many weeks/i), { target: { value: "6" } });
-    fireEvent.click(screen.getByRole("button", { name: /copy it forward/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^repeat$/i }));
 
     // The whole meal is copied, by its id (D-27) — not from one of its preparations.
     await vi.waitFor(() => expect(api.repeatEvent).toHaveBeenCalledWith("meal-reading", 6, "t"));
@@ -316,7 +331,7 @@ describe("an event on the day", () => {
       await screen.findByText(/5 weeks copied · 5 preparations · 1 skipped/)
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "More about Repeating it forward" })
+      screen.getByRole("button", { name: "More about Repeat weekly" })
     ).toBeInTheDocument();
   });
 
@@ -325,7 +340,7 @@ describe("an event on the day", () => {
     render(<PlannerDayPage />);
 
     await screen.findByText("Lunch");
-    expect(screen.queryByRole("button", { name: /repeat it forward/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /repeat weekly/i })).not.toBeInTheDocument();
     expect(api.travelEstimate).not.toHaveBeenCalled();
   });
 });
@@ -337,6 +352,7 @@ describe("editing one meal, at its own id", () => {
     api.saveMeal.mockClear();
     api.getMeal.mockClear();
     routeRef.current = { id: "meal-lunch" };
+    searchRef.current = new URLSearchParams();
     api.getMeal.mockResolvedValue(lunch());
     api.calendarRange.mockResolvedValue([]);
     api.listRecipes.mockResolvedValue(RECIPES);
@@ -352,10 +368,11 @@ describe("editing one meal, at its own id", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Edit Lunch" })).toBeInTheDocument();
     expect(api.getMeal).toHaveBeenCalledWith("meal-lunch", "t");
-    // Cancel is the way out, and it goes back to the day the meal belongs to.
+    // Cancel is the way out. Opened with no `from`, it goes to the planner's day view on the day
+    // the meal belongs to — the planner, with its tabs and its dates, not the separate day page.
     expect(screen.getByRole("link", { name: /^cancel$/i })).toHaveAttribute(
       "href",
-      `/planner/${TOMORROW}`
+      `/planner?view=day&date=${TOMORROW}`
     );
     expect(screen.getByRole("button", { name: /update this meal/i })).toBeInTheDocument();
     // No second copy of the commit button at the foot.
@@ -388,7 +405,7 @@ describe("editing one meal, at its own id", () => {
     expect(api.updateMeal.mock.calls[0][0]).toBe("meal-lunch");
     expect(api.saveMeal).not.toHaveBeenCalled();
     await vi.waitFor(() =>
-      expect(push).toHaveBeenCalledWith(`/planner/${TOMORROW}?saved=Lunch`)
+      expect(push).toHaveBeenCalledWith(`/planner?view=day&date=${TOMORROW}&saved=Lunch`)
     );
   });
 
@@ -410,7 +427,7 @@ describe("editing one meal, at its own id", () => {
 
     fireEvent.click(screen.getByRole("link", { name: /^cancel$/i }));
     fireEvent.click(await screen.findByRole("button", { name: "Leave without saving" }));
-    expect(push).toHaveBeenCalledWith(`/planner/${TOMORROW}`);
+    expect(push).toHaveBeenCalledWith(`/planner?view=day&date=${TOMORROW}`);
     expect(api.updateMeal).not.toHaveBeenCalled();
   });
 
@@ -525,10 +542,11 @@ function isoIn(days: number): string {
 }
 
 /**
- * T-165: the day's calendar correction is a `Form`. Its one required box is the reason, and a blank
- * one is named beside it and corrects nothing.
+ * T-219: correcting what the calendar says about a day moved to the Vaishnava calendar. This page
+ * still says that a date was corrected by hand, and why, but offers no way to correct or undo it.
+ * The correction's own tests are in calendar-correction.test.tsx.
  */
-describe("correcting the calendar for a day (T-165)", () => {
+describe("the day page reads a corrected date but does not correct it (T-219)", () => {
   beforeEach(() => {
     routeRef.current = { date: TOMORROW };
     api.meals.mockResolvedValue([]);
@@ -536,32 +554,106 @@ describe("correcting the calendar for a day (T-165)", () => {
       {
         date: TOMORROW, tithi: 16, paksa: 1, masa: 3, gaurabdaYear: 540, naksatra: 10,
         isEkadashi: false, ekadashiName: null, mahadvadashi: null, fastType: null,
-        sunrise: "06:07:00", sunset: "18:41:00", festivals: [], overridden: false, overrideReason: null,
+        sunrise: "06:07:00", sunset: "18:41:00", festivals: [], overridden: true,
+        overrideReason: "The temple's panchang says tomorrow",
       },
     ]);
     api.listRecipes.mockResolvedValue(RECIPES);
     api.listMealKinds.mockResolvedValue(KINDS);
-    api.setCalendarOverride.mockClear();
     authRef.current = {
       status: "signed-in",
       appUser: { role: "TEMPLE_ADMIN", userId: "me", fullName: "Radha Devi", tenantName: "ISKCON Bengaluru" },
     };
   });
 
-  it("names a blank reason beside its box, corrects nothing, then corrects once it is given", async () => {
+  it("shows a Temple Admin the notice and the reason, with no Correct and no Undo", async () => {
     render(<PlannerDayPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /correct this date/i }));
-    fireEvent.click(screen.getByRole("button", { name: /save correction/i }));
 
-    const said = await screen.findByText("Why are you correcting this? is required");
-    const form = screen.getByRole("form", { name: /correct this date/i });
-    const reason = form.querySelector('[name="reason"]') as HTMLTextAreaElement;
-    expect(reason.getAttribute("aria-describedby")).toContain(said.id);
-    expect(screen.getAllByText(/ is required$/)).toHaveLength(1);
-    expect(api.setCalendarOverride).not.toHaveBeenCalled();
+    expect(await screen.findByText("This date was corrected by hand")).toBeInTheDocument();
+    expect(screen.getByText("The temple's panchang says tomorrow")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /correct this date/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /undo the correction/i })).not.toBeInTheDocument();
+  });
+});
 
-    fireEvent.change(reason, { target: { value: "The temple's panchang says tomorrow" } });
-    fireEvent.click(screen.getByRole("button", { name: /save correction/i }));
-    await vi.waitFor(() => expect(api.setCalendarOverride).toHaveBeenCalledTimes(1));
+/**
+ * T-219: leaving a meal's screen goes back to exactly where it was opened from — the planner in the
+ * view and on the date it showed — by Cancel, by saving, and by "Leave without saving?". A `from`
+ * that is not a planner path on this site is ignored, never followed.
+ */
+describe("leaving a meal's screen returns to where it was opened (T-219)", () => {
+  const WEEK = `/planner?view=week&date=${TOMORROW}`;
+
+  beforeEach(() => {
+    push.mockClear();
+    api.updateMeal.mockClear();
+    routeRef.current = { id: "meal-lunch" };
+    api.getMeal.mockResolvedValue(lunch());
+    api.calendarRange.mockResolvedValue([]);
+    api.listRecipes.mockResolvedValue(RECIPES);
+    api.listMealKinds.mockResolvedValue(KINDS);
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "TEMPLE_ADMIN", userId: "me", fullName: "Radha Devi", tenantName: "ISKCON Bengaluru" },
+    };
+  });
+
+  it("Cancel goes back to the week it was opened from", async () => {
+    searchRef.current = new URLSearchParams({ from: WEEK });
+    render(<EditMealPage />);
+    await screen.findByRole("heading", { level: 1, name: "Edit Lunch" });
+
+    expect(screen.getByRole("link", { name: /^cancel$/i })).toHaveAttribute("href", WEEK);
+  });
+
+  it("saving goes back to the same week, with the confirmation waiting there", async () => {
+    searchRef.current = new URLSearchParams({ from: WEEK });
+    render(<EditMealPage />);
+    await screen.findByRole("heading", { level: 1, name: "Edit Lunch" });
+
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "150" } });
+    fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledWith(`${WEEK}&saved=Lunch`));
+  });
+
+  it("Leave without saving goes back to the same week", async () => {
+    searchRef.current = new URLSearchParams({ from: WEEK });
+    render(<EditMealPage />);
+    await screen.findByRole("heading", { level: 1, name: "Edit Lunch" });
+
+    fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "150" } });
+    fireEvent.click(screen.getByRole("link", { name: /^cancel$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Leave without saving" }));
+    expect(push).toHaveBeenCalledWith(WEEK);
+  });
+
+  it("with no origin, falls back to the planner's day view on the meal's date", async () => {
+    searchRef.current = new URLSearchParams();
+    render(<EditMealPage />);
+    await screen.findByRole("heading", { level: 1, name: "Edit Lunch" });
+
+    expect(screen.getByRole("link", { name: /^cancel$/i })).toHaveAttribute(
+      "href",
+      `/planner?view=day&date=${TOMORROW}`
+    );
+  });
+
+  it.each([
+    "https://evil.example/planner",
+    "//evil.example/planner",
+    "/\\evil.example/planner",
+    "/admin",
+    "/plannerx?view=week",
+    "javascript:alert(1)",
+  ])("ignores a from that is not a planner path on this site: %s", async (from) => {
+    searchRef.current = new URLSearchParams({ from });
+    render(<EditMealPage />);
+    await screen.findByRole("heading", { level: 1, name: "Edit Lunch" });
+
+    expect(screen.getByRole("link", { name: /^cancel$/i })).toHaveAttribute(
+      "href",
+      `/planner?view=day&date=${TOMORROW}`
+    );
   });
 });

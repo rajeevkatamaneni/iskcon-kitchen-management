@@ -148,7 +148,7 @@ describe("adding a vendor", () => {
     render(<NewVendorPage />);
     expect(screen.getByRole("heading", { name: "Add a vendor" })).toBeInTheDocument();
     // Rule 3: one line under the task saying whose record this is.
-    expect(screen.getByText("New supplier for this temple")).toBeInTheDocument();
+    expect(screen.getByText("New vendor for this temple")).toBeInTheDocument();
     expect(screen.getByRole("form", { name: /add a vendor/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /add vendor/i })).toBeInTheDocument();
     // Rule 7: no back-link. Cancel says what happens to what has been typed.

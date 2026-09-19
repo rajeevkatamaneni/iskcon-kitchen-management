@@ -218,9 +218,14 @@ function describe(meal: MealCrewView): string {
   return `${meal.mealKind} on ${shortDate(meal.planDate)} ${at}`;
 }
 
+/**
+ * Only "Waiting" is coloured, because somebody still has to answer it. Approved and declined are
+ * settled: green is kept for the moment the reader's own action succeeds and red for something
+ * serious that needs attention now, and a decided request is neither (Rajeev, 2026-09-18, T-227).
+ */
 function StatusBadge({ status }: { status: LeaveView["status"] }) {
-  if (status === "APPROVED") return <Badge tone="success">Approved</Badge>;
-  if (status === "DECLINED") return <Badge tone="danger">Declined</Badge>;
+  if (status === "APPROVED") return <Badge tone="neutral">Approved</Badge>;
+  if (status === "DECLINED") return <Badge tone="neutral">Declined</Badge>;
   if (status === "REVOKED") return <Badge tone="neutral">Revoked</Badge>;
   // T-184: taken back by the person before it began. Neutral like a revocation, and named apart from
   // it, because one was the temple's decision and the other was theirs. It shows only under Everything.

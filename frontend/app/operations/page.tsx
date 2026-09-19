@@ -71,16 +71,18 @@ function OperationsView() {
                 Couldn’t reach the health endpoint. The API may be down.
               </p>
             ) : (
+              // Only a service that is down is coloured. Up is the expected, passive state, and green
+              // is kept for the moment the reader's own action succeeds (Rajeev, 2026-09-18, T-227).
               <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-3 text-sm">
                 <div>
                   <dt className="text-ink-secondary">Database</dt>
-                  <dd className={`mt-1 ${dbUp ? "text-success" : "text-danger"}`}>
+                  <dd className={`mt-1 ${dbUp ? "text-ink" : "text-danger"}`}>
                     {dbUp ? "Reachable" : "Unreachable"}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-ink-secondary">Background worker</dt>
-                  <dd className={`mt-1 ${workerHealthy ? "text-success" : "text-danger"}`}>
+                  <dd className={`mt-1 ${workerHealthy ? "text-ink" : "text-danger"}`}>
                     {WORKER_LABELS[workerState] ?? workerState}
                   </dd>
                 </div>
@@ -100,7 +102,7 @@ function OperationsView() {
             {metrics.error ? (
               <ErrorNotice error={metrics.error} />
             ) : (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <MetricTile
                   label="Sent today"
                   value={metrics.data?.sentToday}

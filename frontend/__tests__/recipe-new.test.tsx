@@ -119,25 +119,25 @@ describe("new recipe", () => {
   it("names each blank required box in red beside it, and creates nothing (T-161)", () => {
     render(<NewRecipePage />);
 
-    // Base yield starts at 100, so only the two boxes that start empty are refused.
+    // "This recipe makes" starts at 100, so only the two boxes that start empty are refused.
     fireEvent.click(screen.getByRole("button", { name: /create recipe/i }));
 
     expectSaidBeside(screen.getByLabelText(/^name$/i), "Name is required");
     expectSaidBeside(screen.getByLabelText(/^category$/i), "Category is required");
-    expect(screen.queryByText(/^Base yield /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^How much this recipe makes /)).not.toBeInTheDocument();
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it("says a base yield below nothing must be at least 0, and creates nothing (T-161)", () => {
+  it("says an amount made below nothing must be at least 0, and creates nothing (T-161)", () => {
     render(<NewRecipePage />);
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Khichdi" } });
     fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "c1" } });
     // Typed, not a defaultValue: jsdom only range-checks a value set the way a keystroke sets it.
-    fireEvent.change(screen.getByLabelText(/^base yield$/i), { target: { value: "-1" } });
+    fireEvent.change(screen.getByLabelText(/^how much this recipe makes$/i), { target: { value: "-1" } });
 
     fireEvent.click(screen.getByRole("button", { name: /create recipe/i }));
 
-    expectSaidBeside(screen.getByLabelText(/^base yield$/i), "Base yield must be at least 0");
+    expectSaidBeside(screen.getByLabelText(/^how much this recipe makes$/i), "How much this recipe makes must be at least 0");
     expect(createMock).not.toHaveBeenCalled();
   });
 

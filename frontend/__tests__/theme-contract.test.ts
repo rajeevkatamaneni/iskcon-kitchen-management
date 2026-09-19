@@ -116,6 +116,23 @@ const REQUIRED: [ThemeToken, ThemeToken, number][] = [
   ["info", "canvas", 4.5],
   ["info", "raised", 4.5],
 
+  // Festivals (T-229). The tint is a day cell, and a day cell carries the date in `ink`, the event
+  // names in `ink-secondary` and the tithi in `ink-muted`, so all three have to read on it. The
+  // festival's name is set in `festival-text` on the tint (the planner's week), on the page (the
+  // planner's month) and in a badge. The dot is a graphic that carries meaning, so SC 1.4.11's 3:1
+  // against every ground it is drawn on: the tint, and the plain cell on the page or a card.
+  ["ink", "festival-bg", 4.5],
+  ["ink-secondary", "festival-bg", 4.5],
+  ["ink-muted", "festival-bg", 4.5],
+  ["festival-text", "festival-bg", 4.5],
+  ["festival-text", "canvas", 4.5],
+  ["festival-text", "raised", 4.5],
+  ["festival-text", "sunken", 4.5],
+  ["festival", "festival-bg", 3.0],
+  ["festival", "canvas", 3.0],
+  ["festival", "raised", 3.0],
+  ["festival", "sunken", 3.0],
+
   // A meter is a fill in a sunken track and carries no text, so the whole requirement is that
   // somebody can see where the bar ends.
   ["meter-low", "sunken", 3.0],
@@ -266,6 +283,22 @@ describe.each(THEME_PACKS.map((p) => [p.name, p] as const))("%s", (_name, pack) 
     }
 
     expect(failures).toEqual([]);
+  });
+
+  it("gives festivals a colour of their own, not a status's or the accent's", () => {
+    // T-229. Festivals wore `success` until Rajeev ruled that green means only "what you did worked",
+    // amber only a warning and red only something serious — and the accent already means a fasting
+    // day on the calendar. The saffron has to be its own value in every pack, or a later pack could
+    // quietly put festivals back in somebody else's colour.
+    const p = pack.palette;
+    const taken = [
+      p.accent, p["accent-bg"], p["accent-text"],
+      p.success, p["success-bg"], p.warning, p["warning-bg"], p.danger, p["danger-bg"],
+      p.info, p["info-bg"],
+    ].map((h) => h.toUpperCase());
+    for (const token of ["festival", "festival-bg", "festival-text"] as const) {
+      expect(taken, `${token} borrows another role's value`).not.toContain(p[token].toUpperCase());
+    }
   });
 
   it("records no shortfall that has since been fixed", () => {

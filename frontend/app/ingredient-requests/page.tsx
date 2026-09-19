@@ -15,7 +15,7 @@ import { RequestStatusBadge } from "@/components/IngredientRequestStatus";
 import { api, type IngredientRequestStatus } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { shortDate } from "@/lib/format";
-import { TABLE, TD_DATE, TD_TEXT, THEAD, TH_TEXT, TR, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, TD_FIXED, TD_LEAD, TD_PRIMARY, TD_SECOND, THEAD, TH_FIXED, TH_LEAD, TH_PRIMARY, TH_SECOND, TR } from "@/components/ds/table";
 
 /**
  * Every request a kitchen has raised, newest first (E10-S8).
@@ -125,10 +125,10 @@ function IngredientRequestsView() {
     <div className="flex min-h-screen">
       <Sidebar activeHref="/ingredient-requests" />
 
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0 grow basis-60">
               <h1>Ingredient requests</h1>
               <p className="mt-1 max-w-prose text-ink-secondary">
                 What each kitchen has asked the store for, and where it stands.
@@ -169,20 +169,24 @@ function IngredientRequestsView() {
             </EmptyState>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              {/* On the table rule since 2026-09-18 (T-233). The reference leads on the left
+                  although it is fixed, because it is the row's link — the exception Rajeev
+                  accepted. The kitchen is the primary flexible column; who raised it is a person,
+                  so the secondary one; the date and status are fixed (one line, reading left since T-236). */}
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={TH_TEXT}>Reference</th>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Kitchen</th>
-                    <th className={TH_TEXT}>Needed on</th>
-                    <th className={TH_TEXT}>Raised by</th>
-                    <th className={TH_TEXT}>Status</th>
+                    <th className={TH_LEAD}>Reference</th>
+                    <th className={TH_PRIMARY}>Kitchen</th>
+                    <th className={TH_SECOND}>Raised by</th>
+                    <th className={TH_FIXED}>Needed on</th>
+                    <th className={TH_FIXED}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
                     <tr key={row.id} className={TR}>
-                      <td className={TD_TEXT}>
+                      <td className={TD_LEAD}>
                         <Link
                           href={`/ingredient-requests/${row.id}`}
                           className="font-mono font-medium hover:text-accent-text hover:underline"
@@ -190,10 +194,10 @@ function IngredientRequestsView() {
                           {row.reference}
                         </Link>
                       </td>
-                      <td className={`${TD_TEXT} ${WRAP}`}>{row.kitchenName}</td>
-                      <td className={`${TD_DATE} text-ink-secondary`}>{shortDate(row.neededOn)}</td>
-                      <td className={`${TD_TEXT} text-ink-secondary`}>{row.requestedByName}</td>
-                      <td className={TD_TEXT}>
+                      <td className={TD_PRIMARY}>{row.kitchenName}</td>
+                      <td className={`${TD_SECOND} text-ink-secondary`}>{row.requestedByName}</td>
+                      <td className={`${TD_FIXED} text-ink-secondary`}>{shortDate(row.neededOn)}</td>
+                      <td className={TD_FIXED}>
                         <RequestStatusBadge status={row.status} />
                       </td>
                     </tr>

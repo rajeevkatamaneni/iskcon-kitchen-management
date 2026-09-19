@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback } from "react";
+import { useCallback, type ReactNode } from "react";
 import { Badge } from "@/components/ds/Badge";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
@@ -25,6 +25,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
+import { ekadashiSpelling } from "@/lib/vaishnava-day";
 import { cooksQuantity, hhmm, longDay, money, shortDate } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
@@ -117,7 +118,7 @@ function TodayScreen() {
                   }
                 />
                 <StatTile
-                  label="Items below par"
+                  label="Items below reorder level"
                   value={data.itemsBelowThreshold}
                   tone={data.itemsBelowThreshold > 0 ? "warning" : "neutral"}
                   icon="package"
@@ -164,7 +165,7 @@ function TodayScreen() {
 }
 
 /**
- * A dish's figure, said beside the words "served" or "planned".
+ * A dish's figure, said beside the words "cooked" or "planned".
  *
  * <p>Always names the unit now. It used to leave it out where the yield was counted in servings,
  * because "395 servings served" says the same thing twice — and servings has since stopped being a
@@ -195,7 +196,7 @@ function summarise(data: TodayView): string {
   const parts: string[] = [];
   // The day named as a pujari reads it — tithi, naksatra, masa — with the festival or fast, when the
   // day has one, in front of it because that is what the kitchen has to cook for.
-  if (data.calendar?.todayName) parts.push(data.calendar.todayName);
+  if (data.calendar?.todayName) parts.push(ekadashiSpelling(data.calendar.todayName));
   if (data.calendar) parts.push(dayLabel(data.calendar));
   parts.push(
     data.meals.length
@@ -210,6 +211,10 @@ function summarise(data: TodayView): string {
 /**
  * A fasting day changes every menu on it, so it is a banner rather than a tile (E4-S8 D3) — and
  * tomorrow matters as much as today, because menus are settled the day before.
+ *
+ * Blue, not amber (Rajeev, 2026-09-18, T-227): amber is kept for something the user should act on
+ * or take care over, and a fasting day is information the temple already lives by. The banner's
+ * place at the top of the page carries the weight; the colour does not need to.
  */
 function fastingNotice(data: TodayView) {
   const calendar = data.calendar;
@@ -218,15 +223,15 @@ function fastingNotice(data: TodayView) {
   if (calendar.fastingToday) {
     return (
       <InlineNotice
-        tone="warning"
+        tone="info"
         action={
           <ButtonLink href="/planner" size="sm" variant="ghost">
             Review menu
           </ButtonLink>
         }
       >
-        Today is a fasting day{calendar.todayName ? ` (${calendar.todayName})` : ""}. Grains and beans
-        are left out of every meal cooked on it.
+        Today is a fasting day{calendar.todayName ? ` (${ekadashiSpelling(calendar.todayName)})` : ""}. No grains, dal
+        or beans today.
       </InlineNotice>
     );
   }
@@ -234,15 +239,15 @@ function fastingNotice(data: TodayView) {
   if (calendar.fastingTomorrow) {
     return (
       <InlineNotice
-        tone="warning"
+        tone="info"
         action={
           <ButtonLink href="/planner" size="sm" variant="ghost">
             Review menu
           </ButtonLink>
         }
       >
-        Tomorrow is a fasting day{calendar.tomorrowName ? ` (${calendar.tomorrowName})` : ""}. Grains
-        and beans come off every meal on it.
+        Tomorrow is a fasting day{calendar.tomorrowName ? ` (${ekadashiSpelling(calendar.tomorrowName)})` : ""}. No
+        grains, dal or beans tomorrow.
       </InlineNotice>
     );
   }
@@ -262,16 +267,17 @@ function aheadNotice(data: TodayView) {
   const fast = ahead.kind === "FAST";
   return (
     <InlineNotice
-      tone={fast ? "warning" : "info"}
+      // Information either way: a fast is no more a warning than a festival is (T-227).
+      tone="info"
       action={
         <ButtonLink href="/calendar" size="sm" variant="ghost">
           Open the calendar
         </ButtonLink>
       }
     >
-      {ahead.name} on {shortDate(ahead.date)}, in {ahead.daysAway} days.{" "}
+      {ekadashiSpelling(ahead.name)} on {shortDate(ahead.date)}, in {ahead.daysAway} days.{" "}
       {fast
-        ? "Grains, dal and beans come off every menu on that day."
+        ? "No grains, dal or beans on that day."
         : "Plan a feast and extra volunteers."}
     </InlineNotice>
   );
@@ -292,7 +298,7 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
         <EmptyState
           title="Nothing planned for today"
           action={
-            <ButtonLink href="/planner">Open the planner</ButtonLink>
+            <ButtonLink href="/planner">Open planner</ButtonLink>
           }
         >
           Plan a meal and it will appear here.
@@ -300,8 +306,10 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
       ) : (
         <div className="grid">
           {meals.map((meal) => (
+            // The divider lives on a square wrapper, not on the rounded link: a top border on a
+            // rounded box bends down at both ends, which drew every divider as a shallow bracket.
+            <div key={meal.mealId} className="border-t border-hairline first:border-t-0">
             <Link
-              key={meal.mealId}
               href={`/planner?date=${date}`}
               // Named for what it is, so a screen reader announces "Lunch at 12:00" rather than
               // reading the whole block of dishes before saying where the link goes. An event is
@@ -310,7 +318,7 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
               // Item 14. Pulled out and padded back, so the hover tone gains 12px each side and a
               // radius rather than hugging the words. Nothing on the row moves: the negative margin
               // and the padding cancel, and only the highlight is bigger.
-              className="-mx-3 grid gap-2 rounded border-t border-hairline px-3 py-3 transition-colors duration-state first:border-t-0 hover:bg-sunken"
+              className="-mx-3 grid gap-2 rounded px-3 py-3 transition-colors duration-state hover:bg-sunken"
             >
               <span className="flex items-center gap-4">
                 <span className="w-14 flex-none text-sm tabular-nums text-ink-secondary">
@@ -326,7 +334,9 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
                 {/* The truth, not a badge (§2): a meal nobody has recorded is stock that never
                     left the store room, and saying so is more use than colouring it. */}
                 {meal.recorded ? (
-                  <Badge tone="success" shape="pill">
+                  // Neutral: green is kept for the moment the user's own action succeeds (the
+                  // recording toast), not a standing state seen every morning (T-227).
+                  <Badge>
                     Recorded
                   </Badge>
                 ) : (
@@ -336,21 +346,22 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
 
               <span className="grid gap-0.5 pl-[4.5rem]">
                 {meal.dishes.map((dish) => (
-                  <span key={dish.id} className="flex items-baseline gap-2 text-sm">
+                  <span key={dish.id} className="flex flex-wrap items-baseline gap-x-2 text-sm">
                     <span className={dish.notMade ? "text-ink-muted line-through" : "text-ink-secondary"}>
                       {dish.recipeName}
                     </span>
-                    <span className="tabular-nums text-xs text-ink-muted">
+                    <span className="whitespace-nowrap tabular-nums text-xs text-ink-muted">
                       {dish.notMade
                         ? "not made"
                         : dish.actualServings != null
-                          ? `${dishAmount(dish, dish.actualServings)} served`
+                          ? `${dishAmount(dish, dish.actualServings)} cooked`
                           : `${dishAmount(dish, dish.targetYield)} planned`}
                     </span>
                   </span>
                 ))}
               </span>
             </Link>
+            </div>
           ))}
         </div>
       )}
@@ -363,7 +374,7 @@ function DeliveriesCard({ deliveries }: { deliveries: TodayDelivery[] }) {
   return (
     <Card
       title="Deliveries"
-      meta="Against open purchase orders"
+      meta="From orders you have sent"
       action={
         <ButtonLink href="/orders" size="sm" variant="ghost">
           All orders
@@ -389,7 +400,7 @@ function DeliveriesCard({ deliveries }: { deliveries: TodayDelivery[] }) {
                     .join(" · ")}
                 </span>
               </span>
-              <Badge tone={delivery.state === "AWAITED" ? "neutral" : "danger"} shape="pill">
+              <Badge tone={delivery.state === "AWAITED" ? "neutral" : "danger"}>
                 {delivery.state === "AWAITED" ? "Awaited" : "Invoice overdue"}
               </Badge>
             </div>
@@ -403,9 +414,35 @@ function DeliveriesCard({ deliveries }: { deliveries: TodayDelivery[] }) {
 /**
  * The workforce tile's figure. Two numbers, not one: a cook and a two-hour evening volunteer are
  * not interchangeable, and adding them would hide which of the two is missing.
+ *
+ * <p>The numbers at the tile's figure size and the words beside them in small type, so the figure
+ * stays on one line (Rajeev, Decisions Desk, 2026-09-18). Set whole at the figure size, "6 staff · 0
+ * volunteers" is 254px wide, and a tile's text box is 172px at 1280 and 222px at 1920 when the four
+ * tiles share a row, so it broke onto a second line under three single-line figures. Measured in
+ * Chrome with the app's own stylesheet and font (T-234): with the words in small type it is 152px, and
+ * with one two-digit count ("12 staff · 4 volunteers") 167px, both one line at 1280.
+ *
+ * <p>That still broke at 1280 for "12 staff · 14 volunteers", and Rajeev asked (2026-09-18, T-237)
+ * for room for "120 staff · 1400 volunteers" on one line at 1280 and 1920. The tile's figure is now
+ * smaller and its padding narrower (see `StatTile`), and the words here are `text-xs`: measured, that
+ * string is 167px wide in a 180px box at 1280. The halves are still kept whole, so if a larger count
+ * ever does break, it breaks at the dot and never between a number and its word. The words inherit
+ * the figure's colour, so an empty day still reads amber from end to end.
  */
-function workforceValue(workforce: TodayWorkforce): string {
-  return `${workforce.staffIn} · ${workforce.volunteers}`;
+function workforceValue(workforce: TodayWorkforce): ReactNode {
+  const word = "text-xs font-medium";
+  return (
+    <>
+      <span className="whitespace-nowrap">
+        {workforce.staffIn}
+        <span className={word}> staff</span> ·
+      </span>{" "}
+      <span className="whitespace-nowrap">
+        {workforce.volunteers}
+        <span className={word}> {workforce.volunteers === 1 ? "volunteer" : "volunteers"}</span>
+      </span>
+    </>
+  );
 }
 
 /**
@@ -430,7 +467,7 @@ function WorkforceNote({ workforce, meals }: { workforce: TodayWorkforce; meals:
 
   if (counted.length === 0) {
     if (workforce.staffIn === 0 && workforce.volunteers === 0) {
-      return <>Nobody is down to work today</>;
+      return <>Nobody is rostered today</>;
     }
     return (
       <>
@@ -577,7 +614,7 @@ function approvalNotices(data: TodayView) {
             <ButtonLink
               href="/ingredient-requests?status=SUBMITTED"
               size="sm"
-              variant="secondary"
+              variant="ghost"
             >
               Review them
             </ButtonLink>
@@ -586,10 +623,10 @@ function approvalNotices(data: TodayView) {
           {urgency(a.ingredientRequests, a.ingredientRequestsSoon, {
             noneOne: "It is not needed before the day after tomorrow.",
             noneMany: "None of them is needed before the day after tomorrow.",
-            one: "It is needed today or tomorrow, so the store has little time to get it ready.",
-            all: "They are all needed today or tomorrow, so the store has little time to get them ready.",
+            one: "1 is needed today or tomorrow.",
+            all: "All are needed today or tomorrow.",
             some: (n) =>
-              `${n} of them ${n === 1 ? "is" : "are"} needed today or tomorrow, so the store has little time to get them ready.`,
+              `${n} ${n === 1 ? "is" : "are"} needed today or tomorrow.`,
           })}
         </InlineNotice>
       )}
@@ -605,7 +642,7 @@ function approvalNotices(data: TodayView) {
             </>
           }
           action={
-            <ButtonLink href="/leave" size="sm" variant="secondary">
+            <ButtonLink href="/leave" size="sm" variant="ghost">
               Open the leave queue
             </ButtonLink>
           }
@@ -613,10 +650,10 @@ function approvalNotices(data: TodayView) {
           {urgency(a.leaveRequests, a.leaveRequestsSoon, {
             noneOne: "It does not start before the day after tomorrow.",
             noneMany: "None of it starts before the day after tomorrow.",
-            one: "It starts today or tomorrow, or has already started — the roster cannot bend around an answer that comes later.",
-            all: "They all start today or tomorrow, or have already started — the roster cannot bend around an answer that comes later.",
+            one: "1 starts today or tomorrow, or has started.",
+            all: "All start today or tomorrow, or have started.",
             some: (n) =>
-              `${n} of them ${n === 1 ? "starts" : "start"} today or tomorrow, or ${n === 1 ? "has" : "have"} already started — the roster cannot bend around an answer that comes later.`,
+              `${n} ${n === 1 ? "starts" : "start"} today or tomorrow, or ${n === 1 ? "has" : "have"} started.`,
           })}
         </InlineNotice>
       )}
@@ -647,7 +684,7 @@ function unrecordedNotice(data: TodayView) {
         </>
       }
       action={
-        <ButtonLink href="/planner/catch-up" size="sm" variant="secondary">
+        <ButtonLink href="/planner/catch-up" size="sm" variant="ghost">
           Record them
         </ButtonLink>
       }
@@ -690,12 +727,12 @@ function equipmentNotice(data: TodayView) {
         </>
       }
       action={
-        <ButtonLink href="/equipment?serviceStatus=OVERDUE" size="sm" variant="secondary">
+        <ButtonLink href="/equipment?serviceStatus=OVERDUE" size="sm" variant="ghost">
           See which
         </ButtonLink>
       }
     >
-      Book the engineer before {one ? "it stops" : "one of them stops"} in the middle of a festival.
+      Book a service visit.
     </InlineNotice>
   );
 }
@@ -748,23 +785,23 @@ function DraftsAtRiskNotice() {
           <span className="font-semibold">
             {plural(drafts.length, "draft order", "draft orders")}
           </span>{" "}
-          {drafts.length === 1 ? "is" : "are"} waiting to be sent
           {past > 0 && today > 0
-            ? ` — ${past} past the day ${past === 1 ? "it" : "they"} had to go out, ${today} due today`
+            ? `need sending: ${past} past ${past === 1 ? "its" : "their"} order date, ${today} due today`
             : past > 0
-              ? ` — past the day ${past === 1 ? "it" : "they"} had to go out`
-              : ` — today is the last day ${today === 1 ? "it" : "they"} can be`}
+              ? `${drafts.length === 1 ? "is past its" : "are past their"} order date`
+              : "must be sent today"}
           .
         </>
       }
       action={
-        <ButtonLink href="/orders?status=DRAFT" size="sm" variant="secondary">
+        <ButtonLink href="/orders?status=DRAFT" size="sm" variant="ghost">
           Open them
         </ButtonLink>
       }
     >
-      A draft holds its ingredients off the shopping list, so one nobody sends stops them being
-      ordered at all.
+      {drafts.length === 1
+        ? "Its items stay off the shopping list until you send it."
+        : "Their items stay off the shopping list until you send them."}
     </InlineNotice>
   );
 }

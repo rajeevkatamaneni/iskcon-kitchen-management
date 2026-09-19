@@ -80,7 +80,7 @@ function NewVendorView() {
   return (
     <FocusScreen
       task="Add a vendor"
-      who="New supplier for this temple"
+      who="New vendor for this temple"
       activeHref="/vendors"
       actions={
         <>
@@ -95,7 +95,7 @@ function NewVendorView() {
     >
       {error && <ErrorNotice error={error} />}
 
-      <Form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Add a vendor" onSubmit={add}>
+      <Form id={FORM} className="grid gap-4 sm:grid-cols-2" aria-label="Add a vendor" onSubmit={add}>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Name</span>
           <input name="name" required className={FIELD} />
@@ -138,11 +138,11 @@ function NewVendorView() {
             </select>
           )}
         </HintedField>
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+        <label className="sm:col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Address</span>
           <input name="address" className={FIELD} />
         </label>
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+        <label className="sm:col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Notes</span>
           <input name="notes" className={FIELD} />
         </label>

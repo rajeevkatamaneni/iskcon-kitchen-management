@@ -37,13 +37,15 @@ const STATUS_CLASS: Record<PoStatus, string> = {
   // success green: some of what was asked for never arrived, and not the warning amber either,
   // because nobody is waiting on it any more.
   CLOSED: "bg-sunken text-ink-secondary",
-  RECEIVED: "bg-success-bg text-success",
+  // Neutral too. Received is the good end of an order, but green is kept for the moment the
+  // reader's own action succeeds, not a standing state on a list (Rajeev, 2026-09-18, T-227).
+  RECEIVED: "bg-sunken text-ink-secondary",
   CANCELLED: "bg-sunken text-ink-muted",
 };
 
 export function statusChip(status: PoStatus) {
   return (
-    <span className={`rounded-sm px-2 py-1 text-xs ${STATUS_CLASS[status]}`}>
+    <span className={`rounded-control px-2 py-1 text-xs ${STATUS_CLASS[status]}`}>
       {STATUS_LABEL[status]}
     </span>
   );

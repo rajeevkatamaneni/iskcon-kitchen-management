@@ -112,17 +112,17 @@ describe("editing a recipe", () => {
     pushMock.mockReset();
   });
 
-  it("names a cleared name and a cleared base yield in red beside their boxes, and saves nothing", () => {
+  it("names a cleared name and a cleared amount made in red beside their boxes, and saves nothing", () => {
     render(<EditRecipePage />);
     expect(screen.getByLabelText(/^name$/i)).toHaveValue("Khichdi");
 
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText(/^base yield$/i), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText(/^how much this recipe makes$/i), { target: { value: "" } });
     // The header button, outside the form, which reaches it by form="edit-recipe".
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
     expectSaidBeside(screen.getByLabelText(/^name$/i), "Name is required");
-    expectSaidBeside(screen.getByLabelText(/^base yield$/i), "Base yield is required");
+    expectSaidBeside(screen.getByLabelText(/^how much this recipe makes$/i), "How much this recipe makes is required");
     expect(updateMock).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();
   });

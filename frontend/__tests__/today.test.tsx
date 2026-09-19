@@ -164,7 +164,7 @@ describe("today", () => {
     render(<TodayPage />);
 
     expect(screen.getByRole("link", { name: /servings today/i })).toHaveAttribute("href", "/planner");
-    expect(screen.getByRole("link", { name: /items below par/i })).toHaveAttribute("href", "/inventory");
+    expect(screen.getByRole("link", { name: /items below reorder level/i })).toHaveAttribute("href", "/inventory");
     // "Working today" replaced "Shifts unfilled", which warned about a shift on an unnamed date and
     // gave an admin nothing to act on; "Cost of materials" replaced "Given this month", which moved
     // to the donations screen where somebody goes to look at money deliberately.
@@ -209,7 +209,8 @@ describe("today", () => {
     };
     render(<TodayPage />);
 
-    expect(screen.getByText(/Pavitropana Ekadasi/)).toBeInTheDocument();
+    // Stored as the calendar engine spells it, read out as the app spells it (Rajeev, 2026-09-18).
+    expect(screen.getByText(/Pavitropana Ekadashi/)).toBeInTheDocument();
     expect(screen.getByText(/in 10 days/)).toBeInTheDocument();
   });
 
@@ -263,9 +264,24 @@ describe("today", () => {
     render(<TodayPage />);
 
     const tile = screen.getByRole("link", { name: /working today/i });
-    expect(tile).toHaveTextContent("4 · 3");
+    expect(tile).toHaveTextContent("4 staff · 3 volunteers");
     expect(tile).toHaveTextContent(/4 staff/i);
     expect(tile).toHaveTextContent(/3 volunteers/i);
+  });
+
+  it("sets the workforce figure's words a step below its numbers, so it holds one line (T-234)", () => {
+    // Whole at the figure size, "6 staff · 0 volunteers" broke onto two lines at 1280 (Rajeev,
+    // Decisions Desk, 2026-09-18). The width itself was measured in Chrome; this pins the markup
+    // that measurement was taken on. T-237 took the words down to text-xs and the figure to text-lg,
+    // so "120 staff · 1400 volunteers" holds one line at 1280 (167px in a 180px box, measured).
+    queryRef.current = { data: today(), error: null, loading: false };
+    callRef.i = 0;
+    render(<TodayPage />);
+
+    const tile = screen.getByRole("link", { name: /working today/i });
+    const words = Array.from(tile.querySelectorAll("span.text-xs.font-medium")).map((s) => s.textContent?.trim());
+    expect(words).toEqual(["staff", "volunteers"]);
+    expect(tile.querySelector("span.text-lg.font-semibold")).toHaveTextContent("4 staff · 3 volunteers");
   });
 
   it("names how many ingredients had no price rather than quietly under-reporting", () => {
@@ -372,7 +388,7 @@ describe("today", () => {
     expect(within(lunch).getByText(/not yet recorded/i)).toBeInTheDocument();
 
     const dinner = screen.getByRole("link", { name: "Dinner at 19:30" });
-    expect(within(dinner).getByText(/395 Kg served/i)).toBeInTheDocument();
+    expect(within(dinner).getByText(/395 Kg cooked/i)).toBeInTheDocument();
   });
 
   it("puts the platform notice band above everything else on the screen", () => {
@@ -424,7 +440,7 @@ describe("today", () => {
     const count = screen.getByText("3 ingredient requests");
     expect(count).toBeInTheDocument();
     expect(count.className).toContain("font-semibold");
-    expect(screen.getByText(/1 of them is needed today or tomorrow/i)).toBeInTheDocument();
+    expect(screen.getByText(/^1 is needed today or tomorrow\.$/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /review them/i })).toHaveAttribute(
       "href",
       "/ingredient-requests?status=SUBMITTED"
@@ -471,9 +487,9 @@ describe("today", () => {
 
     expect(screen.getByText("1 ingredient request")).toBeInTheDocument();
     expect(screen.getByText("2 leave requests")).toBeInTheDocument();
-    // Two of two are urgent, so the sentence is plural throughout — "they all start …
-    // or have already started", never "has".
-    expect(screen.getByText(/They all start today or tomorrow, or have already started/i)).toBeInTheDocument();
+    // Two of two are urgent, so the sentence is plural throughout — "all start … or have
+    // started", never "has".
+    expect(screen.getByText(/All start today or tomorrow, or have started/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open the leave queue/i })).toHaveAttribute(
       "href",
       "/leave"
@@ -549,14 +565,15 @@ describe("today", () => {
 
     expect(screen.getByText(/nothing planned for today/i)).toBeInTheDocument();
     expect(screen.getByText(/nothing due today/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /open the planner/i })).toBeInTheDocument();
+    // The header's and the empty state's: one label for one action.
+    expect(screen.getAllByRole("link", { name: /^open planner$/i }).length).toBeGreaterThan(1);
 
     // A zero that means "nothing is tracked yet" must not read as "everything is fine".
-    expect(screen.getByRole("link", { name: /items below par/i })).toHaveTextContent(
+    expect(screen.getByRole("link", { name: /items below reorder level/i })).toHaveTextContent(
       /nothing is tracked yet/i
     );
     expect(screen.getByRole("link", { name: /working today/i })).toHaveTextContent(
-      /nobody is down to work today/i
+      /nobody is rostered today/i
     );
   });
 

@@ -84,7 +84,7 @@ describe("the Vaishnava calendar", () => {
 
     expect(screen.getByRole("heading", { name: /vaishnava calendar/i })).toBeInTheDocument();
     expect(screen.getByText("August 2026")).toBeInTheDocument();
-    expect(screen.getByText("Ekadasi")).toBeInTheDocument();
+    expect(screen.getByText("Ekadashi")).toBeInTheDocument();
     expect(screen.getByText("Festival or feast")).toBeInTheDocument();
   });
 
@@ -100,7 +100,7 @@ describe("the Vaishnava calendar", () => {
 
   it("says what an ordinary day asks of the kitchen — nothing", () => {
     render(<CalendarPage />);
-    expect(screen.getByText(/an ordinary day/i)).toBeInTheDocument();
+    expect(screen.getByText(/no festival or fast\. cook the usual menu\./i)).toBeInTheDocument();
   });
 
   it("tells the kitchen what a fasting day changes, when one is selected", () => {
@@ -108,8 +108,10 @@ describe("the Vaishnava calendar", () => {
     paramsRef.current = new URLSearchParams("day=2026-08-23");
     render(<CalendarPage />);
 
-    expect(screen.getAllByText(/pavitropana ekadasi/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/no grains, no dal, no beans/i)).toBeInTheDocument();
+    // The stub carries the engine's "Ekadasi"; the screen says it the app's way (Rajeev, 2026-09-18).
+    expect(screen.getAllByText(/pavitropana ekadashi/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/ekadasi/i)).toBeNull();
+    expect(screen.getByText(/no grains, dal or beans/i)).toBeInTheDocument();
   });
 
   it("treats a feast day as a feast, with the plate count that implies", () => {
@@ -169,7 +171,7 @@ describe("the Vaishnava calendar", () => {
     paramsRef.current = new URLSearchParams("view=year");
     render(<CalendarPage />);
     expect(screen.getAllByText("Festivals and fasts").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/2 marked days in 2026/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2 festivals and fasts in 2026/).length).toBeGreaterThan(0);
   });
 
   it("moves a month at a time, and comes back to today", () => {
@@ -198,7 +200,7 @@ describe("the Vaishnava calendar", () => {
     queryRef.current = { data: [], error: null, loading: false };
     render(<CalendarPage />);
 
-    expect(screen.getByText(/has not been computed this far ahead/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/the calendar doesn’t reach this date yet/i).length).toBeGreaterThan(0);
   });
 
   it("shows the error contract when the calendar cannot load", () => {

@@ -33,7 +33,23 @@ function isFeast(priority: number): boolean {
  * calendar should see a double hyphen (INT-6).
  */
 function clean(text: string): string {
-  return text.replace(/\s+--\s+/g, " — ").trim();
+  return ekadashiSpelling(text.replace(/\s+--\s+/g, " — ")).trim();
+}
+
+/**
+ * "Ekadashi", never "Ekadasi", in anything a person reads (Rajeev, 2026-09-18).
+ *
+ * <p>The calendar engine is a port of GCAL and stores GCAL's own transliteration — "Pavitraropana
+ * Ekadasi", "(Fasting for Ekadasi)" — while every screen the kitchen wrote says "Ekadashi". Two
+ * spellings of the one day the planner is built around read as two different things. The stored
+ * names are left exactly as the engine wrote them, so a regenerated year and an old one still match
+ * row for row; the spelling is settled here, on the way to the screen, in the one function every
+ * calendar name passes through. The server does the same for the names it composes into Today and
+ * the job card, so the two never disagree. Internal identifiers (`"ekadasi"`, `EKADASI`) are not
+ * words anybody reads and stay as they are.
+ */
+export function ekadashiSpelling(text: string): string {
+  return text.replace(/\b([Ee])kadasi/g, "$1kadashi");
 }
 
 export interface DayEvent {
@@ -68,13 +84,13 @@ export function dayEvents(day: CalendarDayView | undefined): DayEvent[] {
     events.push({
       kind: "ekadasi",
       // The engine already stores the whole name — "Pavitraropana Ekadasi" — so appending the word
-      // again read as "Pavitraropana Ekadasi Ekadasi" on every Ekadashi the calendar has ever shown.
+      // again read as "Pavitraropana Ekadashi Ekadashi" on every Ekadashi the calendar has ever shown.
       label: ekadashiLabel(day.ekadashiName),
       // A Mahadvadashi was only ever named on the non-Ekadashi branch, so a Vyanjuli day never said
       // it was one — and the parana window on those is minutes long, which is exactly the day
       // somebody needs telling.
       note: day.mahadvadashi
-        ? `${titleCase(day.mahadvadashi)} Mahadvadashi — fasting from grains and beans, and the parana window is short`
+        ? `${titleCase(day.mahadvadashi)} Mahadvadashi. Break the fast early; the window is short.`
         : "Fasting from grains and beans",
     });
   } else if (day.fastType) {
@@ -95,14 +111,15 @@ export function dayEvents(day: CalendarDayView | undefined): DayEvent[] {
 /**
  * The Ekadashi's name as it should be read.
  *
- * <p>The stored name already ends in "Ekadasi", so it is used as it stands; only a day with no name
- * at all needs the bare word. Written as a check rather than a strip so a future engine that stores
- * "Pavitraropana" alone still reads correctly.
+ * <p>The stored name already ends in "Ekadasi", so it is used as it stands, respelt "Ekadashi" on
+ * the way out (see `ekadashiSpelling`); only a day with no name at all needs the bare word. Written
+ * as a check rather than a strip so a future engine that stores "Pavitraropana" alone still reads
+ * correctly.
  */
 export function ekadashiLabel(name: string | null | undefined): string {
-  const trimmed = (name ?? "").trim();
-  if (!trimmed) return "Ekadasi";
-  return /ekadas[ih]i?$/i.test(trimmed) ? trimmed : `${trimmed} Ekadasi`;
+  const trimmed = ekadashiSpelling((name ?? "").trim());
+  if (!trimmed) return "Ekadashi";
+  return /ekadashi$/i.test(trimmed) ? trimmed : `${trimmed} Ekadashi`;
 }
 
 /** The engine stores these shouting — VYANJULI — and a calendar should not shout back. */
@@ -117,13 +134,23 @@ export function kitchenNote(
   if (!day) return null;
   const kind = dayKind(day);
 
-  if (kind === "ekadasi" || kind === "fast") {
+  // Only an Ekadashi-type fast (the Ekadashi itself, or a full-day fast) changes what may be cooked
+  // and how much. A fast until noon, sunset or moonrise is an appearance day that ends in a feast, so
+  // it says only its own line (Rajeev, 2026-09-18).
+  //
+  // Blue, not amber: amber is for something the user should act on or take care over, and a fast is
+  // a day the temple already knows about, not a problem (Rajeev, 2026-09-18, T-227). The grain
+  // confirm in the meal composer is the warning, when someone actually picks a grain dish.
+  if (kind === "ekadasi" || (kind === "fast" && (day.fastType === "EKADASI" || day.fastType === "FULL_DAY"))) {
     return {
-      tone: "warning",
+      tone: "info",
       text:
-        "Fasting day: no grains, no dal, no beans. Cook sabudana, potato, peanut, fruit and " +
-        "buckwheat, and plan roughly a third of the usual number of servings.",
+        "Fasting day: no grains, dal or beans. Cook sabudana, potato, peanut, fruit or buckwheat. " +
+        "Plan about a third of the usual servings.",
     };
+  }
+  if (kind === "fast" && day.fastType) {
+    return { tone: "info", text: `${fastLabel(day.fastType)}. Plan the feast for after.` };
   }
   if (kind === "festival") {
     return {
@@ -136,7 +163,7 @@ export function kitchenNote(
   if (isFullOrNewMoon(day)) {
     return {
       tone: "info",
-      text: "Higher darshan attendance than an ordinary day. Add about a fifth to the lunch count.",
+      text: "More people come for darshan. Add about a fifth to lunch.",
     };
   }
   return null;
@@ -151,7 +178,7 @@ export function isFullOrNewMoon(day: CalendarDayView): boolean {
 function fastLabel(fastType: string): string {
   switch (fastType) {
     case "EKADASI":
-      return "Ekadasi fast";
+      return "Ekadashi fast";
     case "FULL_DAY":
       return "Full-day fast";
     case "NOON":
@@ -167,4 +194,39 @@ function fastLabel(fastType: string): string {
     default:
       return "Fasting day";
   }
+}
+
+/**
+ * The one name for a recipe that may be cooked on a fasting day (Rajeev, 2026-09-18).
+ *
+ * <p>It had four: "Ekadashi-friendly" on the recipe page, "Suits a fasting day" in the peek, the
+ * "Ekadashi flag" in a notice and "fasting-compatible" in the field name. Four names for one fact
+ * read as four facts. The field and API keep their names; only what a person reads changes.
+ */
+export const EKADASHI_FRIENDLY = "Ekadashi-friendly";
+
+/**
+ * A recipe tag as it should be read. The library data carries "Ekadashi-safe" as a free tag on
+ * about a hundred recipes, copied onto a temple's own recipe when it is imported; it is shown under
+ * the one name above rather than rewritten in the stored data, which is the temple's and the
+ * library's to edit.
+ */
+export function recipeTagLabel(tag: string): string {
+  return /^ekadas(h)?i[- ]?(safe|friendly|compatible)$/i.test(tag.trim())
+    ? EKADASHI_FRIENDLY
+    : ekadashiSpelling(tag);
+}
+
+/** Tags as they should be read, without repeating the Ekadashi-friendly badge a recipe already shows. */
+export function recipeTagLabels(tags: readonly string[], badges: readonly string[] = []): string[] {
+  const seen = new Set(badges);
+  const out: string[] = [];
+  for (const tag of tags) {
+    const label = recipeTagLabel(tag);
+    if (!seen.has(label)) {
+      seen.add(label);
+      out.push(label);
+    }
+  }
+  return out;
 }

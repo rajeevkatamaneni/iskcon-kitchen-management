@@ -10,7 +10,7 @@ const MASA = [
 
 const TITHI_15 = [
   "Pratipat", "Dvitiya", "Tritiya", "Caturthi", "Pancami", "Sasthi", "Saptami",
-  "Astami", "Navami", "Dasami", "Ekadasi", "Dvadasi", "Trayodasi", "Caturdasi",
+  "Astami", "Navami", "Dasami", "Ekadashi", "Dvadasi", "Trayodasi", "Caturdasi",
 ];
 
 export function masaName(masa: number): string {

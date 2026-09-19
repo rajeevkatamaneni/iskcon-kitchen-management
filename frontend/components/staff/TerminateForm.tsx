@@ -83,7 +83,7 @@ export function TerminateForm({
           </dd>
         </div>
         {lastPaid && lastDay && (
-          <div className="col-span-3 text-ink-secondary">
+          <div className="col-span-full text-ink-secondary">
             <p>
               Last recorded payment {shortDate(lastPaid.paidOn)}, last working day{" "}
               {shortDate(lastDay)}.
@@ -95,7 +95,7 @@ export function TerminateForm({
 
       <Form
         id={TERMINATE_FORM_ID}
-        className="grid grid-cols-2 gap-4"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2"
         aria-label="Terminate employment"
         onSubmit={onSubmit}
       >
@@ -125,14 +125,14 @@ export function TerminateForm({
           />
         </label>
 
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+        <label className="col-span-full flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Reason</span>
           <input name="reason" className={FIELD} />
         </label>
 
         {/* The settlement is typed, never worked out here. It is recorded as a payment on their last
             working day, so it lands in the same history as everything else they were paid. */}
-        <fieldset className="col-span-2 grid grid-cols-3 gap-4 rounded border border-hairline px-4 py-3">
+        <fieldset className="col-span-full grid grid-cols-1 gap-4 rounded border border-hairline px-4 py-3 sm:grid-cols-3">
           {/* Not a HintedField: this legend names three controls, so there is no single id for an
               htmlFor to point at. */}
           <legend className="flex items-center gap-1.5 px-1 text-sm text-ink-secondary">
@@ -167,7 +167,7 @@ export function TerminateForm({
         </fieldset>
 
         {staff.userId && (
-          <label className="col-span-2 flex items-start gap-3 rounded border border-hairline px-4 py-3 text-sm">
+          <label className="col-span-full flex items-start gap-3 rounded border border-hairline px-4 py-3 text-sm">
             {/* Keyed so the default follows the reason rather than sticking at whatever loaded first. */}
             <input
               key={status}

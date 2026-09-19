@@ -14,6 +14,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { BusyPot } from "@/components/Loading";
 import { RecipePeek } from "@/components/RecipePeek";
 import { ConfirmLayer } from "@/app/planner/confirm-layer";
+import { withReturn } from "@/components/planner/plannerAddress";
 import {
   api,
   toApiError,
@@ -52,6 +53,7 @@ export function MealServices({
   readOnly,
   refreshKey = 0,
   only,
+  returnTo,
   onChanged,
   onError,
 }: {
@@ -71,6 +73,12 @@ export function MealServices({
    * shows. Absent, the day shows every meal on it, which is what the planner means by a day.
    */
   only?: "unrecorded";
+  /**
+   * The address of the screen showing these meals, handed to the meal's own screen as `?from=` so
+   * that its Cancel and its save come back here rather than to a page the person never opened
+   * (T-219). Absent, the meal's screen falls back to the planner's day view on the meal's date.
+   */
+  returnTo?: string;
   onChanged: () => void;
   onError: (e: ApiError) => void;
 }) {
@@ -158,6 +166,7 @@ export function MealServices({
           sufficiency={sufficiency}
           recipes={recipes}
           readOnly={readOnly}
+          returnTo={returnTo}
           onChanged={changed}
           onCancelled={(sentence) => {
             setCancelled(sentence);
@@ -210,7 +219,9 @@ function shortBadge(sufficiency: MealSufficiency) {
     return <Badge tone="warning">Short · order by {shortDate(sufficiency.orderBy)}</Badge>;
   }
   if (sufficiency.orderUrgency === "ORDER_TODAY") {
-    return <Badge tone="danger">Short · order today</Badge>;
+    // Amber, as on the shopping list and the order: still time if it goes today. Red is kept for
+    // "won't arrive in time" (Rajeev, 2026-09-18, T-227).
+    return <Badge tone="warning">Short · order today</Badge>;
   }
   return <Badge tone="danger">Short · won’t arrive in time</Badge>;
 }
@@ -222,6 +233,7 @@ function MealBlock({
   sufficiency,
   recipes,
   readOnly,
+  returnTo,
   onChanged,
   onCancelled,
   onError,
@@ -233,6 +245,7 @@ function MealBlock({
   sufficiency: Map<string, MealSufficiency>;
   recipes: RecipeSummary[];
   readOnly: boolean;
+  returnTo: string | undefined;
   onChanged: () => void;
   /** The meal was cancelled. Handed the sentence to say, because this block is about to go. */
   onCancelled: (sentence: string) => void;
@@ -382,8 +395,10 @@ function MealBlock({
               Ready by <span className="font-medium tabular-nums text-ink">{hhmm(meal.readyBy)}</span>
             </span>
             {/* Beside the time rather than over the buttons: whether this meal has been written
-                down yet is part of what the meal is, and it reads with the name and the hour. */}
-            {meal.recorded ? <Badge tone="success">Recorded</Badge> : <Badge>Not yet recorded</Badge>}
+                down yet is part of what the meal is, and it reads with the name and the hour.
+                Neutral both ways: green is kept for the moment the recording itself succeeds (the
+                notice below), not a standing state (Rajeev, 2026-09-18, T-227). */}
+            {meal.recorded ? <Badge>Recorded</Badge> : <Badge>Not yet recorded</Badge>}
             <CrewPebble crew={crew} required={meal.crewRequired} name={meal.eventName || meal.mealKind} />
             {/* What has been asked for, beside the number that says it is needed. Asking, and changing
                 what was asked, happen on the meal's own form (section 4) since D-27, because a shift
@@ -392,7 +407,7 @@ function MealBlock({
             {shift && (
               <ShiftPebble
                 shift={shift}
-                href={readOnly || meal.recorded ? null : `/planner/meal/${meal.mealId}`}
+                href={readOnly || meal.recorded ? null : withReturn(`/planner/meal/${meal.mealId}`, returnTo)}
               />
             )}
           </div>
@@ -420,14 +435,17 @@ function MealBlock({
               meal.purpose,
             ]
               .filter((fact): fact is string => Boolean(fact))
-              .map((fact, i) => (
+              // The dot rides at the end of the fact before it rather than the start of the one
+              // after, so when the line wraps on a phone the dot stays behind and the new line does
+              // not open with a stray "·".
+              .map((fact, i, all) => (
                 <span key={fact} className="flex items-baseline gap-x-2">
-                  {i > 0 && (
+                  <span>{fact}</span>
+                  {i < all.length - 1 && (
                     <span aria-hidden className="text-ink-muted">
                       ·
                     </span>
                   )}
-                  <span>{fact}</span>
                 </span>
               ))}
           </div>
@@ -461,7 +479,7 @@ function MealBlock({
             {!readOnly && !meal.recorded && (
               // By the meal's own id (D-27). It was `/planner/<date>/<kind>`, which could not tell
               // two events on one day apart and broke when a kind was renamed.
-              <ButtonLink href={`/planner/meal/${meal.mealId}`} size="sm" variant="secondary">
+              <ButtonLink href={withReturn(`/planner/meal/${meal.mealId}`, returnTo)} size="sm" variant="secondary">
                 Edit
               </ButtonLink>
             )}
@@ -527,37 +545,42 @@ function MealBlock({
                   {dish.recipeName}
                 </button>
 
+                {/* Only a shortage is coloured here. Not made, cooked and ingredients-ready are
+                    states to read, not results of what the reader just did, so they are plain
+                    (Rajeev, 2026-09-18, T-227). */}
                 {dish.notMade ? (
-                  <Badge tone="warning">Not made</Badge>
+                  <Badge>Not made</Badge>
                 ) : dish.status === "COOKED" ? (
-                  <Badge tone="success">Cooked</Badge>
+                  <Badge>Cooked</Badge>
                 ) : sufficiency.get(dish.id)?.status === "SHORT" ? (
                   shortBadge(sufficiency.get(dish.id)!)
                 ) : sufficiency.get(dish.id)?.status === "SUFFICIENT" ? (
-                  <Badge tone="success">Ingredients ready</Badge>
+                  <Badge>Ingredients ready</Badge>
                 ) : (
                   <Badge>Planned</Badge>
                 )}
 
                 {dish.ekadashiAcknowledged && (
                   <span className="text-xs text-ink-muted">
-                    grains on a fasting day, acknowledged
+                    Has grains · fasting day
                   </span>
                 )}
               </span>
 
               {/* What this preparation is for, on the right, in the name's own size and colour:
                   the quantity is half of what the row says and was being whispered under it. */}
-              <span className="text-right font-medium text-ink">
+              {/* ml-auto: when a long name pushes the figure onto its own line on a phone, it stays
+                  at the right edge with every other row's figure instead of jumping to the left. */}
+              <span className="ml-auto text-right font-medium text-ink">
                 {cooksQuantity(dish.targetYield, yieldUnit(dish.recipeId))}
                 {dish.actualServings != null && !dish.notMade && (
                   <span className="block text-xs font-normal text-ink-muted">
-                    {/* Cooked and eaten used to be bare numbers — "248 cooked" against a target
+                    {/* Cooked and served used to be bare numbers — "248 cooked" against a target
                         that carried a unit, so the two figures on one row did not read as the same
                         kind of thing. */}
                     {cooksQuantity(dish.actualServings, yieldUnit(dish.recipeId))} cooked
                     {dish.consumedQuantity != null
-                      ? ` · ${cooksQuantity(dish.consumedQuantity, yieldUnit(dish.recipeId))} eaten`
+                      ? ` · ${cooksQuantity(dish.consumedQuantity, yieldUnit(dish.recipeId))} served`
                       : ""}
                   </span>
                 )}
@@ -587,17 +610,14 @@ function MealBlock({
       {justRecorded && (
         <div className="mt-4">
           <InlineNotice tone="success" autoDismiss title={`${meal.mealKind} is recorded.`}>
-            The ingredients have been drawn from stock against what was cooked.
+            The ingredients for the cooked amount were taken from stock.
           </InlineNotice>
         </div>
       )}
 
       {justCorrected && (
         <div className="mt-4">
-          <InlineNotice tone="success" autoDismiss title={`${meal.mealKind} is corrected.`}>
-            The stock drawn against the old figures has been put back, and the new ones drawn in
-            their place.
-          </InlineNotice>
+          <InlineNotice tone="success" autoDismiss title={`${meal.mealKind} corrected.`} />
         </div>
       )}
 
@@ -789,20 +809,22 @@ function RecordMeal({
       className="card mt-4 grid gap-3 p-5"
     >
       {/*
-        Three figures, read across: what the plan asked for, what the kitchen made, and what people
-        actually ate. The form used to collect one — "servings" — and folded the other two into it,
+        Three figures, read across: what the plan asked for, what the kitchen made, and what was
+        served. "Served" is the job card's own word for the column the figure is copied from, so the
+        form and the paper say the same thing (Rajeev, 2026-09-18, T-230; it had been "Consumed",
+        then briefly "Eaten"). The form used to collect one — "servings" — and folded the other two into it,
         which is why nobody could answer the question the job card was invented to ask. What came
         back is the difference between the last two, and it is worth more than either.
       */}
       <p className="text-sm text-ink-secondary">
-        From the job card that came back. Both figures start at the plan — change what differed.
+        Enter what the job card says. Both boxes start at the plan.
       </p>
 
       <div className="hidden gap-4 px-1 text-xs font-semibold uppercase tracking-wide text-ink-secondary sm:flex">
         <span className="min-w-[12rem] flex-1">Preparation</span>
         <span className="w-24 text-right">Planned</span>
         <span className="w-28 text-right">Cooked</span>
-        <span className="w-28 text-right">Consumed</span>
+        <span className="w-28 text-right">Served</span>
         <span className="w-24" />
       </div>
 
@@ -827,7 +849,7 @@ function RecordMeal({
               type="number"
               min={0}
               step="any"
-              aria-label={`How much ${entry.recipeName} was cooked`}
+              aria-label={`${entry.recipeName} cooked`}
               value={entry.notMade ? "" : entry.cooked}
               disabled={entry.notMade}
               onChange={(e) => {
@@ -844,13 +866,13 @@ function RecordMeal({
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-sm text-ink-secondary sm:sr-only">Consumed</span>
+            <span className="text-sm text-ink-secondary sm:sr-only">Served</span>
             <input
               type="number"
               min={0}
               max={entry.cooked}
               step="any"
-              aria-label={`How much ${entry.recipeName} was eaten`}
+              aria-label={`${entry.recipeName} served`}
               value={entry.notMade ? "" : entry.consumed}
               disabled={entry.notMade}
               onChange={(e) => set(entry.dishId, { consumed: Number(e.target.value) })}
@@ -890,7 +912,7 @@ function RecordMeal({
       </label>
 
       <InlineNotice tone="info">
-        Recording draws the ingredients from stock, against what was cooked.
+        Saving takes the ingredients for the cooked amount from stock.
       </InlineNotice>
 
       {/* Immediately above the button that was pressed, in the product's one shape for a refusal:
@@ -903,10 +925,10 @@ function RecordMeal({
           {busy ? (
             <span className="inline-flex items-center gap-2">
               <BusyPot />
-              Recording…
+              Saving…
             </span>
           ) : (
-            "Record this meal"
+            "Save actuals"
           )}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>
@@ -1019,20 +1041,19 @@ function CorrectMeal({
   return (
     // A form, not a section (T-172). The button used to call `save` from its click and stay disabled
     // until a reason was typed, so the reason box carried no `required` and nothing could ever say it
-    // was blank. As a `Form`, a press on a blank reason says "Why the figures are being changed is
-    // required" beside the box. It also means the figure boxes' own `min` and `max` are now read on
+    // was blank. As a `Form`, a press on a blank reason says "Reason for the change is required"
+    // beside the box. It also means the figure boxes' own `min` and `max` are now read on
     // submit, and Enter in a box submits, as on every other form.
     <Form onSubmit={save} aria-label={`Correct ${meal.mealKind}`} className="card mt-2 grid gap-3 p-5">
       <p className="text-sm text-ink-secondary">
-        What this meal was recorded as, and what it should say. The figures on file are in the boxes
-        — change the ones that were wrong.
+        Change the figures that were wrong.
       </p>
 
       <div className="hidden gap-4 px-1 text-xs font-semibold uppercase tracking-wide text-ink-secondary sm:flex">
         <span className="min-w-[12rem] flex-1">Preparation</span>
         <span className="w-24 text-right">Recorded</span>
         <span className="w-28 text-right">Cooked</span>
-        <span className="w-28 text-right">Consumed</span>
+        <span className="w-28 text-right">Served</span>
         <span className="w-24" />
       </div>
 
@@ -1056,7 +1077,7 @@ function CorrectMeal({
               type="number"
               min={0}
               step="any"
-              aria-label={`How much ${entry.recipeName} was actually cooked`}
+              aria-label={`${entry.recipeName} cooked`}
               value={entry.notMade ? "" : entry.cooked}
               disabled={entry.notMade}
               onChange={(e) => {
@@ -1074,13 +1095,13 @@ function CorrectMeal({
           </label>
 
           <label className="flex items-center gap-2">
-            <span className="text-sm text-ink-secondary sm:sr-only">Consumed</span>
+            <span className="text-sm text-ink-secondary sm:sr-only">Served</span>
             <input
               type="number"
               min={0}
               max={entry.cooked}
               step="any"
-              aria-label={`How much ${entry.recipeName} was actually eaten`}
+              aria-label={`${entry.recipeName} served`}
               value={entry.notMade || entry.consumed == null ? "" : entry.consumed}
               disabled={entry.notMade}
               onChange={(e) =>
@@ -1106,7 +1127,7 @@ function CorrectMeal({
       ))}
 
       <label className="grid gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Why the figures are being changed</span>
+        <span className="pl-field-inset font-medium text-ink">Reason for the change</span>
         <input
           required
           value={note}
@@ -1116,14 +1137,12 @@ function CorrectMeal({
           className="min-h-touch rounded-control border border-hairline px-3"
         />
         <span className="pl-field-inset text-sm text-ink-secondary">
-          Kept with your name and today’s date. It is the only account of why this meal now says
-          something else.
+          Saved with your name and today’s date.
         </span>
       </label>
 
       <InlineNotice tone="info">
-        The stock drawn against the old figures goes back, and the new figures are drawn in its
-        place. The original recording stays on the meal and can still be read.
+        Stock is updated to match. The first recording stays on the meal.
       </InlineNotice>
 
       {refusal && <ErrorNotice error={refusal} />}
@@ -1189,13 +1208,13 @@ function CrewPebble({
     <span className="inline-flex items-center gap-1.5">
       <span
         className={[
-          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums",
+          "inline-flex items-center gap-1.5 rounded-control px-2.5 py-1 text-xs font-semibold tabular-nums",
           short ? "bg-warning-bg text-warning" : "bg-sunken text-ink",
         ].join(" ")}
       >
         <i aria-hidden="true" className="ti ti-users" />
         {rostered} of {required}
-        <span className="sr-only"> people rostered of the number this meal takes</span>
+        <span className="sr-only"> people rostered of the number needed</span>
       </span>
       {/* "More about crew for Lunch", named for the meal so a day of three meals is not three
           buttons all called "More about crew" — the trade `InfoHint` itself argues against. The name
@@ -1236,7 +1255,6 @@ function shortOfCrew(required: number | null, crew: MealCrewView | null): boolea
  * keep.
  */
 function ShiftPebble({ shift, href }: { shift: ShiftView; href: string | null }) {
-  const full = shift.signedUpCount >= shift.capacity;
   const body = (
     <>
       <i aria-hidden="true" className="ti ti-hand-stop" />
@@ -1244,10 +1262,10 @@ function ShiftPebble({ shift, href }: { shift: ShiftView; href: string | null })
       <span className="sr-only"> for {shift.title}</span>
     </>
   );
-  const skin = [
-    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums",
-    full ? "bg-success-bg text-success" : "bg-sunken text-ink",
-  ].join(" ");
+  // Plain whether or not the shift is full. A full shift is a good state, but green is kept for the
+  // moment the reader's own action succeeds (Rajeev, 2026-09-18, T-227); the numbers say it is full.
+  const skin =
+    "inline-flex items-center gap-1.5 rounded-control px-2.5 py-1 text-xs font-semibold tabular-nums bg-sunken text-ink";
 
   if (!href) {
     return (
@@ -1360,7 +1378,7 @@ function TravelLine({ meal }: { meal: MealView }) {
 function unavailableLine(reason: string | null): string {
   switch (reason) {
     case "NO_SERVING_TIME":
-      return "No travel estimate: nobody has said when the guests eat.";
+      return "No travel time. Add when the guests eat.";
     case "ADDRESS_NOT_FOUND":
       return "No travel estimate: we couldn’t find that address on the map.";
     case "NO_ROUTE":
@@ -1410,7 +1428,7 @@ function RepeatForward({
       ];
       if (result.refusedOnFast > 0) {
         parts.push(
-          `${result.refusedOnFast} skipped — a fast falls there that these preparations don’t suit`
+          `${result.refusedOnFast} skipped: fasting days`
         );
       }
       setOutcome(parts.join(" · ") + ".");
@@ -1426,7 +1444,7 @@ function RepeatForward({
     return (
       <div className="mt-3">
         <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-          Repeat it forward
+          Repeat weekly
         </Button>
         {outcome && <span className="ml-3 text-sm text-ink-secondary">{outcome}</span>}
       </div>
@@ -1453,11 +1471,11 @@ function RepeatForward({
             `<label>` rather than in it: the "i" is a button, and a button inside a label can become
             the labelled thing in place of the box. */}
         <InfoHint
-          text="Each week is a copy you can edit or cancel on its own — nothing links them together."
-          label="Repeating it forward"
+          text="Each week is a separate copy you can edit or cancel."
+          label="Repeat weekly"
         />
         <Button size="sm" disabled={busy} onClick={repeat} busy={busy}>
-          {busy ? "Copying…" : "Copy it forward"}
+          {busy ? "Repeating…" : "Repeat"}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
           Close

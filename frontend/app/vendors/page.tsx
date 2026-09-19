@@ -15,7 +15,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { contractWarning, dateWithYear } from "@/lib/format";
 import { languageLabel } from "@/lib/languages";
 import { Loading } from "@/components/Loading";
-import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 
 export default function VendorsPage() {
@@ -60,7 +60,7 @@ function VendorsView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/vendors" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -81,8 +81,8 @@ function VendorsView() {
           )}
 
           <div className="mb-4">
-            <label className="text-sm text-ink-secondary">
-              <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} className="mr-2 align-middle accent-accent" />
+            <label className="inline-flex min-h-touch items-center text-sm text-ink-secondary">
+              <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} className="mr-2 accent-accent" />
               Active vendors only
             </label>
           </div>
@@ -100,21 +100,21 @@ function VendorsView() {
             </div>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Vendor</th>
-                    <th className={TH_TEXT}>Phone</th>
-                    <th className={TH_TEXT}>Language</th>
-                    <th className={TH_TEXT}>Contract ends</th>
-                    <th className={TH_TEXT}>Status</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_PRIMARY}>Vendor</th>
+                    <th className={TH_FIXED}>Phone</th>
+                    <th className={TH_FIXED}>Language</th>
+                    <th className={TH_FIXED}>Contract ends</th>
+                    <th className={TH_FIXED}>Status</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {vendors.map((v) => (
                     <tr key={v.id} className={TR}>
-                      <td className={`${TD_TEXT} ${WRAP}`}>
+                      <td className={TD_PRIMARY}>
                         <Link href={`/vendors/${v.id}`} className="font-medium text-accent-text hover:underline">
                           {v.name}
                         </Link>
@@ -124,29 +124,31 @@ function VendorsView() {
                           — the shop somebody walks into — and `{v.phone}` rendered that as nothing,
                           which reads as a rendering fault rather than as a fact about the supplier.
                           Same shape as every other nullable column on these screens. */}
-                      <td className={`${TD_TEXT} text-ink-secondary tabular-nums`}>{v.phone ?? "—"}</td>
-                      <td className={`${TD_TEXT} text-ink-secondary`}>{languageLabel(v.preferredLanguage)}</td>
+                      <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="Phone">{v.phone ?? "—"}</td>
+                      <td className={`${TD_FIXED} text-ink-secondary`}>{languageLabel(v.preferredLanguage)}</td>
                       {/* Recorded and warned about, and that is all. Nothing on this screen or behind
                           it filters, sorts or deactivates on this date. */}
-                      <td className={`${TD_DATE} text-ink-secondary`}>
+                      <td className={`${TD_FIXED} text-ink-secondary`} data-label="Contract ends">
                         {v.contractEndDate ? dateWithYear(v.contractEndDate) : "—"}
                       </td>
-                      <td className={TD_TEXT}>
+                      <td className={TD_FIXED}>
                         <div className="flex items-center gap-1.5">
                           {v.active ? (
-                            <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">Active</span>
+                            // Neutral, one step darker than Inactive: active is the ordinary state,
+                            // and green is kept for the reader's own action succeeding (T-227).
+                            <span className="rounded-control bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Active</span>
                           ) : (
-                            <span className="rounded-sm bg-sunken px-2 py-1 text-xs text-ink-muted font-semibold">Inactive</span>
+                            <span className="rounded-control bg-sunken px-2 py-1 text-xs text-ink-muted font-semibold">Inactive</span>
                           )}
                           {!v.whatsappReachable && (
-                            <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Recheck WhatsApp</span>
+                            <span className="rounded-control bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Recheck WhatsApp</span>
                           )}
                           {v.contractEndingSoon && v.contractEndDate && (
-                            <Badge tone="warning" shape="square">{contractWarning(v.contractEndDate)}</Badge>
+                            <Badge tone="warning">{contractWarning(v.contractEndDate)}</Badge>
                           )}
                         </div>
                       </td>
-                      <td className={TD_ACTIONS}>
+                      <td className={TD_ACTIONS_FIXED}>
                         <Button variant="ghost" size="sm" onClick={() => setChanging(v)}>
                           {v.active ? "Make inactive" : "Bring back"}
                         </Button>

@@ -12,9 +12,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { FOOD_UNITS, dateWithYear, expiryWord, moment, quantity, unitLabel } from "@/lib/format";
 import { Loading } from "@/components/Loading";
-import {
-  ACTIONS_ROW, TABLE, TD_ACTIONS, TD_DATE, TD_NUM, TD_TEXT, THEAD, TH_ACTIONS, TH_NUM, TH_TEXT, TR, WRAP,
-} from "@/components/ds/table";
+import { RULED_TABLE, RULED_TABLE_EVEN, THEAD, TR, ACTIONS_ROW, TH_LEAD, TD_LEAD, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 
 const REASONS = ["SPOILAGE", "DAMAGE", "COUNT_CORRECTION", "WASTE", "OTHER"];
@@ -129,7 +127,7 @@ function ItemView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/inventory" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <Link href="/inventory" className="text-sm text-accent-text hover:underline">← Inventory</Link>
 
@@ -156,12 +154,13 @@ function ItemView() {
                         item that is over-promised is a different problem from one that is running
                         out — the first is fixed in the planner, the second in the store. */}
                     {item.belowThreshold && (
-                      <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">
+                      <span className="rounded-control bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">
                         {item.available < 0 ? "More committed than you hold" : "Below reorder level"}
                       </span>
                     )}
+                    {/* Expired red, expiring soon amber (Rajeev, 2026-09-18, T-227). */}
                     {item.expiringSoon && (
-                      <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs font-semibold text-warning">
+                      <span className={`rounded-control px-2 py-1 text-xs font-semibold ${expiryWord(item.soonestExpiry) === "expired" ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning"}`}>
                         {expiryWord(item.soonestExpiry) === "expired" ? "Expired" : "Expiring soon"}
                       </span>
                     )}
@@ -235,34 +234,38 @@ function ItemView() {
                   </p>
                 ) : (
                   <div className="table-wrap overflow-x-auto">
-                    <table className={`${TABLE} text-sm`}>
+                    {/* On the table rule since 2026-09-18 (T-233). Every column is fixed, so
+                        there is nothing flexible to sit on the left; Rajeev chose that the first
+                        column (what the lot is: how much of it) leads on the left and the rest
+                        share the width evenly, rather than one blank gap in the middle. */}
+                    <table className={`${RULED_TABLE_EVEN} text-sm`}>
                       <thead className={THEAD}>
                         <tr>
-                          <th className={TH_NUM}>Quantity</th>
-                          <th className={TH_TEXT}>Expires</th>
-                          <th className={TH_TEXT}>Received</th>
-                          <th className={TH_TEXT}>How it arrived</th>
+                          <th className={TH_LEAD}>Quantity</th>
+                          <th className={TH_FIXED}>Expires</th>
+                          <th className={TH_FIXED}>Received</th>
+                          <th className={TH_FIXED}>How it arrived</th>
                         </tr>
                       </thead>
                       <tbody>
                         {batches.map((b: BatchStock) => (
                           <tr key={b.batchId} className={TR}>
-                            <td className={TD_NUM}>{quantity(b.quantity, b.unit)}</td>
-                            <td className={TD_DATE}>
+                            <td className={`${TD_LEAD} tabular-nums`}>{quantity(b.quantity, b.unit)}</td>
+                            <td className={TD_FIXED} data-label="Expires">
                               {b.expiryDate ? dateWithYear(b.expiryDate) : "—"}
                               {b.expiringSoon && (
-                                <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning">
+                                <span className={`ml-2 rounded-control px-2 py-0.5 text-xs font-semibold ${expiryWord(b.expiryDate) === "expired" ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning"}`}>
                                   {expiryWord(b.expiryDate)}
                                 </span>
                               )}
                             </td>
-                            <td className={`${TD_DATE} text-ink-secondary`}>
+                            <td className={`${TD_FIXED} text-ink-secondary`} data-label="Received">
                               {b.receivedDate ? dateWithYear(b.receivedDate) : "—"}
                             </td>
                             {/* A hex id is not something anybody can recognise. Until each lot
                                 carries where it came from, the date it arrived is the honest
                                 answer — and it is the one a storekeeper actually uses. */}
-                            <td className={`${TD_DATE} text-ink-secondary`}>
+                            <td className={`${TD_FIXED} text-ink-secondary`}>
                               {b.receivedDate ? `Arrived ${dateWithYear(b.receivedDate)}` : "—"}
                             </td>
                           </tr>
@@ -299,19 +302,24 @@ function ItemView() {
                   </p>
                 ) : (
                   <div className="table-wrap overflow-x-auto">
-                    <table className={`${TABLE} text-sm`}>
+                    <table className={`${RULED_TABLE} text-sm`}>
                       <thead className={THEAD}>
                         <tr>
-                          <th className={TH_TEXT}>Day</th>
-                          <th className={TH_TEXT}>Meal</th>
-                          <th className={`${TH_TEXT} ${WRAP}`}>Dish</th>
-                          <th className={TH_NUM}>Claims</th>
+                          <th className={TH_PRIMARY}>Dish</th>
+                          <th className={TH_SECOND}>Meal</th>
+                          <th className={TH_FIXED}>Day</th>
+                          <th className={TH_FIXED}>Claims</th>
                         </tr>
                       </thead>
                       <tbody>
                         {committed.map((c: CommittedMeal) => (
                           <tr key={c.dishId} className={TR}>
-                            <td className={TD_DATE}>
+                            {/* An event has a name people recognise; an ordinary meal has only its
+                                kind. Showing "Event" where "Saturday reading" was available is how
+                                a screen makes somebody open the plan to find out what it is. */}
+                            <td className={TD_PRIMARY}>{c.recipeName}</td>
+                            <td className={`${TD_SECOND} text-ink-secondary`}>{c.eventName ?? c.mealKind}</td>
+                            <td className={TD_FIXED}>
                               {/* To the meal itself, by its id (D-27), rather than to its day: a
                                   day can hold two events, and the meal is what claims the stock. */}
                               <Link
@@ -321,12 +329,7 @@ function ItemView() {
                                 {dateWithYear(c.planDate)}
                               </Link>
                             </td>
-                            {/* An event has a name people recognise; an ordinary meal has only its
-                                kind. Showing "Event" where "Saturday reading" was available is how
-                                a screen makes somebody open the plan to find out what it is. */}
-                            <td className={`${TD_TEXT} text-ink-secondary`}>{c.eventName ?? c.mealKind}</td>
-                            <td className={`${TD_TEXT} ${WRAP}`}>{c.recipeName}</td>
-                            <td className={TD_NUM}>{quantity(c.quantity, c.unit)}</td>
+                            <td className={TD_FIXED_NUM} data-label="Claims">{quantity(c.quantity, c.unit)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -414,7 +417,7 @@ function AdjustForm({
   if (!open) {
     return (
       <section className="mb-8">
-        <button type="button" onClick={() => setOpen(true)} className="min-h-touch rounded border border-hairline-strong px-5 text-ink transition-colors duration-state hover:bg-sunken">
+        <button type="button" onClick={() => setOpen(true)} className="min-h-touch rounded-control border border-hairline-strong px-5 text-ink transition-colors duration-state hover:bg-sunken">
           {opening ? "Record what's on the shelf" : "Adjust stock"}
         </button>
       </section>
@@ -479,7 +482,7 @@ function AdjustForm({
           <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">
             {opening ? "Record the count" : "Record adjustment"}
           </button>
-          <button type="button" onClick={() => setOpen(false)} className="min-h-touch rounded px-4 text-ink-secondary hover:underline">Cancel</button>
+          <button type="button" onClick={() => setOpen(false)} className="min-h-touch rounded-control px-4 text-ink-secondary hover:underline">Cancel</button>
         </div>
       </Form>
     </section>
@@ -547,15 +550,15 @@ function MovementHistory({
         <p className="card px-6 py-8 text-center text-ink-secondary">No movements yet.</p>
       ) : (
         <div className="table-wrap overflow-x-auto">
-          <table className={`${TABLE} text-sm`}>
+          <table className={`${RULED_TABLE} text-sm`}>
             <thead className={THEAD}>
               <tr>
-                <th className={TH_TEXT}>When</th>
-                <th className={TH_TEXT}>Type</th>
-                <th className={TH_NUM}>Change</th>
-                <th className={`${TH_TEXT} ${WRAP}`}>Reason / note</th>
-                <th className={TH_TEXT}>By</th>
-                <th className={TH_ACTIONS}>Actions</th>
+                <th className={TH_PRIMARY}>Reason / note</th>
+                <th className={TH_SECOND}>By</th>
+                <th className={TH_FIXED}>When</th>
+                <th className={TH_FIXED}>Type</th>
+                <th className={TH_FIXED}>Change</th>
+                <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
@@ -566,12 +569,7 @@ function MovementHistory({
                 const reversedBy = byOriginal.get(m.id);
                 return (
                   <tr key={m.id} className={TR}>
-                    <td className={`${TD_DATE} text-ink-secondary`}>{moment(m.createdAt)}</td>
-                    <td className={TD_TEXT}>{movementTypeLabel(m.type)}</td>
-                    <td className={`${TD_NUM} ${m.quantity < 0 ? "text-danger" : ""}`}>
-                      {m.quantity > 0 ? "+" : ""}{quantity(m.quantity, m.unit)}
-                    </td>
-                    <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
+                    <td className={`${TD_PRIMARY} text-ink-secondary`}>
                       {/* Somebody's own words about a write-off — the one column here that takes the
                           table's slack, and so the only one allowed to run to a second line. */}
                       <div>
@@ -591,18 +589,25 @@ function MovementHistory({
                           m.reason ? REASON_LABEL[m.reason] ?? m.reason : ""
                         )}
                         {reversedBy && (
-                          <span className="ml-2 rounded-sm bg-sunken px-2 py-0.5 text-xs font-semibold text-ink-secondary">
+                          <span className="ml-2 rounded-control bg-sunken px-2 py-0.5 text-xs font-semibold text-ink-secondary">
                             Corrected
                           </span>
                         )}
                         {m.note ? <span className="block text-xs text-ink-muted">{m.note}</span> : null}
                       </div>
                     </td>
-                    <td className={`${TD_TEXT} text-ink-secondary`}>{m.actorName ?? "—"}</td>
-                    <td className={TD_ACTIONS}>
+                    <td className={`${TD_SECOND} text-ink-secondary`}>{m.actorName ?? "—"}</td>
+                    <td className={`${TD_FIXED} text-ink-secondary`}>{moment(m.createdAt)}</td>
+                    <td className={TD_FIXED}>{movementTypeLabel(m.type)}</td>
+                    {/* Uncoloured: a draw-down is the ordinary case and the minus sign carries it. Red
+                        is for something serious that needs attention now (Rajeev, 2026-09-18, T-227). */}
+                    <td className={TD_FIXED_NUM} data-label="Change">
+                      {m.quantity > 0 ? "+" : ""}{quantity(m.quantity, m.unit)}
+                    </td>
+                    <td className={TD_ACTIONS_FIXED}>
                       <span className={ACTIONS_ROW}>
                         {/* Not offered on a movement this row can already see a correction against.
-                            A person read "Corrected" in the column to the left, pressed this,
+                            A person read "Corrected" beside the reason, pressed this,
                             wrote out a reason and was then refused by the server
                             (MOVEMENT_ALREADY_CORRECTED, KMS-400039) — work asked for and thrown
                             away, over an answer the row was holding all along in `reversedBy`.

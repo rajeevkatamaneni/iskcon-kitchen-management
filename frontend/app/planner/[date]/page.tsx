@@ -73,23 +73,14 @@ function PlannerDayScreen() {
                   [day ? dayLabel(day) : null, appUser?.tenantName ?? null].filter(Boolean).join(" · ") ||
                   undefined
                 }
-                actions={
-                  <>
-                    <ButtonLink href={`/planner?view=week&date=${date}`} variant="secondary">
-                      The week around it
-                    </ButtonLink>
-                    <ButtonLink href="/calendar" variant="secondary">
-                      Open the calendar
-                    </ButtonLink>
-                  </>
-                }
+                // No actions. "The week around it" and "Open the calendar" sat here until T-219;
+                // Rajeev, 2026-09-17, asked that they go if this page stays. The planner's own tabs
+                // and date stepper are the way to a week, and the sidebar is the way to the calendar.
               />
-              {saved && (
-                <div className="mb-6">
-                  <InlineNotice tone="success" autoDismiss title={`${saved} was saved.`} />
-                </div>
-              )}
-              <DayView date={date} />
+              {/* No margin of its own: the screen's 24px gap already separates it (it was 48). */}
+              {saved && <InlineNotice tone="success" autoDismiss title={`${saved} was saved.`} />}
+              {/* Its own address, so a meal opened from here comes back here (T-219). */}
+              <DayView date={date} returnTo={`/planner/${date}`} />
             </>
           ) : (
             <EmptyState

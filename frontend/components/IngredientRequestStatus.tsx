@@ -22,15 +22,17 @@ export const REQUEST_STATUS_LABEL: Record<IngredientRequestStatus, string> = {
  * Colour is reserved for status, and each of these is genuinely a state somebody acts on.
  *
  * <p>A draft is nobody's business but its author's, so it stays neutral. Awaiting review is the
- * only one with work in it and reads as a warning. Approved is accented rather than green because
- * it is not finished — the goods have not moved yet, and issuing is what closes it.
+ * only one with work in it and reads as a warning. Approved is accented because it is not finished —
+ * the goods have not moved yet, and issuing is what closes it. Denied and issued are settled, so
+ * neutral: red is for something serious that needs attention now and green for the moment the
+ * reader's own action succeeds, and a closed request is neither (Rajeev, 2026-09-18, T-227).
  */
-const TONE: Record<IngredientRequestStatus, "neutral" | "success" | "warning" | "danger" | "accent"> = {
+const TONE: Record<IngredientRequestStatus, "neutral" | "warning" | "accent"> = {
   DRAFT: "neutral",
   SUBMITTED: "warning",
   APPROVED: "accent",
-  DENIED: "danger",
-  ISSUED: "success",
+  DENIED: "neutral",
+  ISSUED: "neutral",
 };
 
 export function RequestStatusBadge({ status }: { status: IngredientRequestStatus }) {

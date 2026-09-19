@@ -1,20 +1,22 @@
 "use client";
 
-import { Suspense, useCallback, useState } from "react";
+import { Screen } from "@/components/ds/Screen";
+import { Suspense, useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { BackToRecipes } from "@/components/BackToRecipes";
-import { SCHEDULED_LANGUAGES, languageLabel } from "@/lib/languages";
-import { api, toApiError, type ApiError, type ScaledRecipe, type TranslatedRecipe } from "@/lib/api";
+import { ALL_LANGUAGES, ENGLISH, languageLabel } from "@/lib/languages";
+import { api, toApiError, type ApiError, type TranslatedRecipe } from "@/lib/api";
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { cooksQuantity } from "@/lib/format";
+import { batchCost, cooksQuantity } from "@/lib/format";
 import { BusyPot, Loading } from "@/components/Loading";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
+import { EKADASHI_FRIENDLY, recipeTagLabels } from "@/lib/vaishnava-day";
 
 
 export default function RecipeDetailPage() {
@@ -35,10 +37,15 @@ function RecipeDetailView() {
   const fetchRecipe = useCallback((t: string | undefined) => api.getRecipe(id, t), [id]);
   const { data: recipe, error, loading } = useAuthedQuery(fetchRecipe);
 
-  const [scaled, setScaled] = useState<ScaledRecipe | null>(null);
-  const [targetYield, setTargetYield] = useState("");
   const [translated, setTranslated] = useState<TranslatedRecipe | null>(null);
-  const [language, setLanguage] = useState("hi");
+  // What the picker shows. English is the recipe as the temple wrote it, so it is the default and
+  // choosing it asks the server for nothing.
+  const [language, setLanguage] = useState(ENGLISH.code);
+  // Set when a translation failed and the page went back to English, so the error can say so.
+  const [translationFellBack, setTranslationFellBack] = useState(false);
+  // Choosing Hindi and then Kannada before Hindi has come back must end on Kannada: each request
+  // takes a number, and an answer that is no longer the latest is dropped rather than shown.
+  const translateRequest = useRef(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ApiError | null>(null);
   // Asking before removing something, and — when the answer is "this one has been cooked" —
@@ -52,14 +59,36 @@ function RecipeDetailView() {
 
   const method = translated ? translated.method : splitMethod(recipe.method);
 
-  async function applyScale() {
-    const target = Number(targetYield);
-    if (!Number.isFinite(target) || target <= 0) return;
-    await run("scaling", async (token) => setScaled(await api.scaleRecipe(id, target, token)));
-  }
-
-  async function applyTranslate() {
-    await run("translating", async (token) => setTranslated(await api.translateRecipe(id, language, token)));
+  /*
+    Choosing a language translates at once; there is no Translate button any more (Rajeev,
+    2026-09-19). English goes straight back to the recipe as written, without a request. A failure
+    puts the page back in English and says so, rather than leaving a language picked that the
+    screen is not showing.
+  */
+  async function chooseLanguage(code: string) {
+    const request = ++translateRequest.current;
+    setLanguage(code);
+    setTranslationFellBack(false);
+    setActionError(null);
+    if (code === ENGLISH.code) {
+      setTranslated(null);
+      setBusy((b) => (b === "translating" ? null : b));
+      return;
+    }
+    setBusy("translating");
+    try {
+      const result = await api.translateRecipe(id, code, await getToken());
+      if (request !== translateRequest.current) return;
+      setTranslated(result);
+    } catch (e) {
+      if (request !== translateRequest.current) return;
+      setTranslated(null);
+      setLanguage(ENGLISH.code);
+      setTranslationFellBack(true);
+      setActionError(toApiError(e, "We couldn’t translate this recipe."));
+    } finally {
+      if (request === translateRequest.current) setBusy((b) => (b === "translating" ? null : b));
+    }
   }
 
   async function downloadPdf() {
@@ -68,7 +97,8 @@ function RecipeDetailView() {
         request: () =>
           api.requestRecipePdf(
             id,
-            { targetYield: scaled ? scaled.targetYield : undefined, language: translated ? translated.language : undefined },
+            // The PDF is in the language on screen: the translation showing, or English.
+            { language: translated ? translated.language : undefined },
             token
           ),
         status: (documentId) => api.getDocument(documentId, token),
@@ -115,7 +145,7 @@ function RecipeDetailView() {
     try {
       fn && (await fn(await getToken()));
     } catch (e) {
-      setActionError(toApiError(e, "That didn’t work."));
+      setActionError(toApiError(e, "Couldn’t finish that. Try again."));
     } finally {
       setBusy(null);
     }
@@ -128,7 +158,7 @@ function RecipeDetailView() {
         <div className="flex items-center gap-2">
           <Link
             href={`/recipes/${id}/edit`}
-            className="min-h-touch flex items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
+            className="min-h-touch flex items-center rounded-control border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
           >
             Edit
           </Link>
@@ -137,7 +167,7 @@ function RecipeDetailView() {
               type="button"
               onClick={restore}
               disabled={busy !== null}
-              className="min-h-touch flex items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
+              className="min-h-touch flex items-center rounded-control border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
             >
               {busy === "restoring" ? "Restoring…" : "Restore"}
             </button>
@@ -150,7 +180,7 @@ function RecipeDetailView() {
                 setOfferArchive(false);
               }}
               disabled={busy !== null}
-              className="min-h-touch flex items-center rounded border border-hairline-strong px-4 text-sm text-danger transition-colors duration-state hover:bg-danger-bg disabled:opacity-60"
+              className="min-h-touch flex items-center rounded-control border border-hairline-strong px-4 text-sm text-danger transition-colors duration-state hover:bg-danger-bg disabled:opacity-60"
             >
               Delete
             </button>
@@ -175,23 +205,25 @@ function RecipeDetailView() {
         >
           <p className="text-sm font-medium text-danger">Delete {recipe.name}?</p>
           <p className="mt-0.5 max-w-[60ch] text-sm text-ink-secondary">
-            This removes the recipe, its ingredients and any cards made from it. It cannot be
-            undone. A recipe that has been cooked is archived instead, so the record keeps its
-            preparation.
+            {/* True to RecipeService.delete: the server refuses a recipe that is on any meal, planned
+                or cooked, and this page then offers "Archive it instead". Nothing is archived on
+                its own. Its translations and printed cards go too, but a cook does not need telling. */}
+            This deletes the recipe and its ingredient list. You can’t undo this. If it is on any
+            meal, planned or cooked, you’ll be offered Archive instead.
           </p>
           <div className="mt-4 flex gap-2">
             <button
               type="button"
               onClick={deleteRecipe}
               disabled={busy !== null}
-              className="min-h-touch rounded bg-danger px-5 text-sm text-ink-inverse transition-opacity duration-state hover:opacity-90 disabled:opacity-60"
+              className="min-h-touch rounded-control bg-danger px-5 text-sm text-ink-inverse transition-opacity duration-state hover:opacity-90 disabled:opacity-60"
             >
               {busy === "deleting" ? "Deleting…" : "Delete recipe"}
             </button>
             <button
               type="button"
               onClick={() => setConfirmingDelete(false)}
-              className="min-h-touch rounded border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
+              className="min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
             >
               Cancel
             </button>
@@ -200,36 +232,42 @@ function RecipeDetailView() {
       )}
 
       <header className="mt-2 mb-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1>{translated ? translated.name : recipe.name}</h1>
-        {recipe.subtitle && <p className="mt-1 text-ink-secondary">{recipe.subtitle}</p>}
-          <span className="text-ink-secondary">{translated ? translated.categoryName : recipe.categoryName}</span>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-2">
+        {/* The name, then what kind of dish it is and its tags, on one line beside it, rather than
+            the category alone at the far right edge and the tags on a row of their own (Rajeev,
+            2026-09-18: use the width, don't add rows). They wrap under the name only when the
+            screen is too narrow for both. The subtitle stays under the name. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="min-w-0">{translated ? translated.name : recipe.name}</h1>
+          <span className="rounded-control bg-sunken px-2 py-0.5 text-xs font-semibold text-ink-secondary">
+            {translated ? translated.categoryName : recipe.categoryName}
+          </span>
           {recipe.fastingCompatible && (
-            <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">Ekadashi-friendly</span>
+            <span className="rounded-control bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">{EKADASHI_FRIENDLY}</span>
           )}
           {translated && (
-            <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">
-              {languageLabel(translated.language)} · via {translated.provider}
+            <span className="rounded-control bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">
+              {languageLabel(translated.language)} · machine translation
             </span>
           )}
         </div>
+        {recipe.subtitle && <p className="mt-1 text-ink-secondary">{recipe.subtitle}</p>}
         {/*
           The two figures a planner actually reads, as labelled facts rather than buried at the end
           of one grey sentence — which is where "0.2 litres a head" was, and where nobody found it.
           The library's own screen has always shown them this way; a temple's recipe is the same kind
           of thing and now reads the same.
         */}
-        <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Fact
-            label={scaled ? "Scaled to" : "Makes"}
-            value={
-              scaled
-                ? cooksQuantity(scaled.targetYield, recipe.baseYieldUnit)
-                : cooksQuantity(recipe.baseYieldQty, recipe.baseYieldUnit)
-            }
-          />
+        {/* The batch cost is the third fact (Rajeev, 2026-09-18, T-233), for everyone who can
+            open the recipe, written as the library writes it ("₹8,000 per batch (270 L)") and
+            absent when nobody has saved one. On a phone the facts pack along one line rather than
+            sitting two to a row, and their figures are one size smaller, so the third fits beside
+            the first two and the page is no taller than it was — measured across the temple's
+            recipes at 390, where "Makes 200 pieces · Per person 2 pieces · ₹2,650 per batch
+            (200 pieces)" otherwise took a second row. The four even columns wait for `xl`:
+            at 768 a quarter of the width was 164px and the cost broke onto a second line in 11 of
+            the 38 recipes, so between the two the facts stay packed along the line. */}
+        <dl className="mt-4 flex flex-wrap gap-4 sm:gap-x-8 xl:grid xl:grid-cols-4 xl:gap-4">
+          <Fact label="Makes" value={cooksQuantity(recipe.baseYieldQty, recipe.baseYieldUnit)} />
           <Fact
             label="Per person"
             value={
@@ -238,7 +276,9 @@ function RecipeDetailView() {
                 : "Not set"
             }
           />
-          {scaled && <Fact label="Base yield" value={cooksQuantity(recipe.baseYieldQty, recipe.baseYieldUnit)} />}
+          {recipe.indicativeCost != null && (
+            <Fact label="Rough cost" value={batchCost(recipe.indicativeCost, recipe.baseYieldQty, recipe.baseYieldUnit)} />
+          )}
         </dl>
 
         {/* What the source said, verbatim. "839 pieces" tells a cook nothing; "300 idlis
@@ -249,8 +289,9 @@ function RecipeDetailView() {
 
         {recipe.tags.length > 0 && (
           <ul className="mt-3 flex flex-wrap gap-2">
-            {recipe.tags.map((tag) => (
-              <li key={tag} className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary">
+            {/* The library's "Ekadashi-safe" tag reads as the one name, and not twice beside the badge. */}
+            {recipeTagLabels(recipe.tags, recipe.fastingCompatible ? [EKADASHI_FRIENDLY] : []).map((tag) => (
+              <li key={tag} className="rounded-control bg-sunken px-2 py-0.5 text-xs text-ink-secondary">
                 {tag}
               </li>
             ))}
@@ -261,12 +302,15 @@ function RecipeDetailView() {
       {actionError && (
         <div className="mb-4">
           <ErrorNotice error={actionError} />
+          {translationFellBack && (
+            <p className="mt-2 text-sm text-ink-secondary">The recipe is shown in English.</p>
+          )}
           {offerArchive && (
             <button
               type="button"
               onClick={archive}
               disabled={busy !== null}
-              className="mt-3 min-h-touch rounded border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
+              className="mt-3 min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
             >
               {busy === "archiving" ? "Archiving…" : "Archive it instead"}
             </button>
@@ -274,91 +318,69 @@ function RecipeDetailView() {
         </div>
       )}
 
-      {/* Controls */}
-      <section className="card mb-6 flex flex-wrap items-end gap-4 px-5 py-4">
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Scale to</span>
-          <span className="flex gap-2">
-            <input
-              type="number"
-              min="1"
-              value={targetYield}
-              onChange={(e) => setTargetYield(e.target.value)}
-              placeholder={String(recipe.baseYieldQty)}
-              className="min-h-touch w-28 rounded-control border border-hairline px-3"
-            />
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={applyScale}
-              className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60"
-            >
-              {busy === "scaling" ? (<span className="inline-flex items-center gap-2"><BusyPot />Scaling…</span>) : "Scale"}
-            </button>
-            {scaled && (
-              <button type="button" onClick={() => setScaled(null)} className="min-h-touch rounded border border-hairline-strong px-3 text-sm">
-                Reset
-              </button>
+      {/*
+        The language picker and the PDF sit on the ingredients' own heading line, at the right above
+        Quantity (Rajeev, 2026-09-19: "right on top of the ingredients table above Quantity"). They
+        replace a card of their own that held Scale to, Translate and Download PDF, so the page is
+        shorter by that card. Scale went with it: a planner scales a dish on the meal, and the job
+        card prints the scaled amounts, so the recipe page shows the recipe as written.
+
+        The download is an icon, which DESIGN_SYSTEM §6 otherwise keeps to navigation: it is his
+        decision for this one place, and it carries its name for a screen reader and as a tooltip.
+      */}
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="text-lg">Ingredients</h2>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Kept in the page while empty so the change is announced when a translation starts. */}
+          <span role="status" className="flex items-center">
+            {busy === "translating" && (
+              <>
+                <BusyPot />
+                <span className="sr-only">Translating…</span>
+              </>
             )}
           </span>
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Translate</span>
-          <span className="flex gap-2">
+          <label className="flex items-center">
+            <span className="sr-only">Language</span>
             <select
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className="min-h-touch rounded-control border border-hairline px-3"
+              onChange={(e) => chooseLanguage(e.target.value)}
+              className="min-h-touch max-w-[11rem] rounded-control border border-hairline px-3 text-sm"
             >
-              {SCHEDULED_LANGUAGES.map((l) => (
+              {ALL_LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>{l.label}</option>
               ))}
             </select>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={applyTranslate}
-              className="min-h-touch rounded border border-accent-border bg-accent-bg px-4 text-accent-text transition-colors duration-state hover:bg-accent-border disabled:opacity-60"
-            >
-              {busy === "translating" ? (<span className="inline-flex items-center gap-2"><BusyPot />Translating…</span>) : "Translate"}
-            </button>
-            {translated && (
-              <button type="button" onClick={() => setTranslated(null)} className="min-h-touch rounded border border-hairline-strong px-3 text-sm">
-                Original
-              </button>
-            )}
-          </span>
-        </label>
-
-        <button
-          type="button"
-          disabled={busy !== null}
-          onClick={downloadPdf}
-          className="min-h-touch rounded border border-hairline-strong px-5 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
-        >
-          {busy === "pdf" ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Download PDF"}
-        </button>
-      </section>
+          </label>
+          <button
+            type="button"
+            disabled={busy === "pdf"}
+            onClick={downloadPdf}
+            aria-label="Download recipe as PDF"
+            title="Download recipe as PDF"
+            className="flex min-h-touch min-w-touch items-center justify-center rounded-control border border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink disabled:opacity-60"
+          >
+            {busy === "pdf" ? <BusyPot /> : <i className="ti ti-download text-lg" aria-hidden="true" />}
+          </button>
+        </div>
+      </div>
 
       <div className="table-wrap overflow-x-auto">
-        <table className={TABLE}>
+        <table className={RULED_TABLE}>
           <thead className={THEAD}>
             <tr>
-              <th className={`${TH_TEXT} ${WRAP}`}>Ingredient</th>
-              <th className={TH_NUM}>Quantity</th>
+              <th className={TH_PRIMARY}>Ingredient</th>
+              <th className={TH_FIXED}>Quantity</th>
             </tr>
           </thead>
           <tbody>
             {recipe.ingredients.map((line, i) => (
               <tr key={line.ingredientId} className={TR}>
-                <td className={`${TD_TEXT} ${WRAP}`}>
+                <td className={TD_PRIMARY}>
                   {translated?.ingredients[i]?.name ?? line.ingredientName}
                 </td>
-                <td className={TD_NUM}>
-                  {scaled
-                    ? `${scaled.ingredients[i]?.displayQuantity} ${scaled.ingredients[i]?.displayUnit}`
-                    : cooksQuantity(line.quantity, line.unit)}
+                <td className={TD_FIXED_NUM}>
+                  {cooksQuantity(line.quantity, line.unit)}
                 </td>
               </tr>
             ))}
@@ -369,7 +391,7 @@ function RecipeDetailView() {
       {method.length > 0 && (
         <section className="mt-6">
           <h2 className="text-lg">Method</h2>
-          <ol className="mt-2 list-decimal space-y-2 pl-5">
+          <ol className="mt-2 max-w-prose list-decimal space-y-2 pl-5">
             {method.map((step, i) => (
               <li key={i}>{step}</li>
             ))}
@@ -385,7 +407,8 @@ function RecipeDetailView() {
       <RecipeNote heading="Start" body={recipe.noteStart} />
       <RecipeNote heading="Vessel" body={recipe.noteVessel} />
       <RecipeNote heading="Season" body={recipe.noteSeason} />
-      <RecipeNote heading="Catering" body={recipe.cateringNote} />
+      {/* No "Catering" note: catering is out of the product (E4-S15), and Rajeev had the heading
+          taken off every recipe screen on 2026-09-18. The stored value is left as it was. */}
       <RecipeNote
         heading="Serve with"
         body={recipe.serveWith.length > 0 ? recipe.serveWith.join(" · ") : null}
@@ -398,8 +421,12 @@ function Chrome({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/recipes" />
-      <main className="min-w-0 flex-1 px-8 py-10">
-        <div className="mx-auto max-w-content">{children}</div>
+      {/* The shared page frame, so this page starts where every other screen does. One wrapper
+          inside it keeps this page's own spacing between its blocks. */}
+      <main className="min-w-0 flex-1">
+        <Screen>
+          <div>{children}</div>
+        </Screen>
       </main>
     </div>
   );
@@ -426,7 +453,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-xs uppercase tracking-eyebrow text-ink-muted">{label}</dt>
-      <dd className="mt-1">{value}</dd>
+      <dd className="mt-1 text-sm sm:text-base">{value}</dd>
     </div>
   );
 }

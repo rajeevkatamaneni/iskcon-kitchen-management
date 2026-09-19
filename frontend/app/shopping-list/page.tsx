@@ -13,7 +13,7 @@ import { Loading } from "@/components/Loading";
 import { HintedField } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { PurchaseOrderEditor, type PurchaseOrderDraft } from "@/components/PurchaseOrderEditor";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, TD_DATE, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_LEAD, TD_LEAD, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 
 export default function ShoppingListPage() {
   return (
@@ -176,7 +176,7 @@ function ShoppingListView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/shopping-list" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           {/* There is no "Generate shopping list" button here any more, and its absence is the whole
               of T-132 on this side. Rajeev asked why the screen needed one at all when the list
@@ -297,7 +297,7 @@ function VendorTile({
   const included = group.lines.filter((l) => l.included).length;
 
   return (
-    <section className="card px-6 py-5" aria-labelledby={`vendor-${group.vendorId ?? "none"}`}>
+    <section className="card min-w-0 px-6 py-5" aria-labelledby={`vendor-${group.vendorId ?? "none"}`}>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 id={`vendor-${group.vendorId ?? "none"}`} className="text-lg">
@@ -305,7 +305,7 @@ function VendorTile({
           </h2>
           <p className="mt-1 text-sm text-ink-secondary">
             {group.vendorId === null
-              ? "These have no preferred supplier, so there is nobody to raise an order to. Set one on the ingredient."
+              ? "These have no preferred vendor, so there is nobody to raise an order to. Set one on the ingredient."
               : `${included} of ${group.lines.length} ${group.lines.length === 1 ? "line" : "lines"} will go on this order.`}
           </p>
         </div>
@@ -322,26 +322,30 @@ function VendorTile({
       </div>
 
       <div className="table-wrap overflow-x-auto">
-        <table className={TABLE} aria-label={`Ingredients from ${group.vendorName ?? "no vendor"}`}>
+        {/* On the table rule since 2026-09-18 (T-233). The tick box leads on the left although it
+            is fixed — the exception Rajeev accepted, because a selection box is first in every
+            list anybody has used. The ingredient is the primary flexible column and the reasons
+            (the chips) the secondary one; the figures and the order-by badge are fixed, one line
+            each. Since T-236 every column reads left and the spare width is shared evenly between
+            them — Rajeev's own example of the rule was this table's first three columns. */}
+        <table className={RULED_TABLE} aria-label={`Ingredients from ${group.vendorName ?? "no vendor"}`}>
           <thead className={THEAD}>
             <tr>
-              <th className={TH_TEXT}>Include</th>
-              <th className={`${TH_TEXT} ${WRAP}`}>Ingredient</th>
-              <th className={TH_NUM}>On hand</th>
-              <th className={TH_NUM}>Suggested</th>
-              {/* The only column allowed to grow downwards, so it is the only one that may
-                  take the width the others give up. */}
-              <th className={`${TH_TEXT} ${WRAP}`}>Why</th>
+              <th className={TH_LEAD}>Include</th>
+              <th className={TH_PRIMARY}>Ingredient</th>
+              <th className={TH_SECOND}>Why</th>
+              <th className={TH_FIXED}>On hand</th>
+              <th className={TH_FIXED}>Suggested</th>
               {/* "Order by", not "Needed by" — see OrderByCell. The date this column used to
                   show was the delivery date written on the purchase order, which is a
                   different question from the one somebody reading this list is asking. */}
-              <th className={`${TH_TEXT} ${WRAP}`}>Order by</th>
+              <th className={TH_FIXED}>Order by</th>
             </tr>
           </thead>
           <tbody>
             {group.lines.map((l) => (
               <tr key={l.ingredientId} className={`${TR} ${l.included ? "" : "opacity-50"}`}>
-                <td className={TD_TEXT}>
+                <td className={TD_LEAD}>
                   <input type="checkbox" aria-label={`Include ${l.ingredientName}`} checked={l.included} disabled={busy} onChange={(e) => onInclude(l, e.target.checked)}
                     className="accent-accent"
                   />
@@ -349,7 +353,7 @@ function VendorTile({
                 {/* The second unbounded value in this table, after the chips. An ingredient
                     somebody typed has no maximum length, and refusing it a second line would
                     carry the columns beyond it off the edge of the page. */}
-                <td className={`${TD_TEXT} ${WRAP} font-medium`}>
+                <td className={`${TD_PRIMARY} font-medium`}>
                   {l.ingredientName}
                   {l.edited && <span className="ml-2 text-xs text-ink-muted">edited</span>}
                   {/* An untick persists, and the cost of that was named rather than hidden: one
@@ -364,35 +368,33 @@ function VendorTile({
                     </span>
                   )}
                 </td>
-                <td className={`${TD_NUM} text-ink-secondary`}>{cooksQuantity(l.currentStock, l.unit)}</td>
+                <td className={TD_SECOND}>
+                  {/* The chips sit on one line when the table has room, and reflow only when it has not. */}
+                  <div className="flex flex-wrap gap-1">
+                    {l.shortfall > 0 && <span className="rounded-control bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">shortfall {cooksQuantity(l.shortfall, l.unit)}</span>}
+                    {l.thresholdTopUp > 0 && <span className="rounded-control bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">Top-up {cooksQuantity(l.thresholdTopUp, l.unit)}</span>}
+                    {l.poOutstanding > 0 && <span className="rounded-control bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">PO short {cooksQuantity(l.poOutstanding, l.unit)}</span>}
+                    {l.shortPurchaseOrders.map((po) => <span key={po} className="rounded-control bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">{po}</span>)}
+                  </div>
+                </td>
+                <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="On hand">{cooksQuantity(l.currentStock, l.unit)}</td>
                 {/* A quantity and its unit are one reading — "55 Kg", never a 55 with a Kg
                     somewhere under it — so the cell refuses to break between them. */}
-                <td className={TD_NUM}>
+                <td className={TD_FIXED_NUM} data-label="Order">
                   <input
                     type="number" min="0" step="any" defaultValue={l.suggestedQty} disabled={busy}
                     aria-label={`Quantity for ${l.ingredientName}`}
                     onBlur={(e) => { const n = Number(e.target.value); if (n !== l.suggestedQty) onQuantity(l, n); }}
-                    className="w-16 rounded-control border border-hairline px-2 py-1 tabular-nums"
+                    className="min-w-16 rounded-control border border-hairline px-2 py-1 tabular-nums"
                   />{" "}
                   {/* The bare label, never a promoted one: the box beside it holds and submits
                       the ingredient's own stored unit, so calling it "gm" beside a figure in
                       kilograms would invite a thousandfold error. */}
                   <span className="text-xs text-ink-muted">{unitLabel(l.unit)}</span>
                 </td>
-                <td className={`${TD_TEXT} ${WRAP}`}>
-                  {/* No cap: this is the column that absorbs the table's slack, so the
-                      chips reflow across whatever width is going. Capping it as well would
-                      leave the cell wide and its contents short — the gap Rajeev saw. */}
-                  <div className="flex flex-wrap gap-1">
-                    {l.shortfall > 0 && <span className="rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">shortfall {cooksQuantity(l.shortfall, l.unit)}</span>}
-                    {l.thresholdTopUp > 0 && <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary font-semibold">Top-up {cooksQuantity(l.thresholdTopUp, l.unit)}</span>}
-                    {l.poOutstanding > 0 && <span className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">PO short {cooksQuantity(l.poOutstanding, l.unit)}</span>}
-                    {l.shortPurchaseOrders.map((po) => <span key={po} className="rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">{po}</span>)}
-                  </div>
-                </td>
                 {/* Written the way the rest of the application writes a date, and kept whole:
                     "2026-09-" on one line and "01" on the next is not a date. */}
-                <td className={`${TD_DATE} text-ink-secondary`}>
+                <td className={`${TD_FIXED} text-ink-secondary`}>
                   <OrderByCell line={l} />
                 </td>
               </tr>
@@ -550,7 +552,9 @@ function OrderByCell({ line }: { line: ShoppingListLineView }) {
   if (line.orderUrgency === "ORDER_TODAY") {
     return (
       <>
-        <Badge tone="danger">Order today</Badge>
+        {/* Amber, as on the order itself: there is still time if it goes today. Red is kept for
+            "won't arrive in time" (Rajeev, 2026-09-18, T-227). */}
+        <Badge tone="warning">Order today</Badge>
         {assumed}
       </>
     );
@@ -660,7 +664,7 @@ function AddLine({
           type="button"
           disabled={busy || !ready}
           onClick={add}
-          className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
+          className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
         >
           Add to list
         </button>

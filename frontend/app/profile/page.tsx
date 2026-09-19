@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ds/Button";
 import { DateRange } from "@/components/ds/DateRange";
 import { Form } from "@/components/ds/Form";
 import { InfoHint } from "@/components/ds/InfoHint";
@@ -183,7 +184,8 @@ function ProfileView() {
             </span>
           </div>
         ) : (
-          <p className="mt-5 flex items-center gap-2 text-sm text-success">
+          // Plain: a standing record of consent, not the result of something just pressed (T-227).
+          <p className="mt-5 flex items-center gap-2 text-sm text-ink-secondary">
             <span aria-hidden="true">✓</span>
             You agreed{profile.consentAt ? ` on ${formatDate(profile.consentAt)}` : ""}.
           </p>
@@ -363,7 +365,7 @@ function MyLeave() {
                 {row.decisionNote ? ` — ${row.decisionNote}` : ""}
               </span>
               <span className="flex items-center gap-3">
-                <span className={statusTone(row.status)}>{statusWord(row.status)}</span>
+                <span className="text-ink-secondary">{statusWord(row.status)}</span>
                 {/* T-184: the server says whether this can still be withdrawn: their own, waiting or
                     approved, and not yet begun in the temple's calendar. The browser's clock is never asked. */}
                 {row.canWithdraw && confirming?.id !== row.id && (
@@ -378,25 +380,23 @@ function MyLeave() {
                 )}
               </span>
               {confirming?.id === row.id && (
-                <div role="alertdialog" aria-label="Withdraw this leave" className="basis-full rounded-lg bg-danger-bg px-5 py-4">
-                  <p className="text-sm font-medium text-danger">{withdrawQuestion(row)}</p>
+                // Not red. Withdrawing leave is minor and the person can simply ask again; red is
+                // kept for real deletions (Rajeev, 2026-09-18, T-227). So the panel is the sunken
+                // surface and the button the ordinary primary one.
+                <div role="alertdialog" aria-label="Withdraw this leave" className="basis-full rounded-lg bg-sunken px-5 py-4">
+                  <p className="text-sm font-medium text-ink">{withdrawQuestion(row)}</p>
                   <div className="mt-4 flex gap-2">
                     <button
                       ref={cancelRef}
                       type="button"
                       onClick={() => setConfirming(null)}
-                      className="min-h-touch rounded border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
+                      className="min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
                     >
                       Cancel
                     </button>
-                    <button
-                      type="button"
-                      onClick={confirmWithdraw}
-                      disabled={busy}
-                      className="min-h-touch rounded bg-danger px-5 text-sm text-ink-inverse transition-opacity duration-state hover:opacity-90 disabled:opacity-60"
-                    >
+                    <Button onClick={confirmWithdraw} disabled={busy} className="text-sm">
                       Withdraw
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -445,10 +445,6 @@ function statusWord(status: LeaveView["status"]): string {
     case "WITHDRAWN":
       return "Withdrawn by you";
   }
-}
-
-function statusTone(status: LeaveView["status"]): string {
-  return status === "APPROVED" ? "text-success" : status === "DECLINED" ? "text-danger" : "text-ink-secondary";
 }
 
 /**
@@ -542,7 +538,7 @@ function CommunicationPreferences() {
           key={category.value}
           className="mt-2 flex items-start gap-3 rounded border border-hairline bg-sunken px-4 py-3"
         >
-          <span aria-hidden="true" className="mt-0.5 text-success">
+          <span aria-hidden="true" className="mt-0.5 text-ink-secondary">
             ✓
           </span>
           <span>

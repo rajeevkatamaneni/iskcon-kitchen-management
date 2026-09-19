@@ -14,15 +14,15 @@ describe("calendar names", () => {
   });
 
   it("names tithi, with the 15th as Amavasya (Krsna) or Purnima (Gaura)", () => {
-    expect(tithiName(10)).toBe("Ekadasi"); // Krsna Ekadasi
-    expect(tithiName(25)).toBe("Ekadasi"); // Gaura Ekadasi
+    expect(tithiName(10)).toBe("Ekadashi"); // Krsna Ekadashi
+    expect(tithiName(25)).toBe("Ekadashi"); // Gaura Ekadashi
     expect(tithiName(14)).toBe("Amavasya"); // new moon
     expect(tithiName(29)).toBe("Purnima"); // full moon
   });
 
   it("builds a full tithi name with paksa, omitting it for the moons", () => {
-    expect(fullTithiName(10, 0)).toBe("Krsna Ekadasi");
-    expect(fullTithiName(25, 1)).toBe("Gaura Ekadasi");
+    expect(fullTithiName(10, 0)).toBe("Krsna Ekadashi");
+    expect(fullTithiName(25, 1)).toBe("Gaura Ekadashi");
     expect(fullTithiName(29, 1)).toBe("Purnima");
   });
 });

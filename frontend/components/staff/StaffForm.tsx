@@ -85,11 +85,11 @@ export function StaffForm({
   return (
     <Form
       id={STAFF_FORM_ID}
-      className="grid grid-cols-2 gap-4"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
       aria-label={staff ? "Edit a staff member" : "Hire a staff member"}
       onSubmit={onSubmit}
     >
-      <p className="col-span-2 text-sm text-ink-secondary">
+      <p className="col-span-full text-sm text-ink-secondary">
         A job title is what somebody is called. Access is what they may do.
       </p>
 
@@ -97,7 +97,7 @@ export function StaffForm({
           class of its own, deliberately, so that every hinted field on every screen is spaced the
           same. */}
       {!staff && devotees.length > 0 && (
-        <div className="col-span-2">
+        <div className="col-span-full">
           <HintedField
             label="Already registered here?"
             hint="Their seva history stays with them."
@@ -142,7 +142,7 @@ export function StaffForm({
       </label>
 
       {jobTitle === "OTHER" && (
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+        <label className="col-span-full flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">What does your temple call this job?</span>
           <input
             name="jobTitleOther"
@@ -241,12 +241,12 @@ export function StaffForm({
         )}
       </HintedField>
 
-      <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+      <label className="col-span-full flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Address</span>
         <input name="address" defaultValue={staff?.address ?? ""} className={FIELD} />
       </label>
 
-      <fieldset className="col-span-2 grid grid-cols-3 gap-4 rounded border border-hairline px-4 py-3">
+      <fieldset className="col-span-full grid grid-cols-1 gap-4 rounded border border-hairline px-4 py-3 sm:grid-cols-3">
         {/* Not a HintedField: this legend names three controls, so there is no single id for an
             htmlFor to point at. The tail that used to sit after the dash says what the number is
             for, which is the icon's job. */}
@@ -315,7 +315,7 @@ export function StaffForm({
         )}
       </label>
 
-      <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+      <label className="col-span-full flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Notes</span>
         <input name="notes" defaultValue={staff?.notes ?? ""} className={FIELD} />
       </label>

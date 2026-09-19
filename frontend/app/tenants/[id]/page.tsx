@@ -19,6 +19,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { BusyPot, Loading } from "@/components/Loading";
 import { moment, templeDay } from "@/lib/format";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED } from "@/components/ds/table";
 
 export default function TenantDetailPage() {
   return (
@@ -73,7 +74,7 @@ function TenantDetailView() {
                 */}
                 <Link
                   href={`/tenants/${id}/edit`}
-                  className="min-h-touch shrink-0 rounded-sm border border-hairline-strong px-5 py-2.5 text-sm transition-colors duration-state hover:bg-raised"
+                  className="min-h-touch shrink-0 rounded-control border border-hairline-strong px-5 py-2.5 text-sm transition-colors duration-state hover:bg-raised"
                 >
                   Edit details
                 </Link>
@@ -115,7 +116,7 @@ function TenantDetailView() {
                 <button
                   type="button"
                   onClick={() => setConfirming(true)}
-                  className="mt-4 min-h-touch rounded-sm border border-danger px-5 text-sm text-danger transition-colors duration-state hover:bg-danger-bg"
+                  className="mt-4 min-h-touch rounded-control border border-danger px-5 text-sm text-danger transition-colors duration-state hover:bg-danger-bg"
                 >
                   Delete temple
                 </button>
@@ -264,7 +265,7 @@ function WhatsAppTemplatesSection({ id }: { id: string }) {
                     type="button"
                     onClick={refresh}
                     disabled={refreshing}
-                    className="min-h-touch rounded-sm border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-canvas disabled:opacity-60"
+                    className="min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-canvas disabled:opacity-60"
                   >
                     {refreshing ? (
                       <span className="inline-flex items-center gap-2">
@@ -294,22 +295,27 @@ function WhatsAppTemplatesSection({ id }: { id: string }) {
 
               {view && view.templates.length > 0 && (
                 <div className="mt-4 overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-ink-secondary">
-                        <th className="py-2 pr-4 font-medium">Message</th>
-                        <th className="py-2 pr-4 font-medium">Meta status</th>
-                        <th className="py-2 pr-4 font-medium">Category at Meta</th>
-                        <th className="py-2 font-medium">Wording</th>
+                  {/* On the table rule since 2026-09-18 (T-233). The message's name is the primary
+                      flexible column. Meta status is usually one word but becomes Meta's whole
+                      sentence when Meta did not answer, so Rajeev classified it as the secondary
+                      flexible column; category and wording are short fixed answers (one line, reading left since T-236),
+                      labelled in the phone's card layout where their headings are not shown. */}
+                  <table className={`${RULED_TABLE} text-sm`}>
+                    <thead className={THEAD}>
+                      <tr>
+                        <th className={TH_PRIMARY}>Message</th>
+                        <th className={TH_SECOND}>Meta status</th>
+                        <th className={TH_FIXED}>Category at Meta</th>
+                        <th className={TH_FIXED}>Wording</th>
                       </tr>
                     </thead>
                     <tbody>
                       {view.templates.map((row) => (
-                        <tr key={row.name} className="hover:bg-sunken">
-                          <td className="py-2 pr-4 font-mono">{row.name}</td>
-                          <td className="py-2 pr-4">{metaStatusWords(row)}</td>
-                          <td className="py-2 pr-4">{categoryWords(row)}</td>
-                          <td className="py-2">{wordingWords(row)}</td>
+                        <tr key={row.name} className={TR}>
+                          <td className={`${TD_PRIMARY} font-mono`}>{row.name}</td>
+                          <td className={TD_SECOND}>{metaStatusWords(row)}</td>
+                          <td className={TD_FIXED} data-label="Category at Meta">{categoryWords(row)}</td>
+                          <td className={TD_FIXED} data-label="Wording">{wordingWords(row)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -386,7 +392,7 @@ function ExportButton({
         type="button"
         onClick={download}
         disabled={busy}
-        className="min-h-touch rounded-sm border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-canvas disabled:opacity-60"
+        className="min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-canvas disabled:opacity-60"
       >
         {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing…</span>) : "Download data export"}
       </button>
@@ -506,7 +512,7 @@ function DeleteConfirm({
               <button
                 type="button"
                 onClick={onCancel}
-                className="min-h-touch rounded-sm border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
+                className="min-h-touch rounded-control border border-hairline-strong px-5 text-sm transition-colors duration-state hover:bg-raised"
               >
                 Cancel
               </button>
@@ -514,7 +520,7 @@ function DeleteConfirm({
                 type="button"
                 onClick={doDelete}
                 disabled={!armed}
-                className="min-h-touch rounded-sm bg-danger px-5 text-sm text-ink-inverse transition-colors duration-state hover:opacity-90 disabled:opacity-40"
+                className="min-h-touch rounded-control bg-danger px-5 text-sm text-ink-inverse transition-colors duration-state hover:opacity-90 disabled:opacity-40"
               >
                 Delete temple
               </button>

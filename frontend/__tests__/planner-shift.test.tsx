@@ -310,7 +310,7 @@ describe("Ask for volunteers, in section 4 of the composer", () => {
 
     expect(screen.queryByRole("button", ASK)).toBeNull();
     expect(screen.getByRole("button", VIEW)).toBeInTheDocument();
-    expect(screen.getByText("Not saved yet. It is saved with this meal.")).toBeInTheDocument();
+    expect(screen.getByText("Saved when you save this meal.")).toBeInTheDocument();
   });
 
   it("reopens the draft on View volunteer shift, as it was left", async () => {
@@ -324,7 +324,7 @@ describe("Ask for volunteers, in section 4 of the composer", () => {
     expect(field("startTime").value).toBe("09:00");
     expect(field("capacity").value).toBe("4");
     // Still a shift being posted: nothing has saved it.
-    expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "Post a shift" })).toBeTruthy();
+    expect(within(screen.getByRole("dialog")).getByRole("heading", { name: "Ask for volunteers" })).toBeTruthy();
   });
 
   it("changes nothing when the layer is cancelled", async () => {

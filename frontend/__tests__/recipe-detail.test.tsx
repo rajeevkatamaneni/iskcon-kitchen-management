@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ApiError } from "@/lib/api";
 import type { RecipeDetail, TranslatedRecipe } from "@/lib/api";
 
-const { authRef, recipeRef, translateMock, deleteMock, archiveMock, restoreMock } = vi.hoisted(() => ({
+const { authRef, recipeRef, translateMock, pdfMock, deleteMock, archiveMock, restoreMock } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } } as {
       status: string;
@@ -14,6 +14,7 @@ const { authRef, recipeRef, translateMock, deleteMock, archiveMock, restoreMock 
   },
   recipeRef: { current: { data: null as RecipeDetail | null, error: null, loading: false } },
   translateMock: vi.fn(),
+  pdfMock: vi.fn(),
   deleteMock: vi.fn(),
   archiveMock: vi.fn(),
   restoreMock: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock("@/lib/api", async (orig) => {
     api: {
       ...actual.api,
       translateRecipe: translateMock,
+      requestRecipePdf: pdfMock,
       deleteRecipe: deleteMock,
       archiveRecipe: archiveMock,
       restoreRecipe: restoreMock,
@@ -88,6 +90,8 @@ describe("recipe detail", () => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } };
     recipeRef.current = { data: detail(), error: null, loading: false };
     translateMock.mockReset();
+    // The PDF request is all this screen owns; what happens after it is document-download's job.
+    pdfMock.mockReset().mockRejectedValue(new Error("not under test"));
     deleteMock.mockReset();
     archiveMock.mockReset();
     restoreMock.mockReset();
@@ -107,7 +111,9 @@ describe("recipe detail", () => {
 
     const confirm = screen.getByRole("alertdialog", { name: /delete this recipe/i });
     expect(confirm).toHaveTextContent(/Delete Khichdi\?/);
-    expect(confirm).toHaveTextContent(/cannot be undone/i);
+    expect(confirm).toHaveTextContent(/can’t undo this/i);
+    // True to the server: a recipe on any meal is refused and Archive is offered, never archived on its own.
+    expect(confirm).toHaveTextContent(/If it is on any meal, planned or cooked, you’ll be offered Archive instead\./);
     expect(deleteMock).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /delete recipe/i }));
@@ -116,13 +122,13 @@ describe("recipe detail", () => {
     await waitFor(() => expect(window.location.href).toBe("/recipes"));
   });
 
-  it("offers archiving when the recipe has been cooked, rather than leaving a refusal", async () => {
+  it("offers archiving when the recipe is on a meal, rather than leaving a refusal", async () => {
     // KMS-400102 is the server saying "archive it instead" — the screen has to carry that through
     // to something the person can press, or they are simply stuck.
     deleteMock.mockRejectedValue(
       new ApiError({
         code: "KMS-400102",
-        message: "This recipe has been cooked, so it can't be deleted.",
+        message: "This recipe is on a meal, so it can't be deleted.",
         action: "Archive it instead.",
         fieldErrors: [],
       })
@@ -133,7 +139,7 @@ describe("recipe detail", () => {
     fireEvent.click(screen.getByRole("button", { name: /delete recipe/i }));
 
     const archive = await screen.findByRole("button", { name: /archive it instead/i });
-    expect(screen.getByText(/has been cooked/i)).toBeInTheDocument();
+    expect(screen.getByText(/is on a meal, so it can.t be deleted/i)).toBeInTheDocument();
 
     fireEvent.click(archive);
     await waitFor(() => expect(archiveMock).toHaveBeenCalledWith("r1", "test-token"));
@@ -158,9 +164,13 @@ describe("recipe detail", () => {
     expect(screen.getByRole("cell", { name: "Toor Dal" })).toBeInTheDocument();
     expect(screen.getByText("Wash the rice.")).toBeInTheDocument();
     expect(screen.getByText(/ekadashi-friendly/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^scale$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^translate$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /download pdf/i })).toBeInTheDocument();
+    // Scale and the Translate button are gone (Rajeev, 2026-09-19); a language picker set to
+    // English and a download icon replace them.
+    expect(screen.queryByRole("button", { name: /^scale$/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/scale to/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^translate$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Language" })).toHaveValue("en");
+    expect(screen.getByRole("button", { name: "Download recipe as PDF" })).toBeInTheDocument();
   });
 
   it("translates the recipe and shows the translated names", async () => {
@@ -179,11 +189,98 @@ describe("recipe detail", () => {
     translateMock.mockResolvedValue(translated);
 
     render(<RecipeDetailPage />);
-    fireEvent.click(screen.getByRole("button", { name: /^translate$/i }));
+    expect(translateMock).not.toHaveBeenCalled();
+    // Choosing the language is the whole action: there is no button to press after it.
+    fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "hi" } });
 
     expect(await screen.findByText("तूर दाल")).toBeInTheDocument();
     expect(translateMock).toHaveBeenCalledWith("r1", "hi", "test-token");
     expect(screen.getByRole("heading", { name: "खिचड़ी" })).toBeInTheDocument();
+    expect(screen.getByText(/Hindi · machine translation/)).toBeInTheDocument();
+
+    // English is the recipe as written, back at once and without asking the server.
+    fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "en" } });
+    expect(await screen.findByRole("heading", { name: "Khichdi" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Toor Dal" })).toBeInTheDocument();
+    expect(screen.queryByText(/machine translation/)).not.toBeInTheDocument();
+    expect(translateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows it is working while a translation loads, and keeps only the latest choice", async () => {
+    // Hindi is still on its way when Kannada is chosen; Hindi's late answer must not win.
+    let answerHindi: (v: TranslatedRecipe) => void = () => {};
+    const tr = (language: string, dal: string): TranslatedRecipe => ({
+      recipeId: "r1",
+      language,
+      provider: "google",
+      name: `Khichdi (${language})`,
+      categoryName: "Rice",
+      ingredients: [
+        { name: "Rice", quantity: 2, unit: "KG" },
+        { name: dal, quantity: 1, unit: "KG" },
+      ],
+      method: [],
+    });
+    translateMock
+      .mockImplementationOnce(() => new Promise<TranslatedRecipe>((resolve) => (answerHindi = resolve)))
+      .mockResolvedValueOnce(tr("kn", "ತೊಗರಿ ಬೇಳೆ"));
+    render(<RecipeDetailPage />);
+    const picker = screen.getByRole("combobox", { name: "Language" });
+
+    fireEvent.change(picker, { target: { value: "hi" } });
+    expect(await screen.findByRole("status")).toHaveTextContent("Translating…");
+
+    fireEvent.change(picker, { target: { value: "kn" } });
+    expect(await screen.findByText("ತೊಗರಿ ಬೇಳೆ")).toBeInTheDocument();
+    answerHindi(tr("hi", "तूर दाल"));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(""));
+    expect(screen.queryByText("तूर दाल")).not.toBeInTheDocument();
+    expect(picker).toHaveValue("kn");
+  });
+
+  it("goes back to English and says so when a translation fails", async () => {
+    translateMock.mockRejectedValue(
+      new ApiError({
+        code: "KMS-503001",
+        message: "Translation isn’t available right now.",
+        action: "Try again in a few minutes.",
+        fieldErrors: [],
+      })
+    );
+    render(<RecipeDetailPage />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "kn" } });
+
+    expect(await screen.findByText("The recipe is shown in English.")).toBeInTheDocument();
+    expect(screen.getByText(/Translation isn’t available right now/)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Language" })).toHaveValue("en");
+    expect(screen.getByRole("cell", { name: "Toor Dal" })).toBeInTheDocument();
+  });
+
+  it("downloads the PDF in the language on screen", async () => {
+    translateMock.mockResolvedValue({
+      recipeId: "r1",
+      language: "hi",
+      provider: "google",
+      name: "खिचड़ी",
+      categoryName: "चावल",
+      ingredients: [
+        { name: "चावल", quantity: 2, unit: "KG" },
+        { name: "तूर दाल", quantity: 1, unit: "KG" },
+      ],
+      method: [],
+    } satisfies TranslatedRecipe);
+    render(<RecipeDetailPage />);
+
+    const download = screen.getByRole("button", { name: "Download recipe as PDF" });
+    expect(download).toHaveAttribute("title", "Download recipe as PDF");
+    fireEvent.click(download);
+    await waitFor(() => expect(pdfMock).toHaveBeenCalledWith("r1", { language: undefined }, "test-token"));
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "hi" } });
+    await screen.findByText("तूर दाल");
+    await waitFor(() => expect(download).not.toBeDisabled());
+    fireEvent.click(download);
+    await waitFor(() => expect(pdfMock).toHaveBeenLastCalledWith("r1", { language: "hi" }, "test-token"));
   });
 
   /*
@@ -227,5 +324,30 @@ describe("what a recipe makes, and what one person eats", () => {
     // 0.2 of a litre is not how anybody serves rasam — it is 200 ml (Rajeev, 2026-08-23).
     expect(screen.getByText("200 ml")).toBeInTheDocument();
     expect(screen.queryByText("0.2 L")).not.toBeInTheDocument();
+  });
+});
+
+describe("a temple recipe's batch cost (T-233)", () => {
+  // Rajeev, 2026-09-18: one more figure beside Makes and Per person, for everyone who can open the
+  // recipe, written the way the library page writes it, and absent when no cost is saved.
+  it("shows the saved cost as the library does, with the batch it buys", async () => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    recipeRef.current = {
+      data: detail({ baseYieldQty: 270, baseYieldUnit: "L", indicativeCost: 8000 }),
+      error: null,
+      loading: false,
+    };
+    render(<RecipeDetailPage />);
+    expect(await screen.findByText("Rough cost")).toBeInTheDocument();
+    expect(screen.getByText("₹8,000 per batch (270 L)")).toBeInTheDocument();
+  });
+
+  it("says nothing at all when no cost is saved", async () => {
+    authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
+    recipeRef.current = { data: detail({ indicativeCost: null }), error: null, loading: false };
+    render(<RecipeDetailPage />);
+    expect(await screen.findByText("Makes")).toBeInTheDocument();
+    expect(screen.queryByText("Rough cost")).not.toBeInTheDocument();
+    expect(screen.queryByText(/per batch/)).not.toBeInTheDocument();
   });
 });

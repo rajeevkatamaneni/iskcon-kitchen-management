@@ -21,18 +21,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { dateWithYear, money, moment } from "@/lib/format";
-import {
-  TABLE,
-  TD_DATE,
-  TD_NUM,
-  TD_TEXT,
-  THEAD,
-  TH_DATE,
-  TH_NUM,
-  TH_TEXT,
-  TR,
-  WRAP,
-} from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 
 /**
  * One gift: what it was, the receipt for it, and what else this donor has given (T-110).
@@ -129,7 +118,7 @@ function DonationView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/donations" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto grid max-w-content gap-6">
           {loading ? (
             <Loading label="Loading the donation…" />
@@ -186,7 +175,7 @@ function DonationHeader({ donation }: { donation: DonationDetail }) {
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   if (children === null || children === undefined || children === "") return null;
   return (
-    <div>
+    <div className="min-w-0 break-words">
       <dt className="text-sm text-ink-muted">{label}</dt>
       <dd className="mt-0.5 text-ink">{children}</dd>
     </div>
@@ -198,7 +187,8 @@ function TheGift({ donation }: { donation: DonationDetail }) {
     <Card title="The gift">
       {donation.voided && (
         <div className="mb-4">
-          <InlineNotice tone="warning" title="This gift was struck as wrongly recorded">
+          {/* Information: a settled state, explained, not something to act on (T-227). */}
+          <InlineNotice tone="info" title="This gift was struck as wrongly recorded">
             {donation.voidReason ??
               "No reason was recorded, which should not be possible. Ask whoever struck it."}{" "}
             It stays in the ledger, marked, and is out of every figure the temple reports under 80G.
@@ -206,7 +196,7 @@ function TheGift({ donation }: { donation: DonationDetail }) {
         </div>
       )}
 
-      <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <dl className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Fact label="Amount">{money(donation.amountInr, donation.currency ?? "INR")}</Fact>
         <Fact label="Given on">{dateWithYear(donation.donatedOn)}</Fact>
         <Fact label="Kind of giving">
@@ -547,20 +537,21 @@ function WhatElseTheyGave({
         </p>
       ) : (
         <div className="mt-4 table-wrap overflow-x-auto">
-          <table className={TABLE}>
+          <table className={RULED_TABLE}>
             <thead className={THEAD}>
               <tr>
-                <th className={TH_DATE}>Date</th>
-                <th className={TH_NUM}>Amount</th>
-                <th className={TH_TEXT}>Kind</th>
-                <th className={`${TH_TEXT} ${WRAP}`}>Towards</th>
-                <th className={TH_TEXT}>Payment</th>
+                <th className={TH_PRIMARY}>Towards</th>
+                <th className={TH_FIXED}>Date</th>
+                <th className={TH_FIXED}>Amount</th>
+                <th className={TH_FIXED}>Kind</th>
+                <th className={TH_FIXED}>Payment</th>
               </tr>
             </thead>
             <tbody>
               {shown.map((r) => (
                 <tr key={r.id} className={TR}>
-                  <td className={`${TD_DATE} text-ink-secondary`}>
+                  <td className={`${TD_PRIMARY} text-ink-secondary`}>{r.linkedTo ?? "—"}</td>
+                  <td className={`${TD_FIXED} text-ink-secondary`}>
                     {dateWithYear(r.donatedOn)}
                     {/* The gift being read is in this list too, because it is one of this person's
                         gifts and leaving it out would make the list disagree with the total above
@@ -569,12 +560,11 @@ function WhatElseTheyGave({
                       <span className="ml-2 text-xs text-ink-muted">This one</span>
                     )}
                   </td>
-                  <td className={`${TD_NUM} ${r.voided ? "text-ink-muted line-through" : ""}`}>
+                  <td className={`${TD_FIXED_NUM} ${r.voided ? "text-ink-muted line-through" : ""}`}>
                     {money(r.amountInr, r.currency ?? "INR")}
                   </td>
-                  <td className={TD_TEXT}>{CATEGORY_LABEL[r.category] ?? r.category}</td>
-                  <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{r.linkedTo ?? "—"}</td>
-                  <td className={`${TD_TEXT} text-ink-secondary`}>
+                  <td className={TD_FIXED}>{CATEGORY_LABEL[r.category] ?? r.category}</td>
+                  <td className={`${TD_FIXED} text-ink-secondary`}>
                     {r.voided ? <Badge>Voided</Badge> : STATUS_LABEL[r.status] ?? r.status}
                   </td>
                 </tr>

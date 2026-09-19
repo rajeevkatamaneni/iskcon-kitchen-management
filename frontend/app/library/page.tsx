@@ -109,10 +109,10 @@ function LibraryView() {
     <div className="flex min-h-screen">
       <Sidebar activeHref="/library" />
 
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0 grow basis-60">
               <h1>Recipe library</h1>
               {total > 0 && (
                 <p className="mt-1 text-sm text-ink-secondary">
@@ -124,7 +124,7 @@ function LibraryView() {
               type="button"
               onClick={load}
               disabled={busy}
-              className="flex min-h-touch items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
+              className="flex min-h-touch items-center rounded-control border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised disabled:opacity-60"
             >
               {busy ? "Loading…" : "Load the books"}
             </button>
@@ -197,7 +197,7 @@ function LibraryView() {
                     onClick={() => remove(row)}
                     disabled={busy}
                     aria-label={`Take ${row.displayName} out of the library`}
-                    className="flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-lg border border-hairline-strong text-sm text-ink-secondary transition-colors duration-state hover:bg-raised disabled:opacity-60"
+                    className="flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-control border border-hairline-strong text-sm text-ink-secondary transition-colors duration-state hover:bg-raised disabled:opacity-60"
                   >
                     ×
                   </button>

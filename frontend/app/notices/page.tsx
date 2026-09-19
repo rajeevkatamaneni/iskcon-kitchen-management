@@ -96,7 +96,7 @@ function NoticesView() {
     <div className="flex min-h-screen">
       <Sidebar activeHref="/notices" />
 
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -130,7 +130,7 @@ function NoticesView() {
             <div className="card px-6 py-14 text-center">
               <p className="text-lg">Nothing has been raised</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                A supplier problem or planned downtime appears here, and on everyone’s Today screen.
+                A vendor problem or planned downtime appears here, and on everyone’s Today screen.
               </p>
             </div>
           ) : (
@@ -157,14 +157,14 @@ function NoticesView() {
                           <button
                             type="submit"
                             disabled={busy}
-                            className="min-h-9 rounded bg-danger-bg px-3 text-sm text-danger disabled:opacity-60"
+                            className="min-h-9 rounded-control bg-danger-bg px-3 text-sm text-danger disabled:opacity-60"
                           >
                             Withdraw
                           </button>
                           <button
                             type="button"
                             onClick={() => setWithdrawing(null)}
-                            className="min-h-9 rounded px-3 text-sm text-ink-secondary hover:bg-sunken"
+                            className="min-h-9 rounded-control px-3 text-sm text-ink-secondary hover:bg-sunken"
                           >
                             Keep it
                           </button>
@@ -173,7 +173,7 @@ function NoticesView() {
                         <button
                           type="button"
                           onClick={() => setWithdrawing(n.id)}
-                          className="min-h-9 rounded px-3 text-sm text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
+                          className="min-h-9 rounded-control px-3 text-sm text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
                         >
                           Withdraw
                         </button>

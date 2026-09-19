@@ -1,5 +1,6 @@
 "use client";
 
+import { Screen } from "@/components/ds/Screen";
 import { Suspense, useCallback, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -12,7 +13,9 @@ import { BusyPot, Loading } from "@/components/Loading";
 import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { money } from "@/lib/format";
+import { batchCost } from "@/lib/format";
+import { recipeTagLabels } from "@/lib/vaishnava-day";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 
 /**
  * A library recipe in full (E2-S14).
@@ -81,7 +84,7 @@ function LibraryRecipeView() {
                   Adding…
                 </span>
               ) : (
-                "Add"
+                "Add to my recipes"
               )}
             </button>
           )}
@@ -91,7 +94,7 @@ function LibraryRecipeView() {
               role="button"
               aria-disabled="true"
               tabIndex={0}
-              className="flex min-h-touch cursor-not-allowed items-center rounded border border-hairline-strong px-4 text-sm text-ink-muted"
+              className="flex min-h-touch cursor-not-allowed items-center rounded-control border border-hairline-strong px-4 text-sm text-ink-muted"
             >
               Edit
             </span>
@@ -119,14 +122,15 @@ function LibraryRecipeView() {
         <Fact label="Makes" value={recipe.yieldText} />
         {recipe.perHeadText && <Fact label="Per person" value={recipe.perHeadText} />}
         {recipe.indicativeCost != null && (
-          <Fact label="Indicative cost" value={money(recipe.indicativeCost, "INR")} />
+          // The cost of one batch, and the batch named beside it (T-231): "₹8,000 per batch (270 L)".
+          <Fact label="Rough cost" value={batchCost(recipe.indicativeCost, recipe.yieldQty, recipe.yieldUnit)} />
         )}
       </dl>
 
       {recipe.tags.length > 0 && (
         <ul className="mt-5 flex flex-wrap gap-2">
-          {recipe.tags.map((tag) => (
-            <li key={tag} className="rounded-sm bg-sunken px-2 py-0.5 text-xs text-ink-secondary">
+          {recipeTagLabels(recipe.tags).map((tag) => (
+            <li key={tag} className="rounded-control bg-sunken px-2 py-0.5 text-xs text-ink-secondary">
               {tag}
             </li>
           ))}
@@ -135,14 +139,29 @@ function LibraryRecipeView() {
 
       <section className="mt-8" aria-labelledby="ingredients">
         <h2 id="ingredients" className="text-lg">Ingredients</h2>
-        <ul className="mt-3 grid gap-1">
-          {recipe.ingredients.map((line, i) => (
-            <li key={`${line.name}-${i}`} className="flex justify-between gap-4 border-b border-hairline py-2">
-              <span>{line.name}</span>
-              <span className="shrink-0 tabular-nums text-ink-secondary">{line.qty}</span>
-            </li>
-          ))}
-        </ul>
+        {/* The same ruled table a temple's own recipe uses (app/recipes/[id]), column for column:
+            Ingredient as the primary flexible column, Quantity as a fixed figure (reading left, like every column since T-236).
+            It was a plain list, so the same dish read two different ways depending on whether the
+            temple had added it yet (Rajeev, Decisions Desk, 2026-09-18). The library's quantity
+            arrives as text already written ("2 Kg"), so it is printed as it comes. */}
+        <div className="table-wrap mt-3 overflow-x-auto">
+          <table className={RULED_TABLE}>
+            <thead className={THEAD}>
+              <tr>
+                <th className={TH_PRIMARY}>Ingredient</th>
+                <th className={TH_FIXED}>Quantity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recipe.ingredients.map((line, i) => (
+                <tr key={`${line.name}-${i}`} className={TR}>
+                  <td className={TD_PRIMARY}>{line.name}</td>
+                  <td className={TD_FIXED_NUM}>{line.qty}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="mt-8" aria-labelledby="method">
@@ -161,7 +180,8 @@ function LibraryRecipeView() {
       {recipe.noteStart && <Note heading="Start" body={recipe.noteStart} />}
       {recipe.noteVessel && <Note heading="Vessel" body={recipe.noteVessel} />}
       {recipe.noteSeason && <Note heading="Season" body={recipe.noteSeason} />}
-      {recipe.cateringNote && <Note heading="Catering" body={recipe.cateringNote} />}
+      {/* No "Catering" note: catering is out of the product (E4-S15), removed from every recipe
+          screen on 2026-09-18 at Rajeev's say. The library keeps the value; nobody is shown it. */}
 
       {recipe.serveWith.length > 0 && (
         <Note heading="Serve with" body={recipe.serveWith.join(" · ")} />
@@ -192,8 +212,12 @@ function Chrome({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/recipes" />
-      <main className="min-w-0 flex-1 px-8 py-10">
-        <div className="mx-auto max-w-content">{children}</div>
+      {/* The shared page frame, so this page starts where every other screen does. One wrapper
+          inside it keeps this page's own spacing between its blocks. */}
+      <main className="min-w-0 flex-1">
+        <Screen>
+          <div>{children}</div>
+        </Screen>
       </main>
     </div>
   );

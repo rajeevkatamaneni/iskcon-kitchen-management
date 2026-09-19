@@ -180,7 +180,7 @@ describe("the crew pebble's breakdown", () => {
     expect(holders).toHaveLength(1);
     expect(holders[0]).toHaveAttribute("role", "tooltip");
     // The pebble still says what it said, and no more.
-    expect(pill.textContent).toBe("5 of 8 people rostered of the number this meal takes");
+    expect(pill.textContent).toBe("5 of 8 people rostered of the number needed");
   });
 
   it("names the hint for its meal, so a day of meals is not a row of identical buttons", async () => {

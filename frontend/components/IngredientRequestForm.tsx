@@ -264,7 +264,9 @@ export function IngredientRequestForm({
             )}
           </div>
         )}
-        {problem && <InlineNotice tone="warning" title={problem} />}
+        {/* Red, the colour of a field error saying the same kind of thing: one tone for "fix this
+            before it can be sent" (Rajeev, 2026-09-18, T-227). */}
+        {problem && <InlineNotice tone="danger" title={problem} />}
 
         <section className="space-y-5">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -320,12 +322,12 @@ export function IngredientRequestForm({
             What you need from the store
           </h2>
           {lines.map((line, i) => (
-            <div key={i} className="grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
+            <div key={i} className="grid grid-cols-[minmax(0,1fr)_6rem_auto] items-end gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_6rem_auto]">
               <select
                 aria-label={`Ingredient ${i + 1}`}
                 value={line.ingredientId}
                 onChange={(e) => chooseIngredient(i, e.target.value)}
-                className="min-h-touch rounded-control border border-hairline px-3"
+                className="col-span-3 min-h-touch min-w-0 rounded-control border border-hairline px-3 sm:col-span-1"
               >
                 <option value="">Choose ingredient…</option>
                 {ingredientOptions.map((ing) => (
@@ -360,7 +362,7 @@ export function IngredientRequestForm({
                 type="button"
                 onClick={() => setLines((prev) => prev.filter((_, at) => at !== i))}
                 aria-label={`Remove ingredient ${i + 1}`}
-                className="min-h-touch rounded border border-hairline-strong px-3 text-sm text-ink-secondary hover:bg-raised"
+                className="min-h-touch rounded-control border border-hairline-strong px-3 text-sm text-ink-secondary hover:bg-raised"
               >
                 Remove
               </button>
@@ -371,7 +373,7 @@ export function IngredientRequestForm({
             onClick={() =>
               setLines((prev) => [...prev, { ingredientId: "", quantity: "", unit: DEFAULT_LINE_UNIT }])
             }
-            className="min-h-touch rounded border border-hairline-strong px-4 text-sm hover:bg-raised"
+            className="min-h-touch rounded-control border border-hairline-strong px-4 text-sm hover:bg-raised"
           >
             + Add ingredient
           </button>
@@ -385,13 +387,13 @@ export function IngredientRequestForm({
             Needed before this can go for review. It is what the approver reads your list against.
           </p>
           {dishes.map((dish, i) => (
-            <div key={i} className="grid grid-cols-[1fr_6rem_7rem_auto] items-end gap-2">
+            <div key={i} className="grid grid-cols-[minmax(0,1fr)_7rem_auto] items-end gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_7rem_auto]">
               <input
                 aria-label={`Dish ${i + 1}`}
                 value={dish.dishName}
                 onChange={(e) => setDish(i, { dishName: e.target.value })}
                 placeholder="Khichdi"
-                className="min-h-touch rounded-control border border-hairline px-3"
+                className="col-span-3 min-h-touch min-w-0 rounded-control border border-hairline px-3 sm:col-span-1"
               />
               <input
                 aria-label={`Dish quantity ${i + 1}`}
@@ -419,7 +421,7 @@ export function IngredientRequestForm({
                 type="button"
                 onClick={() => setDishes((prev) => prev.filter((_, at) => at !== i))}
                 aria-label={`Remove dish ${i + 1}`}
-                className="min-h-touch rounded border border-hairline-strong px-3 text-sm text-ink-secondary hover:bg-raised"
+                className="min-h-touch rounded-control border border-hairline-strong px-3 text-sm text-ink-secondary hover:bg-raised"
               >
                 Remove
               </button>
@@ -430,7 +432,7 @@ export function IngredientRequestForm({
             onClick={() =>
               setDishes((prev) => [...prev, { dishName: "", quantity: "", unit: DEFAULT_DISH_UNIT }])
             }
-            className="min-h-touch rounded border border-hairline-strong px-4 text-sm hover:bg-raised"
+            className="min-h-touch rounded-control border border-hairline-strong px-4 text-sm hover:bg-raised"
           >
             + Add dish
           </button>

@@ -377,9 +377,9 @@ describe("the draft nobody sends", () => {
     render(<TodayPage />);
 
     expect(screen.getByText(/1 draft order/)).toBeInTheDocument();
-    expect(screen.getByText(/past the day it had to go out/)).toBeInTheDocument();
+    expect(screen.getByText(/is past its order date/)).toBeInTheDocument();
     // The reason it matters, which is what D-24a's whole hole is about.
-    expect(screen.getByText(/holds its ingredients off the shopping list/)).toBeInTheDocument();
+    expect(screen.getByText(/Its items stay off the shopping list until you send it/)).toBeInTheDocument();
   });
 
   it("says nothing on the Today dashboard when no draft is at risk", () => {
@@ -399,18 +399,17 @@ describe("the vendor scorecard shows what it left out", () => {
     queryRef.current = { data: report({ ordersSentLate: 2 }), error: null, loading: false };
     render(<VendorPerformancePage />);
 
-    // "we", because this is the one figure on the screen that is about the temple rather than the
-    // supplier — and a percentage whose exclusions are invisible cannot be checked.
-    expect(screen.getAllByText(/2 orders we sent late — not counted/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/sent after the vendor had asked to be given/)).toBeInTheDocument();
-    expect(screen.getByText(/left out of the on-time figure/)).toBeInTheDocument();
+    // The one figure on the screen that is about the temple rather than the vendor — and a
+    // percentage whose exclusions are invisible cannot be checked.
+    expect(screen.getAllByText("2 sent late (not counted)").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Not counted: 2 orders sent too late for the vendor to meet the date\./)).toBeInTheDocument();
   });
 
   it("says nothing about late sending when there was none", () => {
     queryRef.current = { data: report({ ordersSentLate: 0 }), error: null, loading: false };
     render(<VendorPerformancePage />);
 
-    expect(screen.queryByText(/we sent late/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sent late|notice period/)).not.toBeInTheDocument();
   });
 });
 

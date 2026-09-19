@@ -139,14 +139,14 @@ function NewInvoiceView() {
     >
       {error && <ErrorNotice error={error} />}
 
-      <label className="flex items-center gap-2 text-sm text-ink-secondary">
+      <label className="flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
         <input type="checkbox" checked={isDirect} onChange={(e) => setIsDirect(e.target.checked)}
                 className="accent-accent"
               />
         Direct, with no purchase order
       </label>
 
-      <Form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Record an invoice" onSubmit={record}>
+      <Form id={FORM} className="grid gap-4 sm:grid-cols-2" aria-label="Record an invoice" onSubmit={record}>
         {/* Vendor first, and that order is now load-bearing rather than cosmetic: it is what the
             purchase orders below are drawn from. */}
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -219,7 +219,7 @@ function NewInvoiceView() {
             column behind it is `scan_ref`, a pointer to a scan filed somewhere else — this
             application stores no file at all — so the receipt does not arrive here, only a note
             of where somebody put it. */}
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+        <label className="sm:col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Scan reference</span>
           <input name="scanRef" placeholder="Uploaded scan id or link" className={FIELD} />
         </label>

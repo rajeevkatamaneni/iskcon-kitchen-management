@@ -1,10 +1,12 @@
 "use client";
 
-import { Suspense, useCallback, useMemo } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ds/Badge";
+import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
+import { Form } from "@/components/ds/Form";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { Screen } from "@/components/ds/Screen";
@@ -13,12 +15,13 @@ import { PeriodNav, isCurrentPeriod, periodHeading, stepPeriod } from "@/compone
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Sidebar } from "@/components/Sidebar";
-import { api, type CalendarDayView } from "@/lib/api";
-import { dayLabel, masaName } from "@/lib/calendar-names";
+import { api, toApiError, type ApiError, type CalendarDayView } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { dayLabel, fullTithiName, masaName } from "@/lib/calendar-names";
 import { hhmm, longDate, todayIso } from "@/lib/format";
 import { dayEvents, dayKind, kitchenNote, type DayEvent, type DayKind } from "@/lib/vaishnava-day";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { Loading } from "@/components/Loading";
+import { BusyPot, Loading } from "@/components/Loading";
 
 /**
  * The Vaishnava calendar (E4-S9).
@@ -55,20 +58,25 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-/** Day tone by kind — the same three colours the legend names, and nothing else. */
+/**
+ * Day tone by kind — the same three colours the legend names, and nothing else.
+ *
+ * <p>A festival is saffron, its own colour (Rajeev, 2026-09-18, T-229). It was green, and green is
+ * kept for one thing: telling somebody that what they just did worked.
+ */
 const CELL_TONES: Record<Exclude<DayKind, null>, string> = {
-  // Ekadasi is blue and an ordinary fast is terracotta, at Rajeev's direction (DESIGN_SYSTEM v1.2).
-  // Ekadasi is the day this temple plans hardest around, and it now has a colour of its own rather
+  // Ekadashi is blue and an ordinary fast is terracotta, at Rajeev's direction (DESIGN_SYSTEM v1.2).
+  // Ekadashi is the day this temple plans hardest around, and it now has a colour of its own rather
   // than borrowing the one reserved for "the main thing to do on this screen".
   ekadasi: "bg-info-bg",
   fast: "bg-accent-bg",
-  festival: "bg-success-bg",
+  festival: "bg-festival-bg",
 };
 
 const DOT_TONES: Record<DayEvent["kind"], string> = {
   ekadasi: "bg-info",
   fast: "bg-accent",
-  festival: "bg-success",
+  festival: "bg-festival",
   observance: "bg-ink-muted",
 };
 
@@ -101,7 +109,7 @@ function CalendarScreen() {
 
   const { from, to } = useMemo(() => rangeFor(view, anchor), [view, anchor]);
   const load = useCallback((token?: string) => api.calendarRange(from, to, token), [from, to]);
-  const { data, error, loading } = useAuthedQuery<CalendarDayView[]>(load);
+  const { data, error, loading, reload } = useAuthedQuery<CalendarDayView[]>(load);
 
   const byDate = useMemo(() => {
     const map = new Map<string, CalendarDayView>();
@@ -123,7 +131,7 @@ function CalendarScreen() {
             // where it is actually used and where the planner can share it — the planner's header
             // is shaped differently and could never have copied this, which is how it came to have
             // no way back to today at all. One control, one component, both screens.
-            actions={<ButtonLink href={`/planner?date=${selected}`}>Open the meal planner</ButtonLink>}
+            actions={<ButtonLink href={`/planner?date=${selected}`}>Open planner</ButtonLink>}
             tabs={
               <PeriodNav
                 label="Calendar view"
@@ -150,7 +158,10 @@ function CalendarScreen() {
           {loading && !data && <Loading label="Loading the calendar…" />}
 
           {data && view === "month" && (
-            <div className="grid items-start gap-4 xl:grid-cols-[1fr_340px]">
+            // Side by side only once the month has its full 720px beside the day: at 1280 the
+            // panel took the month down to 580px and Friday and Saturday scrolled out of sight on
+            // an ordinary laptop. Below that the day sits under the month.
+            <div className="grid items-start gap-4 min-[1420px]:grid-cols-[1fr_340px]">
               <CalendarMonth
                 anchor={anchor}
                 today={today}
@@ -158,7 +169,9 @@ function CalendarScreen() {
                 byDate={byDate}
                 onSelect={(iso) => go({ day: iso }, "replace")}
               />
-              <DayPanel date={selected} day={selectedDay} />
+              {/* Keyed by the date, so a correction half-typed on one day is not carried to the
+                  next day opened with its form still showing the first day's values. */}
+              <DayPanel key={selected} date={selected} day={selectedDay} onChanged={reload} />
             </div>
           )}
 
@@ -197,9 +210,9 @@ function subtitle(day: CalendarDayView | undefined): string {
 
 function Legend() {
   const items = [
-    ["bg-info", "Ekadasi"],
+    ["bg-info", "Ekadashi"],
     ["bg-accent", "Fasting day"],
-    ["bg-success", "Festival or feast"],
+    ["bg-festival", "Festival or feast"],
     ["bg-ink-muted", "Observance"],
   ] as const;
   return (
@@ -240,7 +253,13 @@ function CalendarMonth({
   const cells = monthCells(anchor);
   const month = Number(anchor.slice(5, 7));
 
+  // Scrolls sideways inside its own box below 720px, as the planner's month does. Squeezed into a
+  // phone's width each cell was 50px: the moon and tithi ran off the edge and every festival name
+  // broke into two-letter pieces.
   return (
+    // 700, not 720: a portrait tablet has 704px here, and 720 made the month scroll 16px sideways.
+    <div className="relative min-w-0 overflow-x-auto">
+    <div className="min-w-[700px]">
     <MonthGrid
       weekdays={DOW}
       cells={cells}
@@ -295,6 +314,8 @@ function CalendarMonth({
         );
       }}
     </MonthGrid>
+    </div>
+    </div>
   );
 }
 
@@ -307,19 +328,28 @@ function tithiShort(day: CalendarDayView): string {
 
 // ---- The selected day ------------------------------------------------------
 
-function DayPanel({ date, day }: { date: string; day: CalendarDayView | undefined }) {
+function DayPanel({
+  date,
+  day,
+  onChanged,
+}: {
+  date: string;
+  day: CalendarDayView | undefined;
+  /** A Temple Admin corrected this day or undid a correction; the month re-reads itself. */
+  onChanged: () => void;
+}) {
   const events = dayEvents(day);
   const note = kitchenNote(day);
 
   return (
     <Card
       title={longDate(date)}
-      meta={day ? dayLabel(day) : "Not computed for this temple yet"}
-      className="xl:sticky xl:top-6"
+      meta={day ? dayLabel(day) : "The calendar doesn’t reach this date yet."}
+      className="min-[1420px]:sticky min-[1420px]:top-6"
     >
       <div className="grid gap-4">
         {day && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:max-w-sm">
             <Fact label="Sunrise" value={hhmm(day.sunrise)} />
             <Fact label="Sunset" value={hhmm(day.sunset)} />
           </div>
@@ -337,31 +367,232 @@ function DayPanel({ date, day }: { date: string; day: CalendarDayView | undefine
         ) : (
           <p className="text-ink-secondary">
             {day
-              ? "An ordinary day. The standard menu."
-              : "This temple’s calendar has not been computed this far ahead."}
+              ? "No festival or fast. Cook the usual menu."
+              : "The calendar doesn’t reach this date yet."}
           </p>
         )}
 
         {day?.overridden && (
-          <Badge tone="warning" shape="pill">
+          // Neutral: a record of an admin's correction, not something to act on (T-227).
+          <Badge>
             Corrected by hand{day.overrideReason ? ` — ${day.overrideReason}` : ""}
           </Badge>
         )}
 
         {note && <InlineNotice tone={note.tone}>{note.text}</InlineNotice>}
 
-        <ButtonLink href={`/planner?date=${date}`} variant="secondary" fullWidth>
-          Plan this day’s menu
-        </ButtonLink>
+        <DateCorrection date={date} day={day} onChanged={onChanged} />
       </div>
     </Card>
   );
 }
 
+/**
+ * A Temple Admin's correction to what the engine worked out for a day, and the way to undo it.
+ *
+ * <p>Moved here from the planner's page for one day (T-219). There it was the one thing on the
+ * planner a person could reach only by landing on that page by accident — a meal's Cancel went there
+ * — and it is not a planning act at all: it says what day it is. Rajeev, 2026-09-17, asked for it on
+ * the calendar, which is the screen that answers that question. The code, the permission, the API
+ * calls and every word are what the planner had; only the place changed.
+ *
+ * <p>Who may: a Temple Admin, on a day that has not passed. Nobody else sees the buttons at all. The
+ * server holds the same line; hiding them here is so nobody is offered what they would be refused.
+ *
+ * <p>The notice that a day was corrected is the badge above, which every role sees. This adds only
+ * the Undo under it, for the person allowed to press it.
+ */
+function DateCorrection({
+  date,
+  day,
+  onChanged,
+}: {
+  date: string;
+  day: CalendarDayView | undefined;
+  onChanged: () => void;
+}) {
+  const { appUser, getToken } = useAuth();
+  const [correcting, setCorrecting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const canCorrect = !!day && appUser?.role === "TEMPLE_ADMIN" && date >= todayIso();
+
+  /*
+   * The day's two acts, side by side at one size (Rajeev, 2026-09-18, T-237). They used to be a
+   * small button and a large one on two rows; his standing rule is that things go on a new row only
+   * when they cannot fit beside each other.
+   *
+   * Both are `sm`, and they are exactly the same size: a two-column grid of `1fr 1fr` with an 8px
+   * gap, and each button stretched to its cell, so they share one width and one height whatever the
+   * labels (Rajeev, via the coordinator, 2026-09-18: 135px beside 147px was not "the same size").
+   *
+   * The side panel beside the month gives its content 290px, so each half is 141px. At the `sm`
+   * padding of 12px a side, "Plan this day's menu" needs 145px; at 8px (`!px-2`, which has to beat
+   * `sm`'s own `px-3`) it needs 139px and fits on one line. Where even that does not fit — a phone
+   * of 360px gives each half 135px — the label wraps to two lines inside its button rather than the
+   * buttons going unequal, and the grid keeps the two the same height. `py-1` only matters then: it
+   * keeps two wrapped lines off the border, and a one-line button is held at 36px by `sm` anyway. Under the month on a
+   * mid-width screen (640–1419px) a full-width grid would make two 460px bars, so there it is only
+   * as wide as it needs (`sm:w-fit`): `1fr` columns in a fit-content grid both take the wider
+   * label's width. Every width and height is in T-237's proof.
+   *
+   * When only the link is shown (nobody may correct this day, or the form is open), it is a grid of
+   * one: the full width in the side panel and on a phone, as it always was, its own width between.
+   */
+  const pair = canCorrect && !correcting;
+  const shared = "!px-2 py-1 text-center";
+  const actions = (
+    <div
+      className={[
+        "grid gap-2 sm:w-fit min-[1420px]:w-auto",
+        pair ? "grid-cols-2" : "",
+      ].join(" ")}
+    >
+      {pair && (
+        // Amber, at his request: correcting a date the calendar worked out is an act to take with
+        // care, and the colour says so before the form does.
+        <Button size="sm" variant="warning" className={shared} onClick={() => setCorrecting(true)}>
+          Correct this date
+        </Button>
+      )}
+      <ButtonLink href={`/planner?date=${date}`} size="sm" variant="secondary" className={shared}>
+        Plan this day’s menu
+      </ButtonLink>
+    </div>
+  );
+
+  if (!canCorrect || !day) return actions;
+
+  async function run(fn: (t: string | undefined) => Promise<unknown>, failure: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn(await getToken());
+      setCorrecting(false);
+      onChanged();
+    } catch (e) {
+      setError(toApiError(e, failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const f = new FormData(event.currentTarget);
+    await run(
+      (t) =>
+        api.setCalendarOverride(
+          date,
+          {
+            isEkadashi: f.get("isEkadashi") === "on",
+            ekadashiName: String(f.get("ekadashiName") ?? "").trim() || null,
+            tithi: Number(f.get("tithi")),
+            festivalNote: String(f.get("festivalNote") ?? "").trim() || null,
+            reason: String(f.get("reason") ?? "").trim(),
+          },
+          t
+        ),
+      "We couldn’t correct that date."
+    );
+  }
+
+  return (
+    <>
+      {error && <ErrorNotice error={error} />}
+
+      {day.overridden && (
+        <div>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => run((t) => api.revertCalendarOverride(date, t), "We couldn’t undo that.")} busy={busy}>
+            {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Undoing…</span>) : "Undo the correction"}
+          </Button>
+        </div>
+      )}
+
+      {correcting && (
+        <Form onSubmit={save} aria-label="Correct this date" className="grid gap-4 border-t border-hairline pt-4">
+          <p className="text-sm text-ink-secondary">
+            Only correct a date you know is wrong. Everyone will see your change and reason.
+          </p>
+          <label className="flex items-start gap-3 text-sm">
+            <input
+              type="checkbox"
+              name="isEkadashi"
+              defaultChecked={day.isEkadashi}
+              className="mt-1 h-5 w-5 rounded-sm border-hairline-strong accent-accent"
+            />
+            <span className="font-medium text-ink">This is an Ekadashi fasting day</span>
+          </label>
+          {/* One column, not the planner's two: this panel is 340 pixels wide beside the month. */}
+          <div className="grid gap-4">
+            <label className="grid gap-1 text-sm text-ink-secondary">
+              <span className="pl-field-inset font-medium text-ink">Ekadashi name</span>
+              <input
+                name="ekadashiName"
+                defaultValue={day.ekadashiName ?? ""}
+                className="min-h-touch rounded-control border border-hairline px-3"
+              />
+            </label>
+            <label className="grid gap-1 text-sm text-ink-secondary">
+              <span className="pl-field-inset font-medium text-ink">Tithi</span>
+              <select
+                name="tithi"
+                defaultValue={day.tithi}
+                className="min-h-touch rounded-control border border-hairline px-3"
+              >
+                {Array.from({ length: 30 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {fullTithiName(i, i < 15 ? 0 : 1)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label className="grid gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Festival note</span>
+            <input name="festivalNote" className="min-h-touch rounded-control border border-hairline px-3" />
+          </label>
+          <label className="grid gap-1 text-sm text-ink-secondary">
+            <span className="pl-field-inset font-medium text-ink">Why are you correcting this?</span>
+            {/* No "Required" under the box. The word said nothing the `required` attribute and the
+                refused submit do not, and on a four-field form where this is the only compulsory
+                one it read as decoration. What must not be lost is the sentence above the form —
+                that everyone sees the correction and the reason for it — which is a consequence,
+                not guidance, and stays where it is. */}
+            <textarea
+              name="reason"
+              required
+              rows={2}
+              className="rounded-control border border-hairline px-3 py-2"
+            />
+          </label>
+          <div className="flex items-center gap-3">
+            <Button type="submit" size="sm" disabled={busy} busy={busy}>
+              {busy ? (<span className="inline-flex items-center gap-2"><BusyPot />Saving…</span>) : "Save correction"}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setCorrecting(false)}>
+              Cancel
+            </Button>
+          </div>
+        </Form>
+      )}
+
+      {actions}
+    </>
+  );
+}
+
+// The rule on each event matches its own cell and dot: Ekadashi blue, a fast the accent. Neither is a
+// warning, so neither is amber (Rajeev, 2026-09-18, T-227).
 const BORDER_TONES: Record<DayEvent["kind"], string> = {
-  ekadasi: "border-accent",
-  fast: "border-warning",
-  festival: "border-success",
+  ekadasi: "border-info",
+  fast: "border-accent",
+  festival: "border-festival",
   observance: "border-hairline-strong",
 };
 
@@ -492,7 +723,7 @@ function YearView({
 
       <Card
         title="Festivals and fasts"
-        meta={`${marked.length} marked days in ${year}`}
+        meta={`${marked.length} festivals and fasts in ${year}`}
         className="xl:sticky xl:top-6"
       >
         <div className="grid max-h-[560px] gap-3 overflow-auto">
@@ -512,7 +743,7 @@ function YearView({
           })}
           {marked.length === 0 && (
             <p className="text-sm text-ink-secondary">
-              Nothing computed for this year yet.
+              The calendar doesn’t reach this year yet.
             </p>
           )}
         </div>

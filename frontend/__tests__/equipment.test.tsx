@@ -94,7 +94,8 @@ describe("the equipment list", () => {
     render(<EquipmentPage />);
 
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual(["Name", "Location", "Status", "Next service", "Service company"]);
+    // Flexible columns first, fixed ones grouped on the right (the table rule, T-228).
+    expect(headers).toEqual(["Name", "Location", "Service company", "Status", "Next service"]);
 
     // Everything visible at once needs a horizontal scroll on a laptop, which is the density
     // complaint raised against the recipe list. These four are on /equipment/[id].

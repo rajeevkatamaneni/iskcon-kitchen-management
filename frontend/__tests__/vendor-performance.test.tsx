@@ -140,7 +140,7 @@ describe("Vendor performance", () => {
 
     const row = rowFor("Half Load Traders");
     expect(within(row).getAllByText("25%")).toHaveLength(2);
-    expect(within(row).getByText("across 24 lines")).toBeInTheDocument();
+    expect(within(row).getByText("across 24 items")).toBeInTheDocument();
   });
 
   it("names the supplier who never turned up, separately from the one who turned up late", () => {
@@ -264,7 +264,7 @@ describe("Vendor performance", () => {
       within(rowFor("Govind Wholesale")).getByText("20 of 24 items across 11 orders · 2 with no date")
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/2 orders have no needed-by date, so there is nothing to be late against/)
+      screen.getByText(/Not counted: 2 orders with no needed-by date\./)
     ).toBeInTheDocument();
   });
 
@@ -286,7 +286,7 @@ describe("Vendor performance", () => {
     expect(within(rowFor("Govind Wholesale")).getByText("Spoiled 2 · Damaged 1")).toBeInTheDocument();
   });
 
-  it("flags an open order that is past the day it was wanted, in the payables screen's words", () => {
+  it("flags an open order that is past the day it was wanted, with the count and the range apart", () => {
     queryRef.current.data = report({
       openOrders: 3,
       openCurrent: 1,
@@ -297,7 +297,7 @@ describe("Vendor performance", () => {
     render(<VendorPerformancePage />);
 
     expect(
-      within(rowFor("Govind Wholesale")).getByText("1 1–30 days overdue · 1 31+ days overdue")
+      within(rowFor("Govind Wholesale")).getByText("1 up to 30 days late · 1 over 30 days late")
     ).toBeInTheDocument();
   });
 
@@ -305,21 +305,26 @@ describe("Vendor performance", () => {
     queryRef.current.data = report();
     render(<VendorPerformancePage />);
 
-    expect(screen.getByText(/On time is scored item by item/)).toBeInTheDocument();
-    expect(screen.getByText(/eight of ten items in time is 80%/)).toBeInTheDocument();
-    expect(screen.getByText(/An order split across two days is still fully on time/))
+    // The short version (T-224): the rules, not the argument for them.
+    expect(screen.getByText("How these are worked out")).toBeInTheDocument();
+    expect(screen.getByText(/items that arrived by the needed-by date\. 8 of 10 = 80%\./)).toBeInTheDocument();
+    expect(screen.getByText(/how much of the order arrived in the end, whenever it came\./))
       .toBeInTheDocument();
-    // And what a cancellation does and does not say, which is the new thing on this screen.
+    // Rajeev's wording (2026-09-18, T-236), replacing "Counts sent orders whose needed-by date has
+    // passed.", which he found unreadable.
     expect(
-      screen.getByText(/a cancellation nobody has marked against the vendor/)
+      screen.getByText("Only orders that were sent and are now past their needed-by date are counted.")
     ).toBeInTheDocument();
+    // Nothing was left out of this report, so there is no "Not counted" line at all.
+    expect(screen.queryByText(/Not counted:/)).not.toBeInTheDocument();
   });
 
   it("says there were no orders rather than showing a table of dashes", () => {
     queryRef.current.data = report({ vendors: [] });
     render(<VendorPerformancePage />);
 
-    expect(screen.getByText("No orders with any supplier in this period")).toBeInTheDocument();
+    expect(screen.getByText("No orders in this period")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open purchase orders" })).toHaveAttribute("href", "/orders");
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
@@ -349,5 +354,43 @@ describe("Vendor performance", () => {
     expect(screen.getByRole("tablist", { name: /period/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /next month/i })).toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: /^today$/i })).toHaveLength(0);
+  });
+});
+
+// Rajeev's replacement for the "Left out" line (2026-09-18, T-236): each part says "order" or
+// "orders" in full, the parts are joined as a sentence, and a part whose count is 0 is dropped.
+describe("the Not counted line", () => {
+  beforeEach(() => {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role: "TEMPLE_ADMIN", fullName: "Radha Devi", tenantName: "ISKCON Bengaluru" },
+    };
+    queryRef.current = { data: null, error: null, loading: false };
+  });
+
+  it("reads as his sentence when an order was sent late and one had no date", () => {
+    queryRef.current.data = report({ ordersSentLate: 1, ordersWithoutNeededBy: 1 });
+    render(<VendorPerformancePage />);
+    expect(
+      screen.getByText(
+        "Not counted: 1 order sent too late for the vendor to meet the date, and 1 order with no needed-by date."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("names all three parts, plural where the count is more than one", () => {
+    queryRef.current.data = report({ ordersSentLate: 2, ordersExcused: 1, ordersWithoutNeededBy: 3 });
+    render(<VendorPerformancePage />);
+    expect(
+      screen.getByText(
+        "Not counted: 2 orders sent too late for the vendor to meet the date, 1 order the vendor made right, and 3 orders with no needed-by date."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("drops a part whose count is 0", () => {
+    queryRef.current.data = report({ ordersSentLate: 0, ordersExcused: 0, ordersWithoutNeededBy: 1 });
+    render(<VendorPerformancePage />);
+    expect(screen.getByText("Not counted: 1 order with no needed-by date.")).toBeInTheDocument();
   });
 });

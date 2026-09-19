@@ -10,7 +10,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 
 /**
  * Platform administration — the temples on this installation.
@@ -127,20 +127,20 @@ function TenantsView() {
             </div>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Temple</th>
-                    <th className={TH_TEXT}>Web address</th>
-                    <th className={TH_TEXT}>Timezone</th>
-                    <th className={TH_NUM}>People</th>
-                    <th className={TH_TEXT}>80G</th>
+                    <th className={TH_PRIMARY}>Temple</th>
+                    <th className={TH_SECOND}>Web address</th>
+                    <th className={TH_FIXED}>Timezone</th>
+                    <th className={TH_FIXED}>People</th>
+                    <th className={TH_FIXED}>80G</th>
                   </tr>
                 </thead>
                 <tbody>
                   {tenants.map((tenant) => (
                     <tr key={tenant.id} className={TR}>
-                      <td className={`${TD_TEXT} ${WRAP}`}>
+                      <td className={TD_PRIMARY}>
                         <Link
                           href={`/tenants/${tenant.id}`}
                           className="font-medium hover:text-accent-text hover:underline"
@@ -148,14 +148,15 @@ function TenantsView() {
                           {tenant.name}
                         </Link>
                       </td>
-                      <td className={`${TD_TEXT} font-mono text-sm text-ink-secondary`}>
+                      <td className={`${TD_SECOND} font-mono text-sm text-ink-secondary`}>
                         {tenant.slug}
                       </td>
-                      <td className={`${TD_TEXT} text-ink-secondary`}>{tenant.timezone}</td>
-                      <td className={`${TD_NUM} text-ink-secondary`}>{tenant.user_count}</td>
-                      <td className={TD_TEXT}>
+                      <td className={`${TD_FIXED} text-ink-secondary`}>{tenant.timezone}</td>
+                      <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="People">{tenant.user_count}</td>
+                      <td className={TD_FIXED}>
                         {tenant.is_80g_approved ? (
-                          <span className="rounded-sm bg-success-bg px-2.5 py-1 text-sm text-success">
+                          // Neutral: a standing fact about the temple, not a result (T-227).
+                          <span className="rounded-control bg-sunken px-2.5 py-1 text-sm text-ink-secondary">
                             Approved
                           </span>
                         ) : (

@@ -70,8 +70,9 @@ function EditIngredientRequestView() {
   if (status !== "DRAFT" && status !== "SUBMITTED") {
     return (
       <Frame>
+        {/* Information: a locked state, explained, with the way on (T-227). */}
         <InlineNotice
-          tone="warning"
+          tone="info"
           title={`${data.request.reference} has been answered, so it can no longer be changed.`}
         >
           Raise a fresh request if the kitchen needs something different.
@@ -116,7 +117,7 @@ function Frame({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/ingredient-requests" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">{children}</div>
       </main>
     </div>

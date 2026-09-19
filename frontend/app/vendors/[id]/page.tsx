@@ -18,7 +18,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { contractWarning, money, moment } from "@/lib/format";
 import { ALL_LANGUAGES, languageLabel } from "@/lib/languages";
 import { Loading } from "@/components/Loading";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import type { VendorSupplyView } from "@/lib/api";
 import { normalizePhone } from "@/lib/phone";
 
@@ -135,7 +135,7 @@ function VendorDetailView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/vendors" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <Link href="/vendors" className="text-sm text-accent-text hover:underline">← All vendors</Link>
 
@@ -176,7 +176,7 @@ function VendorDetailView() {
 
               <section className="card mb-8 px-6 py-5">
                 <h2 className="text-lg">Details</h2>
-                <Form className="mt-4 grid grid-cols-2 gap-4" aria-label="Edit vendor" onSubmit={save}>
+                <Form className="mt-4 grid gap-4 sm:grid-cols-2" aria-label="Edit vendor" onSubmit={save}>
                   <Field name="name" label="Name" defaultValue={vendor.name} required />
                   {/* Not required, and `?? ""` rather than the bare value: a vendor may have no
                       number at all now (T-025), and an uncontrolled input cannot be handed null. */}
@@ -202,9 +202,9 @@ function VendorDetailView() {
                       {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                     </select>
                   </label>
-                  <div className="col-span-2"><Field name="address" label="Address" defaultValue={vendor.address ?? ""} /></div>
-                  <div className="col-span-2"><Field name="notes" label="Notes" defaultValue={vendor.notes ?? ""} /></div>
-                  <div className="col-span-2 flex items-center gap-3">
+                  <div className="sm:col-span-2"><Field name="address" label="Address" defaultValue={vendor.address ?? ""} /></div>
+                  <div className="sm:col-span-2"><Field name="notes" label="Notes" defaultValue={vendor.notes ?? ""} /></div>
+                  <div className="sm:col-span-2 flex items-center gap-3">
                     <button type="submit" disabled={busy} className="btn btn-primary min-h-touch px-5 transition-colors duration-state disabled:opacity-60">
                       Save changes
                     </button>
@@ -230,17 +230,17 @@ function VendorDetailView() {
                 </p>
 
                 {supplies.length > 0 && (
-                  <table className={`${TABLE} mt-4`}>
+                  <table className={`${RULED_TABLE} mt-4`}>
                     <thead className={THEAD}>
                       <tr>
-                        <th className={`${TH_TEXT} ${WRAP}`}>Ingredient</th>
-                        <th className={TH_NUM}>Last price</th>
-                        <th className={TH_NUM}>Lead time</th>
-                        <th className={TH_TEXT}>Preferred</th>
+                        <th className={TH_PRIMARY}>Ingredient</th>
+                        <th className={TH_FIXED}>Last price</th>
+                        <th className={TH_FIXED}>Lead time</th>
+                        <th className={TH_FIXED}>Preferred</th>
                         {/* "Remove" until T-131, when the column stopped holding only the one
                             control. Named for what the column is rather than for what happens to
                             be in it, as every other table on the site names it. */}
-                        <th className={TH_ACTIONS}>Actions</th>
+                        <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -261,18 +261,18 @@ function VendorDetailView() {
                           />
                         ) : (
                         <tr key={s.ingredientId} className={TR}>
-                          <td className={`${TD_TEXT} ${WRAP}`}>{s.ingredientName}</td>
-                          <td className={TD_NUM}>{money(s.lastPrice, "INR")}</td>
+                          <td className={TD_PRIMARY}>{s.ingredientName}</td>
+                          <td className={TD_FIXED_NUM} data-label="Last price">{money(s.lastPrice, "INR")}</td>
                           {/* An em dash, never a nought. Nobody having said how long this vendor
                               takes and this vendor delivering the same day are different facts, and
                               a "0 days" here would read as the second. */}
-                          <td className={TD_NUM}>
+                          <td className={TD_FIXED_NUM} data-label="Lead time">
                             {s.leadTimeDays === null
                               ? <span className="text-ink-muted">—</span>
                               : `${s.leadTimeDays} ${s.leadTimeDays === 1 ? "day" : "days"}`}
                           </td>
-                          <td className={TD_TEXT}>{s.preferred ? <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Preferred</span> : "—"}</td>
-                          <td className={TD_ACTIONS}>
+                          <td className={TD_FIXED}>{s.preferred ? <span className="rounded-control bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Preferred</span> : "—"}</td>
+                          <td className={TD_ACTIONS_FIXED}>
                             <div className={ACTIONS_ROW}>
                               <Button variant="ghost" size="sm" onClick={() => setEditing(s.ingredientId)}>Edit</Button>
                               <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.removeVendorSupply(id, s.ingredientId, t), "We couldn’t remove that supply.")}>
@@ -318,7 +318,7 @@ function VendorDetailView() {
                       />
                     )}
                   </HintedField>
-                  <label className="flex items-center gap-2 text-sm text-ink-secondary">
+                  <label className="flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
                     <input name="preferred" type="checkbox" 
                 className="accent-accent"
               /> Preferred
@@ -345,7 +345,8 @@ function VendorDetailView() {
                     {statusHistory.map((c: VendorStatusChange) => (
                       <li key={c.id} className="border-t border-hairline pt-3 first:border-t-0 first:pt-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge tone={c.toActive ? "success" : "neutral"}>
+                          {/* Neutral both ways: a line of history, not a result (T-227). */}
+                          <Badge>
                             {c.toActive ? "Brought back" : "Made inactive"}
                           </Badge>
                           <span className="text-sm text-ink-secondary">
@@ -471,8 +472,8 @@ function SupplyEditRow({
 
   return (
     <tr className="border-t border-hairline bg-sunken align-top">
-      <td className={`${TD_TEXT} ${WRAP}`}>{supply.ingredientName}</td>
-      <td className={TD_NUM}>
+      <td className={TD_PRIMARY}>{supply.ingredientName}</td>
+      <td className={TD_FIXED_NUM}>
         <HintedField label="Last price (₹)">
           {(fieldId) => (
             <input
@@ -491,7 +492,7 @@ function SupplyEditRow({
           it is answering the same question. Emptying the box is a real and useful edit — a lead time
           recorded from a guess should be removable back to "nobody has said" — so the hint has to be
           here too, where the clearing actually happens. */}
-      <td className={TD_NUM}>
+      <td className={TD_FIXED_NUM}>
         <HintedField
           label="Lead time (days)"
           hint="How long this vendor takes to deliver this item once you ask. Leave it blank if you don’t know — we’ll assume two days until somebody records it. Put 0 for a shop you walk into and carry it back from."
@@ -510,8 +511,8 @@ function SupplyEditRow({
           )}
         </HintedField>
       </td>
-      <td className={TD_TEXT}>
-        <label className="flex items-center gap-2 text-sm text-ink-secondary">
+      <td className={TD_FIXED}>
+        <label className="flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
           {/* No `aria-label`: the wrapping `<label>` already names it, exactly as the Add form's
               own Preferred box does, and a redundant one only invites the two to drift apart. */}
           <input
@@ -523,7 +524,7 @@ function SupplyEditRow({
           Preferred
         </label>
       </td>
-      <td className={TD_ACTIONS}>
+      <td className={TD_ACTIONS_FIXED}>
         <div className={ACTIONS_ROW}>
           <Button
             size="sm"

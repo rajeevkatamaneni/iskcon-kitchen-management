@@ -13,7 +13,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
-import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED, ACTIONS_ROW } from "@/components/ds/table";
 import { dateWithYear, moment, shiftWindow, templeDay, templeZone, todayIso } from "@/lib/format";
 import { mealLabel } from "../shift-form";
 
@@ -311,13 +311,19 @@ function ShiftRosterView() {
                 ) : (
                   <Form aria-label="Attendance" onSubmit={recordAttendance}>
                     <div className="table-wrap overflow-x-auto">
-                      <table className={TABLE}>
+                      {/* On the table rule since 2026-09-18 (T-233). The volunteer is the primary
+                          flexible column; Rajeev classified Attendance (buttons and a "Corrected by
+                          … on …" sentence) and Reminders (a list whose length varies) as secondary
+                          flexible columns; Remove is fixed (one line). Every column reads left since T-236. */}
+                      <table className={RULED_TABLE}>
                         <thead className={THEAD}>
                           <tr>
-                            <th className={`${TH_TEXT} ${WRAP}`}>Volunteer</th>
-                            <th className={TH_TEXT}>Attendance</th>
-                            <th className={TH_TEXT}>Reminders</th>
-                            {shift.status === "OPEN" && <th className={TH_ACTIONS}>Actions</th>}
+                            <th className={TH_PRIMARY}>Volunteer</th>
+                            <th className={TH_SECOND}>Attendance</th>
+                            <th className={TH_SECOND}>Reminders</th>
+                            {shift.status === "OPEN" && (
+                              <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
@@ -329,11 +335,11 @@ function ShiftRosterView() {
                                     a status and a channel — and no length a person can type reaches
                                     them, so squeezing a name to keep a row of "24h: sent (email)"
                                     on one line was the exception put on the wrong column. */}
-                                <td className={`${TD_TEXT} ${WRAP}`}>
+                                <td className={TD_PRIMARY}>
                                   {s.fullName}
-                                  {s.source === "PROMOTION" && <span className="ml-2 rounded-sm bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">promoted</span>}
+                                  {s.source === "PROMOTION" && <span className="ml-2 rounded-control bg-accent-bg px-2 py-0.5 text-xs text-accent-text font-semibold">promoted</span>}
                                 </td>
-                                <td className={TD_TEXT}>
+                                <td className={TD_SECOND}>
                                   {canMarkAttendance ? (
                                     // Ticked to start, and the tick is what a person unticks for the
                                     // one or two who did not come. The other way round — an empty
@@ -404,7 +410,7 @@ function ShiftRosterView() {
                                     </span>
                                   )}
                                 </td>
-                                <td className={`${TD_TEXT} text-sm text-ink-secondary`}>
+                                <td className={`${TD_SECOND} text-sm text-ink-secondary`}>
                                   <span className="block">
                                     {s.reminders.length === 0 ? "—" : s.reminders.map((r, i) => (
                                       <span key={i} className="me-2 inline-block tabular-nums">{r.offsetMinutes / 60}h: {(r.status ?? "").toLowerCase()}{r.channel ? ` (${r.channel.toLowerCase()})` : ""}</span>
@@ -412,7 +418,7 @@ function ShiftRosterView() {
                                   </span>
                                 </td>
                                 {shift.status === "OPEN" && (
-                                  <td className={TD_ACTIONS}>
+                                  <td className={TD_ACTIONS_FIXED}>
                                     {/* The button is the whole of this cell now. The form it opens
                                         is the row below, which is where the note it is really about
                                         can be reached — see the comment there. Rendered only while

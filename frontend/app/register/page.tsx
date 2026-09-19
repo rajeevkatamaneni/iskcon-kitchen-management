@@ -233,11 +233,13 @@ export default function RegisterPage() {
       </header>
 
       {error && <ErrorNotice error={error} />}
-      {message && <InlineNotice tone="warning">{message}</InlineNotice>}
+      {/* Red: registration was refused and cannot go on until this is put right, the same tone as a
+          field error on this form (Rajeev, 2026-09-18, T-227). */}
+      {message && <InlineNotice tone="danger">{message}</InlineNotice>}
 
       <TemplePicker token={undefined} value={temple} onChange={setTemple} />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-x-3 gap-y-6 sm:grid-cols-2">
         <label className="grid gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">First name</span>
           <input
@@ -284,8 +286,8 @@ export default function RegisterPage() {
       </label>
 
       <fieldset className="grid gap-3">
-        <legend className="mb-1 text-sm text-ink-secondary">How would you like to sign in?</legend>
-        <div role="tablist" aria-label="How you’ll sign in" className="flex gap-1 rounded-lg bg-sunken p-1">
+        <legend className="mb-1 pl-field-inset text-sm font-medium text-ink">How would you like to sign in?</legend>
+        <div role="tablist" aria-label="How you’ll sign in" className="flex gap-1 rounded-control bg-sunken p-1">
           {(
             [
               ["password", "Password"],
@@ -300,7 +302,7 @@ export default function RegisterPage() {
               aria-selected={method === option}
               onClick={() => setMethod(option)}
               className={[
-                "min-h-touch flex-1 rounded px-3 text-sm transition-colors duration-state",
+                "min-h-touch flex-1 rounded-control px-3 text-sm transition-colors duration-state",
                 method === option ? "bg-raised font-medium text-ink" : "text-ink-secondary",
               ].join(" ")}
             >

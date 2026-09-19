@@ -4,9 +4,7 @@ import { useId, useState, type ReactNode } from "react";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
 import { HintedField } from "@/components/ds/InfoHint";
-import {
-  TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, WRAP,
-} from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { FOOD_UNITS, leadTimeWarning, unitLabel } from "@/lib/format";
 import type { IngredientView, PoLineInput } from "@/lib/api";
 
@@ -271,7 +269,7 @@ export function PurchaseOrderEditor({
             <span className="pl-field-inset text-sm text-ink-secondary">
               {vendorName ?? "This vendor"} asked for{" "}
               {leadTimeDays === 0
-                ? "no notice — they are a walk-in supplier"
+                ? "no notice — they are a walk-in vendor"
                 : leadTimeDays === 1
                   ? "1 day’s notice"
                   : `${leadTimeDays} days’ notice`}
@@ -279,19 +277,19 @@ export function PurchaseOrderEditor({
             </span>
           )}
         </div>
-        <table className={`${TABLE} text-sm`}>
+        <table className={`${RULED_TABLE} text-sm`}>
           <thead className={THEAD}>
             <tr>
-              <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
-              <th className={TH_NUM}>Quantity</th>
-              <th className={TH_ACTIONS}>Remove</th>
+              <th className={TH_PRIMARY}>Item</th>
+              <th className={TH_FIXED}>Quantity</th>
+              <th className={TH_ACTIONS_FIXED}><span className="sr-only">Remove</span></th>
             </tr>
           </thead>
           <tbody>
             {lines.map((l, i) => (
               <tr key={l.key} className={TR}>
-                <td className={`${TD_TEXT} ${WRAP}`}>{subjectOf(l)}</td>
-                <td className={TD_NUM}>
+                <td className={TD_PRIMARY}>{subjectOf(l)}</td>
+                <td className={TD_FIXED_NUM}>
                   <input
                     type="number"
                     min="0"
@@ -299,14 +297,14 @@ export function PurchaseOrderEditor({
                     value={l.quantity}
                     aria-label={`Quantity of ${subjectOf(l)}`}
                     onChange={(e) => setLines((cur) => cur.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))}
-                    className="w-28 rounded-control border border-hairline px-2 py-1 tabular-nums"
+                    className="min-w-28 rounded-control border border-hairline px-2 py-1 tabular-nums"
                   />{" "}
                   {/* The bare label, never a promoted one: the box beside it holds and submits the
                       line's own stored unit, so a readout that said "gm" over a figure in kilograms
                       would invite a thousandfold error. */}
                   <span className="text-ink-secondary">{unitLabel(l.unit)}</span>
                 </td>
-                <td className={TD_ACTIONS}>
+                <td className={TD_ACTIONS_FIXED}>
                   {/*
                     Rajeev, 2026-09-10, driving the deployed app: the Remove button is "washed out —
                     fix the styling" so that it reads as an available control. Three things were
@@ -463,7 +461,7 @@ function AddLine({
           type="button"
           disabled={busy || chosen === ""}
           onClick={add}
-          className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
+          className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
         >
           Add line
         </button>
@@ -518,7 +516,7 @@ function AddLine({
           type="button"
           disabled={busy || described.trim() === ""}
           onClick={addDescribed}
-          className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
+          className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
         >
           Add described line
         </button>

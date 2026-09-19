@@ -14,7 +14,7 @@ import { dateWithYear, money, quantity, unitLabel, templeDay } from "@/lib/forma
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { ENTRY_GRID, RULED_TABLE, TABLE, THEAD, TR, WRAP, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, TD_DATE, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 // The edit form, which this screen and the shopping-list panel both mount — see T-134 and the
 // note on the component. `subjectOf` comes with it because the tables below print the same
 // subject and two copies of that rule is how one of them comes to print an empty cell.
@@ -144,7 +144,8 @@ function leadTimeLine(po: PurchaseOrderView) {
     if (po.sentAfterLeadTime) {
       return (
         <p className="mt-2 flex flex-wrap items-baseline gap-2 text-sm">
-          <Badge tone="warning">Sent late</Badge>
+          {/* Neutral: a past fact about a sent order, nothing left to act on (T-227). */}
+          <Badge>Sent late</Badge>
           <span className="max-w-prose text-ink-secondary">
             This went out after {po.orderBy ? dateWithYear(po.orderBy) : "the last day it could be ordered"},
             the last day {po.vendorName} could have filled it — they asked for{" "}
@@ -574,7 +575,7 @@ function PurchaseOrderDetailView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/orders" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <Link href="/orders" className="text-sm text-accent-text hover:underline">← All purchase orders</Link>
 
@@ -677,7 +678,8 @@ function PurchaseOrderDetailView() {
                   */}
                   {po.vendorAbandoned && (
                     <p className="mt-2 flex flex-wrap items-baseline gap-2 text-sm text-ink-secondary">
-                      <Badge tone="warning">Never delivered</Badge>
+                      {/* Neutral: the order is closed, so this is history (T-227). */}
+                      <Badge>Never delivered</Badge>
                       {/* The second half of the sentence has to stay true (T-137). This order was
                           marked as a no-show, but if we sent it after the vendor's agreed lead time
                           the scorecard leaves it out of their figures entirely — so promising that
@@ -707,7 +709,9 @@ function PurchaseOrderDetailView() {
                 {po.closeOutcome && (
                   <div className="mt-2 text-sm">
                     <p className="flex flex-wrap items-baseline gap-2">
-                      <Badge tone={po.closeOutcome === "VENDOR_LET_US_DOWN" ? "warning" : "neutral"}>
+                      {/* Neutral for every outcome: a closed order is history, and amber is for
+                          something the reader should still act on (Rajeev, 2026-09-18, T-227). */}
+                      <Badge>
                         {po.closeOutcome === "VENDOR_LET_US_DOWN"
                           ? "Vendor let us down"
                           : po.closeOutcome === "SHORTFALL_EXCUSED"
@@ -766,17 +770,17 @@ function PurchaseOrderDetailView() {
                       <option value="">Vendor’s language</option>
                       {ALL_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
                     </select>
-                    <button type="button" disabled={busy} onClick={generatePdf} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{preparingPdf ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Generate PDF"}</button>
-                    <button type="button" disabled={busy} onClick={print} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Print</button>
+                    <button type="button" disabled={busy} onClick={generatePdf} className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">{preparingPdf ? (<span className="inline-flex items-center gap-2"><BusyPot />Preparing PDF…</span>) : "Generate PDF"}</button>
+                    <button type="button" disabled={busy} onClick={print} className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Print</button>
                     {/* "Edit", not "Edit lines" — Rajeev, 2026-09-10: "because that is what you are
                         doing. EDITING the whole PO, not just 1 line." The form below edits the
                         needed-by date as well as the lines, so the old label was describing less
                         than the button did. It no longer doubles as the way out of edit mode
                         either: it is not rendered there at all. */}
-                    {canEdit && <button type="button" disabled={busy} onClick={() => { setActionError(null); setEditing(true); }} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Edit</button>}
+                    {canEdit && <button type="button" disabled={busy} onClick={() => { setActionError(null); setEditing(true); }} className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Edit</button>}
                     {canSend && <button type="button" disabled={busy} onClick={() => markSent(false)} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Mark sent</button>}
                     {canWhatsApp && <button type="button" disabled={busy} onClick={() => run((t) => api.sendPurchaseOrderWhatsApp(id, t), "We couldn’t send it on WhatsApp.")} className="btn btn-primary min-h-touch px-4 transition-colors duration-state disabled:opacity-60">Send on WhatsApp</button>}
-                    {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
+                    {canReceive && <button type="button" disabled={busy} onClick={() => setShowReceive((s) => !s)} className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60">Receive delivery</button>}
                   </div>
                 )}
               </header>
@@ -873,12 +877,17 @@ function PurchaseOrderDetailView() {
 
 
               {showReceive && canReceive && (
-                <section className="card mb-6 px-6 py-5" aria-labelledby="receive-heading">
+                <section className="card mb-8 px-6 py-5" aria-labelledby="receive-heading">
                   <h2 id="receive-heading" className="text-lg">Record a delivery</h2>
                   <p className="mt-1 text-sm text-ink-secondary">Rejected goods need a reason and never enter stock. The price is what the bill says — correct it if it differs, or leave it blank for a delivery that came without one.</p>
                   <Form className="mt-4" aria-label="Record a delivery" onSubmit={receive}>
+                    {/* An entry grid, not a list, so it stays off the table rule (Rajeev,
+                        2026-09-18, T-233): on a wide screen it is the grid it always was. Below
+                        1024px each line becomes a card with a label over every box — ENTRY_GRID in
+                        ds/table.ts, from the `data-label` on each cell — instead of a table eight
+                        columns wide scrolling sideways inside the card. */}
                     <div className="overflow-x-auto">
-                    <table className={`${TABLE} text-sm`}>
+                    <table className={`${TABLE} ${ENTRY_GRID} text-sm`}>
                       <thead className={THEAD}>
                         <tr>
                           {/* A floor, not a width. Seven of these eight columns hold a fixed-width
@@ -925,24 +934,24 @@ function PurchaseOrderDetailView() {
                                 and not the receipts against it and a fully delivered line reads as
                                 over-delivered. "Received so far" was printing a bare number with no
                                 unit at all, which is the same defect one step further on. */}
-                            <td className={TD_NUM}>{quantity(l.quantity, l.unit)}</td>
-                            <td className={`${TD_NUM} text-ink-secondary`}>{quantity(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
-                            <td className={TD_NUM}><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${subjectOf(l)}`} className="w-24 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
-                            <td className={TD_NUM}><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${subjectOf(l)}`} className="w-20 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
-                            <td className={TD_TEXT}>
+                            <td className={TD_NUM} data-label="Ordered">{quantity(l.quantity, l.unit)}</td>
+                            <td className={`${TD_NUM} text-ink-secondary`} data-label="Received so far">{quantity(receivedByLine.get(l.id) ?? 0, l.unit)}</td>
+                            <td className={TD_NUM} data-label="Received now"><input name={`received_${l.id}`} type="number" min="0" step="any" aria-label={`Received ${subjectOf(l)}`} className="min-w-24 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
+                            <td className={TD_NUM} data-label="Rejected"><input name={`rejected_${l.id}`} type="number" min="0" step="any" aria-label={`Rejected ${subjectOf(l)}`} className="min-w-20 rounded-control border border-hairline px-2 py-1 tabular-nums" /></td>
+                            <td className={TD_TEXT} data-label="Reason">
                               <select name={`reason_${l.id}`} className="rounded-control border border-hairline px-2 py-1">
                                 <option value="">—</option>
                                 {REJECT_REASONS.map((r) => <option key={r} value={r}>{r.replace("_", " ").toLowerCase()}</option>)}
                               </select>
                             </td>
-                            <td className={TD_DATE}><input name={`expiry_${l.id}`} type="date" className="rounded-control border border-hairline px-2 py-1" /></td>
+                            <td className={TD_DATE} data-label="Expiry"><input name={`expiry_${l.id}`} type="date" className="rounded-control border border-hairline px-2 py-1" /></td>
                             {/* Pre-filled from the order and editable, because the bill that arrived
                                 with the lorry is the truth and the order was only ever a guess. The
                                 expected figure stays visible underneath rather than being replaced,
                                 so a storekeeper can see that ₹80 is not the ₹45 that was budgeted —
                                 as information, not as a gate. Whatever is typed here becomes the
                                 vendor's last-known price for this ingredient. */}
-                            <td className={`${TD_NUM} align-top`}>
+                            <td className={`${TD_NUM} align-top`} data-label="Price paid">
                               <input
                                 name={`price_${l.id}`}
                                 type="number"
@@ -950,7 +959,7 @@ function PurchaseOrderDetailView() {
                                 step="0.01"
                                 defaultValue={l.expectedPrice ?? ""}
                                 aria-label={`Price paid per ${unitLabel(l.unit)} of ${subjectOf(l)}, optional`}
-                                className="w-24 rounded-control border border-hairline px-2 py-1 tabular-nums"
+                                className="min-w-24 rounded-control border border-hairline px-2 py-1 tabular-nums"
                               />
                               <span className="mt-1 block pl-field-inset text-xs text-ink-muted">
                                 {l.expectedPrice == null
@@ -978,7 +987,7 @@ function PurchaseOrderDetailView() {
                   hidden behind a button the storekeeper has no reason to press. This is the only
                   way such an order is ever closed, and it has to be the thing you see. */}
               {canReceive && outstandingArrivals.length > 0 && (
-                <section className="card mb-6 px-6 py-5" aria-labelledby="arrivals-heading">
+                <section className="card mb-8 px-6 py-5" aria-labelledby="arrivals-heading">
                   <h2 id="arrivals-heading" className="text-lg">Did these arrive?</h2>
                   {/* Rewritten with the default (T-107). The first two sentences still orient —
                       they say why these lines are here and why the order will not close without
@@ -1076,18 +1085,18 @@ function PurchaseOrderDetailView() {
                     told apart by anything but the words inside them. A subject now appears in two
                     places at once (here, and on the "Did these arrive?" list), so "the line is on
                     the screen" stopped being the same claim as "the line is on the order". */}
-                <table className={TABLE} aria-label="What was ordered">
+                <table className={RULED_TABLE} aria-label="What was ordered">
                   <thead className={THEAD}>
                     <tr>
-                      <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
-                      <th className={TH_NUM}>Quantity</th>
-                      {showPrices && <th className={TH_NUM}>Price</th>}
+                      <th className={TH_PRIMARY}>Item</th>
+                      <th className={TH_FIXED}>Quantity</th>
+                      {showPrices && <th className={TH_FIXED}>Price</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {lines.map((l: PurchaseOrderLineView) => (
                       <tr key={l.id} className={TR}>
-                        <td className={`${TD_TEXT} ${WRAP}`}>
+                        <td className={TD_PRIMARY}>
                           {subjectOf(l)}
                           {/* Only ever on a described line, and only once somebody has said so
                               (T-066). A catalogue line's arrival is the delivery table below; this
@@ -1102,8 +1111,8 @@ function PurchaseOrderDetailView() {
                         {/* The order as issued, beside what it is expected to cost — the figure
                             the delivery above and the vendor's invoice are both checked against, so
                             it is exact and agrees line for line with the receiving table. */}
-                        <td className={TD_NUM}>{quantity(l.quantity, l.unit)}</td>
-                        {showPrices && <td className={TD_NUM}>{money(l.expectedPrice, "INR")}</td>}
+                        <td className={TD_FIXED_NUM}>{quantity(l.quantity, l.unit)}</td>
+                        {showPrices && <td className={TD_FIXED_NUM} data-label="Price">{money(l.expectedPrice, "INR")}</td>}
                       </tr>
                     ))}
                   </tbody>
@@ -1126,25 +1135,25 @@ function PurchaseOrderDetailView() {
                         {templeDay(r.receivedAt)}{r.receivedByName ? ` · ${r.receivedByName}` : ""}
                       </p>
                       <div className="table-wrap mt-2 overflow-x-auto">
-                        <table className={TABLE}>
+                        <table className={RULED_TABLE}>
                           <thead className={THEAD}>
                             <tr>
-                              <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
-                              <th className={TH_NUM}>Received</th>
-                              <th className={TH_NUM}>Rejected at the gate</th>
-                              <th className={TH_NUM}>Returned</th>
-                              <th className={TH_ACTIONS}>&nbsp;</th>
+                              <th className={TH_PRIMARY}>Item</th>
+                              <th className={TH_FIXED}>Received</th>
+                              <th className={TH_FIXED}>Rejected at the gate</th>
+                              <th className={TH_FIXED}>Returned</th>
+                              <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                             </tr>
                           </thead>
                           <tbody>
                             {r.lines.map((l) => (
                               <tr key={l.id} className={TR}>
-                                <td className={`${TD_TEXT} ${WRAP}`}>{l.ingredientName}</td>
+                                <td className={TD_PRIMARY}>{l.ingredientName}</td>
                                 {/* Ledger form throughout, as in the receiving table above: these
                                     figures are checked against each other and against the order, so
                                     a rounded one would read as a discrepancy that is not there. */}
-                                <td className={TD_NUM}>{quantity(l.receivedQty, l.unit)}</td>
-                                <td className={`${TD_NUM} text-ink-secondary`}>
+                                <td className={TD_FIXED_NUM} data-label="Received">{quantity(l.receivedQty, l.unit)}</td>
+                                <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="Rejected">
                                   {l.rejectedQty > 0
                                     ? `${quantity(l.rejectedQty, l.unit)} · ${reasonLabel(l.rejectReason ?? "")}`
                                     : "—"}
@@ -1153,10 +1162,10 @@ function PurchaseOrderDetailView() {
                                     it: the server sums the returns recorded against the line. A
                                     line nothing has gone back on reads as a dash rather than 0, so
                                     the exceptions are the only things the eye stops on. */}
-                                <td className={TD_NUM}>
+                                <td className={TD_FIXED_NUM} data-label="Returned">
                                   {l.returnedQty > 0 ? quantity(l.returnedQty, l.unit) : "—"}
                                 </td>
-                                <td className={TD_ACTIONS}>
+                                <td className={TD_ACTIONS_FIXED}>
                                   {/* Offered only where there is something left to send back.
                                       A line rejected in full never entered stock, and a line
                                       already returned in full has nothing more to take out — in
@@ -1431,7 +1440,7 @@ function PurchaseOrderDetailView() {
                         <span className="pl-field-inset font-medium text-ink">Reason</span>
                         <input name="reason" required className="min-h-touch rounded-control border border-hairline px-3" />
                       </label>
-                      <button type="submit" disabled={busy} className="min-h-touch rounded bg-danger px-5 text-ink-inverse disabled:opacity-60">Cancel order</button>
+                      <button type="submit" disabled={busy} className="min-h-touch rounded-control bg-danger px-5 text-ink-inverse disabled:opacity-60">Cancel order</button>
                     </div>
 
                     {/*

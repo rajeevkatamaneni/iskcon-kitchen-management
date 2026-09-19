@@ -477,18 +477,18 @@ describe("the scorecard shows what the excuses left out", () => {
     // Twice in the vendor's row — once under on-time, once under the fill rate — plus the totals
     // line. It is in the fill-rate column because this exclusion moves that percentage too, which
     // is exactly what an order we sent late does NOT do.
-    expect(screen.getAllByText("2 orders they made right — not counted")).toHaveLength(3);
-    expect(screen.getByText(/left out of the on-time figure and the fill rate alike/i)).toBeInTheDocument();
+    expect(screen.getAllByText("2 made right (not counted)")).toHaveLength(3);
+    expect(screen.getByText(/Not counted: 2 orders the vendor made right\./)).toBeInTheDocument();
   });
 
-  it("says plainly that nobody can move a percentage by hand", () => {
+  // The explainer used to argue this at length ("Nobody can change a percentage by hand …"). T-224
+  // cut it to the short version; the reasoning lives in the page's `caveat` comment now, and the
+  // screen only says what was left out and how many.
+  it("names one order the vendor made right in the explainer's Not counted line", () => {
     queryRef.current = { data: report({ ordersExcused: 1 }), error: null, loading: false };
     render(<VendorPerformancePage />);
 
-    expect(screen.getByText(/1 order was closed with part of the delivery never made/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Nobody can change a percentage by hand anywhere in this application/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Not counted: 1 order the vendor made right\./)).toBeInTheDocument();
   });
 
   it("says nothing at all when nothing was excused", () => {

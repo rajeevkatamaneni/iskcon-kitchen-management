@@ -9,7 +9,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, type AuditFilters } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { TABLE, TD_DATE, TD_TEXT, THEAD, TH_TEXT, TR, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, TD_FIXED, TD_PRIMARY, TD_SECOND, THEAD, TH_FIXED, TH_PRIMARY, TH_SECOND, TR } from "@/components/ds/table";
 import { moment } from "@/lib/format";
 
 /**
@@ -69,7 +69,7 @@ function AuditView() {
     <div className="flex min-h-screen">
       <Sidebar activeHref="/audit" />
 
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-8">
             <h1>Audit log</h1>
@@ -121,27 +121,25 @@ function AuditView() {
           ) : (
             <>
               <div className="table-wrap overflow-x-auto">
-                <table className={TABLE}>
+                {/* On the table rule since 2026-09-18 (T-233), classified by Rajeev: Details is
+                    the primary flexible column and Who the secondary one; the action's label and
+                    the time are fixed (one line). Every column reads left since T-236. */}
+                <table className={RULED_TABLE}>
                   <thead className={THEAD}>
                     <tr>
-                      <th className={TH_TEXT}>When</th>
-                      <th className={`${TH_TEXT} ${WRAP}`}>Who</th>
-                      <th className={TH_TEXT}>Action</th>
-                      <th className={`${TH_TEXT} ${WRAP}`}>Details</th>
+                      <th className={TH_PRIMARY}>Details</th>
+                      <th className={TH_SECOND}>Who</th>
+                      <th className={TH_FIXED}>Action</th>
+                      <th className={TH_FIXED}>When</th>
                     </tr>
                   </thead>
                   <tbody>
                     {events.map((event) => (
                       <tr key={event.id} className={TR}>
-                        <td className={`${TD_DATE} text-ink-secondary`}>
-                          {moment(event.createdAt)}
-                        </td>
-                        <td className={`${TD_TEXT} ${WRAP}`}>{event.actorLabel}</td>
-                        <td className={TD_TEXT}>{actionLabel(event.action)}</td>
-                        <td className={`${TD_TEXT} ${WRAP} text-sm text-ink-secondary`}>
-                          {/* The column that takes this table's slack, so a before/after pair as long
-                              as the record it describes grows downwards here rather than pushing the
-                              columns beside it off the screen. A recorded state is one unbroken run
+                        <td className={`${TD_PRIMARY} text-sm text-ink-secondary`}>
+                          {/* Wraps when the table is short of room, so a before/after pair as long as the record it
+                              describes grows downwards here rather than pushing the columns beside
+                              it off the screen. A recorded state is one unbroken run
                               of punctuation with nowhere to break, so it is allowed to break
                               anywhere; somebody's own words are not, and break between words. */}
                           {event.reason != null ? (
@@ -155,6 +153,9 @@ function AuditView() {
                             </div>
                           )}
                         </td>
+                        <td className={TD_SECOND}>{event.actorLabel}</td>
+                        <td className={TD_FIXED}>{actionLabel(event.action)}</td>
+                        <td className={`${TD_FIXED} text-ink-secondary`}>{moment(event.createdAt)}</td>
                       </tr>
                     ))}
                   </tbody>

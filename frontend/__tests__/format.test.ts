@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  convertQuantity,
   crossesMidnight,
   dayRange,
   leadTimeWarning,
@@ -237,5 +238,26 @@ describe("a span of days (T-194)", () => {
 
   it("hands back what it was given when it is not a date, rather than Invalid Date", () => {
     expect(dayRange("soon", "later", false, THIS_YEAR)).toBe("soon to later");
+  });
+});
+
+describe("convertQuantity (T-217)", () => {
+  it("restates a portion in the recipe's unit within a family", () => {
+    expect(convertQuantity(350, "ML", "L")).toBeCloseTo(0.35);
+    expect(600 * (convertQuantity(350, "ML", "L") as number)).toBeCloseTo(210);
+    expect(convertQuantity(150, "GM", "KG")).toBeCloseTo(0.15);
+    expect(convertQuantity(2, "KG", "GM")).toBe(2000);
+    expect(convertQuantity(0.2, "L", "ML")).toBeCloseTo(200);
+  });
+
+  it("returns the same unit unchanged, pieces included", () => {
+    expect(convertQuantity(3, "PIECES", "PIECES")).toBe(3);
+    expect(convertQuantity(1.5, "KG", "KG")).toBe(1.5);
+  });
+
+  it("refuses to convert across families", () => {
+    expect(convertQuantity(200, "ML", "KG")).toBeNull();
+    expect(convertQuantity(3, "PIECES", "KG")).toBeNull();
+    expect(convertQuantity(1, "GM", "L")).toBeNull();
   });
 });

@@ -13,7 +13,7 @@ import { Screen } from "@/components/ds/Screen";
 import { api, type IssuedFromStore, type KitchenIssueCost } from "@/lib/api";
 import { dayRange, money, todayIso } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 
 /**
  * What the temple store issued to each kitchen, costed (E10-S13).
@@ -94,12 +94,16 @@ function IssuedFromStoreView() {
               <InlineNotice tone="info" title={caveatTitle(data)}>
                 {caveatDetail(data)}
               </InlineNotice>
-              <KitchenTable report={data} />
-              <p className="mt-4 text-xs text-ink-muted">
-                If a kitchen carries its own purchases into the temple store, record them as a
-                donation in kind. They are then issued back out like anything else, and they reach
-                this report.
-              </p>
+              {/* The note is about the table, so it sits with it: 12px under it, not the 24px
+                  between blocks plus a margin of its own, which set it 40px off as a section. */}
+              <div className="grid gap-3">
+                <KitchenTable report={data} />
+                <p className="text-xs text-ink-muted">
+                  If a kitchen carries its own purchases into the temple store, record them as a
+                  donation in kind. They are then issued back out like anything else, and they reach
+                  this report.
+                </p>
+              </div>
             </>
           )}
         </Screen>
@@ -112,7 +116,7 @@ function IssuedFromStoreView() {
 function KitchenTable({ report }: { report: IssuedFromStore }) {
   return (
     <div className="table-wrap overflow-x-auto">
-      <table className={TABLE}>
+      <table className={RULED_TABLE}>
         <caption className="sr-only">
           {/* Read aloud as the table's name, so it is said the way the screen writes a date (T-194). */}
           Estimated materials cost of what the temple store issued to each kitchen,{" "}
@@ -120,16 +124,16 @@ function KitchenTable({ report }: { report: IssuedFromStore }) {
         </caption>
         <thead className={THEAD}>
           <tr>
-            <th scope="col" className={`${TH_TEXT} ${WRAP}`}>
+            <th scope="col" className={TH_PRIMARY}>
               Kitchen
             </th>
-            <th scope="col" className={TH_NUM}>
+            <th scope="col" className={TH_FIXED}>
               Requests
             </th>
-            <th scope="col" className={TH_NUM}>
+            <th scope="col" className={TH_FIXED}>
               Ingredients
             </th>
-            <th scope="col" className={TH_NUM}>
+            <th scope="col" className={TH_FIXED}>
               Estimated materials
             </th>
           </tr>
@@ -137,7 +141,7 @@ function KitchenTable({ report }: { report: IssuedFromStore }) {
         <tbody>
           {report.kitchens.map((kitchen) => (
             <tr key={kitchen.kitchenId} className={TR}>
-              <th scope="row" className={`${TD_TEXT} ${WRAP} font-normal text-ink`}>
+              <th scope="row" className={`${TD_PRIMARY} font-normal text-ink`}>
                 {kitchen.kitchen}
                 {kitchen.ingredientsWithoutPrice > 0 && (
                   <span className="mt-1 block text-xs text-ink-muted">{noPriceNote(kitchen)}</span>
@@ -153,13 +157,13 @@ function KitchenTable({ report }: { report: IssuedFromStore }) {
                   </span>
                 )}
               </th>
-              <td className={TD_NUM}>
+              <td data-label="Requests" className={TD_FIXED_NUM}>
                 {kitchen.requests.toLocaleString("en-IN")}
               </td>
-              <td className={TD_NUM}>
+              <td data-label="Ingredients" className={TD_FIXED_NUM}>
                 {kitchen.ingredients.toLocaleString("en-IN")}
               </td>
-              <td className={`${TD_NUM} font-medium`}>
+              <td data-label="Estimated materials" className={`${TD_FIXED_NUM} font-medium`}>
                 {money(kitchen.estimatedTotal, "INR")}
               </td>
             </tr>
@@ -167,18 +171,18 @@ function KitchenTable({ report }: { report: IssuedFromStore }) {
         </tbody>
         <tfoot>
           <tr className="border-t border-hairline bg-sunken">
-            <th scope="row" className={`${TD_TEXT} font-medium text-ink`}>
+            <th scope="row" className={`${TD_PRIMARY} font-medium text-ink`}>
               All kitchens
             </th>
-            <td className={TD_NUM}>
+            <td data-label="Requests" className={TD_FIXED_NUM}>
               {report.requests.toLocaleString("en-IN")}
             </td>
             {/*
               Deliberately blank. Two kitchens issued the same rice have been issued one ingredient
               between them, and adding the columns would say two.
             */}
-            <td className={TD_NUM} />
-            <td className={`${TD_NUM} font-medium`}>
+            <td className={TD_FIXED_NUM} />
+            <td data-label="Estimated materials" className={`${TD_FIXED_NUM} font-medium`}>
               {money(report.estimatedTotal, "INR")}
             </td>
           </tr>

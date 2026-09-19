@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Form } from "@/components/ds/Form";
 import { HintedField, InfoHint } from "@/components/ds/InfoHint";
 import { money, shortDate } from "@/lib/format";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_DATE, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import type { StaffPaymentMode, StaffPayView } from "@/lib/api";
 import { Button } from "@/components/ds/Button";
 
@@ -73,7 +73,7 @@ export function PayPanel({
     // would put the same sentence on the screen twice. The name is kept for anyone navigating by
     // region, who arrives at this block without the heading above it in view.
     <section className="card px-6 py-5" aria-label={`${pay.fullName}’s pay`}>
-      <dl className="grid grid-cols-3 gap-4 text-sm">
+      <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
         <div className="rounded border border-hairline px-4 py-3">
           <dt className="text-ink-secondary">Monthly salary</dt>
           <dd className="mt-1 text-lg tabular-nums">
@@ -101,8 +101,8 @@ export function PayPanel({
       </dl>
 
       {/* ---- Recording a payment ---- */}
-      <Form className="mt-6 grid grid-cols-4 gap-4" aria-label="Record a payment" onSubmit={onSubmitPayment}>
-        <h2 className="col-span-4 text-base">Record a payment</h2>
+      <Form className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Record a payment" onSubmit={onSubmitPayment}>
+        <h2 className="col-span-full text-base">Record a payment</h2>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Date</span>
@@ -153,7 +153,7 @@ export function PayPanel({
         </HintedField>
 
         {recoverable.length > 0 && (
-          <fieldset className="col-span-4 rounded border border-hairline px-4 py-3">
+          <fieldset className="col-span-full rounded border border-hairline px-4 py-3">
             {/* Not a HintedField: this legend names one box per outstanding advance, so there is no
                 single id for an htmlFor to point at. */}
             <legend className="flex items-center gap-1.5 px-1 text-sm text-ink-secondary">
@@ -163,7 +163,7 @@ export function PayPanel({
                 label="Recover from an advance"
               />
             </legend>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {recoverable.map((a) => (
                 <label key={a.id} className="flex items-center gap-3 text-sm text-ink-secondary">
                   {/* The outstanding figure is the number this whole control exists for — how much
@@ -194,15 +194,15 @@ export function PayPanel({
           </fieldset>
         )}
 
-        <label className="col-span-3 flex flex-col gap-1 text-sm text-ink-secondary">
+        <label className="col-span-full flex flex-col xl:col-span-3 gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Note</span>
           <input name="note" className={FIELD} />
         </label>
-        <div className="flex items-end">
+        <div className="col-span-full flex items-end justify-end xl:col-span-1">
           <button
             type="submit"
             disabled={busy}
-            className="btn btn-primary min-h-touch w-full px-5 transition-colors duration-state disabled:opacity-60"
+            className="btn btn-primary min-h-touch w-full px-5 transition-colors sm:w-auto xl:w-full duration-state disabled:opacity-60"
           >
             Record payment
           </button>
@@ -210,9 +210,9 @@ export function PayPanel({
       </Form>
 
       {/* ---- Recording an advance ---- */}
-      <Form className="mt-6 grid grid-cols-4 gap-4" aria-label="Record an advance" onSubmit={onSubmitAdvance}>
-        <h2 className="col-span-4 text-base">Give an advance</h2>
-        <p className="col-span-4 -mt-2 text-sm text-ink-secondary">
+      <Form className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Record an advance" onSubmit={onSubmitAdvance}>
+        <h2 className="col-span-full text-base">Give an advance</h2>
+        <p className="col-span-full -mt-2 text-sm text-ink-secondary">
           Money paid ahead of the work. It is docked from later payments.
         </p>
 
@@ -257,15 +257,15 @@ export function PayPanel({
           />
         </label>
 
-        <label className="col-span-3 flex flex-col gap-1 text-sm text-ink-secondary">
+        <label className="col-span-full flex flex-col xl:col-span-3 gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Note</span>
           <input name="advanceNote" className={FIELD} />
         </label>
-        <div className="flex items-end">
+        <div className="col-span-full flex items-end justify-end xl:col-span-1">
           <button
             type="submit"
             disabled={busy}
-            className="min-h-touch w-full rounded border border-hairline px-5 hover:bg-sunken disabled:opacity-60"
+            className="min-h-touch w-full rounded-control border border-hairline px-5 hover:bg-sunken sm:w-auto xl:w-full disabled:opacity-60"
           >
             Record advance
           </button>
@@ -281,16 +281,16 @@ export function PayPanel({
           <p className="text-sm text-ink-secondary">Nothing has been paid to {pay.fullName} yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg bg-sunken">
-            <table className={`${TABLE} text-sm`}>
+            <table className={`${RULED_TABLE} text-sm`}>
               <thead className={THEAD}>
                 <tr>
-                  <th className={TH_TEXT}>Date</th>
-                  <th className={TH_TEXT}>For</th>
-                  <th className={TH_NUM}>Gross</th>
-                  <th className={TH_NUM}>Docked</th>
-                  <th className={TH_NUM}>Paid</th>
-                  <th className={`${TH_TEXT} ${WRAP}`}>How</th>
-                  <th className={TH_ACTIONS}>Actions</th>
+                  <th className={TH_PRIMARY}>How</th>
+                  <th className={TH_FIXED}>Date</th>
+                  <th className={TH_FIXED}>For</th>
+                  <th className={TH_FIXED}>Gross</th>
+                  <th className={TH_FIXED}>Docked</th>
+                  <th className={TH_FIXED}>Paid</th>
+                  <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -302,21 +302,21 @@ export function PayPanel({
                       p.voidedAt ? "text-ink-muted line-through" : "",
                     ].join(" ")}
                   >
-                    <td className={`${TD_DATE} tabular-nums`}>{shortDate(p.paidOn)}</td>
-                    <td className={TD_TEXT}>
-                      {p.purposeLabel}
-                      {p.voidedAt && <span className="sr-only"> struck out</span>}
-                    </td>
-                    <td className={TD_NUM}>{money(p.gross, pay.currency)}</td>
-                    <td className={TD_NUM}>
-                      {p.deducted > 0 ? money(p.deducted, pay.currency) : "—"}
-                    </td>
-                    <td className={TD_NUM}>{money(p.net, pay.currency)}</td>
-                    <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
+                    <td className={`${TD_PRIMARY} text-ink-secondary`}>
                       {p.modeLabel}
                       {p.reference ? ` · ${p.reference}` : ""}
                     </td>
-                    <td className={TD_ACTIONS}>
+                    <td className={TD_FIXED_NUM}>{shortDate(p.paidOn)}</td>
+                    <td className={TD_FIXED}>
+                      {p.purposeLabel}
+                      {p.voidedAt && <span className="sr-only"> struck out</span>}
+                    </td>
+                    <td className={TD_FIXED_NUM} data-label="Gross">{money(p.gross, pay.currency)}</td>
+                    <td className={TD_FIXED_NUM} data-label="Docked">
+                      {p.deducted > 0 ? money(p.deducted, pay.currency) : "—"}
+                    </td>
+                    <td className={TD_FIXED_NUM} data-label="Paid">{money(p.net, pay.currency)}</td>
+                    <td className={TD_ACTIONS_FIXED}>
                       {/* Only an entry nothing depends on can be struck. One that docked an advance
                           would hand the balance back silently, so the API refuses it. Deliberately
                           left as quiet text: correcting a mistake is not one of this screen’s
@@ -342,15 +342,15 @@ export function PayPanel({
             Advances
           </h2>
           <div className="overflow-x-auto rounded-lg bg-sunken">
-            <table className={`${TABLE} text-sm`}>
+            <table className={`${RULED_TABLE} text-sm`}>
               <thead className={THEAD}>
                 <tr>
-                  <th className={TH_TEXT}>Date</th>
-                  <th className={TH_NUM}>Given</th>
-                  <th className={TH_NUM}>Recovered</th>
-                  <th className={TH_NUM}>Outstanding</th>
-                  <th className={`${TH_TEXT} ${WRAP}`}>How</th>
-                  <th className={TH_ACTIONS}>Actions</th>
+                  <th className={TH_PRIMARY}>How</th>
+                  <th className={TH_FIXED}>Date</th>
+                  <th className={TH_FIXED}>Given</th>
+                  <th className={TH_FIXED}>Recovered</th>
+                  <th className={TH_FIXED}>Outstanding</th>
+                  <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -362,22 +362,22 @@ export function PayPanel({
                       a.voidedAt ? "text-ink-muted line-through" : "",
                     ].join(" ")}
                   >
-                    <td className={`${TD_DATE} tabular-nums`}>
-                      {shortDate(a.paidOn)}
-                      {a.voidedAt && <span className="sr-only"> struck out</span>}
-                    </td>
-                    <td className={TD_NUM}>{money(a.amount, pay.currency)}</td>
-                    <td className={TD_NUM}>
-                      {a.recovered > 0 ? money(a.recovered, pay.currency) : "—"}
-                    </td>
-                    <td className={TD_NUM}>
-                      {a.voidedAt ? "—" : money(a.outstanding, pay.currency)}
-                    </td>
-                    <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
+                    <td className={`${TD_PRIMARY} text-ink-secondary`}>
                       {a.modeLabel}
                       {a.reference ? ` · ${a.reference}` : ""}
                     </td>
-                    <td className={TD_ACTIONS}>
+                    <td className={TD_FIXED_NUM}>
+                      {shortDate(a.paidOn)}
+                      {a.voidedAt && <span className="sr-only"> struck out</span>}
+                    </td>
+                    <td className={TD_FIXED_NUM} data-label="Given">{money(a.amount, pay.currency)}</td>
+                    <td className={TD_FIXED_NUM} data-label="Recovered">
+                      {a.recovered > 0 ? money(a.recovered, pay.currency) : "—"}
+                    </td>
+                    <td className={TD_FIXED_NUM} data-label="Outstanding">
+                      {a.voidedAt ? "—" : money(a.outstanding, pay.currency)}
+                    </td>
+                    <td className={TD_ACTIONS_FIXED}>
                       {!a.voidedAt && a.recovered === 0 && (
                         <Button variant="danger" size="sm" disabled={busy} onClick={() => onVoidAdvance(a.id)}>
                           Strike out

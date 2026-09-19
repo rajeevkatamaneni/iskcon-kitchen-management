@@ -246,6 +246,37 @@ export const FOOD_UNITS: readonly string[] = ["KG", "GM", "L", "ML", "PIECES"];
  */
 export const YIELD_UNITS: readonly string[] = FOOD_UNITS;
 
+/**
+ * What a recipe form offers under "Measured in" (T-218): kilos, litres or pieces, and not grams or
+ * millilitres.
+ *
+ * <p>A batch is made by the kilo or the litre. A recipe measured in grams invites the exact mistake
+ * T-217 found in the planner from the other side — a number that is right in one unit and a
+ * thousand times wrong in its neighbour — and nobody writes a temple recipe as "270000 ml of rasam".
+ * The smaller unit stays on offer for the portion, where "350 ml" is exactly how a person says it.
+ *
+ * <p>Narrower than {@link YIELD_UNITS} on purpose, and not a replacement for it: the database still
+ * admits all five, an older recipe measured in grams must still open and save untouched, and the
+ * ingredient request's dish lines are a different question. The form adds a recipe's own stored
+ * unit back to this list when it is not already on it.
+ */
+export const RECIPE_MEASURES: readonly string[] = ["KG", "L", "PIECES"];
+
+/**
+ * The portion units that fit a recipe measured in `yieldUnit` — the same family and nothing else
+ * (T-218): Kg or gm for a recipe in kilos, L or ml for one in litres, pieces for one in pieces.
+ *
+ * <p>Built on {@link FAMILY}, so there is still one table of what goes with what, and it agrees
+ * with {@link convertQuantity}: every unit this returns converts into `yieldUnit`, and nothing else
+ * does. `RecipeService` refuses the same mismatch on the server, keyed on `Unit.family()`.
+ */
+export function portionUnitsFor(yieldUnit: string | null | undefined): readonly string[] {
+  const code = (yieldUnit ?? "").toUpperCase();
+  const family = FAMILY[code];
+  if (family) return [family.large, family.small];
+  return code ? [code] : [];
+}
+
 /** How many base-family units one of each unit is. Mirrors Unit.baseFactor() and to_base_qty(). */
 const BASE_FACTOR: Record<string, number> = { KG: 1000, GM: 1, L: 1000, ML: 1, PIECES: 1 };
 
@@ -256,6 +287,29 @@ const FAMILY: Record<string, { large: string; small: string }> = {
   L: { large: "L", small: "ML" },
   ML: { large: "L", small: "ML" },
 };
+
+/**
+ * A quantity restated in another unit of the same family — 350 ml is 0.35 L, 2 Kg is 2000 gm — or
+ * null where the two units measure different things.
+ *
+ * <p>Built on {@link BASE_FACTOR} and {@link FAMILY} above and nothing else, so that there is one
+ * table of what a kilo is. Written for the meal planner (T-217): a recipe measured in litres with a
+ * portion of 350 ml was being planned as people × 350 *litres*, a thousand times too much, because
+ * the portion's unit was never read.
+ *
+ * <p>The same unit, or no unit given for either side, comes back unchanged — which is how pieces,
+ * a family of one, convert to themselves. A volume into a mass, or pieces into either, is null
+ * rather than a guess: without a density there is no honest answer, and the caller says so.
+ */
+export function convertQuantity(value: number, from: string | null | undefined, to: string | null | undefined): number | null {
+  const a = (from ?? "").toUpperCase();
+  const b = (to ?? "").toUpperCase();
+  if (a === b) return value;
+  const fa = FAMILY[a];
+  const fb = FAMILY[b];
+  if (!fa || !fb || fa.large !== fb.large) return null;
+  return (value * BASE_FACTOR[a]) / BASE_FACTOR[b];
+}
 
 /**
  * A quantity rounded the way a person rounds it — to a step that grows with the size of the number.
@@ -316,6 +370,31 @@ export function quantity(value: number | null | undefined, unit: string): string
  */
 export function cooksQuantity(value: number | null | undefined, unit: string): string {
   return render(value, unit, true);
+}
+
+/**
+ * A recipe's rough cost, said with what it buys: "₹8,000 per batch (270 L)" (T-231).
+ *
+ * <p>The field was labelled "Indicative cost" and shown as a bare "₹8,000", which left the reader
+ * to guess whether that was per plate, per kilo or per pot. It is the cost of one batch, the amount
+ * the recipe's "This recipe makes" says it makes (Rajeev, 2026-09-18), so the batch size is printed
+ * beside it, in the same rounded form the recipe page uses for that quantity, and the money in the
+ * lakh grouping every other rupee figure uses.
+ *
+ * <p>No batch size to name — a quantity of zero or none — and it says "per batch" and stops, rather
+ * than printing an empty bracket. No cost at all is "—", as {@link money} has it.
+ */
+export function batchCost(
+  cost: number | null | undefined,
+  batchQty: number | null | undefined,
+  batchUnit: string | null | undefined,
+  currency = "INR",
+): string {
+  if (cost == null) return "—";
+  const size = batchQty != null && Number.isFinite(batchQty) && batchQty > 0
+    ? ` (${cooksQuantity(batchQty, batchUnit ?? "")})`
+    : "";
+  return `${money(cost, currency)} per batch${size}`;
 }
 
 function render(value: number | null | undefined, unit: string, forCooking: boolean): string {

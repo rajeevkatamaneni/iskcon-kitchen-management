@@ -80,15 +80,15 @@ function library(overrides: Partial<RecipeSearchResult> = {}): RecipeSearchResul
 }
 
 /*
-  Rajeev's own words, approved 2026-09-08 under D-18, and asserted here character for character so
+  Rajeev's own words, first approved 2026-09-08 under D-18 and replaced by this shorter version he
+  approved on 2026-09-18 (T-226), asserted here character for character so
   that a later edit to the page has to come back through this test rather than quietly rewording
   him. The heading is the notice's `title` and the rest is its body.
 */
-const WARNING_TITLE = "Imported ingredients arrive unflagged for Ekadashi";
+const WARNING_TITLE = "Check imported ingredients for Ekadashi";
 const WARNING_BODY =
-  "A recipe import adds any ingredient this temple doesn\u2019t have, and can\u2019t tell which are " +
-  "restricted on a fast day \u2014 so it flags none. Set the Ekadashi flag on each yourself, or the " +
-  "meal planner will allow them onto an Ekadashi menu.";
+  "Imports can\u2019t tell which are restricted. Mark each one Ekadashi-prohibited or not, or the " +
+  "planner will allow them.";
 
 /** True when `first` comes before `second` in the rendered document. */
 function precedes(first: Element, second: Element): boolean {
@@ -248,7 +248,9 @@ describe("recipe browse", () => {
     searchMock.mockResolvedValue([]);
     render(<RecipesPage />);
 
-    expect(await screen.findByText(/no recipes found/i)).toBeInTheDocument();
+    // No query typed, so this is the first-use state, with one way forward.
+    expect(await screen.findByText("No recipes yet")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "New recipe" }).length).toBeGreaterThan(0);
   });
 
   /*
@@ -261,7 +263,7 @@ describe("recipe browse", () => {
     system\u2019s warning treatment rather than a paragraph, and it stands where the eye reaches it
     before the results.
   */
-  it("warns that imported ingredients arrive unflagged, in Rajeev\u2019s exact words", async () => {
+  it("warns to check imported ingredients for Ekadashi, in Rajeev\u2019s exact words", async () => {
     render(<RecipesPage />);
     await settle();
 

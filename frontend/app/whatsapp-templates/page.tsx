@@ -57,7 +57,7 @@ function WhatsAppTemplatesView() {
     <div className="flex min-h-screen">
       <Sidebar activeHref="/whatsapp-templates" />
 
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-8">
             <h1>WhatsApp templates</h1>
@@ -119,7 +119,10 @@ function TemplateCard({
       {counts && <StatusAcrossTemples counts={counts} />}
 
       <h3 className="mt-4 text-sm font-medium">Body</h3>
-      <p className="mt-1 whitespace-pre-wrap rounded bg-sunken px-4 py-3 text-sm">{template.body}</p>
+      {/* `rounded-control`, the corner every box of text in the application wears (T-235). Plain
+          `rounded` is Tailwind's default here, 12px, left over from before the theme packs set the
+          control corner — so this one box was rounder than everything around it. */}
+      <p className="mt-1 whitespace-pre-wrap rounded-control bg-sunken px-4 py-3 text-sm">{template.body}</p>
 
       {template.exampleValues.length > 0 && (
         <>
@@ -179,7 +182,8 @@ function StatusAcrossTemples({ counts }: { counts: TemplateStatusCounts }) {
       </p>
       {counts.formattingRefusal && (
         <div className="mt-2">
-          <InlineNotice tone="warning">
+          {/* Red: Meta refused it, so no temple can send it until it is fixed (Rajeev, 2026-09-18, T-227). */}
+          <InlineNotice tone="danger">
             Meta refused this for its formatting in a temple. That applies to every temple.
           </InlineNotice>
         </div>

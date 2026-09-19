@@ -14,7 +14,7 @@ import { ACCESS_LABELS, employmentTypeLabel } from "@/components/staff/labels";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { dateWithYear } from "@/lib/format";
 import { api, type StaffProfileView } from "@/lib/api";
-import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_DATE, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 
 /**
  * The staff register (E6-S8): who works at this temple, and who used to.
@@ -178,26 +178,30 @@ function StaffTable({
         </div>
       ) : (
         <div className="table-wrap overflow-x-auto">
-          <table className={TABLE}>
+          <table className={RULED_TABLE}>
             <thead className={THEAD}>
               <tr>
-                <th className={`${TH_TEXT} ${WRAP}`}>Name</th>
-                <th className={TH_TEXT}>Job</th>
-                <th className={TH_TEXT}>Contact</th>
-                <th className={TH_TEXT}>Access</th>
+                <th className={TH_PRIMARY}>Name</th>
+                <th className={TH_SECOND}>Contact</th>
+                <th className={TH_FIXED}>Job</th>
+                <th className={TH_FIXED}>Access</th>
                 {/* Joined and PAN left this table on 2026-08-20. The joining date is on the record
                     and rarely the thing being scanned for, and a PAN is not something to have sitting
                     in a column at all — it is now read from the person’s own record, where it is one
                     deliberate act rather than an inch from every other row. The room they freed goes
                     to the actions. */}
-                {former && <th className={TH_TEXT}>Left</th>}
-                <th className={TH_ACTIONS}>Actions</th>
+                {former && <th className={TH_FIXED}>Left</th>}
+                <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
               {rows.map(({ staff: s, banned }) => (
-                <tr key={s.id} className={TR}>
-                  <td className={`${TD_TEXT} ${WRAP} ${banned ? "text-danger" : ""}`}>
+                // Cells meet on the baseline of their first line (T-235). The row's `align-top` put
+                // each cell's line box at the top, and Job's 16px line is 6px taller than Access's
+                // 14px one, so the two words sat 4px apart (baselines measured 123.5 and 119.5 at
+                // 1280). Baseline alignment keeps both sizes and lines the words up.
+                <tr key={s.id} className={`${TR} [&>td]:align-baseline`}>
+                  <td className={`${TD_PRIMARY} ${banned ? "text-danger" : ""}`}>
                     {s.fullName}
                     {banned && (
                       <span className="ml-2">
@@ -210,15 +214,15 @@ function StaffTable({
                       </span>
                     )}
                   </td>
-                  <td className={TD_TEXT}>
+                  <td className={`${TD_SECOND} text-sm text-ink-secondary`}>
+                    <div className="whitespace-nowrap tabular-nums">{s.phone ?? "—"}</div>
+                    <div>{s.email ?? ""}</div>
+                  </td>
+                  <td className={TD_FIXED}>
                     {s.jobTitleLabel}
                     <div className="text-xs text-ink-muted">{employmentTypeLabel(s.employmentType)}</div>
                   </td>
-                  <td className={`${TD_TEXT} text-sm text-ink-secondary`}>
-                    <div className="tabular-nums">{s.phone ?? "—"}</div>
-                    <div>{s.email ?? ""}</div>
-                  </td>
-                  <td className={`${TD_TEXT} text-sm`}>
+                  <td className={`${TD_FIXED} text-sm`}>
                     {s.systemAccess ? (
                       ACCESS_LABELS[s.systemAccess]
                     ) : (
@@ -226,15 +230,15 @@ function StaffTable({
                     )}
                   </td>
                   {former && (
-                    <td className={`${TD_DATE} text-sm text-ink-secondary`}>
+                    <td className={`${TD_FIXED} text-sm text-ink-secondary`}>
                       {/* The date and nothing else. How and why they left are on their record, which
                           is one press away in this same row — a second line of prose here made this
                           table read as a different table from the one above it. */}
                       {s.lastWorkingDay ? dateWithYear(s.lastWorkingDay) : "—"}
                     </td>
                   )}
-                  <td className={TD_ACTIONS}>
-                    {/* One row, starting at the same edge as the heading over it, and it stays one
+                  <td className={TD_ACTIONS_FIXED}>
+                    {/* One row, ending at the table's right edge (T-228), and it stays one
                         row: three buttons stacked into a column was what a crushed cell looked like.
                         Terminate sits last: it is the one action here nobody takes twice. Former
                         staff get View instead, because they have no editable form and would
@@ -280,9 +284,9 @@ function StaffTable({
  * radius — comes from {@link ButtonLink}. All this adds is a little more room at each end, so three
  * short words in a narrow column do not read as cramped.
  *
- * <p>They were briefly pill-shaped. They are not any more: §4 of the design system gives the pill
- * radius to status chips alone, so that a shape says whether something is a state or an action, and
- * a screen that spends it on buttons takes that distinction away everywhere.
+ * <p>They were briefly pill-shaped. They are not any more, and since 2026-09-17 nothing is: §4 of the
+ * design system now gives every chip, badge and control the theme's control corner, the buttons'
+ * own, and keeps full rounding for true circles and meter bars only.
  *
  * <p>Every one of them is a link now rather than a button. Each opens a screen with its own address,
  * which is what makes the browser's back button do the obvious thing.

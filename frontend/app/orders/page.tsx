@@ -13,7 +13,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { STATUSES, STATUS_LABEL, statusChip } from "./po-status";
 import { Loading } from "@/components/Loading";
 import { dateWithYear, templeDay } from "@/lib/format";
-import { TABLE, THEAD, TR, TH_TEXT, TD_TEXT, TD_DATE, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_LEAD, TD_LEAD, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED } from "@/components/ds/table";
 
 export default function PurchaseOrdersPage() {
   return (
@@ -68,7 +68,7 @@ function PurchaseOrdersView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/orders" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -150,12 +150,17 @@ function PurchaseOrdersView() {
             </div>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              {/* On the table rule since 2026-09-18 (T-233): the order number leads on the left,
+                  fixed, because it is the row's link (the exception Rajeev accepted); the vendor is
+                  the primary flexible column; status and the three dates are fixed (one line, reading left since T-236).
+                  The dates carry labels, which only the phone's card layout prints — three bare
+                  dates in a row would not say which is which. */}
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={TH_TEXT}>PO</th>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Vendor</th>
-                    <th className={TH_TEXT}>Status</th>
+                    <th className={TH_LEAD}>PO</th>
+                    <th className={TH_PRIMARY}>Vendor</th>
+                    <th className={TH_FIXED}>Status</th>
                     {/* Beside the status because the pair answers one question — how far along is
                         this, and since when. It was the last column and called "Ordered", which is
                         the one thing it is not: order_date is stamped when the PO is generated, and
@@ -165,22 +170,22 @@ function PurchaseOrdersView() {
                         be any confusion IF an order was sent late or if the merchant send the items
                         late." Generated → Sent is our lateness; Sent → Needed by is theirs, and one
                         column cannot answer both. */}
-                    <th className={TH_TEXT}>Generated</th>
-                    <th className={TH_TEXT}>Sent</th>
-                    <th className={TH_TEXT}>Needed by</th>
+                    <th className={TH_FIXED}>Generated</th>
+                    <th className={TH_FIXED}>Sent</th>
+                    <th className={TH_FIXED}>Needed by</th>
                   </tr>
                 </thead>
                 <tbody>
                   {orders.map((po) => (
                     <tr key={po.id} className={TR}>
-                      <td className={TD_TEXT}>
+                      <td className={TD_LEAD}>
                         <Link href={`/orders/${po.id}`} className="font-medium text-accent-text hover:underline tabular-nums">
                           {po.poNumber}
                         </Link>
                       </td>
-                      <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{po.vendorName}</td>
-                      <td className={TD_TEXT}>{statusChip(po.status)}</td>
-                      <td className={`${TD_DATE} text-ink-secondary`}>{dateWithYear(po.orderDate)}</td>
+                      <td className={`${TD_PRIMARY} text-ink-secondary`}>{po.vendorName}</td>
+                      <td className={TD_FIXED}>{statusChip(po.status)}</td>
+                      <td className={`${TD_FIXED} text-ink-secondary`} data-label="Generated">{dateWithYear(po.orderDate)}</td>
                       {/* An em dash rather than a blank: a draft has not been sent, and saying so is
                           different from having nothing to say. */}
                       {/* templeDay, not dateWithYear: sentAt is an Instant and dateWithYear appends
@@ -188,8 +193,8 @@ function PurchaseOrdersView() {
                           Date. It also has to be read in the temple's zone — an order sent at 02:00
                           in Bengaluru is the previous evening in UTC, and would sit on the wrong day
                           in the very column that exists to say which day it was sent. */}
-                      <td className={`${TD_DATE} text-ink-secondary`}>{po.sentAt ? templeDay(po.sentAt) : "—"}</td>
-                      <td className={`${TD_DATE} text-ink-secondary`}>{po.neededBy ? dateWithYear(po.neededBy) : "—"}</td>
+                      <td className={`${TD_FIXED} text-ink-secondary`} data-label="Sent">{po.sentAt ? templeDay(po.sentAt) : "—"}</td>
+                      <td className={`${TD_FIXED} text-ink-secondary`} data-label="Needed by">{po.neededBy ? dateWithYear(po.neededBy) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>

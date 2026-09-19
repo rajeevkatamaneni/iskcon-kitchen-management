@@ -15,14 +15,7 @@ import {
   ConditionBadge,
   ServiceState,
 } from "@/components/EquipmentWords";
-import {
-  TABLE,
-  TD_TEXT,
-  THEAD,
-  TH_TEXT,
-  TR,
-  WRAP,
-} from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED } from "@/components/ds/table";
 import {
   api,
   type EquipmentCondition,
@@ -130,10 +123,10 @@ function EquipmentList() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/equipment" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
-            <div>
+          <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 grow basis-60">
               <h1>Equipment</h1>
               <p className="mt-1 text-ink-secondary">
                 What the temple owns, what state it is in, and when it is next due to be looked at.
@@ -147,7 +140,7 @@ function EquipmentList() {
               <button
                 type="button"
                 onClick={() => setServiceStatus((s) => (s === "OVERDUE" ? "" : "OVERDUE"))}
-                className={`rounded-md px-4 py-2 text-sm ${
+                className={`rounded-control px-4 py-2 text-sm ${
                   serviceStatus === "OVERDUE" ? "bg-danger text-ink-inverse" : "bg-danger-bg text-danger"
                 }`}
               >
@@ -254,20 +247,20 @@ function EquipmentList() {
             /* The table scrolls inside its own box if it has to. The page never does — that is the
                complaint this list was designed around. */
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Name</th>
-                    <th className={TH_TEXT}>Location</th>
-                    <th className={TH_TEXT}>Status</th>
-                    <th className={TH_TEXT}>Next service</th>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Service company</th>
+                    <th className={TH_PRIMARY}>Name</th>
+                    <th className={TH_SECOND}>Location</th>
+                    <th className={TH_SECOND}>Service company</th>
+                    <th className={TH_FIXED}>Status</th>
+                    <th className={TH_FIXED}>Next service</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((i: EquipmentView) => (
                     <tr key={i.id} className={TR}>
-                      <td className={`${TD_TEXT} ${WRAP}`}>
+                      <td className={TD_PRIMARY}>
                         {/* The name and nothing beside it. The kind — machine, tool, furniture —
                             was removed on 2026-09-04: a closed vocabulary of three the temple
                             could not extend was worse than none, and "Wet Grinder 10L" already
@@ -279,11 +272,14 @@ function EquipmentList() {
                           {i.name}
                         </Link>
                       </td>
-                      <td className={`${TD_TEXT} text-ink-secondary`}>{i.storageLocation ?? "—"}</td>
-                      <td className={TD_TEXT}>
+                      <td className={`${TD_SECOND} text-ink-secondary`}>{i.storageLocation ?? "—"}</td>
+                      <td className={`${TD_SECOND} text-ink-secondary`}>
+                        {i.serviceCompany ?? "—"}
+                      </td>
+                      <td className={TD_FIXED}>
                         <ConditionBadge condition={i.condition} />
                       </td>
-                      <td className={TD_TEXT}>
+                      <td className={TD_FIXED}>
                         {/* T-120. "Not scheduled" against sixty stools for ever teaches the reader
                             that the phrase means nothing, and then it means nothing when a boiler
                             is wearing it. A thing somebody has said will never need servicing says
@@ -299,9 +295,6 @@ function EquipmentList() {
                         ) : (
                           <ServiceState item={i} />
                         )}
-                      </td>
-                      <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
-                        {i.serviceCompany ?? "—"}
                       </td>
                     </tr>
                   ))}

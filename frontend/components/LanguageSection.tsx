@@ -96,7 +96,7 @@ export function LanguageSection({
   }
 
   return (
-    <section className="card mt-6 px-7 py-7" aria-label="Language">
+    <section className="card mt-6 px-5 py-6 sm:px-7 sm:py-7" aria-label="Language">
       <h2 className="text-lg font-semibold text-ink">Language</h2>
       <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
         The language your kitchen reads. Job cards print in it by default.

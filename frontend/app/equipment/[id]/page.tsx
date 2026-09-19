@@ -20,7 +20,7 @@ import {
   intervalUnitLabel,
   intervalWords,
 } from "@/components/EquipmentWords";
-import { TABLE, TD_TEXT, THEAD, TH_TEXT, TR, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 import {
   api,
   toApiError,
@@ -146,7 +146,7 @@ function EquipmentItemView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/equipment" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <Link href="/equipment" className="text-sm text-accent-text hover:underline">
             ← Equipment
@@ -290,34 +290,34 @@ function EquipmentItemView() {
                   </p>
                 ) : (
                   <div className="table-wrap overflow-x-auto">
-                    <table className={`${TABLE} text-sm`}>
+                    <table className={`${RULED_TABLE} text-sm`}>
                       <thead className={THEAD}>
                         <tr>
-                          <th className={TH_TEXT}>Serviced on</th>
-                          <th className={`${TH_TEXT} ${WRAP}`}>Company</th>
-                          <th className={`${TH_TEXT} ${WRAP}`}>What was done</th>
-                          <th className={TH_TEXT}>Cost</th>
-                          <th className={TH_TEXT}>Recorded by</th>
+                          <th className={TH_PRIMARY}>What was done</th>
+                          <th className={TH_SECOND}>Company</th>
+                          <th className={TH_SECOND}>Recorded by</th>
+                          <th className={TH_FIXED}>Serviced on</th>
+                          <th className={TH_FIXED}>Cost</th>
                         </tr>
                       </thead>
                       <tbody>
                         {data.services.map((s) => (
                           <tr key={s.id} className={TR}>
-                            <td className={TD_TEXT}>{dateWithYear(s.servicedOn)}</td>
-                            <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
-                              {s.serviceCompany ?? "—"}
-                            </td>
-                            <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
+                            <td className={`${TD_PRIMARY} text-ink-secondary`}>
                               {s.workDone ?? "—"}
                             </td>
-                            <td className={TD_TEXT}>
-                              {s.costInr == null ? "—" : money(s.costInr, "INR")}
+                            <td className={`${TD_SECOND} text-ink-secondary`}>
+                              {s.serviceCompany ?? "—"}
                             </td>
-                            <td className={`${TD_TEXT} text-ink-secondary`}>
+                            <td className={`${TD_SECOND} text-ink-secondary`}>
                               {s.actorName ?? "—"}
                               <span className="block text-xs text-ink-muted">
                                 {moment(s.createdAt)}
                               </span>
+                            </td>
+                            <td className={TD_FIXED}>{dateWithYear(s.servicedOn)}</td>
+                            <td className={TD_FIXED_NUM}>
+                              {s.costInr == null ? "—" : money(s.costInr, "INR")}
                             </td>
                           </tr>
                         ))}
@@ -340,29 +340,29 @@ function EquipmentItemView() {
                   </p>
                 ) : (
                   <div className="table-wrap overflow-x-auto">
-                    <table className={`${TABLE} text-sm`}>
+                    <table className={`${RULED_TABLE} text-sm`}>
                       <thead className={THEAD}>
                         <tr>
-                          <th className={TH_TEXT}>When</th>
-                          <th className={TH_TEXT}>Change</th>
-                          <th className={`${TH_TEXT} ${WRAP}`}>Why</th>
-                          <th className={TH_TEXT}>By</th>
+                          <th className={TH_PRIMARY}>Why</th>
+                          <th className={TH_SECOND}>By</th>
+                          <th className={TH_FIXED}>When</th>
+                          <th className={TH_FIXED}>Change</th>
                         </tr>
                       </thead>
                       <tbody>
                         {data.history.map((h) => (
                           <tr key={h.id} className={TR}>
-                            <td className={`${TD_TEXT} text-ink-secondary`}>
+                            <td className={`${TD_PRIMARY} text-ink-secondary`}>
+                              {h.reason ?? "—"}
+                            </td>
+                            <td className={`${TD_SECOND} text-ink-secondary`}>{h.actorName ?? "—"}</td>
+                            <td className={`${TD_FIXED} text-ink-secondary`}>
                               {moment(h.createdAt)}
                             </td>
-                            <td className={TD_TEXT}>
+                            <td className={TD_FIXED}>
                               {h.fromCondition ? `${CONDITION_LABEL[h.fromCondition]} → ` : ""}
                               {CONDITION_LABEL[h.toCondition]}
                             </td>
-                            <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
-                              {h.reason ?? "—"}
-                            </td>
-                            <td className={`${TD_TEXT} text-ink-secondary`}>{h.actorName ?? "—"}</td>
                           </tr>
                         ))}
                       </tbody>

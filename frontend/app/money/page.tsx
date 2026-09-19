@@ -9,7 +9,7 @@ import { money, todayIso } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
 
@@ -63,7 +63,7 @@ function PayablesView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/money" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6">
             <h1>Payments</h1>
@@ -89,29 +89,33 @@ function PayablesView() {
                 Total outstanding: <span className="font-medium tabular-nums text-ink">{money(total, "INR")}</span>
               </p>
               <div className="table-wrap overflow-x-auto">
-                <table className={TABLE}>
+                {/* The table rule (DESIGN_SYSTEM §5): the vendor is the one flexible column, so it
+                    leads; the invoice number is a short code and not a link here, so it sits with
+                    the fixed values. Below 1024px each row is a card and Record payment stays on
+                    screen instead of past a sideways scroll. */}
+                <table className={RULED_TABLE}>
                   <thead className={THEAD}>
                     <tr>
-                      <th className={TH_TEXT}>Invoice</th>
-                      <th className={`${TH_TEXT} ${WRAP}`}>Vendor</th>
-                      <th className={TH_NUM}>Outstanding</th>
-                      <th className={TH_TEXT}>Aging</th>
-                      <th className={TH_ACTIONS}>Action</th>
+                      <th className={TH_PRIMARY}>Vendor</th>
+                      <th className={TH_FIXED}>Invoice</th>
+                      <th className={TH_FIXED}>Outstanding</th>
+                      <th className={TH_FIXED}>Aging</th>
+                      <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     {payables.map((p) => (
                       <Fragment key={p.invoiceId}>
                         <tr className={TR}>
-                          <td className={`${TD_TEXT} font-medium`}>{p.invoiceNumber}</td>
-                          <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{p.vendorName}</td>
-                          <td className={TD_NUM}>{money(p.outstanding, "INR")}</td>
-                          <td className={TD_TEXT}>
-                            <span className={`rounded-sm px-2 py-1 text-xs ${p.agingBucket === "CURRENT" ? "bg-sunken text-ink-secondary" : "bg-warning-bg text-warning"}`}>
+                          <td className={TD_PRIMARY}>{p.vendorName}</td>
+                          <td className={`${TD_FIXED} font-medium`}>{p.invoiceNumber}</td>
+                          <td className={TD_FIXED_NUM} data-label="Outstanding">{money(p.outstanding, "INR")}</td>
+                          <td className={TD_FIXED}>
+                            <span className={`rounded-control px-2 py-1 text-xs ${p.agingBucket === "CURRENT" ? "bg-sunken text-ink-secondary" : "bg-warning-bg text-warning"}`}>
                               {BUCKET_LABEL[p.agingBucket] ?? p.agingBucket}
                             </span>
                           </td>
-                          <td className={TD_ACTIONS}>
+                          <td className={TD_ACTIONS_FIXED}>
                             <Button variant="ghost" size="sm" onClick={() => setPaying(paying === p.invoiceId ? null : p.invoiceId)}>
                               Record payment
                             </Button>
@@ -125,7 +129,7 @@ function PayablesView() {
                                   <input name="paidOn" type="date" defaultValue={today} required className="min-h-touch rounded-control border border-hairline px-2" />
                                 </label>
                                 <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Amount (₹)</span>
-                                  <input name="amount" type="number" min="0" step="any" defaultValue={p.outstanding} required className="min-h-touch w-32 rounded-control border border-hairline px-2 text-right tabular-nums" />
+                                  <input name="amount" type="number" min="0" step="any" defaultValue={p.outstanding} required className="min-h-touch min-w-32 rounded-control border border-hairline px-2 tabular-nums" />
                                 </label>
                                 <label className="flex flex-col gap-1 text-sm text-ink-secondary"><span className="pl-field-inset font-medium text-ink">Method</span>
                                   <select name="method" className="min-h-touch rounded-control border border-hairline px-2">

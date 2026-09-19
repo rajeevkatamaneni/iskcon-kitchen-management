@@ -69,7 +69,7 @@ function MyDonationsView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/my-donations" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6">
             <h1>My donations</h1>
@@ -108,7 +108,7 @@ function MyDonationsView() {
                       type="button"
                       disabled={downloading !== null}
                       onClick={() => download(gift)}
-                      className="min-h-touch rounded border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60"
+                      className="min-h-touch rounded-control border border-hairline px-4 text-sm hover:bg-sunken disabled:opacity-60"
                     >
                       {downloading === gift.id ? "Downloading…" : "Download receipt"}
                     </button>

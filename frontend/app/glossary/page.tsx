@@ -10,7 +10,7 @@ import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { TABLE, TD_ACTIONS, TD_TEXT, THEAD, TH_ACTIONS, TH_TEXT, TR, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
 
@@ -69,9 +69,9 @@ function GlossaryView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/recipes" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <header className="mb-8">
+          <header className="mb-6">
             <Link href="/recipes" className="text-sm text-ink-secondary hover:text-ink">← Recipes</Link>
             <h1 className="mt-2">Translation glossary</h1>
             <p className="mt-1 text-ink-secondary">
@@ -126,24 +126,24 @@ function GlossaryView() {
             </div>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={TH_TEXT}>Language</th>
-                    <th className={`${TH_TEXT} ${WRAP}`}>English</th>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Preferred</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_PRIMARY}>English</th>
+                    <th className={TH_SECOND}>Preferred</th>
+                    <th className={TH_FIXED}>Language</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map((e) => (
                     <tr key={e.id} className={TR}>
-                      <td className={`${TD_TEXT} text-ink-secondary`}>
+                      <td className={TD_PRIMARY}>{e.sourceTerm}</td>
+                      <td className={TD_SECOND}>{e.targetTerm}</td>
+                      <td className={`${TD_FIXED} text-ink-secondary`}>
                         {languageLabel(e.language)}
                       </td>
-                      <td className={`${TD_TEXT} ${WRAP}`}>{e.sourceTerm}</td>
-                      <td className={`${TD_TEXT} ${WRAP}`}>{e.targetTerm}</td>
-                      <td className={TD_ACTIONS}>
+                      <td className={TD_ACTIONS_FIXED}>
                         <Button
                           variant="danger"
                           size="sm"

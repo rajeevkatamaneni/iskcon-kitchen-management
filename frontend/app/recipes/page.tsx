@@ -1,5 +1,6 @@
 "use client";
 
+import { Screen } from "@/components/ds/Screen";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -142,14 +143,16 @@ function RecipesView() {
     <div className="flex min-h-screen">
       <Sidebar activeHref="/recipes" />
 
-      <main className="min-w-0 flex-1 px-8 py-10">
-        <div className="mx-auto max-w-content">
+      {/* The shared page frame, so this page starts where every other screen does. */}
+      <main className="min-w-0 flex-1">
+        <Screen>
+        <div>
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <h1>Recipes</h1>
             <div className="flex flex-wrap gap-2">
               <Link
                 href="/glossary"
-                className="flex min-h-touch items-center rounded border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
+                className="flex min-h-touch items-center rounded-control border border-hairline-strong px-4 text-sm transition-colors duration-state hover:bg-raised"
               >
                 Glossary
               </Link>
@@ -177,13 +180,16 @@ function RecipesView() {
             the catalogue rather than about what the box just found — under the field it would read
             as something the search had turned up.
 
-            The words are Rajeev's own, approved 2026-09-08 under D-18. Do not reword them.
+            The words are Rajeev's own. He approved the first version on 2026-09-08 under D-18, and
+            approved this shorter one on 2026-09-18 (T-226) after the content audit found the old one
+            over the notice length. The action names the setting exactly as the ingredients screen
+            labels it, "Ekadashi-prohibited", so the reader can find the box it means. Do not reword
+            them without asking him.
           */}
           <div className="mb-6">
-            <InlineNotice tone="warning" title="Imported ingredients arrive unflagged for Ekadashi">
-              A recipe import adds any ingredient this temple doesn’t have, and can’t tell which are
-              restricted on a fast day — so it flags none. Set the Ekadashi flag on each yourself, or
-              the meal planner will allow them onto an Ekadashi menu.
+            <InlineNotice tone="warning" title="Check imported ingredients for Ekadashi">
+              Imports can’t tell which are restricted. Mark each one Ekadashi-prohibited or not, or
+              the planner will allow them.
             </InlineNotice>
           </div>
 
@@ -218,9 +224,7 @@ function RecipesView() {
                   </ButtonLink>
                 }
               >
-                An import creates any ingredient a recipe needs that this temple doesn’t already
-                have, and picks its category and unit itself. Check each one on the Ingredients
-                page — saving an ingredient clears its label.
+                Check the category and unit of each one.
               </InlineNotice>
             </div>
           )}
@@ -244,10 +248,15 @@ function RecipesView() {
             <Loading label="Loading recipes…" />
           ) : results.length === 0 ? (
             <div className="card px-6 py-14 text-center">
-              <p className="text-lg">No recipes found</p>
+              <p className="text-lg">{search ? `No recipes match “${search}”` : "No recipes yet"}</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                {search ? "Try a different search." : "Recipes added to your temple will appear here."}
+                {search ? "Try another name." : "Add one, or pick from the shared library."}
               </p>
+              {!search && (
+                <div className="mt-4 flex justify-center">
+                  <ButtonLink href="/recipes/new">New recipe</ButtonLink>
+                </div>
+              )}
             </div>
           ) : (
             /*
@@ -292,7 +301,7 @@ function RecipesView() {
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {row.status === "ARCHIVED" && (
-                        <span className="rounded-sm bg-sunken px-2 py-0.5 text-xs font-semibold text-ink-secondary">
+                        <span className="rounded-control bg-sunken px-2 py-0.5 text-xs font-semibold text-ink-secondary">
                           Archived
                         </span>
                       )}
@@ -314,7 +323,7 @@ function RecipesView() {
                         onClick={() => add(row)}
                         disabled={adding !== null}
                         aria-label={`Add ${row.name} to your recipes`}
-                        className="flex min-h-touch w-full items-center justify-center rounded-lg border border-hairline-strong text-xl transition-colors duration-state hover:bg-canvas disabled:opacity-60"
+                        className="flex min-h-touch w-full items-center justify-center rounded-control border border-hairline-strong text-xl transition-colors duration-state hover:bg-canvas disabled:opacity-60"
                       >
                         {adding === row.id ? "…" : "+"}
                       </button>
@@ -326,6 +335,7 @@ function RecipesView() {
           )}
 
         </div>
+        </Screen>
       </main>
     </div>
   );

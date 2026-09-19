@@ -10,7 +10,7 @@ import { Form } from "@/components/ds/Form";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { HintedField } from "@/components/ds/InfoHint";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TH_ACTIONS, TD_TEXT, TD_NUM, TD_ACTIONS, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { api, toApiError, type ApiError, type IngredientView, type VendorView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -236,7 +236,7 @@ function NewPurchaseOrderLinesView() {
         <Loading label="Loading the vendor…" />
       ) : (
         <Form id={FORM} aria-label="Raise a purchase order" onSubmit={raise} className="grid gap-6">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             {/* `min` is what refuses yesterday in the browser, in every language and on a phone.
                 The temple's today, not the device's: a date is the kitchen's operational day, and
                 the server measures this one against the same clock. */}
@@ -248,7 +248,7 @@ function NewPurchaseOrderLinesView() {
               <span className="pl-field-inset font-medium text-ink">Deliver to</span>
               <input name="deliveryLocation" maxLength={300} placeholder="Main store" className={FIELD} />
             </label>
-            <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+            <label className="sm:col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
               <span className="pl-field-inset font-medium text-ink">Notes for the vendor</span>
               <input name="notes" maxLength={1000} className={FIELD} />
             </label>
@@ -263,20 +263,20 @@ function NewPurchaseOrderLinesView() {
               </p>
             ) : (
               <div className="table-wrap mt-2 overflow-x-auto">
-                <table className={TABLE}>
+                <table className={RULED_TABLE}>
                   <thead className={THEAD}>
                     <tr>
-                      <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
-                      <th className={TH_NUM}>Quantity</th>
-                      <th className={TH_TEXT}>Counted in</th>
-                      <th className={TH_ACTIONS}>Actions</th>
+                      <th className={TH_PRIMARY}>Item</th>
+                      <th className={TH_FIXED}>Quantity</th>
+                      <th className={TH_FIXED}>Counted in</th>
+                      <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     {lines.map((l) => (
                       <tr key={l.key} className={TR}>
-                        <td className={`${TD_TEXT} ${WRAP}`}>{subjectOf(l)}</td>
-                        <td className={TD_NUM}>
+                        <td className={TD_PRIMARY}>{subjectOf(l)}</td>
+                        <td className={TD_FIXED_NUM}>
                           <input
                             type="number"
                             min="0"
@@ -284,11 +284,11 @@ function NewPurchaseOrderLinesView() {
                             value={l.quantity}
                             aria-label={`Quantity of ${subjectOf(l)}`}
                             onChange={(e) => setQuantity(l.key, e.target.value)}
-                            className="min-h-touch w-28 rounded-control border border-hairline px-3 text-right tabular-nums"
+                            className="min-h-touch min-w-28 rounded-control border border-hairline px-3 tabular-nums"
                           />
                         </td>
-                        <td className={`${TD_TEXT} text-ink-secondary`}>{unitLabel(l.unit)}</td>
-                        <td className={TD_ACTIONS}>
+                        <td className={`${TD_FIXED} text-ink-secondary`}>{unitLabel(l.unit)}</td>
+                        <td className={TD_ACTIONS_FIXED}>
                           <Button
                             type="button"
                             variant="ghost"

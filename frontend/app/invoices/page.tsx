@@ -12,7 +12,7 @@ import { api, type InvoiceStatus } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { dateWithYear, money } from "@/lib/format";
-import { TABLE, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, TD_DATE, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_LEAD, TD_LEAD, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 
 export default function InvoicesPage() {
   return (
@@ -56,7 +56,7 @@ function InvoicesView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/invoices" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -90,8 +90,8 @@ function InvoicesView() {
                 <option value="VOIDED">Voided</option>
               </select>
             </label>
-            <label className="text-sm text-ink-secondary">
-              <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} className="mr-2 align-middle accent-accent" />
+            <label className="inline-flex min-h-touch items-center text-sm text-ink-secondary">
+              <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} className="mr-2 accent-accent" />
               Overdue only
             </label>
           </div>
@@ -109,39 +109,43 @@ function InvoicesView() {
             </div>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              {/* On the table rule since 2026-09-18 (T-233): the invoice number leads on the left,
+                  fixed, because it is the row's link (the exception Rajeev accepted); the vendor is
+                  the primary flexible column; everything after it is fixed (one line). Since T-236 every
+                  column reads left and the spare width is shared evenly between them. */}
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={TH_TEXT}>Invoice</th>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Vendor</th>
-                    <th className={TH_TEXT}>Against</th>
-                    <th className={TH_NUM}>Amount</th>
-                    <th className={TH_TEXT}>Due</th>
-                    <th className={TH_TEXT}>Status</th>
+                    <th className={TH_LEAD}>Invoice</th>
+                    <th className={TH_PRIMARY}>Vendor</th>
+                    <th className={TH_FIXED}>Against</th>
+                    <th className={TH_FIXED}>Amount</th>
+                    <th className={TH_FIXED}>Due</th>
+                    <th className={TH_FIXED}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoices.map((inv) => (
                     <tr key={inv.id} className={TR}>
-                      <td className={`${TD_TEXT}`}>
+                      <td className={TD_LEAD}>
                         <Link href={`/invoices/${inv.id}`} className="font-medium text-accent-text hover:underline">
                           {inv.invoiceNumber}
                         </Link>
                       </td>
-                      <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{inv.vendorName}</td>
-                      <td className={`${TD_TEXT} text-ink-secondary`}>
+                      <td className={`${TD_PRIMARY} text-ink-secondary`}>{inv.vendorName}</td>
+                      <td className={`${TD_FIXED} text-ink-secondary`}>
                         {inv.direct ? (
-                          <span className="rounded-sm bg-sunken px-2 py-1 text-xs font-semibold">Direct</span>
+                          <span className="rounded-control bg-sunken px-2 py-1 text-xs font-semibold">Direct</span>
                         ) : (
                           <span className="tabular-nums">{inv.poNumber ?? "—"}</span>
                         )}
                         {inv.variance != null && inv.variance !== 0 && (
-                          <span className="ml-2 rounded-sm bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">
+                          <span className="ml-2 rounded-control bg-warning-bg px-2 py-0.5 text-xs text-warning font-semibold">
                             Variance {money(inv.variance, "INR")}
                           </span>
                         )}
                       </td>
-                      <td className={TD_NUM}>
+                      <td className={TD_FIXED_NUM}>
                         {money(inv.amount, "INR")}
                         {/* What is owed, where it differs from what was billed. A credit note leaves
                             the invoiced figure alone — that is what the vendor sent — so the row has
@@ -152,17 +156,19 @@ function InvoicesView() {
                           </span>
                         )}
                       </td>
-                      <td className={`${TD_DATE} text-ink-secondary`}>
+                      <td className={`${TD_FIXED} text-ink-secondary`} data-label="Due">
                         {inv.dueDate ? dateWithYear(inv.dueDate) : "—"}
-                        {inv.overdue && <span className="ml-2 rounded-sm bg-danger-bg px-2 py-0.5 text-xs text-danger font-semibold">Overdue</span>}
+                        {inv.overdue && <span className="ml-2 rounded-control bg-danger-bg px-2 py-0.5 text-xs text-danger font-semibold">Overdue</span>}
                       </td>
-                      <td className={TD_TEXT}>
+                      <td className={TD_FIXED}>
                         {inv.status === "VOIDED" ? (
-                          <span className="rounded-sm bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Voided</span>
+                          <span className="rounded-control bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Voided</span>
                         ) : inv.status === "PAID" ? (
-                          <span className="rounded-sm bg-success-bg px-2 py-1 text-xs text-success font-semibold">Paid</span>
+                          // Neutral: paid is a settled state, and green is kept for the moment the
+                          // reader's own action succeeds (Rajeev, 2026-09-18, T-227).
+                          <span className="rounded-control bg-sunken px-2 py-1 text-xs text-ink-secondary font-semibold">Paid</span>
                         ) : (
-                          <span className="rounded-sm bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Pending</span>
+                          <span className="rounded-control bg-accent-bg px-2 py-1 text-xs text-accent-text font-semibold">Pending</span>
                         )}
                       </td>
                     </tr>

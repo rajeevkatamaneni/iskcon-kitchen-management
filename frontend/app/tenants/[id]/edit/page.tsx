@@ -269,7 +269,7 @@ function EditTenantForm({ id, temple }: { id: string; temple: TenantDetail }) {
 
           <Link
             href={`/tenants/${id}`}
-            className="flex min-h-touch items-center rounded border border-hairline-strong px-5 transition-colors duration-state hover:bg-raised"
+            className="flex min-h-touch items-center rounded-control border border-hairline-strong px-5 transition-colors duration-state hover:bg-raised"
           >
             Cancel
           </Link>

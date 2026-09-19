@@ -34,7 +34,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { ShiftLayer, timesChanged, timesChangedWarning } from "@/components/planner/ShiftLayer";
 import { ConfirmLayer, useLeaveGuard } from "@/app/planner/confirm-layer";
-import { longDate, unitLabel } from "@/lib/format";
+import { convertQuantity, longDate, unitLabel } from "@/lib/format";
 import { ekadashiLabel } from "@/lib/vaishnava-day";
 import { FIELD_LABEL } from "@/components/Field";
 
@@ -62,6 +62,12 @@ import { FIELD_LABEL } from "@/components/Field";
 
 const CHILD_PORTION = 0.6;
 const SENIOR_PORTION = 0.8;
+/**
+ * The most of one dish a meal may plan, in the recipe's own yield unit (T-217). The same 50,000 as
+ * `SaveMealRequest.DishDraft`, `RecipeService.MAX_TARGET_YIELD` and `DocumentService.MAX_TARGET_YIELD`
+ * on the server; the four move together.
+ */
+const MAX_TARGET_YIELD = 50_000;
 
 interface Draft {
   recipeId: string;
@@ -141,7 +147,7 @@ export function MealComposer({
   isEkadashi: boolean;
   /**
    * What the calendar calls this day, so the picker can say why its list is short in the same words
-   * the calendar and the day header use. Optional: absent, the line falls back to "Ekadasi".
+   * the calendar and the day header use. Optional: absent, the line falls back to "Ekadashi".
    */
   ekadashiName?: string | null;
   /** The meal being corrected. Absent when a new one is being planned. */
@@ -279,7 +285,11 @@ export function MealComposer({
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [confirmGrain, setConfirmGrain] = useState<{ names: string[]; ingredients: string[] } | null>(null);
+  // `recipeIds` are the offending preparations, so "Leave it out" can untick exactly those. Empty when
+  // the per-dish check could not say which one it was — then there is nothing safe to untick.
+  const [confirmGrain, setConfirmGrain] = useState<
+    { names: string[]; ingredients: string[]; recipeIds: string[] } | null
+  >(null);
 
   /**
    * The volunteer shift drafted in the layer and not yet saved (D-27 answers 2 and 7).
@@ -730,16 +740,16 @@ export function MealComposer({
     if (spare < 0) {
       const late = -spare;
       return {
-        blocking: `The food cannot get there in time: ready at ${readyBy} plus ${allow} minutes of driving arrives ${late} ${
+        blocking: `The food arrives ${late} ${
           late === 1 ? "minute" : "minutes"
-        } after the guests sit down at ${guestsEatAt}.`,
+        } late. Make it ready earlier, or change when guests eat.`,
         warning: null,
       };
     }
     if (spare < LOADING_MINUTES) {
       return {
         blocking: null,
-        warning: `Only ${spare} ${spare === 1 ? "minute" : "minutes"} between the food being ready and the van having to leave. Please account for loading time.`,
+        warning: `Only ${spare} ${spare === 1 ? "minute" : "minutes"} to load the van. Make it ready earlier if you need more.`,
       };
     }
     return null;
@@ -815,9 +825,25 @@ export function MealComposer({
       return null;
     }
 
-    const raw = people * Number(recipe.perHeadQty);
+    // The portion in the recipe's own unit before it is multiplied, because the box is in the
+    // recipe's unit (T-217). Basmati Ghee Rice is measured in litres with a portion of 350 ml; this
+    // used to multiply 600 people by 350 and save 210,000 *litres*, which the Today screen then
+    // refused to scale for the whole kitchen. 350 ml is 0.35 L, and 600 × 0.35 is 210 L.
+    //
+    // A portion with no unit is read as the recipe's, which is what every recipe saved before the
+    // unit was asked for meant. A portion in another family — millilitres of a dish measured in
+    // kilos — has no answer without a density, so the box stays empty and the planner types it,
+    // exactly as for a recipe with no portion at all.
+    const portion = recipe.perHeadUnit
+      ? convertQuantity(Number(recipe.perHeadQty), recipe.perHeadUnit, recipe.baseYieldUnit)
+      : Number(recipe.perHeadQty);
+    if (portion === null) {
+      return null;
+    }
+
+    const raw = people * portion;
     // Pieces are whole things. Half an idli is not a plan.
-    return recipe.perHeadUnit === "PIECES" ? Math.ceil(raw) : Math.round(raw * 100) / 100;
+    return recipe.baseYieldUnit === "PIECES" ? Math.ceil(raw) : Math.round(raw * 100) / 100;
   }
 
   function toggle(recipeId: string) {
@@ -1082,6 +1108,7 @@ export function MealComposer({
               ? offending.map((c) => byId.get(c.recipeId)?.name ?? "A preparation")
               : ["A preparation"],
           ingredients: Array.from(new Set(offending.flatMap((c) => c.check.offendingIngredients))),
+          recipeIds: offending.map((c) => c.recipeId),
         });
         return;
       }
@@ -1099,9 +1126,7 @@ export function MealComposer({
     // telling where to go back to, not a shortcut that saves them one click of it.
     const empty = (
       <EmptyState title="No recipes yet">
-        Choosing this temple’s recipes comes before planning a meal. Open <strong>Recipes</strong> in
-        the menu, find the ones this kitchen cooks — the shared library has most of them — and add
-        them. Then come back here.
+        Add recipes before you plan a meal. Open <strong>Recipes</strong> in the menu to add them.
       </EmptyState>
     );
     return empty;
@@ -1126,8 +1151,21 @@ export function MealComposer({
               <Button type="button" size="sm" disabled={busy} onClick={() => { setConfirmGrain(null); save(true, true); }}>
                 Plan it anyway
               </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmGrain(null)}>
-                Leave it out
+              {/* The words are a promise: "Leave it out" unticks the grain dish. It used to only close
+                  this warning and leave the dish ticked, so a cook who pressed it believed they had
+                  removed a dish that was still on the menu (T-223 content audit, T-224). */}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const leaveOut = new Set(confirmGrain.recipeIds);
+                  setDirty(true);
+                  setPicked((list) => list.filter((d) => !leaveOut.has(d.recipeId)));
+                  setConfirmGrain(null);
+                }}
+              >
+                {confirmGrain.recipeIds.length > 1 ? "Leave them out" : "Leave it out"}
               </Button>
             </span>
           }
@@ -1146,7 +1184,7 @@ export function MealComposer({
           <div className="flex flex-wrap items-center gap-3">
             <Badge tone="accent">{kindName}</Badge>
             <InfoHint
-              text="A meal is its date and its kind, so a correction cannot move it to another one."
+              text="You can’t change the meal type. Cancel this meal and plan a new one."
               label="Meal kind"
             />
           </div>
@@ -1159,7 +1197,7 @@ export function MealComposer({
                 onClick={() => chooseKind(k.name)}
                 aria-pressed={k.name === kindName}
                 className={[
-                  "min-h-touch rounded-full border px-4 text-sm transition-colors duration-state",
+                  "min-h-touch rounded-control border px-4 text-sm transition-colors duration-state",
                   k.name === kindName
                     ? "btn btn-primary"
                     : "border-hairline-strong text-ink hover:bg-raised",
@@ -1188,8 +1226,15 @@ export function MealComposer({
             hint line sat under each control; when the guidance went into the labels' "i" on
             2026-09-04 the line went but `FieldRow`'s third track did not, leaving 4px of `gap-y-1`
             above a track nothing was drawn in, and the margins were briefly `mt-10` to absorb it.
-            `FieldRow` now declares two tracks, so the 4 is gone and the arithmetic is honest. */}
-        <FieldRow className="mt-11 [grid-template-columns:repeat(3,16rem)]">
+            `FieldRow` now declares two tracks, so the 4 is gone and the arithmetic is honest.
+
+            Except on the edit screen (T-231, Rajeev 2026-09-18). There the chips are replaced by one
+            small badge, and 56px under a 22px badge left "Ready by" floating in the middle of the
+            card, a gap sized for 44px buttons that are not drawn. The badge belongs with the step's
+            title, so it is spaced as a group of its own: `gap-3` (12) plus `mt-3` (12) is 24px, twice
+            the 12px between the title and the badge, which is enough to read as a new group and no
+            more. The rows below it keep their 56. */}
+        <FieldRow className={`${editing ? "mt-3" : "mt-11"} [grid-template-columns:repeat(3,16rem)] ${NARROW_TWO_UP}`}>
           <RowField label="Ready by">
             {(id) => (
               <span className="grid gap-1">
@@ -1219,7 +1264,7 @@ export function MealComposer({
               still a box: a temple anniversary, or a local festival the calendar does not carry, is
               a feast the temple takes just as much pride in. */}
           {kind?.needsOccasion && (
-            <RowField label="What is the occasion?" hint="The calendar’s answer, or your own">
+            <RowField label="What is the occasion?" hint="Filled in from the calendar. You can change it.">
               {(id) => (
                 <input
                   id={id}
@@ -1282,9 +1327,9 @@ export function MealComposer({
             keeps each row to three, and the breaks fall where the questions change subject: what and
             where it is, then who to hand it to, then where it goes and when. */}
         {isEventKind && isOutside && (
-        <FieldRow className="mt-11 [grid-template-columns:repeat(3,16rem)]">
+        <FieldRow className={`mt-11 [grid-template-columns:repeat(3,16rem)] ${NARROW_TWO_UP}`}>
           {isEventKind && isOutside && (
-            <RowField label="Pickup or delivery?" hint="What decides whether we need an address">
+            <RowField label="Pickup or delivery?">
               {(id) => (
                 <select
                   id={id}
@@ -1312,7 +1357,7 @@ export function MealComposer({
             </RowField>
           )}
           {isEventKind && isOutside && (
-            <RowField label="Contact phone" hint="Both halves: a contact you cannot ring is not one">
+            <RowField label="Contact phone">
               {(id) => (
                 <input
                   id={id}
@@ -1328,11 +1373,11 @@ export function MealComposer({
         )}
 
         {isEventKind && isOutside && handover === "DELIVERY" && (
-        <FieldRow className="mt-11 [grid-template-columns:repeat(3,16rem)]">
+        <FieldRow className={`mt-11 [grid-template-columns:repeat(3,16rem)] ${NARROW_TWO_UP}`}>
           {isEventKind && isOutside && handover === "DELIVERY" && (
             <RowField
               label="Where is it going?"
-              hint="Pick from the list where you can — a chosen address is one the map can find, and it is what the travel estimate needs"
+              hint="Pick an address from the list so we can work out the travel time."
             >
               {(id) => (
                 <AddressPicker
@@ -1356,8 +1401,10 @@ export function MealComposer({
           )}
           {isEventKind && isOutside && handover === "DELIVERY" && (
             <RowField
-              label="Once you are there"
-              hint="The clubhouse, the block, which gate. Kept off the address on purpose — the van is routed to the main entrance, and this is what the driver asks about when they arrive"
+              label="Gate or building"
+              // Kept off the address on purpose: the van is routed to the main entrance, and this is
+              // what the driver asks about on arrival.
+              hint="The block, gate or hall the driver should look for."
             >
               {(id) => (
                 <input
@@ -1447,9 +1494,9 @@ export function MealComposer({
         <Step
           n={2}
           title="Who is expected"
-          hint={isEventKind ? "Optional for an event — the amounts below are what it is planned by" : undefined}
+          hint={isEventKind ? "Optional for events. You set each dish’s amount below." : undefined}
         />
-        <FieldRow>
+        <FieldRow className={NARROW_TWO_UP}>
           <Counter label="Adults" value={adults} onChange={(v) => setCount("adults", v ?? 0)} />
           <Counter label="Children" value={children} onChange={(v) => setCount("children", v ?? 0)} />
           <Counter label="Seniors" value={seniors} onChange={(v) => setCount("seniors", v ?? 0)} />
@@ -1474,7 +1521,7 @@ export function MealComposer({
         <Step
           n={3}
           title="Preparations"
-          hint="Raise the ones that always run out"
+          hint="Increase any dish that usually runs out."
         />
 
         {/* Why the list is short, in the calendar's own words for the day, and the way out for
@@ -1543,37 +1590,73 @@ export function MealComposer({
           {visible.map((recipe) => {
             const draft = picked.find((d) => d.recipeId === recipe.id);
             return (
-              <div key={recipe.id} className="grid gap-1 border-t border-hairline py-2 first:border-t-0 sm:border-t-0">
-                <label className="flex cursor-pointer items-start gap-2">
+              // One row per dish, ticked or not: the name on the left and, once ticked, the amount
+              // box and its unit on the same line to its right (Rajeev, 2026-09-18, T-237). The box
+              // used to sit on a line of its own under the name, and because the grid gives every
+              // cell in a row the height of the tallest, one ticked dish left its neighbours standing
+              // over ~50px of nothing. Measured before and after in the proof (T-237).
+              //
+              // A grid rather than a flex row, so a refused amount's red sentence goes under the
+              // box and not beside it (Rajeev, 2026-09-18). `Form` places its error slot straight
+              // after the box, which in a flex row made it a third item on the line: it took the
+              // room the unit had, and "L · set by hand" was squeezed into a column that broke
+              // over three lines. Here the name, the box and the unit are pinned to the first row
+              // and the slot, whatever its position in the markup, spans the row beneath from the
+              // box's left edge — so the red sentence is the only thing that makes a ticked dish
+              // taller. The slot is still `Form`'s own, so the sentence stays tied to the box by
+              // aria-describedby exactly as before.
+              //
+              // The slot is `w-0 min-w-full`: it fills the two columns it spans but asks nothing of
+              // their width. Without that, the sentence ("Amount of Arbi ki Sabzi (Haryana) can be
+              // at most 50,000") sized the two `auto` columns to its own length and squeezed the
+              // name's column to 0px, so the name broke a word per line (measured: a 138px cell).
+              //
+              // `content-start` because the outer grid stretches every cell in a row to the tallest:
+              // without it an unticked neighbour's one row stretched too and `items-center` floated
+              // its name down to the middle of the cell, out of line with the ticked dish's name.
+              // The name itself is `self-start` for the same reason on a smaller scale: the box is
+              // 44px and a name with its category 36px, so centring put a ticked dish's name 4px
+              // below its unticked neighbours' (measured 677 against 673).
+              <div
+                key={recipe.id}
+                className="grid grid-cols-[minmax(0,1fr)_auto_auto] content-start items-center gap-x-2 border-t border-hairline py-2 first:border-t-0 sm:border-t-0 [&>[data-form-error-slot]]:col-span-2 [&>[data-form-error-slot]]:col-start-2 [&>[data-form-error-slot]]:row-start-2 [&>[data-form-error-slot]]:w-0 [&>[data-form-error-slot]]:min-w-full"
+              >
+                <label className="col-start-1 row-start-1 flex cursor-pointer items-start gap-2 self-start">
                   <input
                     type="checkbox"
                     checked={Boolean(draft)}
                     onChange={() => toggle(recipe.id)}
                     className="mt-1 h-4 w-4 flex-none accent-accent"
                   />
-                  <span className="grid">
+                  <span className="grid min-w-0">
                     <span className="text-sm text-ink">{recipe.name}</span>
-                    <span className="pl-field-inset text-xs text-ink-muted">{recipe.categoryName}</span>
+                    <span className="text-xs text-ink-muted">{recipe.categoryName}</span>
                   </span>
                 </label>
 
                 {draft && (
-                  <span className="ml-6 flex items-center gap-2">
+                  <>
+                    {/* `max` is the server's ceiling on a dish's amount and the scaler's (T-217):
+                        past 50,000 the Today screen cannot scale the dish and fails for everyone.
+                        `Form` reads it off the element and puts the refusal under this box in red
+                        on the press, so the button stays live for it — adding it to firstBlocker
+                        would disable the button and the red sentence would never be reached. */}
                     <input
                       type="number"
                       min={0}
+                      max={MAX_TARGET_YIELD}
                       step="any"
-                      aria-label={`How much ${recipe.name} to make`}
+                      aria-label={`Amount of ${recipe.name}`}
                       value={draft.target ?? ""}
                       onChange={(e) => setTarget(recipe.id, e.target.value)}
                       className={[
-                        "min-h-touch w-24 rounded-control border px-2 text-sm tabular-nums",
-                        draft.target === null || !(draft.target > 0)
+                        "col-start-2 row-start-1 min-h-touch w-20 rounded-control border px-2 text-sm tabular-nums",
+                        draft.target === null || !(draft.target > 0) || draft.target > MAX_TARGET_YIELD
                           ? "border-warning"
                           : "border-hairline",
                       ].join(" ")}
                     />
-                    <span className="text-xs text-ink-muted">
+                    <span className="col-start-3 row-start-1 max-w-20 text-xs text-ink-muted">
                       {/* The unit is the recipe's, never chosen here — nobody can plan ten litres
                           of a dry podi. Written the way it is said rather than lower-cased: a
                           litre is "L", and toLowerCase() rendered it as the digit-like "l". */}
@@ -1582,7 +1665,7 @@ export function MealComposer({
                         <> · set by hand</>
                       )}
                     </span>
-                  </span>
+                  </>
                 )}
               </div>
             );
@@ -1595,7 +1678,11 @@ export function MealComposer({
           for 133 and eight for 133 are not the same morning’s work. */}
       <section className="card grid gap-3 p-5">
         <Step n={4} title="Who will run it" hint="Any mix of staff and volunteers" />
-        <FieldRow>
+        {/* The two numbers and the button that acts on them, in one row of three equal columns that
+            share the card's whole width, rather than the button dropping to a row of its own under a
+            stretch of white space (Rajeev, 2026-09-17). The counter centres its controls in the
+            wider box, and the Rostered sentence gets room to sit on one line. */}
+        <FieldRow className={`[grid-template-columns:repeat(3,minmax(16rem,1fr))] ${NARROW_TWO_UP}`}>
           <Counter
             label="People needed"
             hint="Leave it empty until you know"
@@ -1613,73 +1700,71 @@ export function MealComposer({
             // being short of hands today says nothing about the plan and never blocks saving it.
             tone={crewRequired != null && roster != null && roster.rostered < crewRequired ? "warning" : "neutral"}
           />
+          {/* Asking for volunteers, beside the two numbers that say whether any are needed (D-27, the
+              first of the screens that change). *Ask for volunteers* appears the moment People needed
+              is more than Rostered, and not at equal: a covered meal is not short. Once a shift has
+              been drafted here, or the meal already has one, *View volunteer shift* takes its place
+              whatever the numbers say, so a shift can always be opened. Both open the same layer, and
+              neither saves anything — the meal's own Save or Update does. The empty first cell sits in
+              the shared label track, so the button lines up with the two boxes, not their labels. */}
+          {(shiftDraft || liveShift || shortBy > 0) && (
+            <span className="contents">
+              <span aria-hidden="true" />
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                icon="hand-stop"
+                aria-haspopup="dialog"
+                onClick={() => setShiftOpen(true)}
+                className="h-full w-full justify-center"
+              >
+                {shiftDraft || liveShift ? "View volunteer shift" : "Ask for volunteers"}
+              </Button>
+            </span>
+          )}
         </FieldRow>
-
-        {/* Asking for volunteers, beside the two numbers that say whether any are needed (D-27, the
-            first of the screens that change). *Ask for volunteers* appears the moment People needed
-            is more than Rostered, and not at equal: a covered meal is not short. Once a shift has
-            been drafted here, or the meal already has one, *View volunteer shift* takes its place
-            whatever the numbers say, so a shift can always be opened. Both open the same layer, and
-            neither saves anything — the meal's own Save or Update does. */}
-        {shiftDraft || liveShift ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              icon="hand-stop"
-              aria-haspopup="dialog"
-              onClick={() => setShiftOpen(true)}
-            >
-              View volunteer shift
-            </Button>
-            <span className="text-sm text-ink-secondary">{shiftLine(liveShift, shiftDraft)}</span>
-          </div>
-        ) : shortBy > 0 ? (
-          <div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              icon="hand-stop"
-              aria-haspopup="dialog"
-              onClick={() => setShiftOpen(true)}
-            >
-              Ask for volunteers
-            </Button>
-          </div>
-        ) : null}
+        {(shiftDraft || liveShift) && (
+          <span className="text-sm text-ink-secondary">{shiftLine(liveShift, shiftDraft)}</span>
+        )}
       </section>
 
-      {/* Notes */}
-      <label className="grid gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Notes for the kitchen</span>
-        <textarea
-          rows={3}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Cook the kheer thin — the seniors prefer it that way."
-          className="rounded-control border border-hairline px-3 py-2 text-ink"
-        />
-      </label>
+      {/* 5 — notes. In a card of their own, numbered like the four above (Rajeev, Decisions Desk,
+          2026-09-18): the two boxes used to sit loose under the step cards, so they read as an
+          afterthought to step 4 rather than as the last thing a meal's plan carries. The same card,
+          padding and gap as every step, so the column of cards stays one rhythm. */}
+      <section className="card grid gap-3 p-5">
+        <Step n={5} title="Notes" />
+        <label className="grid gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Notes for the kitchen</span>
+          <textarea
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Cook the kheer thin — the seniors prefer it that way."
+            className="rounded-control border border-hairline px-3 py-2 text-ink"
+          />
+        </label>
 
-      {/* The mirror of the kitchen's notes, for the people handing food out. It exists because the
-          job card's serving sheet had nothing to say on it: the meal carried notes for the kitchen
-          and no equivalent for the servers, so the sheet was boxes and signatures alone. */}
-      <label className="grid gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Notes for the servers</span>
-        <textarea
-          rows={3}
-          value={serverNotes}
-          onChange={(e) => setServerNotes(e.target.value)}
-          placeholder="Serve the children first, and keep a tray back for the kitchen."
-          className="rounded-control border border-hairline px-3 py-2 text-ink"
-        />
-      </label>
+        {/* The mirror of the kitchen's notes, for the people handing food out. It exists because the
+            job card's serving sheet had nothing to say on it: the meal carried notes for the kitchen
+            and no equivalent for the servers, so the sheet was boxes and signatures alone. */}
+        <label className="grid gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">Notes for the servers</span>
+          <textarea
+            rows={3}
+            value={serverNotes}
+            onChange={(e) => setServerNotes(e.target.value)}
+            placeholder="Serve the children first, and keep a tray back for the kitchen."
+            className="rounded-control border border-hairline px-3 py-2 text-ink"
+          />
+        </label>
+      </section>
 
       {isEkadashi && (
         <div>
-          <Badge tone="warning">Fasting day — grain preparations will ask you to confirm</Badge>
+          {/* Information: it states the day. The grain confirm is the warning, and it stays amber. */}
+          <Badge tone="info">Fasting day — grain preparations will ask you to confirm</Badge>
         </div>
       )}
     </div>
@@ -1778,7 +1863,7 @@ function openDrafts(meal: MealView | undefined): Draft[] {
  * shifts elsewhere would otherwise not find theirs there and not know why.
  */
 function shiftLine(saved: ShiftView | null, draft: MealShiftDraft | null): string {
-  if (!saved) return "Not saved yet. It is saved with this meal.";
+  if (!saved) return "Saved when you save this meal.";
   const signedUp = `${saved.signedUpCount} of ${draft?.capacity ?? saved.capacity} signed up`;
   return draft ? `${signedUp}. Your changes are saved with this meal.` : signedUp;
 }
@@ -1880,21 +1965,17 @@ function travelHint(manual: boolean, estimate: TravelEstimate | null): string {
   if (manual) {
     const google =
       estimate?.available && estimate.pessimisticMinutes != null
-        ? ` Google currently estimates ${estimate.optimisticMinutes}–${estimate.pessimisticMinutes} minutes.`
+        ? ` Google says ${estimate.optimisticMinutes}–${estimate.pessimisticMinutes} minutes.`
         : "";
-    return `You set this, so it stands — printing the job card will not change it.${google}`;
+    return `You set this.${google}`;
   }
+  // Untouched, the figure is Google's and is worked out again when the job card prints; typed over,
+  // the person's figure is the one that prints. The hint used to say all of that in three sentences
+  // (T-223 content audit); a hint is one sentence, so the mechanics live here.
   if (estimate?.available && estimate.pessimisticMinutes != null) {
-    return (
-      `A good-faith estimate from Google Maps as of now — ${estimate.optimisticMinutes}–` +
-      `${estimate.pessimisticMinutes} minutes in traffic at that hour. Traffic changes, so it is ` +
-      "worked out again when the job card is printed. Change it and your figure is the one that prints."
-    );
+    return `From Google Maps: ${estimate.optimisticMinutes}–${estimate.pessimisticMinutes} minutes at that hour.`;
   }
-  return (
-    "How long to allow for the drive. Pick the address from the list and set a serving time and " +
-    "Google will fill this in; type your own at any time and it is the one that prints."
-  );
+  return "Minutes to drive there.";
 }
 
 /**
@@ -1908,6 +1989,15 @@ function travelHint(manual: boolean, estimate: TravelEstimate | null): string {
  * temple tells us thirty is wrong, that is the moment to make it theirs — with a direction and a
  * figure, rather than a guess with a text box round it.
  */
+/**
+ * A row of three 16rem fields is 50rem, and the card has that much room only from `xl` (1280px):
+ * below it — a tablet, or a laptop narrower than 1184px beside the sidebar — the row ran past the
+ * card and took the page sideways with it. Below `xl` the row goes two to a line instead, and
+ * `FieldRow`'s own rule still stacks it to one below `sm`.
+ */
+const NARROW_TWO_UP =
+  "max-xl:grid-flow-row max-xl:gap-y-4 max-xl:![grid-template-columns:repeat(2,minmax(0,1fr))]";
+
 const LOADING_MINUTES = 30;
 
 /** "45" out of a text box, or null. Anything that is not a positive whole number is not a figure. */
@@ -1963,7 +2053,7 @@ function Readout({
       </span>
       <span
         className={[
-          "flex items-center rounded-lg px-4 text-lg font-semibold tabular-nums",
+          "flex items-center rounded-control px-5 py-2 text-lg font-semibold leading-snug tabular-nums",
           tone === "warning" ? "bg-warning-bg text-warning" : "bg-sunken text-ink",
         ].join(" ")}
       >
@@ -1991,12 +2081,12 @@ function Counter({
         <span>{label}</span>
         {hint && <InfoHint text={hint} label={label} />}
       </span>
-      <span className="flex items-center gap-1 rounded-lg bg-sunken px-2 py-1">
+      <span className="flex items-center justify-center gap-2 rounded-control bg-sunken px-3 py-1">
         <button
           type="button"
           aria-label={`One fewer ${label.toLowerCase()}`}
           onClick={() => onChange((value ?? 0) - 1)}
-          className="min-h-touch w-9 rounded text-lg text-ink-secondary transition-colors duration-state hover:bg-hairline"
+          className="min-h-touch w-9 rounded-control text-lg text-ink-secondary transition-colors duration-state hover:bg-hairline"
         >
           −
         </button>
@@ -2012,7 +2102,7 @@ function Counter({
           type="button"
           aria-label={`One more ${label.toLowerCase()}`}
           onClick={() => onChange((value ?? 0) + 1)}
-          className="min-h-touch w-9 rounded text-lg text-ink-secondary transition-colors duration-state hover:bg-hairline"
+          className="min-h-touch w-9 rounded-control text-lg text-ink-secondary transition-colors duration-state hover:bg-hairline"
         >
           +
         </button>

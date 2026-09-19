@@ -111,10 +111,9 @@ function CatchUpView() {
           {data && owing.length === 0 && (
             <Card tone="canvas">
               <div className="grid justify-items-center gap-3 py-10 text-center">
-                <p className="text-lg font-semibold text-ink">You are all caught up.</p>
+                <p className="text-lg font-semibold text-ink">All meals recorded</p>
                 <p className="max-w-prose text-ink-secondary">
-                  Every meal of the last week has been written down, and the store room agrees with
-                  the kitchen. Thank you — this is the part nobody sees and everything else rests on.
+                  Stock matches the last week’s cooking.
                 </p>
                 <ButtonLink href="/today">Back to Today</ButtonLink>
               </div>

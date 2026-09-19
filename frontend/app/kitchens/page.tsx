@@ -15,7 +15,7 @@ import Link from "next/link";
 import { api, toApiError, type ApiError, type Kitchen } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { TABLE, THEAD, TR, TH_TEXT, TH_ACTIONS, TD_TEXT, TD_ACTIONS, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 
 /**
  * The kitchens a temple runs (E10-S3).
@@ -93,10 +93,10 @@ function KitchensView() {
     <div className="flex min-h-screen">
       <Sidebar activeHref="/kitchens" />
 
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
-            <div>
+          <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 grow basis-60">
               <h1>Kitchens</h1>
               <p className="mt-1 text-ink-secondary">
                 The kitchens this temple runs, and how each of them gets its ingredients.
@@ -146,20 +146,20 @@ function KitchensView() {
             </EmptyState>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Kitchen</th>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Where</th>
-                    <th className={TH_TEXT}>Who runs it</th>
-                    <th className={TH_TEXT}>Gets ingredients by</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_PRIMARY}>Kitchen</th>
+                    <th className={TH_SECOND}>Where</th>
+                    <th className={TH_SECOND}>Who runs it</th>
+                    <th className={TH_FIXED}>Gets ingredients by</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {kitchens.map((k) => (
                     <tr key={k.id} className={TR}>
-                      <td className={`${TD_TEXT} ${WRAP}`}>
+                      <td className={TD_PRIMARY}>
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{k.name}</span>
                           {k.isMain && <Badge tone="accent">Main kitchen</Badge>}
@@ -169,12 +169,12 @@ function KitchensView() {
                           <span className="mt-0.5 block text-sm text-ink-secondary">{k.description}</span>
                         )}
                       </td>
-                      <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>{k.location ?? "—"}</td>
-                      <td className={`${TD_TEXT} text-ink-secondary`}>{k.inChargeName ?? "Nobody yet"}</td>
-                      <td className={`${TD_TEXT} text-ink-secondary`}>
+                      <td className={`${TD_SECOND} text-ink-secondary`}>{k.location ?? "—"}</td>
+                      <td className={`${TD_SECOND} text-ink-secondary`}>{k.inChargeName ?? "Nobody yet"}</td>
+                      <td className={`${TD_FIXED} text-ink-secondary`}>
                         {k.usesMealPlanner ? "Its own meal plan" : "Asking the store"}
                       </td>
-                      <td className={TD_ACTIONS}>
+                      <td className={TD_ACTIONS_FIXED}>
                         <div className={ACTIONS_ROW}>
                           <ButtonLink href={`/kitchens/${k.id}/edit`} variant="ghost" size="sm">
                             Edit

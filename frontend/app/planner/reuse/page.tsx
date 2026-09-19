@@ -1,5 +1,6 @@
 "use client";
 
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED } from "@/components/ds/table";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ds/Badge";
@@ -350,7 +351,9 @@ function ReusePlanScreen() {
                         </>
                       }
                       badge={
-                        <Badge tone={e.occurrences === 1 ? "warning" : "neutral"}>
+                        // Neutral either way: how often an event happened is a fact about
+                        // history, not something to act on (T-227).
+                        <Badge>
                           {e.occurrences === 1 ? "happened once" : `happened ${e.occurrences}×`}
                         </Badge>
                       }
@@ -435,31 +438,28 @@ function ReusePlanScreen() {
             <div className="mb-5 flex flex-wrap gap-3">
               <Tally value={totals?.meals ?? 0} label="meals created" />
               <Tally value={totals?.daysWritten ?? 0} label="days written to" />
-              <Tally value={totals?.daysLeftAlone ?? 0} label="days left alone" tone="warning" />
-              <Tally value={totals?.notCopied ?? 0} label="not copied" tone="danger" />
+              {/* A day left alone is the safe outcome (nothing overwritten), so it is plain. Dishes
+                  not copied are left for the planner to fill: something to act on, so amber, but
+                  not an emergency, so not red (Rajeev's rule, 2026-09-18, T-227). */}
+              <Tally value={totals?.daysLeftAlone ?? 0} label="days left alone" />
+              <Tally value={totals?.notCopied ?? 0} label="not copied" tone="warning" />
             </div>
 
             <div className={WRAP}>
-              <table className={TABLE}>
+              <table className={`${RULED_TABLE} text-sm`}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={TH_DATE}>Target day</th>
-                    <th className={TH_TEXT}>What lands on it</th>
-                    <th className={TH_TEXT}>Note</th>
+                    <th className={TH_PRIMARY}>What lands on it</th>
+                    <th className={TH_SECOND}>Note</th>
+                    <th className={TH_FIXED}>Target day</th>
                   </tr>
                 </thead>
                 <tbody>
                   {preview.days.map((d) => (
                     <tr key={d.targetDate} className={d.alreadyPlanned ? "bg-sunken" : TR}>
-                      <td className={TD_DATE}>
-                        <span className="font-semibold">{shortDate(d.targetDate)}</span>
-                        <span className="block text-xs text-ink-muted">
-                          from {shortDate(d.sourceDate)}
-                        </span>
-                      </td>
-                      <td className={TD_TEXT}>
+                      <td className={TD_PRIMARY}>
                         {d.alreadyPlanned ? (
-                          <Badge tone="warning">Left alone</Badge>
+                          <Badge>Left alone</Badge>
                         ) : (
                           <span className="flex flex-wrap gap-1.5">
                             {d.meals.map((m, i) => (
@@ -467,8 +467,8 @@ function ReusePlanScreen() {
                                 key={`${m.mealKind}-${m.recipeName}-${i}`}
                                 className={
                                   m.copied
-                                    ? "rounded bg-sunken px-2 py-0.5 text-xs text-ink"
-                                    : "rounded border border-dashed border-hairline-strong px-2 py-0.5 text-xs text-ink-muted line-through"
+                                    ? "rounded-control bg-sunken px-2 py-0.5 text-xs text-ink"
+                                    : "rounded-control border border-dashed border-hairline-strong px-2 py-0.5 text-xs text-ink-muted line-through"
                                 }
                               >
                                 {m.eventName ?? m.mealKind}
@@ -477,13 +477,14 @@ function ReusePlanScreen() {
                           </span>
                         )}
                       </td>
-                      <td className={`${TD_TEXT} text-xs text-ink-secondary`}>
+                      <td className={`${TD_SECOND} text-xs text-ink-secondary`}>
                         {d.alreadyPlanned ? (
                           "This day already has meals planned. Nothing is overwritten."
                         ) : (
                           <>
                             {d.fastName && (
-                              <Badge tone="danger">{d.fastName}</Badge>
+                              // A fast is information, not an emergency (T-227).
+                              <Badge tone="info">{d.fastName}</Badge>
                             )}{" "}
                             {d.meals
                               .filter((m) => !m.copied)
@@ -491,6 +492,12 @@ function ReusePlanScreen() {
                               .join(" ")}
                           </>
                         )}
+                      </td>
+                      <td className={TD_FIXED}>
+                        <span className="font-semibold">{shortDate(d.targetDate)}</span>
+                        <span className="block text-xs text-ink-muted">
+                          from {shortDate(d.sourceDate)}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -593,10 +600,9 @@ function Tally({
 }: {
   value: number;
   label: string;
-  tone?: "warning" | "danger";
+  tone?: "warning";
 }) {
-  const colour =
-    tone === "warning" ? "text-warning" : tone === "danger" ? "text-danger" : "text-ink";
+  const colour = tone === "warning" ? "text-warning" : "text-ink";
   return (
     <div className="grid min-w-[8.25rem] gap-px rounded-card border border-hairline px-4 py-3">
       <b className={`text-xl font-bold tabular-nums ${colour}`}>{value}</b>
@@ -605,16 +611,14 @@ function Tally({
   );
 }
 
-// ---- table classes, the app's own -------------------------------------
+// ---- table classes ---------------------------------------------------
 
+/*
+ * The box around the preview. The table inside it is the shared one (T-228): this file used to
+ * carry a private set of cell classes, which is how one table in the app came to have its own
+ * header band and its own padding while every other one followed the design system.
+ */
 const WRAP = "overflow-x-auto rounded-lg border border-hairline";
-const TABLE = "w-full border-collapse text-sm";
-const THEAD = "bg-sunken";
-const TR = "border-b border-hairline";
-const TH_DATE = "px-3 py-2 text-left text-xs font-bold uppercase tracking-eyebrow text-ink-secondary";
-const TH_TEXT = TH_DATE;
-const TD_DATE = "whitespace-nowrap border-b border-hairline px-3 py-2.5 align-top tabular-nums";
-const TD_TEXT = "border-b border-hairline px-3 py-2.5 align-top";
 
 // ---- dates -------------------------------------------------------------
 

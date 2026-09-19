@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import { expiryWord, quantity, unitLabel } from "@/lib/format";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { TABLE, TD_ACTIONS, TD_NUM, TD_TEXT, THEAD, TH_ACTIONS, TH_NUM, TH_TEXT, TR, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 
 export default function InventoryPage() {
@@ -98,7 +98,7 @@ function InventoryView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/inventory" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           {/*
             Adding is a screen of its own at /inventory/new, and so is adding an ingredient. Five
@@ -107,8 +107,8 @@ function InventoryView() {
             item was not already in. Ingredients moved at the same time, so the two pages still do
             the same job the same way, and now agree with Recipes as well.
           */}
-          <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
-            <div>
+          <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 grow basis-60">
               <h1>Inventory</h1>
               <p className="mt-1 text-ink-secondary">
                 What the store holds, counted from every receipt, donation and meal cooked.
@@ -125,13 +125,13 @@ function InventoryView() {
                 <button
                   type="button"
                   onClick={() => setOnlyLow((s) => !s)}
-                  className={`rounded-md px-4 py-2 text-sm ${onlyLow ? "bg-warning text-ink-inverse" : "bg-warning-bg text-warning"}`}
+                  className={`rounded-control px-4 py-2 text-sm ${onlyLow ? "bg-warning text-ink-inverse" : "bg-warning-bg text-warning"}`}
                 >
                   {lowCount} below reorder level{onlyLow ? ", showing only these" : ""}
                 </button>
               )}
               {expiringCount > 0 && (
-                <span className="rounded-md bg-warning-bg px-4 py-2 text-sm text-warning">
+                <span className="rounded-control bg-warning-bg px-4 py-2 text-sm text-warning">
                   {expiringCount} with stock expiring soon
                 </span>
               )}
@@ -172,11 +172,11 @@ function InventoryView() {
             </EmptyState>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Item</th>
-                    <th className={TH_TEXT}>Location</th>
+                    <th className={TH_PRIMARY}>Item</th>
+                    <th className={TH_SECOND}>Location</th>
                     {/*
                       Three figures where there was one, and the columns are how the screen shows
                       its working: on hand is a physical fact, committed is what the saved plan
@@ -185,11 +185,11 @@ function InventoryView() {
                       state, it is set once per temple, and it now lives on the item's own page
                       beside the figures that explain why something reads Low.
                     */}
-                    <th className={TH_NUM}>On hand</th>
-                    <th className={TH_NUM}>Committed</th>
-                    <th className={TH_NUM}>Available</th>
-                    <th className={TH_TEXT}>Status</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_FIXED}>On hand</th>
+                    <th className={TH_FIXED}>Committed</th>
+                    <th className={TH_FIXED}>Available</th>
+                    <th className={TH_FIXED}>Status</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -210,27 +210,29 @@ function InventoryView() {
                       />
                     ) : (
                       <tr key={i.itemId} className={TR}>
-                        <td className={`${TD_TEXT} ${WRAP}`}>
+                        <td className={TD_PRIMARY}>
                           <Link href={`/inventory/${i.itemId}`} className="font-medium text-accent-text hover:underline">
                             {i.ingredientName}
                           </Link>
                           <span className="ml-2 text-xs text-ink-muted">{i.category}</span>
                         </td>
-                        <td className={`${TD_TEXT} text-ink-secondary`}>{i.storageLocation ?? "—"}</td>
-                        <td className={TD_NUM}>{quantity(i.onHand, i.unit)}</td>
+                        <td className={`${TD_SECOND} text-ink-secondary`}>{i.storageLocation ?? "—"}</td>
+                        <td className={TD_FIXED_NUM} data-label="On hand">{quantity(i.onHand, i.unit)}</td>
                         {/* A dash rather than "0 Kg" where nothing has claimed it: the column is
                             scanned down, and a column of zeroes hides the one row that is not. */}
-                        <td className={`${TD_NUM} text-ink-secondary`}>
+                        <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="Committed">
                           {i.committed === 0 ? "—" : quantity(i.committed, i.unit)}
                         </td>
-                        <td className={TD_NUM}>{quantity(i.available, i.unit)}</td>
-                        <td className={TD_TEXT}>
+                        <td className={TD_FIXED_NUM} data-label="Available">{quantity(i.available, i.unit)}</td>
+                        <td className={TD_FIXED}>
                           {/* A row, never a stack. The chips are short and the column takes its
                               natural width, so both fit on the one line the row already has. */}
                           <div className="flex items-center gap-1.5">
-                            {i.belowThreshold && <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Low</span>}
+                            {i.belowThreshold && <span className="rounded-control bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Low</span>}
+                            {/* Expired is red: the food cannot be served and needs dealing with now.
+                                Expiring soon stays amber, act before it goes (Rajeev, 2026-09-18, T-227). */}
                             {i.expiringSoon && (
-                              <span className="rounded-sm bg-warning-bg px-2 py-1 text-xs font-semibold text-warning">
+                              <span className={`rounded-control px-2 py-1 text-xs font-semibold ${expiryWord(i.soonestExpiry) === "expired" ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning"}`}>
                                 {expiryWord(i.soonestExpiry) === "expired" ? "Expired" : "Expiring soon"}
                               </span>
                             )}
@@ -240,7 +242,7 @@ function InventoryView() {
                         {/* Changing your mind about a level is a one-click job on the row you are
                             looking at. It used to be impossible anywhere in the application: the
                             endpoint existed and no screen called it. */}
-                        <td className={TD_ACTIONS}>
+                        <td className={TD_ACTIONS_FIXED}>
                           <Button variant="ghost" size="sm" onClick={() => setEditing(i.itemId)}>
                             Edit
                           </Button>
@@ -277,14 +279,14 @@ function EditRow({
 
   return (
     <tr className="border-t border-hairline bg-sunken align-top">
-      <td className={`${TD_TEXT} ${WRAP}`}>
+      <td className={TD_PRIMARY}>
         <span className="font-medium">{item.ingredientName}</span>
         <span className="ml-2 text-xs text-ink-muted">{item.category}</span>
       </td>
-      <td className={TD_TEXT}>
+      <td className={TD_SECOND}>
         <input aria-label="Where it lives" value={location} onChange={(e) => setLocation(e.target.value)} className={FIELD} />
       </td>
-      <td className={`${TD_NUM} text-ink-secondary`}>{quantity(item.onHand, item.unit)}</td>
+      <td className={`${TD_FIXED_NUM} text-ink-secondary`}>{quantity(item.onHand, item.unit)}</td>
       {/*
         The reorder level lost its column and kept its field. Taking `Reorder at` off the table was
         about what the table is for — figures that change on their own — and not about making a
@@ -292,7 +294,7 @@ function EditRow({
         became. It spans the three columns the row itself has nothing to edit, because committed,
         available and status are all computed and none of them is a thing to type into.
       */}
-      <td className={TD_TEXT} colSpan={3}>
+      <td className={TD_FIXED} colSpan={3}>
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-xs text-ink-secondary">
             <span>Tell me below</span>
@@ -310,7 +312,7 @@ function EditRow({
           <input aria-label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" className={`${FIELD} min-w-0 flex-1`} />
         </div>
       </td>
-      <td className={TD_ACTIONS}>
+      <td className={TD_ACTIONS_FIXED}>
         <div className={ACTIONS_ROW}>
           <Button
             size="sm"

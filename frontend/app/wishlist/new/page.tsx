@@ -79,8 +79,8 @@ function NewWishlistItemView() {
     >
       {error && <ErrorNotice error={error} />}
 
-      <Form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Add wish-list item" onSubmit={add}>
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+      <Form id={FORM} className="grid gap-4 sm:grid-cols-2" aria-label="Add wish-list item" onSubmit={add}>
+        <label className="sm:col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Title</span>
           <input name="title" required className={FIELD} />
         </label>
@@ -103,7 +103,7 @@ function NewWishlistItemView() {
             <option value="OTHER">Other</option>
           </select>
         </label>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <HintedField label="Description" hint="Devotees read this before they give">
             {(id) => <input id={id} name="description" className={FIELD} />}
           </HintedField>

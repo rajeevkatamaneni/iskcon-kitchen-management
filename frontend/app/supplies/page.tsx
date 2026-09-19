@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { FOOD_UNITS, unitLabel } from "@/lib/format";
-import { TABLE, TD_ACTIONS, TD_TEXT, THEAD, TH_ACTIONS, TH_TEXT, TR, ACTIONS_ROW, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 
 /**
@@ -110,10 +110,10 @@ function SuppliesView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/supplies" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
-            <div>
+          <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 grow basis-60">
               <h1>Supplies</h1>
               <p className="mt-1 text-ink-secondary">
                 What the kitchen uses up that nobody eats — LPG, kerosene, cleaning liquid, bulbs,
@@ -152,20 +152,20 @@ function SuppliesView() {
             </EmptyState>
           ) : (
             <div className="table-wrap overflow-x-auto">
-              <table className={TABLE}>
+              <table className={RULED_TABLE}>
                 <thead className={THEAD}>
                   <tr>
-                    <th className={`${TH_TEXT} ${WRAP}`}>Name</th>
-                    <th className={TH_TEXT}>Category</th>
-                    <th className={TH_TEXT}>Unit</th>
+                    <th className={TH_PRIMARY}>Name</th>
+                    <th className={TH_SECOND}>Category</th>
                     {/*
                       Aliases are shown here and not on /ingredients, and the difference is what
                       the two lists are for. A temple's food is called what the recipes call it;
                       its supplies are called four things by four people — a cylinder, LPG, gas —
                       and the alias is what makes the shopping list and the vendor agree.
                     */}
-                    <th className={TH_TEXT}>Also called</th>
-                    <th className={TH_ACTIONS}>Actions</th>
+                    <th className={TH_SECOND}>Also called</th>
+                    <th className={TH_FIXED}>Unit</th>
+                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -183,17 +183,17 @@ function SuppliesView() {
                       />
                     ) : (
                       <tr key={item.id} className={TR}>
-                        <td className={`${TD_TEXT} ${WRAP}`}>{item.name}</td>
-                        <td className={`${TD_TEXT} text-ink-secondary`}>{item.category}</td>
-                        <td className={`${TD_TEXT} text-ink-secondary`}>{unitLabel(item.unit)}</td>
-                        <td className={`${TD_TEXT} text-ink-secondary`}>
+                        <td className={TD_PRIMARY}>{item.name}</td>
+                        <td className={`${TD_SECOND} text-ink-secondary`}>{item.category}</td>
+                        <td className={`${TD_SECOND} text-ink-secondary`}>
                           {item.aliases.length > 0 ? (
                             item.aliases.join(", ")
                           ) : (
                             <span className="text-ink-muted">—</span>
                           )}
                         </td>
-                        <td className={TD_ACTIONS}>
+                        <td className={`${TD_FIXED} text-ink-secondary`}>{unitLabel(item.unit)}</td>
+                        <td className={TD_ACTIONS_FIXED}>
                           <div className={ACTIONS_ROW}>
                             <Button variant="ghost" size="sm" onClick={() => setEditing(item.id)}>Edit</Button>
                             {/*
@@ -252,14 +252,9 @@ function EditRow({
 
   return (
     <tr className="border-t border-hairline bg-sunken align-top">
-      <td className={`${TD_TEXT} ${WRAP}`}><input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
-      <td className={TD_TEXT}><input aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
-      <td className={TD_TEXT}>
-        <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} className="min-h-touch rounded-control border border-hairline px-2">
-          {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
-        </select>
-      </td>
-      <td className={TD_TEXT}>
+      <td className={TD_PRIMARY}><input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
+      <td className={TD_SECOND}><input aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
+      <td className={TD_SECOND}>
         <input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded-control border border-hairline px-2" />
         <label className="mt-2 flex items-center gap-2 text-xs text-ink-secondary">
           <input
@@ -272,7 +267,12 @@ function EditRow({
           Move to Ingredients
         </label>
       </td>
-      <td className={TD_ACTIONS}>
+      <td className={TD_FIXED}>
+        <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} className="min-h-touch rounded-control border border-hairline px-2">
+          {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
+        </select>
+      </td>
+      <td className={TD_ACTIONS_FIXED}>
         <div className={ACTIONS_ROW}>
           <Button size="sm" disabled={busy} onClick={() => onSave({ name, category, unit, supply: !move, aliases: splitAliases(aliases) })}>Save</Button>
           <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>

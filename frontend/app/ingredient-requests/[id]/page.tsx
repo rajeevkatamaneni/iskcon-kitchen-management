@@ -23,7 +23,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { cooksQuantity, longDate, moment, unitLabel } from "@/lib/format";
 import { ALL_LANGUAGES, ENGLISH } from "@/lib/languages";
 import { generateAndDownload } from "@/lib/document-download";
-import { TABLE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 
 /**
  * One request, everything on it, and only the acts this person may perform in this state (E10-S10).
@@ -38,6 +38,12 @@ import { TABLE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR, WRAP } from "@/comp
  */
 
 /** What an event says if the server ever writes one with no sentence of its own. */
+/**
+ * A titled card whose table runs to its edges. `p-0` alone left the card's own title flush against
+ * the border, 0px in where every other card's title sits 24px in; this pads the title only.
+ */
+const BLEED_WITH_TITLE = "p-0 [&>header]:px-6 [&>header]:pt-6";
+
 const EVENT_LABEL: Record<string, string> = {
   CREATED: "Raised as a draft",
   EDITED: "Edited",
@@ -66,7 +72,7 @@ function IngredientRequestRecordView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/ingredient-requests" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto grid max-w-content gap-6">
           {loading ? (
             <Loading label="Loading the request…" />
@@ -227,7 +233,8 @@ function RequestRecord({
       </header>
 
       {notice && <InlineNotice tone="success" autoDismiss title={notice} />}
-      {problem && <InlineNotice tone="warning" title={problem} />}
+      {/* Red, like a field error: the request cannot go until this is fixed (T-227). */}
+      {problem && <InlineNotice tone="danger" title={problem} />}
       {actionError && <ErrorNotice error={actionError} />}
 
       {/* What this state means for whoever is reading, before they go looking for a button. */}
@@ -243,15 +250,18 @@ function RequestRecord({
           An administrator or a kitchen manager decides it.
         </InlineNotice>
       )}
+      {/* Both of these explain a settled request, shown every time it is opened, so both are
+          information: nothing to act on, and not the moment the reader's own action succeeded
+          (Rajeev, 2026-09-18, T-227). The issue itself has its own green flash. */}
       {status === "DENIED" && (
-        <InlineNotice tone="warning" title="This request was denied, and that is final.">
+        <InlineNotice tone="info" title="This request was denied, and that is final.">
           A refusal that could be edited and shown again would not be a refusal. Raise a fresh
           request if the kitchen still needs something, and this one stays on the record with the
           reason.
         </InlineNotice>
       )}
       {status === "ISSUED" && (
-        <InlineNotice tone="success" title="The goods have gone over the counter.">
+        <InlineNotice tone="info" title="The goods have gone over the counter.">
           The stock has been drawn down against this request, so nothing on it can change now.
         </InlineNotice>
       )}
@@ -309,28 +319,28 @@ function RequestRecord({
         </Card>
       )}
 
-      <Card title="What was asked for" padding="p-0">
+      <Card title="What was asked for" padding={BLEED_WITH_TITLE}>
         {detail.lines.length === 0 ? (
           <p className="px-6 py-8 text-center text-ink-secondary">
             Nothing has been added to this request yet.
           </p>
         ) : (
-          <table className={TABLE}>
+          <table className={RULED_TABLE}>
             <thead className={THEAD}>
               <tr>
-                <th className={`${TH_TEXT} ${WRAP}`}>Ingredient</th>
-                <th className={TH_NUM}>Asked for</th>
-                <th className={TH_NUM}>Handed over</th>
+                <th className={TH_PRIMARY}>Ingredient</th>
+                <th className={TH_FIXED}>Asked for</th>
+                <th className={TH_FIXED}>Handed over</th>
               </tr>
             </thead>
             <tbody>
               {detail.lines.map((line) => (
                 <tr key={line.id} className={TR}>
-                  <td className={`${TD_TEXT} ${WRAP}`}>{line.ingredientName}</td>
-                  <td className={`${TD_NUM} text-ink-secondary`}>
+                  <td className={TD_PRIMARY}>{line.ingredientName}</td>
+                  <td data-label="Asked for" className={`${TD_FIXED_NUM} text-ink-secondary`}>
                     {cooksQuantity(line.quantity, line.unit)}
                   </td>
-                  <td className={`${TD_NUM} text-ink-secondary`}>
+                  <td data-label="Handed over" className={`${TD_FIXED_NUM} text-ink-secondary`}>
                     {line.issuedQuantity == null
                       ? "—"
                       : cooksQuantity(line.issuedQuantity, line.issuedUnit ?? line.unit)}
@@ -342,24 +352,24 @@ function RequestRecord({
         )}
       </Card>
 
-      <Card title="What it is for" padding="p-0">
+      <Card title="What it is for" padding={BLEED_WITH_TITLE}>
         {detail.dishes.length === 0 ? (
           <p className="px-6 py-8 text-center text-ink-secondary">
             No dishes named yet. A request cannot go for review without them.
           </p>
         ) : (
-          <table className={TABLE}>
+          <table className={RULED_TABLE}>
             <thead className={THEAD}>
               <tr>
-                <th className={`${TH_TEXT} ${WRAP}`}>Dish</th>
-                <th className={TH_NUM}>How much</th>
+                <th className={TH_PRIMARY}>Dish</th>
+                <th className={TH_FIXED}>How much</th>
               </tr>
             </thead>
             <tbody>
               {detail.dishes.map((dish) => (
                 <tr key={dish.id} className={TR}>
-                  <td className={`${TD_TEXT} ${WRAP}`}>{dish.dishName}</td>
-                  <td className={`${TD_NUM} text-ink-secondary`}>
+                  <td className={TD_PRIMARY}>{dish.dishName}</td>
+                  <td data-label="How much" className={`${TD_FIXED_NUM} text-ink-secondary`}>
                     {cooksQuantity(dish.quantity, dish.unit)}
                   </td>
                 </tr>
@@ -475,56 +485,67 @@ function RecordIssue({
         put zero against anything that did not go out at all.
       </p>
 
+      {/* Red, like a field error: nothing can be recorded until every line has a figure (T-227). */}
       {problem && (
         <div className="mb-4">
-          <InlineNotice tone="warning" title={problem} />
+          <InlineNotice tone="danger" title={problem} />
         </div>
       )}
 
-      {error && (
-        <div className="mb-4 grid gap-3">
+      {/* A refusal for short stock is one red message, not a red refusal with an amber note under
+          it: "nothing was issued" is the refusal, explained, and it needs dealing with now
+          (Rajeev, 2026-09-18, T-227). Drawn as ErrorNotice draws, with the explanation and the
+          short lines between the refusal and its reference code. Every other refusal is the plain
+          ErrorNotice. */}
+      {error && !shortOfStock && (
+        <div className="mb-4">
           <ErrorNotice error={error} />
-          {shortOfStock && (
-            <InlineNotice tone="warning" title="Nothing was issued.">
-              <p>
-                The whole request goes over the counter together or not at all, so no stock has
-                moved and the books are unchanged.
-              </p>
-              {error.fieldErrors.length > 0 && (
-                <ul className="mt-2 grid gap-1">
-                  {error.fieldErrors.map((f) => (
-                    <li key={f.field}>
-                      {f.field}: {f.message}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="mt-2">
-                If the shelf holds more than the books say, correct the count on the inventory
-                screen first, then record the issue again.
-              </p>
-            </InlineNotice>
+        </div>
+      )}
+      {error && shortOfStock && (
+        <div role="alert" className="mb-4 rounded border border-danger bg-danger-bg p-4 text-danger">
+          <p className="font-medium">Nothing was issued. {error.message}</p>
+          <p className="mt-1 text-sm">
+            The whole request goes over the counter together or not at all, so no stock has moved
+            and the books are unchanged.
+          </p>
+          {error.fieldErrors.length > 0 && (
+            <ul className="mt-2 grid gap-1 text-sm">
+              {error.fieldErrors.map((f) => (
+                <li key={f.field}>
+                  {f.field}: {f.message}
+                </li>
+              ))}
+            </ul>
           )}
+          <p className="mt-2 text-sm">
+            If the shelf holds more than the books say, correct the count on the inventory screen
+            first, then record the issue again.
+          </p>
+          <p className="mt-1 text-sm">{error.action}</p>
+          <p className="mt-3 text-xs text-danger">
+            If you need help, quote <span className="font-mono font-medium">{error.code}</span>
+          </p>
         </div>
       )}
 
       <div className="overflow-x-auto rounded-lg border border-hairline">
-        <table className={TABLE}>
+        <table className={RULED_TABLE}>
           <thead className={THEAD}>
             <tr>
-              <th className={`${TH_TEXT} ${WRAP}`}>Ingredient</th>
-              <th className={TH_NUM}>Approved</th>
-              <th className={TH_NUM}>Actually issued</th>
+              <th className={TH_PRIMARY}>Ingredient</th>
+              <th className={TH_FIXED}>Approved</th>
+              <th className={TH_FIXED}>Actually issued</th>
             </tr>
           </thead>
           <tbody>
             {detail.lines.map((line) => (
               <tr key={line.id} className={TR}>
-                <td className={`${TD_TEXT} ${WRAP}`}>{line.ingredientName}</td>
-                <td className={`${TD_NUM} text-ink-secondary`}>
+                <td className={TD_PRIMARY}>{line.ingredientName}</td>
+                <td data-label="Approved" className={`${TD_FIXED_NUM} text-ink-secondary`}>
                   {cooksQuantity(line.quantity, line.unit)}
                 </td>
-                <td className={TD_NUM}>
+                <td className={TD_FIXED_NUM}>
                   <span className="flex items-center gap-2">
                     <input
                       aria-label={`Issued ${line.ingredientName}`}
@@ -535,7 +556,7 @@ function RecordIssue({
                       onChange={(e) =>
                         setAmounts((prev) => ({ ...prev, [line.id]: e.target.value }))
                       }
-                      className="min-h-touch w-28 rounded-control border border-hairline px-3"
+                      className="min-h-touch min-w-28 rounded-control border border-hairline px-3"
                     />
                     {/* The stored unit, never the promoted one: the box submits kilograms, and
                         labelling it grams would invite a thousandfold error. */}

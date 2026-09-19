@@ -25,20 +25,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { savedPhoneForDisplay } from "@/lib/phone";
 import { Loading } from "@/components/Loading";
-import {
-  ACTIONS_ROW,
-  TABLE,
-  TD_ACTIONS,
-  TD_DATE,
-  TD_NUM,
-  TD_TEXT,
-  THEAD,
-  TH_ACTIONS,
-  TH_NUM,
-  TH_TEXT,
-  TR,
-  WRAP,
-} from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 
 // The order the ledger reads in: what the temple collected online first, then what it wrote down.
 //
@@ -191,7 +178,7 @@ function DonationsView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/donations" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -352,7 +339,7 @@ function DonationsLedger() {
           type="button"
           onClick={exportCsv}
           disabled={exporting}
-          className="min-h-touch rounded border border-hairline px-5 py-2 text-sm hover:bg-sunken disabled:opacity-60"
+          className="min-h-touch rounded-control border border-hairline px-5 py-2 text-sm hover:bg-sunken disabled:opacity-60"
         >
           {exporting ? "Preparing…" : "Export CSV"}
         </button>
@@ -440,34 +427,23 @@ function DonationsLedger() {
         </div>
       ) : (
         <div className="table-wrap overflow-x-auto">
-          <table className={TABLE}>
+          <table className={RULED_TABLE}>
             <thead className={THEAD}>
               <tr>
-                <th className={TH_TEXT}>Date</th>
-                <th className={TH_TEXT}>Type</th>
-                <th className={`${TH_TEXT} ${WRAP}`}>Donor</th>
-                <th className={TH_NUM}>Amount</th>
-                <th className={TH_TEXT}>Mode</th>
-                <th className={`${TH_TEXT} ${WRAP}`}>Linked to</th>
-                <th className={TH_ACTIONS}>Actions</th>
+                <th className={TH_PRIMARY}>Donor</th>
+                <th className={TH_SECOND}>Linked to</th>
+                <th className={TH_FIXED}>Date</th>
+                <th className={TH_FIXED}>Type</th>
+                <th className={TH_FIXED}>Amount</th>
+                <th className={TH_FIXED}>Mode</th>
+                <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className={TR}>
-                  {/* Written out, not the stored "2026-08-16": a ledger is read by somebody who
-                      knows what day a gift arrived, not by a database. */}
-                  <td className={`${TD_DATE} text-ink-secondary`}>{dayMonthYear(r.donatedOn)}</td>
-                  <td className={TD_TEXT}>{CATEGORY_LABEL[r.category] ?? r.category}</td>
-                  <td className={`${TD_TEXT} ${WRAP}`}>{r.donorDisplay}</td>
-                  {/* Struck through, because the money column is what somebody adds up down the
-                      page, and a voided gift is not in the totals above it. The badge two columns
-                      along says why; this is what stops the eye counting it in the first place. */}
-                  <td className={`${TD_NUM} ${r.voided ? "text-ink-muted line-through" : ""}`}>
-                    {money(r.amountInr, "INR")}
-                  </td>
-                  <td className={`${TD_TEXT} text-ink-secondary`}>{r.paymentMode ? (PAYMENT_MODE_LABEL[r.paymentMode] ?? r.paymentMode) : "—"}</td>
-                  <td className={`${TD_TEXT} ${WRAP} text-ink-secondary`}>
+                  <td className={TD_PRIMARY}>{r.donorDisplay}</td>
+                  <td className={`${TD_SECOND} text-ink-secondary`}>
                     {r.linkedTo ?? "—"}
                     {r.voided && (
                       <span className="mt-1 block">
@@ -481,7 +457,18 @@ function DonationsLedger() {
                       </span>
                     )}
                   </td>
-                  <td className={TD_ACTIONS}>
+                  {/* Written out, not the stored "2026-08-16": a ledger is read by somebody who
+                      knows what day a gift arrived, not by a database. */}
+                  <td className={`${TD_FIXED} text-ink-secondary`}>{dayMonthYear(r.donatedOn)}</td>
+                  <td className={TD_FIXED}>{CATEGORY_LABEL[r.category] ?? r.category}</td>
+                  {/* Struck through, because the money column is what somebody adds up down the
+                      page, and a voided gift is not in the totals above it. The badge under
+                      "Linked to" says why; this is what stops the eye counting it in the first place. */}
+                  <td className={`${TD_FIXED_NUM} ${r.voided ? "text-ink-muted line-through" : ""}`}>
+                    {money(r.amountInr, "INR")}
+                  </td>
+                  <td className={`${TD_FIXED} text-ink-secondary`}>{r.paymentMode ? (PAYMENT_MODE_LABEL[r.paymentMode] ?? r.paymentMode) : "—"}</td>
+                  <td className={TD_ACTIONS_FIXED}>
                     <span className={ACTIONS_ROW}>
                       {/* The list linked nowhere until T-110, so a gift could be read as a row and
                           never opened — which is why the 80G receipt had nothing to hang on and why

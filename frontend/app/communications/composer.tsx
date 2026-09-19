@@ -315,7 +315,10 @@ export function Composer({ existing }: { existing: CommunicationView | null }) {
 
           <h3 className="mt-6 text-sm font-medium text-ink">And on WhatsApp</h3>
           <p className="mt-1 text-sm text-ink-secondary">All WhatsApp can carry.</p>
-          <p className="mt-2 max-w-md whitespace-pre-wrap rounded-lg rounded-bl-none bg-success-bg px-4 py-3 text-sm text-ink">
+          {/* The bubble's shape says WhatsApp; its colour does not. It used to borrow the success
+              green to look like a WhatsApp bubble, and status colours are never decorative: green
+              means the reader's own action succeeded (DESIGN_SYSTEM §3, T-227). */}
+          <p className="mt-2 max-w-md whitespace-pre-wrap rounded-lg rounded-bl-none bg-sunken px-4 py-3 text-sm text-ink">
             {preview.whatsappText}
           </p>
         </div>
@@ -338,7 +341,7 @@ function Toolbar() {
   };
 
   return (
-    <div className="flex flex-wrap gap-1 rounded border border-hairline bg-sunken px-2 py-1">
+    <div className="flex flex-wrap gap-1 rounded-control border border-hairline bg-sunken px-2 py-1">
       <ToolButton label="Bold" onMouseDown={apply("bold")}>
         <strong>B</strong>
       </ToolButton>
@@ -388,7 +391,7 @@ function ToolButton({
       // Mouse-down, not click: a click fires after the caret has already left the letter, and the
       // formatting would land on nothing.
       onMouseDown={onMouseDown}
-      className="min-w-9 rounded px-2 py-1 text-sm text-ink-secondary hover:bg-raised hover:text-ink"
+      className="min-h-touch min-w-touch rounded-control px-2 text-sm text-ink-secondary hover:bg-raised hover:text-ink"
     >
       {children}
     </button>

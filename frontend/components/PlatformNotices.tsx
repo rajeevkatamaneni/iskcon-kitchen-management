@@ -134,7 +134,7 @@ export function NoticeCard({
             <button
               type="button"
               onClick={() => onDismiss(notice.id)}
-              className="min-h-9 rounded px-3 text-sm text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
+              className="min-h-9 rounded-control px-3 text-sm text-ink-secondary transition-colors duration-state hover:bg-sunken hover:text-ink"
             >
               Dismiss
             </button>

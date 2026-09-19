@@ -99,7 +99,7 @@ function RecordLeaveView() {
     >
       {error && <ErrorNotice error={error} />}
 
-      <Form id={FORM} className="grid grid-cols-2 gap-4" aria-label="Record leave" onSubmit={record}>
+      <Form id={FORM} className="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-label="Record leave" onSubmit={record}>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Staff member</span>
           <select name="staffProfileId" required className={FIELD}>
@@ -125,12 +125,12 @@ function RecordLeaveView() {
           to={{ name: "toDate", label: "Last day", defaultValue: todayIso(), required: true }}
           className={FIELD}
         />
-        <label className="col-span-2 flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
+        <label className="col-span-full flex min-h-touch items-center gap-2 text-sm text-ink-secondary">
           <input type="checkbox" name="halfDay" 
                 className="accent-accent"
               /> Half day
         </label>
-        <label className="col-span-2 flex flex-col gap-1 text-sm text-ink-secondary">
+        <label className="col-span-full flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Note</span>
           <input name="reason" className={FIELD} />
         </label>

@@ -209,19 +209,24 @@ describe("the day's meals", () => {
     fireEvent.click(screen.getByRole("button", { name: /record actuals/i }));
 
     // Every dish is listed with the three figures the returned job card carries: what was planned,
-    // what was cooked, and what was actually eaten. Both editable ones start at the plan.
-    const cooked = screen.getByLabelText("How much Bisi Bele Bath was cooked");
-    const eaten = screen.getByLabelText("How much Bisi Bele Bath was eaten");
+    // what was cooked, and what was served. Both editable ones start at the plan.
+    const cooked = screen.getByLabelText("Bisi Bele Bath cooked");
+    const served = screen.getByLabelText("Bisi Bele Bath served");
     expect(cooked).toHaveValue(248);
-    expect(eaten).toHaveValue(248);
+    expect(served).toHaveValue(248);
+
+    // The column says "Served", the word on the job card's serving sheet the figure is copied from
+    // (Rajeev, 2026-09-18, T-230). "Eaten" and "Consumed" were both earlier names for it.
+    expect(screen.getAllByText("Served").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^(Eaten|Consumed)$/)).not.toBeInTheDocument();
 
     fireEvent.change(cooked, { target: { value: "220" } });
-    // Nothing can be eaten that was never made, so the figure below follows the one above down.
-    expect(eaten).toHaveValue(220);
-    fireEvent.change(eaten, { target: { value: "190" } });
+    // Nothing can be served that was never made, so the figure below follows the one above down.
+    expect(served).toHaveValue(220);
+    fireEvent.change(served, { target: { value: "190" } });
     fireEvent.click(screen.getByLabelText("Kesari Bath was not made"));
 
-    fireEvent.click(screen.getByRole("button", { name: /record this meal/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save actuals/i }));
     await vi.waitFor(() => expect(recordMeal).toHaveBeenCalledTimes(1));
 
     const [mealId, input] = recordMeal.mock.calls[0];
@@ -243,7 +248,7 @@ describe("the day's meals", () => {
     await open([event()], "Bhagavad Gita Parayanam");
 
     openTheRecordingForm();
-    fireEvent.click(screen.getByRole("button", { name: /record this meal/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save actuals/i }));
 
     await vi.waitFor(() => expect(recordMeal).toHaveBeenCalledTimes(1));
     expect(recordMeal.mock.calls[0][0]).toBe("meal-reading");
@@ -255,7 +260,7 @@ describe("the day's meals", () => {
     await open([lunch()]);
 
     openTheRecordingForm();
-    fireEvent.click(screen.getByRole("button", { name: /record this meal/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save actuals/i }));
 
     await vi.waitFor(() => expect(recordMeal).toHaveBeenCalledTimes(1));
     const input = recordMeal.mock.calls[0][1];
@@ -286,7 +291,7 @@ describe("the day's meals", () => {
     const { onError } = await open([event()], "Bhagavad Gita Parayanam");
 
     openTheRecordingForm();
-    const button = screen.getByRole("button", { name: /record this meal/i });
+    const button = screen.getByRole("button", { name: /save actuals/i });
     fireEvent.click(button);
 
     const alert = await screen.findByRole("alert");
@@ -308,7 +313,7 @@ describe("the day's meals", () => {
     expect(onError).not.toHaveBeenCalled();
 
     // The form stays open on its figures, which is what a person needs in order to try again.
-    expect(screen.getByLabelText("How much Bisi Bele Bath was cooked")).toHaveValue(248);
+    expect(screen.getByLabelText("Bisi Bele Bath cooked")).toHaveValue(248);
   });
 
   it("puts no swap and no cancel on a preparation row", async () => {
@@ -328,11 +333,13 @@ describe("the day's meals", () => {
         recorded: true,
         recordedByName: "Gopal Das",
         cardNumber: "LC-2026-0142",
-        dishes: [{ ...dish("m1", "r1", "Bisi Bele Bath", 248), status: "COOKED", actualServings: 220 }],
+        dishes: [{ ...dish("m1", "r1", "Bisi Bele Bath", 248), status: "COOKED", actualServings: 220, consumedQuantity: 200 }],
       }),
     ]);
 
     expect(screen.getByText("LC-2026-0142")).toBeInTheDocument();
+    // The recorded summary uses the recording form's word for the second figure (T-230).
+    expect(screen.getByText(/220 Kg cooked · 200 Kg served/)).toBeInTheDocument();
     // With its unit, like every other quantity on the screen (E11-S4): the recorded figure used to
     // read "220" beside a target that read "248 servings", so the two did not read as comparable.
     expect(screen.getByText(/220 Kg cooked/)).toBeInTheDocument();

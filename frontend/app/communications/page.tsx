@@ -19,7 +19,7 @@ import {
   type CommunicationDelivery,
   type CommunicationView,
 } from "@/lib/api";
-import { TABLE, TD_DATE, TD_NUM, TD_TEXT, THEAD, TH_NUM, TH_TEXT, TR, WRAP } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 import { moment } from "@/lib/format";
 
 /**
@@ -72,7 +72,7 @@ function CommunicationsView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/communications" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -150,29 +150,29 @@ function CommunicationTable({
         <p className="card px-6 py-8 text-center text-ink-secondary">{empty}</p>
       ) : (
         <div className="table-wrap overflow-x-auto">
-          <table className={TABLE}>
+          <table className={RULED_TABLE}>
             <thead className={THEAD}>
               <tr>
-                <th className={`${TH_TEXT} ${WRAP}`}>Subject</th>
-                <th className={TH_TEXT}>Kind</th>
-                <th className={TH_TEXT}>Sent as</th>
-                <th className={TH_NUM}>Reached</th>
-                <th className={TH_TEXT}>When</th>
+                <th className={TH_PRIMARY}>Subject</th>
+                <th className={TH_FIXED}>Kind</th>
+                <th className={TH_FIXED}>Sent as</th>
+                <th className={TH_FIXED}>Reached</th>
+                <th className={TH_FIXED}>When</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className={TR}>
-                  <td className={`${TD_TEXT} ${WRAP}`}>
+                  <td className={TD_PRIMARY}>
                     <Link href={hrefFor(c)} className="font-medium text-accent-text hover:underline">
                       {c.subject}
                     </Link>
                     {c.author && <div className="text-xs text-ink-muted">by {c.author}</div>}
                   </td>
-                  <td className={`${TD_TEXT} text-ink-secondary`}>{CATEGORY_LABELS[c.category] ?? c.category}</td>
-                  <td className={`${TD_TEXT} text-ink-secondary`}>{c.channel === "EMAIL" ? "Email" : "WhatsApp"}</td>
-                  <td className={TD_NUM}>{c.audienceCount ?? "—"}</td>
-                  <td className={`${TD_DATE} text-ink-secondary`}>
+                  <td className={`${TD_FIXED} text-ink-secondary`}>{CATEGORY_LABELS[c.category] ?? c.category}</td>
+                  <td className={`${TD_FIXED} text-ink-secondary`}>{c.channel === "EMAIL" ? "Email" : "WhatsApp"}</td>
+                  <td className={TD_FIXED_NUM} data-label="Reached">{c.audienceCount ?? "—"}</td>
+                  <td className={`${TD_FIXED} text-ink-secondary`}>
                     {moment(c.sentAt ?? c.createdAt)}
                   </td>
                 </tr>
@@ -282,10 +282,12 @@ function SentDetail({ communication }: { communication: CommunicationView }) {
           </div>
         )}
 
+        {/* Red: a message that did not reach people is a failure that needs attention now, and
+            the retry is right here (Rajeev, 2026-09-18, T-227). */}
         {failed > 0 && (
           <div className="mt-4">
             <InlineNotice
-              tone="warning"
+              tone="danger"
               title={`${failed} ${failed === 1 ? "copy" : "copies"} didn’t arrive.`}
               action={
                 <Button variant="secondary" onClick={retryFailed} busy={busy}>
@@ -313,20 +315,20 @@ function SentDetail({ communication }: { communication: CommunicationView }) {
           <div className="-mx-5 mt-4 overflow-x-auto">
             {/* Pulled out by the width of the cell padding, so the first column lines up with the
                 heading above it rather than sitting inside the card's own inset. */}
-            <table className={`${TABLE} text-sm`}>
+            <table className={`${RULED_TABLE} text-sm`}>
               <thead className={THEAD}>
                 <tr>
-                  <th className={`${TH_TEXT} ${WRAP}`}>Devotee</th>
-                  <th className={TH_TEXT}>Channel</th>
-                  <th className={TH_TEXT}>Outcome</th>
+                  <th className={TH_PRIMARY}>Devotee</th>
+                  <th className={TH_FIXED}>Channel</th>
+                  <th className={TH_FIXED}>Outcome</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((d, i) => (
                   <tr key={`${d.recipientName}-${i}`} className={TR}>
-                    <td className={`${TD_TEXT} ${WRAP}`}>{d.recipientName}</td>
-                    <td className={`${TD_TEXT} text-ink-secondary`}>{d.channel ?? "—"}</td>
-                    <td className={TD_TEXT}>
+                    <td className={TD_PRIMARY}>{d.recipientName}</td>
+                    <td className={`${TD_FIXED} text-ink-secondary`}>{d.channel ?? "—"}</td>
+                    <td className={TD_FIXED}>
                       <DeliveryOutcome status={d.status} reason={d.suppressedReason} />
                     </td>
                   </tr>
@@ -342,7 +344,8 @@ function SentDetail({ communication }: { communication: CommunicationView }) {
 
 function DeliveryOutcome({ status, reason }: { status: string; reason: string | null }) {
   if (status === "SENT" || status === "DELIVERED") {
-    return <span className="text-success">{status === "DELIVERED" ? "Delivered" : "Sent"}</span>;
+    // Plain: delivery is the expected outcome and a passive state. Only a failure is coloured (T-227).
+    return <span className="text-ink-secondary">{status === "DELIVERED" ? "Delivered" : "Sent"}</span>;
   }
   if (status === "FAILED") return <span className="text-danger">Failed</span>;
   if (status === "SUPPRESSED") {
