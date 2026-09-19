@@ -104,14 +104,17 @@ public class JobCardService {
 	 */
 	public static final String WORKSHEET_ONLY = "none";
 
-	private static final DateTimeFormatter DATE_LONG = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy");
+	/**
+	 * The card's dates come from {@link DisplayDates} (T-312), shared with every other document and
+	 * the screens' en-GB: with no locale the stamp's month took the JVM's US English and wrote "Sep".
+	 */
+	private static final DateTimeFormatter DATE_LONG = DisplayDates.LONG_DAY;
 	/**
 	 * Left without a zone on purpose. It carried {@code .withZone(Asia/Kolkata)}, which is a static
 	 * decision about a fact that belongs to whichever temple is printing — so the zone is supplied
 	 * at the moment of formatting instead.
 	 */
-	private static final DateTimeFormatter GENERATED =
-			DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm");
+	private static final DateTimeFormatter GENERATED = DisplayDates.DAY_AND_TIME;
 	private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
 
 	private final JdbcTemplate jdbc;
@@ -559,10 +562,18 @@ public class JobCardService {
 		// positions. Anything not in it keeps its English name rather than being sent for
 		// translation: a print is not the moment to discover the translation provider is down.
 		Map<String, String> ingredientNames = new HashMap<>();
+		// The notes the same way, by English note: "slit" is "slit" on whichever line it appears.
+		Map<String, String> preparationNotes = new HashMap<>();
 		if (translated != null) {
 			List<RecipeIngredientView> base = recipe.ingredients();
 			for (int i = 0; i < base.size() && i < translated.ingredientNames().size(); i++) {
 				ingredientNames.put(base.get(i).ingredientName(), translated.ingredientNames().get(i));
+			}
+			for (int i = 0; i < base.size(); i++) {
+				String note = base.get(i).preparationNote();
+				if (note != null && !note.isBlank()) {
+					preparationNotes.put(note.strip(), translated.preparationNote(i, note.strip()));
+				}
 			}
 		}
 
@@ -571,8 +582,13 @@ public class JobCardService {
 			// The cook's form: this is the figure somebody stands at a scale with. It also settles a
 			// disagreement — the merged line carries the stored unit name, so this card used to ask
 			// for "2 KG" while the recipe card for the very same line said "2 Kg".
+			// The preparation note follows the name, "Green chilli · slit" (R-DUP-1): the cook
+			// weighing it out is the person who has to know it is to be slit.
+			String note = line.preparationNote() == null
+					? null : preparationNotes.getOrDefault(line.preparationNote(), line.preparationNote());
 			ingredients.add(new JobCardTemplate.Ingredient(
-					ingredientNames.getOrDefault(line.name(), line.name()),
+					RecipeIngredientView.withPreparation(
+							ingredientNames.getOrDefault(line.name(), line.name()), note),
 					Quantities.cooks(line.quantity(), line.unit())));
 		}
 
@@ -841,24 +857,32 @@ public class JobCardService {
 	 * can be shown in different units, so adding them would produce a number that is simply wrong.
 	 * Two lines whose raw units differ stay two lines for the same reason — converting between them is
 	 * the inventory module's job and the card must not invent a conversion of its own.
+	 *
+	 * <p>Two lines prepared differently also stay two lines (R-DUP-1). Since the library import
+	 * stopped making "Coconut, grated" and "Coconut, fresh grated" two ingredients, a recipe can hold
+	 * Coconut twice with different notes, and "Coconut · grated 2 Kg" plus "Coconut · fresh grated
+	 * 1 Kg" is two jobs at the grating station; one "Coconut 3 Kg" would lose both instructions. Lines
+	 * with the same note, or none, still fold as they always did.
 	 */
 	private static List<MergedLine> merge(List<ScaledLine> lines) {
 		Map<String, MergedLine> byKey = new LinkedHashMap<>();
 		for (ScaledLine line : lines) {
-			String key = line.ingredientId() + "|" + line.rawUnit();
+			String note = line.preparationNote() == null || line.preparationNote().isBlank()
+					? null : line.preparationNote().strip();
+			String key = line.ingredientId() + "|" + line.rawUnit() + "|" + (note == null ? "" : note);
 			MergedLine existing = byKey.get(key);
 			if (existing == null) {
-				byKey.put(key, new MergedLine(line.ingredientName(), line.rawQuantity(),
+				byKey.put(key, new MergedLine(line.ingredientName(), note, line.rawQuantity(),
 						line.rawUnit()));
 			} else {
-				byKey.put(key, new MergedLine(existing.name(),
+				byKey.put(key, new MergedLine(existing.name(), existing.preparationNote(),
 						existing.quantity().add(line.rawQuantity()), existing.unit()));
 			}
 		}
 		return List.copyOf(byKey.values());
 	}
 
-	private record MergedLine(String name, BigDecimal quantity, String unit) {
+	private record MergedLine(String name, String preparationNote, BigDecimal quantity, String unit) {
 	}
 
 	private String templeName() {

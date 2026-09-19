@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -103,6 +104,55 @@ class DonationLedgerIT extends AbstractIntegrationTest {
 						.value("Wish list: Commercial wet grinder (₹4,000) and general kitchen (₹10,000)"))
 				// The amount is untouched: it is the payment, and it is what an 80G receipt reports.
 				.andExpect(jsonPath("$[0].amountInr").value(14000));
+	}
+
+	@Test
+	@DisplayName("a split gift of lakhs is labelled the Indian way: ₹1,00,000 and ₹50,000, never ₹100,000 (T-279)")
+	void aSplitGiftOfLakhsIsGroupedTheIndianWay() throws Exception {
+		// F6. The same split as above, at the size a temple's larger gifts really are: ₹1,50,000 paid,
+		// ₹1,00,000 of it finishing a kitchen range. Rupees used the JDK's en-IN formatter, which
+		// groups in threes, so this label read "(₹100,000)".
+		UUID item = admin.queryForObject("""
+				INSERT INTO wishlist_items (tenant_id, title, price_inr, category, quantity_wanted, status)
+				VALUES (?, 'Kitchen range', 100000, 'EQUIPMENT', 1, 'ACTIVE') RETURNING id
+				""", UUID.class, tenant);
+		money("ONE_TIME", "150000", "Shyam", item, null);
+		admin.update("UPDATE donations SET wishlist_applied_inr = 100000 WHERE wishlist_item_id = ?", item);
+
+		mvc.perform(authed(get("/api/v1/donations/ledger").param("type", "WISHLIST")))
+				.andExpect(jsonPath("$[0].linkedTo")
+						.value("Wish list: Kitchen range (₹1,00,000) and general kitchen (₹50,000)"));
+	}
+
+	@Test
+	@DisplayName("the split-gift thank-you WhatsApp text writes lakhs the Indian way (T-279)")
+	void theSplitGiftThankYouGroupsLakhs() {
+		// The thank-you text is built from exactly these three Rupees.format calls
+		// (MonetaryDonationService, the WISHLIST_GIFT_SPLIT notification), then rendered by the
+		// template. Driving the payment webhook to get here would prove the webhook, not the figures.
+		BigDecimal paid = new BigDecimal("1234567.50");
+		BigDecimal applied = new BigDecimal("1000000");
+		String body = org.iskcon.kms.notification.NotificationTemplate.WISHLIST_GIFT_SPLIT.render(Map.of(
+				"donor", "Shyam", "temple", "Bengaluru Temple", "item", "Kitchen range",
+				"amount", Rupees.format(paid),
+				"applied", Rupees.format(applied),
+				"remainder", Rupees.format(paid.subtract(applied)))).body();
+
+		assertThat(body)
+				.contains("your gift of ₹12,34,567.50.")
+				.contains("Only part of it, ₹10,00,000, could go")
+				.contains("The remaining ₹2,34,567.50 has gone")
+				.doesNotContain("1,234,567")
+				.doesNotContain("1,000,000")
+				.doesNotContain("234,567");
+
+		// And the formatter at each boundary, below a lakh unchanged.
+		assertThat(Rupees.format(new BigDecimal("99999"))).isEqualTo("₹99,999");
+		assertThat(Rupees.format(new BigDecimal("100000.00"))).isEqualTo("₹1,00,000");
+		assertThat(Rupees.format(new BigDecimal("9999999"))).isEqualTo("₹99,99,999");
+		assertThat(Rupees.format(new BigDecimal("10000000"))).isEqualTo("₹1,00,00,000");
+		assertThat(Rupees.format(new BigDecimal("14000.00"))).isEqualTo("₹14,000");
+		assertThat(Rupees.format(new BigDecimal("501.5"))).isEqualTo("₹501.50");
 	}
 
 	@Test

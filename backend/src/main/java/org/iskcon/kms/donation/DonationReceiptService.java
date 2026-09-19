@@ -10,6 +10,7 @@ import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
 import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.document.DisplayDates;
 import org.iskcon.kms.document.DonationReceiptTemplate;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
@@ -47,8 +48,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DonationReceiptService {
 
-	/** "14 Aug 2026" — the way a date is written on a receipt somebody will file. */
-	private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy");
+	/**
+	 * "14 Aug 2026" — the way a date is written on a receipt somebody will file, and in the thank-you
+	 * message. {@link DisplayDates#DAY}, shared with every other document and the screens (T-312):
+	 * with no locale it took the JVM's US English and a September gift read "Sep" on the receipt.
+	 */
+	private static final DateTimeFormatter DATE = DisplayDates.DAY;
 
 	private final JdbcTemplate jdbc;
 	private final PanCipher panCipher;

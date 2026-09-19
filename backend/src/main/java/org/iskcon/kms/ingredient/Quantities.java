@@ -2,9 +2,8 @@ package org.iskcon.kms.ingredient;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.text.NumberFormat;
-import java.util.Locale;
 import java.util.Map;
+import org.iskcon.kms.document.IndianNumbers;
 
 /**
  * How a quantity is written where a person reads it (E11-S3).
@@ -46,9 +45,6 @@ import java.util.Map;
  * the only thing standing between these two files and a silent disagreement.
  */
 public final class Quantities {
-
-	/** Indian digit grouping, matching the browser's {@code toLocaleString("en-IN")} exactly. */
-	private static final Locale INDIA = Locale.forLanguageTag("en-IN");
 
 	/**
 	 * The larger and smaller unit of each convertible family. Counts and servings have neither, and a
@@ -220,9 +216,10 @@ public final class Quantities {
 	 * {@code UnitLabelAgreementTest} fails the build if anyone does.
 	 */
 	private static String say(BigDecimal value, Unit unit, int maxDecimals) {
-		NumberFormat format = NumberFormat.getInstance(INDIA);
-		format.setMaximumFractionDigits(maxDecimals);
-		format.setGroupingUsed(true);
-		return format.format(value) + " " + unit.label(value);
+		// Indian grouping, matching the browser's toLocaleString("en-IN"). This used to say "exactly"
+		// over a JDK NumberFormat for en-IN, which it was not: that formatter groups in threes, so
+		// 1,50,000 pieces printed as "150,000 pieces" on a job card while the screen said
+		// "1,50,000 pieces" (T-279). Below a lakh the two agree, which is why no vector caught it.
+		return IndianNumbers.group(value, 0, maxDecimals) + " " + unit.label(value);
 	}
 }

@@ -132,10 +132,21 @@ class OneTimeDonationIT extends AbstractIntegrationTest {
 	 * <p>Both endpoints below were {@code @PreAuthorize("isAuthenticated()")}, and the request is
 	 * made signed-in on purpose: a 403 would be an authorisation answer and would leave open the
 	 * question of whether the mapping still exists. 404 is the mapping's own answer.
+	 *
+	 * <p>Signed in as a Temple Admin, not the volunteer donor. {@code GET /donations/recurring} now
+	 * lands on the donation detail endpoint's {@code /donations/{donationId}} pattern, and since
+	 * permissions are checked before the path is read (T-301), a volunteer is refused there with a
+	 * 403 before "recurring" is found not to be a donation id. A Temple Admin holds
+	 * {@code VIEW_DONATIONS}, so the only answer left is the one this test is about.
 	 */
 	@Test
 	@DisplayName("every recurring-donation endpoint is gone from the application — each answers 404")
 	void theRecurringSurfaceIsGone() throws Exception {
+		admin.update("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'uid-admin', 'Temple Admin', 'admin@example.com', '+919800000001', 'TEMPLE_ADMIN', 'ACTIVE')
+				""", tenant);
+		stubVerifier.accept("uid-admin", "uid-admin@example.com", "+919800000001");
 		String authorised = "Bearer valid-token";
 
 		// Creating a plan — the one that could start a charge.

@@ -189,10 +189,12 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		// September's lot spoils first, so it is emptied before anything else is touched, and the lot
 		// with no expiry at all is last in the queue and is never reached.
 		assertThat(html)
-				.contains("It is expiring on 30 Sep 2026.")
+				.contains("It is expiring on 30 Sept 2026.")
 				.contains("It is expiring on 31 Dec 2026.")
 				.doesNotContain("No expiry date");
-		assertThat(html.indexOf("30 Sep 2026")).isLessThan(html.indexOf("31 Dec 2026"));
+		assertThat(html.indexOf("30 Sept 2026")).isLessThan(html.indexOf("31 Dec 2026"));
+		// The screens' en-GB "Sept", from the shared DisplayDates; the JVM's US default wrote "Sep" (T-312).
+		assertThat(html).doesNotContain("30 Sep 2026");
 		// A lot is named by the pair a storekeeper actually uses — when it goes off and when it came
 		// in — because a hex batch id is not something anybody can recognise on a shelf.
 		// The lot line is a sentence naming the ingredient it came from, not two abbreviated
@@ -220,7 +222,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 		seedBatch(rice, "20", null);
 		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
 
-		assertThat(print(id, null)).contains("It is expiring on 30 Sep 2026.");
+		assertThat(print(id, null)).contains("It is expiring on 30 Sept 2026.");
 
 		// The whole September sack goes off between one print and the next. Approval decided the
 		// kitchen may have the food; the sheet says where today's is, and a work order that sends a
@@ -229,7 +231,7 @@ class WorkOrderIT extends AbstractIntegrationTest {
 
 		String reprinted = print(id, null);
 		assertThat(reprinted)
-				.doesNotContain("It is expiring on 30 Sep 2026.")
+				.doesNotContain("It is expiring on 30 Sept 2026.")
 				.contains("It is expiring on 31 Dec 2026.")
 				// Ten kilos out of December's lot and the last two out of the one with no date on it,
 				// which was never reached before.

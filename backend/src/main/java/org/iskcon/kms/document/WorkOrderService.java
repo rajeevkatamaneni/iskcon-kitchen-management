@@ -77,11 +77,15 @@ public class WorkOrderService {
 	/** The label set the sheet's fixed wording is cached under. */
 	static final String LABEL_SET = "WORK_ORDER";
 
-	private static final DateTimeFormatter DATE_LONG = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy");
-	private static final DateTimeFormatter DATE_SHORT = DateTimeFormatter.ofPattern("d MMM yyyy");
+	/**
+	 * The sheet's dates come from {@link DisplayDates} (T-312), shared with every other document and
+	 * the screens' en-GB: with no locale the month took the JVM's US English and a lot's expiry read
+	 * "30 Sep 2026" where the screen reads "30 Sept 2026".
+	 */
+	private static final DateTimeFormatter DATE_LONG = DisplayDates.LONG_DAY;
+	private static final DateTimeFormatter DATE_SHORT = DisplayDates.DAY;
 	/** Zoned where it is used, not here: the zone is the printing temple's, not this class's. */
-	private static final DateTimeFormatter STAMP =
-			DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm");
+	private static final DateTimeFormatter STAMP = DisplayDates.DAY_AND_TIME;
 
 	private final JdbcTemplate jdbc;
 	private final IngredientRequestService requestService;

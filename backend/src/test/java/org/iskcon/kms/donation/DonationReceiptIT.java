@@ -158,6 +158,34 @@ class DonationReceiptIT extends AbstractIntegrationTest {
 		assertThat(html).doesNotContain("Eligible for deduction under Section 80G");
 	}
 
+	@Test
+	@DisplayName("the receipt writes a gift of lakhs the Indian way: ₹1,50,000, not ₹150,000 (T-279)")
+	void theReceiptGroupsLakhs() throws Exception {
+		// F6. The receipt's amount comes from Rupees, which used the JDK's en-IN formatter and so
+		// grouped in threes above ₹99,999 — on the one document a donor files with their tax return.
+		UUID gift = monetaryGift(new BigDecimal("150000"), "Gopal Das");
+
+		issue(gift);
+		String html = within(() -> receiptService.render(gift));
+
+		assertThat(html).contains("₹1,50,000").doesNotContain("150,000");
+	}
+
+	@Test
+	@DisplayName("the receipt writes its dates the screen's way: 20 Sept 2026, not the US 20 Sep 2026 (T-312)")
+	void theReceiptDatesMatchTheScreen() throws Exception {
+		// The receipt had its own "d MMM yyyy" with no locale, so it took the JVM's US English. It
+		// now uses DisplayDates.DAY, the formatter every document shares. September is the one month
+		// where the two differ, so the gift is dated in it.
+		UUID gift = monetaryGift(new BigDecimal("5000"), "Gopal Das");
+		admin.update("UPDATE donations SET donated_on = DATE '2026-09-20' WHERE id = ?", gift);
+
+		issue(gift);
+		String html = within(() -> receiptService.render(gift));
+
+		assertThat(html).contains("20 Sept 2026").doesNotContain("20 Sep 2026");
+	}
+
 	// --- One payment, one receipt ---------------------------------------
 
 	@Test

@@ -226,6 +226,52 @@ class JobCardIT extends AbstractIntegrationTest {
 				.contains("2 pieces");
 	}
 
+	@Test
+	@DisplayName("the card prints a line's preparation note, and keeps two preparations of one thing apart (R-DUP-1)")
+	void theCardPrintsPreparationNotes() throws Exception {
+		UUID chilli = admin.queryForObject("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, 'Green chilli', 'Produce', 'KG') RETURNING id
+				""", UUID.class, tenant);
+		// Slit twice (folded into one line, as repeated lines always were) and chopped once (a
+		// different job at the chopping board, so a line of its own).
+		admin.update("""
+				INSERT INTO recipe_ingredients
+					(tenant_id, recipe_id, ingredient_id, quantity, unit, line_order, preparation_note)
+				VALUES (?, ?, ?, 1, 'KG', 2, 'slit'), (?, ?, ?, 1, 'KG', 3, 'slit'),
+					   (?, ?, ?, 3, 'KG', 4, 'chopped')
+				""", tenant, khichdi, chilli, tenant, khichdi, chilli, tenant, khichdi, chilli);
+
+		plan("Lunch", 100, 100, 0, 0);
+
+		String html = print(null);
+
+		assertThat(html)
+				.contains("<tr><td>Green chilli · slit</td><td class=\"num\">2 Kg</td></tr>")
+				.contains("<tr><td>Green chilli · chopped</td><td class=\"num\">3 Kg</td></tr>")
+				// The rice lines have no note, and still fold into one line with no separator.
+				.contains("<tr><td>Rice</td><td class=\"num\">5 Kg</td></tr>")
+				.doesNotContain("Green chilli · slit</td><td class=\"num\">1 Kg");
+	}
+
+	@Test
+	@DisplayName("the translated appendix prints the preparation note translated too (R-DUP-1)")
+	void theTranslatedCardTranslatesTheNote() throws Exception {
+		UUID chilli = admin.queryForObject("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, 'Green chilli', 'Produce', 'KG') RETURNING id
+				""", UUID.class, tenant);
+		admin.update("""
+				INSERT INTO recipe_ingredients
+					(tenant_id, recipe_id, ingredient_id, quantity, unit, line_order, preparation_note)
+				VALUES (?, ?, ?, 1, 'KG', 2, 'slit')
+				""", tenant, khichdi, chilli);
+
+		plan("Lunch", 100, 100, 0, 0);
+
+		assertThat(print("kn")).contains("[kn] Green chilli · [kn] slit");
+	}
+
 	/**
 	 * A banana and three cardamom pods on the Khichdi — one counted line of exactly one, one of more
 	 * than one.

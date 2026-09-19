@@ -337,6 +337,20 @@ class QuantitiesTest {
 	}
 
 	@Test
+	@DisplayName("a quantity of a lakh or more is grouped the Indian way: 1,50,000 pieces (T-279)")
+	void lakhsAreGroupedTheIndianWay() {
+		// F6. The JDK's en-IN NumberFormat, which say() used, groups in threes: a bulk order of leaf
+		// plates printed "150,000 pieces" on the sheet while the screen said "1,50,000 pieces".
+		// Mirrored in frontend/__tests__/money-indian-grouping.test.ts, as this file's rule asks.
+		assertThat(Quantities.exact(n("99999"), Unit.PIECES)).isEqualTo("99,999 pieces");
+		assertThat(Quantities.exact(n("150000"), Unit.PIECES)).isEqualTo("1,50,000 pieces");
+		assertThat(Quantities.cooks(n("150000"), Unit.PIECES)).isEqualTo("1,50,000 pieces");
+		assertThat(Quantities.exact(n("1234567.5"), Unit.KG)).isEqualTo("12,34,567.5 Kg");
+		assertThat(Quantities.exact(n("10000000"), Unit.L)).isEqualTo("1,00,00,000 L");
+		assertThat(Quantities.exact(n("-150000"), Unit.KG)).isEqualTo("-1,50,000 Kg");
+	}
+
+	@Test
 	@DisplayName("rounding cannot compound, because it happens last")
 	void roundingCannotCompound() {
 		// The worry Rajeev raised: "rounding can add a bigger than expected error". It can — if you
