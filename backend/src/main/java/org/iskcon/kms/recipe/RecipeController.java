@@ -57,18 +57,38 @@ public class RecipeController {
 	 * new one. Refused with KMS-400103 if they already hold it, KMS-400036 if the name is taken, and
 	 * KMS-400104 if it needs an ingredient the temple has flagged — in every case having written
 	 * nothing at all.
+	 *
+	 * <p>The body is optional (T-287). With none, a recipe whose ingredients the temple either has
+	 * exactly or does not have at all is copied as it always was. A recipe with a <em>close</em> match
+	 * ("Tomatos" beside the temple's "Tomato, ripe") needs {@code { "decisions": [...] }} answering
+	 * every one {@link #importCloseMatches} lists, and is otherwise refused with KMS-400156 — again
+	 * having written nothing.
 	 */
 	@PostMapping("/import/{masterRecipeId}")
 	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
 	public ResponseEntity<Map<String, Object>> importFromLibrary(
 			@PathVariable UUID masterRecipeId,
+			@RequestBody(required = false) org.iskcon.kms.library.ImportRecipeRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
-		var imported = importService.importRecipe(actor, masterRecipeId);
+		var imported = importService.importRecipe(actor, masterRecipeId,
+				request == null ? List.of() : request.decisions());
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
 				"id", imported.recipeId(),
 				"name", imported.name(),
 				"ingredientsCreated", imported.ingredientsCreated(),
 				"categoryCreated", imported.categoryCreated()));
+	}
+
+	/**
+	 * The ingredient names in a library recipe that are close to, but not the same as, one the temple
+	 * has — what the copy screen asks about before it copies (Q-11, T-287). Empty when there are none.
+	 * The same permission as the copy itself, because it is the first half of it. Writes nothing.
+	 */
+	@GetMapping("/import/{masterRecipeId}/close-matches")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public List<org.iskcon.kms.library.ImportCloseMatchView> importCloseMatches(
+			@PathVariable UUID masterRecipeId) {
+		return importService.closeMatches(masterRecipeId);
 	}
 
 	/** Browse/search: filter by category, by contained ingredient ("what can we make with X"), or name. */

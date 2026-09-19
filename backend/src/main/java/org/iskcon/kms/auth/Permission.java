@@ -117,6 +117,18 @@ public enum Permission {
 	MANAGE_VENDORS,
 	MANAGE_PURCHASE_ORDERS,
 
+	// Recording what a vendor actually delivered, on the Deliveries screen (procurement rework,
+	// PROCUREMENT-REQUIREMENTS.md R-DEL-1, 2026-09-19). Split out of MANAGE_PURCHASE_ORDERS because
+	// receiving goods at the door is a different job from deciding what to buy: the person standing
+	// at the gate counting sacks need not be able to raise or send an order. The screen shows no
+	// prices at all, which is what makes it safe to hand to whoever receives.
+	RECEIVE_DELIVERIES,
+
+	// Merging duplicate ingredients into one (R-DUP-3). It re-points every recipe line, stock
+	// movement, supply and order line that named the merged-away ingredient, and that cannot be
+	// undone by editing a row, so it is the Temple Admin's alone.
+	MERGE_INGREDIENTS,
+
 	// --- Workforce ---
 
 	// Hiring, employing and letting go — held apart from MANAGE_STAFF_SCHEDULE because it is a

@@ -52,6 +52,10 @@ public final class RolePermissions {
 					CORRECT_RECORDED_MEAL,
 					MANAGE_VENDORS,
 					MANAGE_PURCHASE_ORDERS,
+					RECEIVE_DELIVERIES,
+					// Merging duplicate ingredients re-points every record that named them and cannot be
+					// undone by an edit (R-DUP-3), so it is the Temple Admin's alone.
+					MERGE_INGREDIENTS,
 					MANAGE_STAFF,
 					// Conduct notes are held apart from the rest of the employment record, and narrowly:
 					// the Temple Admin alone, never the Kitchen Manager and never Kitchen Staff. The
@@ -109,6 +113,8 @@ public final class RolePermissions {
 					MANAGE_MEAL_PLANS,
 					MANAGE_VENDORS,
 					MANAGE_PURCHASE_ORDERS,
+					// The storekeeper takes deliveries at the door (R-DEL-1).
+					RECEIVE_DELIVERIES,
 					MANAGE_VOLUNTEER_SHIFTS,
 					// The manager runs the shift, so the manager corrects its attendance (T-106).
 					// This is the one attendance write kitchen staff do not hold: the person running
@@ -138,6 +144,11 @@ public final class RolePermissions {
 					MANAGE_MEAL_PLANS,
 					MANAGE_VENDORS,
 					MANAGE_PURCHASE_ORDERS,
+					// Taking deliveries at the door. Rajeev answered open question Q-1 on 2026-09-19
+					// (docs/work/PROCUREMENT-REQUIREMENTS.md §12): Kitchen Staff get RECEIVE_DELIVERIES by
+					// default, not only named staff. The Deliveries screen shows no prices, which is what
+					// makes it safe to hand to whoever is at the gate.
+					RECEIVE_DELIVERIES,
 					// Marking who turned up, kept — a cook who ran the shift is who saw the crew.
 					// What is absent beside it is CORRECT_RECORDED_ATTENDANCE (T-106): changing a
 					// mark already made about a colleague they work alongside is the manager's.

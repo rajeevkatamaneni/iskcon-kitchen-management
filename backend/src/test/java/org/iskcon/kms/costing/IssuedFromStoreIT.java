@@ -1,9 +1,12 @@
 package org.iskcon.kms.costing;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
@@ -18,9 +21,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
  * What the store issued to each kitchen, costed (E10-S13).
@@ -66,6 +71,7 @@ class IssuedFromStoreIT extends AbstractIntegrationTest {
 				""", UUID.class);
 		insertUser("uid-staff-a", "staff-a@example.com", "KITCHEN_STAFF");
 		insertUser("uid-vol-a", "vol-a@example.com", "VOLUNTEER");
+		insertUser("uid-admin-a", "admin-a@example.com", "TEMPLE_ADMIN");
 
 		rice = ingredient("Rice");
 		dal = ingredient("Toor Dal");
@@ -93,11 +99,14 @@ class IssuedFromStoreIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM ingredient_request_lines");
 		admin.execute("DELETE FROM ingredient_request_dishes");
 		admin.execute("DELETE FROM ingredient_requests");
+		admin.execute("DELETE FROM ingredient_request_sequence");
 		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM vendor_supplies");
 		admin.execute("DELETE FROM vendors");
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM inventory_items");
+		// The stock-take below sets a market rate, and its append-only history holds the ingredient.
+		admin.execute("DELETE FROM ingredient_market_rate_history");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
@@ -128,6 +137,83 @@ class IssuedFromStoreIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.kitchens[0].usesMealPlanner").value(false))
 				.andExpect(jsonPath("$.kitchens[1].kitchen").value("Prasadam kitchen"))
 				.andExpect(jsonPath("$.kitchens[1].estimatedTotal").value(180.00));
+	}
+
+	/**
+	 * R-ING-3's acceptance criterion, and the defect this whole procurement build started from: the
+	 * rice the Deity Kitchen received showed at ₹0 because nobody had ever given it a price.
+	 *
+	 * <p>Driven end to end through the real endpoints rather than seeded, because every step is part
+	 * of the claim: the rice has no vendor price at all; "Add to inventory" creates the item and then
+	 * sends the opening count, which is refused without a value and accepted with one; that value
+	 * becomes the market rate; the kitchen's request is raised, approved and issued, so the ISSUE rows
+	 * are the ones {@code IngredientIssueService} really writes; and the report prices them.
+	 * 10 Kg at ₹62 a Kg is ₹620, and nothing is left "without a price".
+	 */
+	@Test
+	@DisplayName("rice with no vendor price, added to inventory with a value and issued, costs a real ₹ figure")
+	void riceAddedWithAValueIsCostedWhenIssued() throws Exception {
+		UUID sonaMasoori = ingredient("Sona Masoori rice");
+		// Supplied by nobody: no vendor_supplies row at all, so no list price anywhere.
+		signIn("uid-admin-a");
+
+		String created = mvc.perform(authed(post("/api/v1/inventory/items"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"ingredientId\":\"%s\",\"storageLocation\":\"Main store\"}"
+								.formatted(sonaMasoori)))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		String itemId = idOf(created);
+
+		// "How much is on the shelf now", with the value box left empty: refused, and nothing written.
+		mvc.perform(authed(post("/api/v1/inventory/items/{id}/adjustments", itemId))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"batchId":null,"quantity":50,"unit":"KG","reason":"COUNT_CORRECTION"}
+								"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400161"));
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM stock_movements WHERE ingredient_id = ?", Integer.class, sonaMasoori))
+				.as("a refused count writes no stock").isZero();
+
+		// And again with what it would cost to buy today.
+		mvc.perform(authed(post("/api/v1/inventory/items/{id}/adjustments", itemId))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"batchId":null,"quantity":50,"unit":"KG","reason":"COUNT_CORRECTION",
+								 "pricePerUnit":62}
+								"""))
+				.andExpect(status().isCreated());
+		assertThat(admin.queryForObject("SELECT market_rate FROM ingredients WHERE id = ?",
+				BigDecimal.class, sonaMasoori)).isEqualByComparingTo("62");
+
+		// The Deity kitchen asks for 10 Kg, it is approved, and the store issues it.
+		String request = idOf(mvc.perform(authed(post("/api/v1/ingredient-requests"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(("{\"kitchenId\":\"%s\",\"neededOn\":\"%s\",\"purpose\":\"Mangala arati\","
+								+ "\"lines\":[{\"ingredientId\":\"%s\",\"quantity\":10,\"unit\":\"KG\"}],"
+								+ "\"dishes\":[{\"dishName\":\"Anna\",\"quantity\":30,\"unit\":\"KG\"}]}")
+								.formatted(deityKitchen, day.plusDays(2), sonaMasoori)))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString());
+		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/submit", request)))
+				.andExpect(status().isNoContent());
+		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/approve", request))
+						.contentType(MediaType.APPLICATION_JSON).content("{}"))
+				.andExpect(status().isNoContent());
+		mvc.perform(authed(post("/api/v1/ingredient-requests/{id}/issue", request))
+						.contentType(MediaType.APPLICATION_JSON).content("{}"))
+				.andExpect(status().isNoContent());
+
+		signIn("uid-staff-a");
+		report(day, day).andExpect(status().isOk())
+				.andExpect(jsonPath("$.kitchens.length()").value(1))
+				.andExpect(jsonPath("$.kitchens[0].kitchen").value("Deity kitchen"))
+				.andExpect(jsonPath("$.kitchens[0].estimatedTotal").value(620.00))
+				.andExpect(jsonPath("$.kitchens[0].ingredientsWithoutPrice").value(0))
+				.andExpect(jsonPath("$.estimatedTotal").value(620.00))
+				.andExpect(jsonPath("$.ingredientsWithoutPrice").value(0));
 	}
 
 	@Test
@@ -272,6 +358,14 @@ class IssuedFromStoreIT extends AbstractIntegrationTest {
 				.param("from", from.toString())
 				.param("to", to.toString())
 				.header("Authorization", "Bearer valid-token"));
+	}
+
+	private MockHttpServletRequestBuilder authed(MockHttpServletRequestBuilder builder) {
+		return builder.header("Authorization", "Bearer valid-token");
+	}
+
+	private static String idOf(String json) {
+		return json.replaceAll(".*\"id\"\\s*:\\s*\"([0-9a-f-]+)\".*", "$1");
 	}
 
 	private OffsetDateTime noon(LocalDate date) {

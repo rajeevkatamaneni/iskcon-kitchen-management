@@ -62,6 +62,10 @@ class VendorIT extends AbstractIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		admin.execute("DELETE FROM vendor_status_changes");
+		// Every supply saved with a price now leaves a price-history row (T-252), which holds the
+		// vendor and ingredient down (RESTRICT). Append-only for the application; the admin
+		// connection used here is not the application role, so it can clear it.
+		admin.execute("DELETE FROM vendor_price_history");
 		admin.execute("DELETE FROM vendor_supplies");
 		admin.execute("DELETE FROM vendors");
 		admin.execute("DELETE FROM audit_events");

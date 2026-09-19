@@ -41,9 +41,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class IngredientController {
 
 	private final IngredientService ingredientService;
+	private final PackSizeService packSizeService;
 
-	public IngredientController(IngredientService ingredientService) {
+	public IngredientController(IngredientService ingredientService, PackSizeService packSizeService) {
 		this.ingredientService = ingredientService;
+		this.packSizeService = packSizeService;
 	}
 
 	@GetMapping
@@ -82,6 +84,13 @@ public class IngredientController {
 		return ingredientService.get(id);
 	}
 
+	/**
+	 * Adds an ingredient. A name the temple already has, or very nearly has ("Tomatos" beside
+	 * "Tomato, ripe", "Curd sour" beside "Curd"), is refused with KMS-400156 and the ingredient it
+	 * looks like in the error's details, until the request says {@code confirmDifferent: true}
+	 * (R-DUP-2). The same applies to a rename through {@code PUT /{id}}. The check lives in the
+	 * service rather than here, so every future caller of {@code create} meets it too.
+	 */
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
 	public ResponseEntity<Map<String, Object>> create(
@@ -126,6 +135,38 @@ public class IngredientController {
 			@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
 
 		ingredientService.delete(actor, id);
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * Adds a pack size to an ingredient (R-ING-1): "Bag = 25 Kg", or a plain "500 gm".
+	 *
+	 * <p>Behind {@code MANAGE_RECIPES}, the permission every other descriptive edit of an ingredient
+	 * uses: a pack size is a fact about the ingredient, entered on its page, and nobody who may
+	 * rename rice should be unable to say it comes in 25 Kg bags. Refusals: a pack of the same size
+	 * already there (KMS-400157), a ninth pack (KMS-400158), a unit from another family
+	 * (KMS-400013). The reads come back on the ingredient itself, in {@code packSizes}.
+	 */
+	@PostMapping("/{id}/pack-sizes")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public ResponseEntity<Map<String, Object>> addPackSize(
+			@PathVariable UUID id,
+			@Valid @RequestBody AddPackSizeRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		UUID packSizeId = packSizeService.add(actor, id, request);
+		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", packSizeId));
+	}
+
+	/** Removes a pack size, unless a vendor sells in it or a bill was billed in it (KMS-400159). */
+	@DeleteMapping("/{id}/pack-sizes/{packSizeId}")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public ResponseEntity<Void> removePackSize(
+			@PathVariable UUID id,
+			@PathVariable UUID packSizeId,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		packSizeService.remove(actor, id, packSizeId);
 		return ResponseEntity.noContent().build();
 	}
 }

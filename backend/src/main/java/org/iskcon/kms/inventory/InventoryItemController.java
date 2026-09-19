@@ -62,6 +62,12 @@ public class InventoryItemController {
 		return inventoryItemService.get(id, expiringWithinDays);
 	}
 
+	/**
+	 * Start tracking a consumable, optionally with its opening count (T-294). The count is written in
+	 * the same transaction as the item, under the same rules as {@link #adjust}, so a refused count
+	 * leaves no item behind. It is still behind {@code MANAGE_INVENTORY} alone: the service asks for
+	 * the large-adjustment permission a first count needs, as {@link #adjust} does.
+	 */
 	@PostMapping
 	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")
 	public ResponseEntity<Map<String, Object>> create(

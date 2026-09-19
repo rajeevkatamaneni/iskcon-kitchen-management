@@ -333,6 +333,61 @@ class RecipeIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a line's preparation note is saved, read back, scaled and edited; a blank one is saved as none (R-DUP-1)")
+	void preparationNoteTravelsWithTheLine() throws Exception {
+		UUID chilli = insertIngredient(templeA, "Green chilli", "Vegetables");
+
+		// Three lines: one with a note (spaces round it, which are not part of it), one with a
+		// blank note, one with none at all. Rice twice, because the same ingredient prepared two
+		// ways is exactly what the note is for.
+		String body = ("{\"name\":\"Chilli Rice\",\"categoryId\":\"%s\",\"baseYieldQty\":100,"
+				+ "\"baseYieldUnit\":\"KG\",\"ingredients\":["
+				+ "{\"ingredientId\":\"%s\",\"quantity\":1,\"unit\":\"KG\",\"preparationNote\":\"  slit \"},"
+				+ "{\"ingredientId\":\"%s\",\"quantity\":2,\"unit\":\"KG\",\"preparationNote\":\"   \"},"
+				+ "{\"ingredientId\":\"%s\",\"quantity\":3,\"unit\":\"KG\"}]}")
+				.formatted(categoryRice, chilli, rice, rice);
+		String response = mvc.perform(recipeRequest(body))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		String id = response.replaceAll(".*\"id\"\\s*:\\s*\"([0-9a-f-]+)\".*", "$1");
+
+		// Stored trimmed, and blank stored as null: the column's not-blank check (V144) would refuse
+		// the whitespace outright, so this proves the service cleans it rather than the database
+		// rejecting it.
+		assertThat(admin.queryForList(
+				"SELECT preparation_note FROM recipe_ingredients WHERE recipe_id = ?::uuid ORDER BY line_order",
+				String.class, id)).containsExactly("slit", null, null);
+
+		mvc.perform(authed(get("/api/v1/recipes/{id}", id)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ingredients[0].ingredientName").value("Green chilli"))
+				.andExpect(jsonPath("$.ingredients[0].preparationNote").value("slit"))
+				.andExpect(jsonPath("$.ingredients[1].preparationNote").value(org.hamcrest.Matchers.nullValue()))
+				.andExpect(jsonPath("$.ingredients[2].preparationNote").value(org.hamcrest.Matchers.nullValue()));
+
+		mvc.perform(authed(get("/api/v1/recipes/{id}/scaled", id)).param("targetYield", "200"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ingredients[0].ingredientName").value("Green chilli"))
+				.andExpect(jsonPath("$.ingredients[0].preparationNote").value("slit"))
+				.andExpect(jsonPath("$.ingredients[0].rawQuantity").value(2));
+
+		// An edit replaces the lines, notes and all.
+		String update = ("{\"name\":\"Chilli Rice\",\"categoryId\":\"%s\",\"baseYieldQty\":100,"
+				+ "\"baseYieldUnit\":\"KG\",\"ingredients\":["
+				+ "{\"ingredientId\":\"%s\",\"quantity\":1,\"unit\":\"KG\",\"preparationNote\":\"chopped fine\"},"
+				+ "{\"ingredientId\":\"%s\",\"quantity\":2,\"unit\":\"KG\",\"preparationNote\":null}]}")
+				.formatted(categoryRice, chilli, rice);
+		mvc.perform(authed(put("/api/v1/recipes/{id}", id))
+				.contentType(MediaType.APPLICATION_JSON).content(update))
+				.andExpect(status().isNoContent());
+
+		mvc.perform(authed(get("/api/v1/recipes/{id}", id)))
+				.andExpect(jsonPath("$.ingredients.length()").value(2))
+				.andExpect(jsonPath("$.ingredients[0].preparationNote").value("chopped fine"))
+				.andExpect(jsonPath("$.ingredients[1].preparationNote").value(org.hamcrest.Matchers.nullValue()));
+	}
+
+	@Test
 	@DisplayName("scaling refuses a non-positive or absurd target yield")
 	void rejectsBadTargetYield() throws Exception {
 		String id = createKhichdi();

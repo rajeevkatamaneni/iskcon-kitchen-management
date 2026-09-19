@@ -2,9 +2,14 @@ package org.iskcon.kms.library;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.iskcon.kms.audit.AuditAction;
 import org.iskcon.kms.audit.AuditEntityType;
@@ -12,6 +17,8 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.error.ErrorResponse.FieldError;
+import org.iskcon.kms.ingredient.IngredientNameMatcher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,8 +47,13 @@ import org.springframework.transaction.annotation.Transactional;
  * <h2>What it does in one transaction, and why that matters</h2>
  *
  * <ol>
+ *   <li>Plans every ingredient line against the temple's catalogue and refuses, having written
+ *       nothing, if a line is a close match nobody has answered for (Q-11, below).</li>
  *   <li>Resolves the category, creating it on first use.</li>
- *   <li>Resolves every ingredient by name, creating what is missing.</li>
+ *   <li>Resolves every ingredient by name, creating what is missing. A preparation in the name
+ *       ("Cashew, halved") goes on the recipe line as its note, never into a new ingredient. So does
+ *       the rest of a name the person has matched to an existing ingredient ("Ginger, peeled", "Use
+ *       Ginger": Ginger · peeled; A-N5).</li>
  *   <li>Writes the recipe and its lines.</li>
  * </ol>
  *
@@ -69,8 +81,37 @@ public class RecipeImportService {
 	public record Imported(UUID recipeId, String name, int ingredientsCreated, boolean categoryCreated) {
 	}
 
+	/**
+	 * Every ingredient name in the library recipe that is a close — not exact — match for one the
+	 * temple has: what the copy screen lists before it copies anything (Q-11, T-287). Empty when
+	 * there is none, which is the common case and lets the screen copy at once.
+	 *
+	 * <p>Worked out by the same {@link #plan} the copy itself runs, so the list the person answered
+	 * is the list the copy checks their answers against. It writes nothing.
+	 */
+	@Transactional(readOnly = true)
+	public List<ImportCloseMatchView> closeMatches(UUID masterRecipeId) {
+		MasterRecipeView master = library.get(masterRecipeId);
+		return closeMatchesOf(plan(master, catalogue())).values().stream().map(CloseMatch::view).toList();
+	}
+
+	/** The copy with no answers, as every caller before T-287 made it. */
 	@Transactional
 	public Imported importRecipe(AuthenticatedUser actor, UUID masterRecipeId) {
+		return importRecipe(actor, masterRecipeId, List.of());
+	}
+
+	/**
+	 * The copy, with the person's answer to each close match {@link #closeMatches} listed.
+	 *
+	 * <p>Refused, having written nothing, when an answer is malformed or names something that was
+	 * not listed ({@code VALIDATION_FAILED}, see {@link #answersFor}), or when any listed close match
+	 * has no answer ({@code INGREDIENT_LOOKS_LIKE_EXISTING}, with every close match in its details
+	 * so a screen that did not ask first can still ask now).
+	 */
+	@Transactional
+	public Imported importRecipe(
+			AuthenticatedUser actor, UUID masterRecipeId, List<ImportCloseMatchDecision> decisions) {
 		MasterRecipeView master = library.get(masterRecipeId);
 
 		// Already taken, by this exact library recipe.
@@ -93,8 +134,14 @@ public class RecipeImportService {
 					Map.of("name", master.displayName()));
 		}
 
+		// Decided before anything is written, so a refusal leaves no category or ingredient behind even
+		// before the transaction's rollback is counted on.
+		List<LinePlan> plans = plan(master, catalogue());
+		Map<String, CloseMatch> listed = closeMatchesOf(plans);
+		Map<String, ImportCloseMatchDecision> answers = answersFor(decisions, listed);
+
 		CategoryResolution category = resolveCategory(master);
-		List<ResolvedIngredient> ingredients = resolveIngredients(master);
+		List<ResolvedIngredient> ingredients = resolveIngredients(actor, plans, listed, answers);
 
 		UUID recipeId = UUID.randomUUID();
 		jdbc.update("""
@@ -122,9 +169,10 @@ public class RecipeImportService {
 		for (ResolvedIngredient ingredient : ingredients) {
 			jdbc.update("""
 					INSERT INTO recipe_ingredients (
-						tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
-					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
-					""", recipeId, ingredient.id(), ingredient.quantity(), ingredient.unit(), order++);
+						tenant_id, recipe_id, ingredient_id, quantity, unit, line_order, preparation_note)
+					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?)
+					""", recipeId, ingredient.id(), ingredient.quantity(), ingredient.unit(), order++,
+					ingredient.preparationNote());
 		}
 
 		int created = (int) ingredients.stream().filter(ResolvedIngredient::created).count();
@@ -134,6 +182,21 @@ public class RecipeImportService {
 		after.put("from", master.state());
 		after.put("masterRecipeId", masterRecipeId.toString());
 		after.put("ingredientsCreated", created);
+		// What the person answered for each close match, so the import's own entry says which
+		// ingredients a line was put on by choice rather than by the matcher. Left out when there was
+		// nothing to answer, so an ordinary import's entry reads exactly as it did before T-287.
+		if (!listed.isEmpty()) {
+			List<Map<String, Object>> answered = new ArrayList<>();
+			listed.forEach((key, match) -> {
+				ImportCloseMatchDecision answer = answers.get(key);
+				Map<String, Object> entry = new LinkedHashMap<>();
+				entry.put("libraryName", match.view().libraryName());
+				entry.put("lookedLike", match.view().existingIngredientName());
+				entry.put("answer", answer.useIngredientId() != null ? "USED_EXISTING" : "DIFFERENT_INGREDIENT");
+				answered.add(entry);
+			});
+			after.put("closeMatches", answered);
+		}
 		audit.record(actor, AuditAction.RECIPE_IMPORTED, AuditEntityType.RECIPE, recipeId,
 				null, after, null);
 
@@ -162,51 +225,455 @@ public class RecipeImportService {
 		return new CategoryResolution(id, true);
 	}
 
+	/** A library line resolved to this temple's ingredient, with the preparation that goes on the line. */
 	private record ResolvedIngredient(
-			UUID id, String name, BigDecimal quantity, String unit, boolean created) {
+			UUID id, String name, String preparationNote, BigDecimal quantity, String unit, boolean created) {
+	}
+
+	/**
+	 * One library line, split and matched against the catalogue as it stood before this import:
+	 * {@code exact} when the temple has it, {@code close} when it has something only close to it,
+	 * neither when it has nothing like it. {@code key} is the matcher's normalised form of the base,
+	 * which is what an answer is filed under.
+	 */
+	private record LinePlan(
+			MasterRecipeView.MasterRecipeIngredient line, String base, String note, String key,
+			IngredientNameMatcher.Entry exact, IngredientNameMatcher.Match close, String useNote) {
+	}
+
+	/** A close match as the screen is shown it, with the match the audit needs if it is overridden. */
+	private record CloseMatch(ImportCloseMatchView view, IngredientNameMatcher.Match match) {
+	}
+
+	/**
+	 * Every line of the recipe, split and matched.
+	 *
+	 * <p><strong>The ingredient is separate from its preparation (R-DUP-1).</strong> The library names
+	 * a line the way a reference book does — "Cashew, halved", "Green chilli, slit" — and until
+	 * 2026-09-19 the import created each of those as an ingredient of its own. That is how one temple
+	 * came to hold curd as "Curd", "Curd, fresh", "Curd, sour" and "Curd, whisked": four stock
+	 * figures, four prices, four lines on the shopping list for one pot of curd. Now each name is
+	 * split by {@link IngredientNameMatcher#split} into the ingredient (Cashew) and the preparation
+	 * (halved); the preparation goes on the recipe line as its note, and only the ingredient is
+	 * looked for or created.
+	 *
+	 * <p>What is looked for is decided by {@link IngredientNameMatcher#findMatch}, the same rule the
+	 * create-and-rename guard uses (R-DUP-2), against every ingredient's name and every alias in
+	 * {@code ingredient_aliases} — so a name merged away ("Curd, sour", now an alias of Curd) finds
+	 * Curd, and so do "Green chillies" and "green chilli". The catalogue is loaded once rather than
+	 * queried per line: the matcher's closeness rule is not something SQL can say, and a temple's
+	 * catalogue is hundreds of rows.
+	 *
+	 * <p><strong>Only the catalogue as it was before this import is matched here</strong>, and that is
+	 * what makes the list of close matches a thing the screen can ask about in advance. What this
+	 * import itself creates depends on the answers, so a close match against it could not be listed
+	 * before they were given — and "Use Jaggery" could not name an ingredient that does not exist yet.
+	 * Ingredients created by the import are found again by {@link #resolveIngredients}, for exact
+	 * matches only, which is what they always needed: the recipe's second coconut line finding the
+	 * first one's Coconut.
+	 */
+	private List<LinePlan> plan(MasterRecipeView master, List<IngredientNameMatcher.Entry> catalogue) {
+		List<LinePlan> plans = new ArrayList<>();
+		for (MasterRecipeView.MasterRecipeIngredient line : master.ingredients()) {
+			IngredientNameMatcher.Split split = IngredientNameMatcher.split(line.name().trim());
+			String base = split.base();
+			Optional<IngredientNameMatcher.Match> match = IngredientNameMatcher.findMatch(base, catalogue);
+			boolean exact = match.isPresent() && match.get().kind() == IngredientNameMatcher.MatchKind.EXACT;
+			IngredientNameMatcher.Match close = match.isPresent() && !exact ? match.get() : null;
+			String useNote = close == null ? null
+					: combineNotes(line.name(), split.preparation(), leftOver(base, close));
+			plans.add(new LinePlan(line, base, split.preparation(), IngredientNameMatcher.normalise(base),
+					exact ? match.get().entry() : null, close, useNote));
+		}
+		return plans;
+	}
+
+	/**
+	 * The close matches, one per distinct base name in recipe order. Two lines naming the same thing
+	 * ("Tomatos, chopped" and "Tomatos") match the same ingredient by the same rule and get one
+	 * question: asking twice would let the recipe put one tomato on two ingredients, which is the
+	 * split this whole feature exists to stop.
+	 */
+	private static Map<String, CloseMatch> closeMatchesOf(List<LinePlan> plans) {
+		Map<String, CloseMatch> out = new LinkedHashMap<>();
+		for (LinePlan plan : plans) {
+			if (plan.close() == null || out.containsKey(plan.key())) {
+				continue;
+			}
+			IngredientNameMatcher.Entry existing = plan.close().entry();
+			out.put(plan.key(), new CloseMatch(
+					new ImportCloseMatchView(plan.base(), plan.useNote(), existing.id(), existing.name()),
+					plan.close()));
+		}
+		return out;
+	}
+
+	/**
+	 * The person's answers, filed by the close match they answer, after checking every one.
+	 *
+	 * <p><strong>A wrong answer is a {@code VALIDATION_FAILED} field error</strong>, named by its place
+	 * in the list the way other list bodies here are ({@code decisions[1].useIngredientId}):
+	 * <ul>
+	 *   <li>{@code decisions[i]} — the entry is null.</li>
+	 *   <li>{@code decisions[i].libraryName} — blank; or no close match in this recipe by that name
+	 *       (compared the way the matcher compares, so "tomatos" answers "Tomatos"); or a second
+	 *       answer to a name already answered.</li>
+	 *   <li>{@code decisions[i].useIngredientId} — an ingredient that is not the one listed for that
+	 *       name. "Use" means the ingredient the person was shown, never another one slipped in: the
+	 *       recipe form is where a line is put on an arbitrary ingredient.</li>
+	 *   <li>{@code decisions[i].confirmDifferent} — both "use" and "different" at once.</li>
+	 * </ul>
+	 * The first problem found is the one refused, as elsewhere in this codebase.
+	 *
+	 * <p><strong>A missing answer is {@code INGREDIENT_LOOKS_LIKE_EXISTING}</strong> (KMS-400156), the
+	 * code the ingredient form's prompt is driven by. An entry with no ingredient and
+	 * {@code confirmDifferent: false} counts as missing, exactly as {@code confirmDifferent: false} does
+	 * on the ingredient form. The refusal's details list every close match, not only the unanswered
+	 * ones, so that a screen that copied without asking first can ask about the whole recipe at once.
+	 */
+	private static Map<String, ImportCloseMatchDecision> answersFor(
+			List<ImportCloseMatchDecision> decisions, Map<String, CloseMatch> listed) {
+		Map<String, ImportCloseMatchDecision> answers = new LinkedHashMap<>();
+		Set<String> seen = new HashSet<>();
+		List<ImportCloseMatchDecision> given = decisions == null ? List.of() : decisions;
+		for (int i = 0; i < given.size(); i++) {
+			ImportCloseMatchDecision decision = given.get(i);
+			String at = "decisions[" + i + "]";
+			if (decision == null) {
+				throw fieldError(at, "Answer each ingredient in the list.");
+			}
+			if (decision.libraryName() == null || decision.libraryName().isBlank()) {
+				throw fieldError(at + ".libraryName", "Say which ingredient in the recipe this answers.");
+			}
+			String key = IngredientNameMatcher.normalise(decision.libraryName().trim());
+			CloseMatch match = listed.get(key);
+			if (match == null) {
+				throw fieldError(at + ".libraryName",
+						"This recipe has no ingredient called “" + decision.libraryName().trim()
+								+ "” that needs an answer.");
+			}
+			if (!seen.add(key)) {
+				throw fieldError(at + ".libraryName",
+						"“" + match.view().libraryName() + "” has already been answered.");
+			}
+			if (decision.useIngredientId() != null && decision.confirmDifferent()) {
+				throw fieldError(at + ".confirmDifferent",
+						"Choose either " + match.view().existingIngredientName()
+								+ " or a different ingredient, not both.");
+			}
+			if (decision.useIngredientId() != null
+					&& !decision.useIngredientId().equals(match.view().existingIngredientId())) {
+				throw fieldError(at + ".useIngredientId",
+						"That isn’t the ingredient “" + match.view().libraryName()
+								+ "” was matched with. Choose " + match.view().existingIngredientName()
+								+ " or a different ingredient.");
+			}
+			if (decision.useIngredientId() != null || decision.confirmDifferent()) {
+				answers.put(key, decision);
+			}
+		}
+
+		if (answers.size() < listed.size()) {
+			List<FieldError> details = new ArrayList<>();
+			int i = 0;
+			for (CloseMatch match : listed.values()) {
+				// ErrorResponse carries details as field/message pairs only, so each close match is
+				// flattened into its own four entries, indexed like a list body's field errors. The
+				// screen rebuilds ImportCloseMatchView[] from them; note is left out when there is none.
+				String at = "closeMatches[" + i++ + "]";
+				ImportCloseMatchView view = match.view();
+				details.add(new FieldError(at + ".libraryName", view.libraryName()));
+				if (view.note() != null) {
+					details.add(new FieldError(at + ".note", view.note()));
+				}
+				details.add(new FieldError(at + ".existingIngredientId", view.existingIngredientId().toString()));
+				details.add(new FieldError(at + ".existingIngredientName", view.existingIngredientName()));
+			}
+			List<String> unanswered = listed.keySet().stream().filter(k -> !answers.containsKey(k)).toList();
+			throw new ApplicationException(ErrorCode.INGREDIENT_LOOKS_LIKE_EXISTING,
+					Map.of("unanswered", unanswered), details, null);
+		}
+		return answers;
+	}
+
+	private static ApplicationException fieldError(String field, String message) {
+		return new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", field),
+				List.of(new FieldError(field, message)), null);
 	}
 
 	/**
 	 * Every ingredient the recipe needs, as a row in this temple's own catalogue.
 	 *
-	 * <p>Matched on {@code lower(name)} first, so an existing Rice is reused rather than duplicated.
-	 * What is missing is created — silently, and marked {@code library_derived} so a catalogue can
-	 * be tidied later. Standing a review step in front of every import was the alternative, and it
-	 * is the kind of friction that stops a feature being used at all.
+	 * <ul>
+	 *   <li><strong>An exact match</strong> is used, and the note goes on the line.</li>
+	 *   <li><strong>A close match</strong> — a spelling one letter off, or "Rice" against "Rice,
+	 *       basmati" — is decided by the person, in {@link #answeredCloseMatch} (Q-11).</li>
+	 *   <li><strong>No match</strong> creates the base ingredient only ("Cashew", never "Cashew,
+	 *       halved") — silently, and marked {@code library_derived} so a catalogue can be tidied
+	 *       later. A review step in front of every import was the alternative, and it is the kind of
+	 *       friction that stops a feature being used at all; the close matches are the only lines
+	 *       worth a question, because only they can be a duplicate.</li>
+	 * </ul>
+	 *
+	 * <p>Whatever a line created is found again by the recipe's later lines, by an exact match only
+	 * (see {@link #plan}): "Coconut, grated" then "Fresh grated coconut" make one Coconut, and a
+	 * second "Tomatos" line after "It's a different ingredient" goes on the Tomatos the first made.
 	 *
 	 * <p>The unit comes from the book's own quantity, which is why it can: all 46,337 ingredient
 	 * lines in the library parse, into five units the catalogue already knows.
 	 */
-	private List<ResolvedIngredient> resolveIngredients(MasterRecipeView master) {
+	private List<ResolvedIngredient> resolveIngredients(AuthenticatedUser actor, List<LinePlan> plans,
+			Map<String, CloseMatch> listed, Map<String, ImportCloseMatchDecision> answers) {
+		List<IngredientNameMatcher.Entry> createdHere = new ArrayList<>();
 		List<ResolvedIngredient> resolved = new ArrayList<>();
 
-		for (MasterRecipeView.MasterRecipeIngredient line : master.ingredients()) {
-			String name = line.name().trim();
+		for (LinePlan plan : plans) {
+			MasterRecipeView.MasterRecipeIngredient line = plan.line();
 
-			List<UUID> found = jdbc.queryForList(
-					"SELECT id FROM ingredients WHERE lower(name) = lower(?)", UUID.class, name);
-
-			if (!found.isEmpty()) {
-				resolved.add(new ResolvedIngredient(
-						found.get(0), name, line.qtyValue(), line.qtyUnit(), false));
+			if (plan.exact() != null) {
+				resolved.add(new ResolvedIngredient(plan.exact().id(), plan.exact().name(), plan.note(),
+						line.qtyValue(), line.qtyUnit(), false));
 				continue;
 			}
 
-			// The catalogue unit is the one the recipe asked in: an ingredient first met as "200 gm"
-			// is catalogued in grams, and every later recipe and stock movement speaks that unit.
-			UUID id = UUID.randomUUID();
-			jdbc.update("""
-					INSERT INTO ingredients (
-						id, tenant_id, name, category, canonical_unit, library_derived)
-					VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, true)
-					""", id, name, IngredientCategories.forName(name), line.qtyUnit());
+			if (plan.close() != null
+					&& answers.get(plan.key()).useIngredientId() != null) {
+				resolved.add(answeredCloseMatch(plan));
+				continue;
+			}
 
-			// Nothing the import creates arrives pre-flagged for Ekadashi either: the flag is a Temple
-			// Admin's to set, and the import cannot tell a grain from a spice. That is the gap the
-			// warning box on the Recipes page exists to make honest (D-18).
-			resolved.add(new ResolvedIngredient(id, name, line.qtyValue(), line.qtyUnit(), true));
+			Optional<IngredientNameMatcher.Match> again = IngredientNameMatcher.findMatch(plan.base(), createdHere);
+			if (again.isPresent() && again.get().kind() == IngredientNameMatcher.MatchKind.EXACT) {
+				IngredientNameMatcher.Entry found = again.get().entry();
+				resolved.add(new ResolvedIngredient(found.id(), found.name(), plan.note(),
+						line.qtyValue(), line.qtyUnit(), false));
+				continue;
+			}
+
+			ResolvedIngredient created = create(plan.base(), plan.note(), line);
+			if (plan.close() != null) {
+				auditConfirmedDifferent(actor, created, line, listed.get(plan.key()).match());
+			}
+			createdHere.add(new IngredientNameMatcher.Entry(created.id(), created.name()));
+			resolved.add(created);
 		}
 		return resolved;
+	}
+
+	/**
+	 * A close match the person answered "Use Tomato, ripe" (Q-11, Rajeev 2026-09-19). Until his
+	 * answer this method held the line and created an ingredient, because an import with nobody there
+	 * to ask could not tell a slip from a second ingredient. Now somebody is asked, on the copy
+	 * screen, before anything is written.
+	 *
+	 * <p>The line goes on the existing ingredient and keeps its note (R-DUP-1): "Tomatos, chopped"
+	 * becomes Tomato, ripe · chopped. Whatever else the library wrote that is not the chosen
+	 * ingredient's name goes on the note too (A-N5, T-297): "Ginger, peeled" becomes Ginger · peeled.
+	 * That is {@link LinePlan#useNote}, worked out in {@link #plan}. Nothing is created. {@link #answersFor} has already checked that
+	 * the id answered is the one listed. The other answer, "It's a different ingredient", takes the
+	 * unmatched path in {@link #resolveIngredients} and is audited there.
+	 */
+	private static ResolvedIngredient answeredCloseMatch(LinePlan plan) {
+		IngredientNameMatcher.Entry existing = plan.close().entry();
+		return new ResolvedIngredient(existing.id(), existing.name(), plan.useNote(),
+				plan.line().qtyValue(), plan.line().qtyUnit(), false);
+	}
+
+	// ------------------------------------------------------------------ the rest of the typed name (A-N5)
+
+	/**
+	 * What is left of {@code base} once the chosen ingredient's name is taken out of it, or null when
+	 * nothing is — the words that become the line's note when the person answers "Use Ginger" (A-N5,
+	 * conductor's ruling of 2026-09-19, T-297).
+	 *
+	 * <p><strong>Why this is not the preparation-word list.</strong> {@link IngredientNameMatcher#split}
+	 * only moves a qualifier onto the note when it is a word somebody has ruled is a preparation, and
+	 * that list is held on Q-12. So "Ginger, peeled" stays whole, is only a close match for Ginger, and
+	 * until this method existed "Use Ginger" put the line on Ginger with no note at all: the recipe
+	 * lost "peeled", and "Mustard, split" lost "split", which changes what is bought. Here the person
+	 * has already said the line <em>is</em> Ginger, so the question the list answers — is "peeled"
+	 * part of what the temple buys? — has been answered by them for this line, and whatever is not
+	 * "Ginger" is simply the rest of what the library wrote. R-DUP-2's prompt says the same thing to
+	 * the ingredient form: "Use Curd, or add a preparation note instead."
+	 *
+	 * <p>The rules, in order, tried against the name the match was made on (an alias, if it was one)
+	 * and then the ingredient's own name, the first that leaves something winning:
+	 * <ol>
+	 *   <li><strong>With a comma</strong>, the part before the first comma is compared with the chosen
+	 *       name the way the matcher compares (plural, case, a one-letter slip), and when it is the
+	 *       same, every segment after it is the note, as written, joined with ", ": "Ginger, peeled" →
+	 *       "peeled"; "Tomatos, ripe" + Tomato → "ripe"; "Rice, basmati, aged" + Rice → "basmati,
+	 *       aged". As written, not lower-cased, because {@code split} keeps a comma tail as written
+	 *       too.</li>
+	 *   <li><strong>Without a comma</strong>, the chosen name must be the first or the last words of
+	 *       the typed name, and the words on the other side are the note, lower case: "Thick curd" +
+	 *       Curd → "thick"; "Curd thick" + Curd → "thick". Lower case because that is what
+	 *       {@code split} does with a word it takes off the front or the end ("Sour curd" → "sour").
+	 *       Only the ends: "Hot curd rice" + Curd is not taken apart, because "hot rice" would be a
+	 *       note nobody wrote. (The matcher does not call a bare two-word name close to a one-word one
+	 *       today, so this rule only matters if that ever changes; it is here so that the answer does
+	 *       not silently depend on it.)</li>
+	 *   <li><strong>Nothing left</strong> — the typed name is a spelling of the chosen one ("Tomatos"
+	 *       + Tomato, "Greenchilli" + Green chilli), or it is the bare side of a bare-and-qualified
+	 *       pair ("Tomatos" + "Tomato, ripe") — gives null, and the line has only whatever note
+	 *       {@code split} gave it, exactly as before.</li>
+	 * </ol>
+	 */
+	static String leftOver(String base, IngredientNameMatcher.Match match) {
+		String left = leftOver(base, match.matchedName());
+		return left != null ? left : leftOver(base, match.entry().name());
+	}
+
+	private static String leftOver(String base, String chosen) {
+		if (base == null || chosen == null || base.isBlank()) {
+			return null;
+		}
+		String typed = base.trim().replaceAll("\\s+", " ");
+		String key = IngredientNameMatcher.normalise(chosen);
+		if (key.isEmpty() || IngredientNameMatcher.normalise(typed).equals(key)) {
+			return null;
+		}
+		int comma = typed.indexOf(',');
+		if (comma >= 0) {
+			String head = typed.substring(0, comma).trim();
+			if (!sameName(head, chosen)) {
+				return null;
+			}
+			List<String> tails = new ArrayList<>();
+			for (String tail : typed.substring(comma + 1).split(",")) {
+				if (!tail.isBlank()) {
+					tails.add(tail.trim());
+				}
+			}
+			return tails.isEmpty() ? null : String.join(", ", tails);
+		}
+		if (chosen.indexOf(',') >= 0) {
+			return null;
+		}
+		String[] words = typed.split(" ");
+		int size = IngredientNameMatcher.normalise(chosen).split(" ").length;
+		if (size >= words.length) {
+			return null;
+		}
+		String front = String.join(" ", Arrays.copyOfRange(words, 0, size));
+		String end = String.join(" ", Arrays.copyOfRange(words, words.length - size, words.length));
+		if (sameName(end, chosen)) {
+			return String.join(" ", Arrays.copyOfRange(words, 0, words.length - size))
+					.toLowerCase(Locale.ROOT);
+		}
+		if (sameName(front, chosen)) {
+			return String.join(" ", Arrays.copyOfRange(words, size, words.length))
+					.toLowerCase(Locale.ROOT);
+		}
+		return null;
+	}
+
+	/** Whether {@code typed} is {@code chosen} by the matcher's own rule: the same, or a one-letter slip. */
+	private static boolean sameName(String typed, String chosen) {
+		return IngredientNameMatcher.findMatch(typed, List.of(new IngredientNameMatcher.Entry(null, chosen)))
+				.filter(m -> m.kind() == IngredientNameMatcher.MatchKind.EXACT
+						|| IngredientNameMatcher.normalise(typed).split(" ").length
+								== IngredientNameMatcher.normalise(chosen).split(" ").length)
+				.isPresent();
+	}
+
+	/**
+	 * The preparation {@code split} found and what {@link #leftOver} found, as one note, in the order
+	 * the library wrote them: "Rice, basmati, soaked" + Rice gives "basmati, soaked", not "soaked,
+	 * basmati". Either alone is returned as it is — so a line with no left-over keeps exactly the note
+	 * it had before T-297.
+	 */
+	static String combineNotes(String raw, String prepared, String left) {
+		if (left == null) {
+			return prepared;
+		}
+		if (prepared == null || prepared.equalsIgnoreCase(left)) {
+			return left;
+		}
+		String written = raw == null ? "" : raw.toLowerCase(Locale.ROOT);
+		int p = written.indexOf(prepared.split(", ")[0].toLowerCase(Locale.ROOT));
+		int l = written.indexOf(left.split(", ")[0].toLowerCase(Locale.ROOT));
+		// Not found (the split normalised spacing) sorts last, so the rarer case still reads sensibly.
+		p = p < 0 ? Integer.MAX_VALUE : p;
+		l = l < 0 ? Integer.MAX_VALUE : l;
+		return l < p ? left + ", " + prepared : prepared + ", " + left;
+	}
+
+	/**
+	 * "It's a different ingredient", confirmed, recorded the way the ingredient form records the same
+	 * override (R-DUP-2, {@code IngredientService.create}): an {@code INGREDIENT_ADDED} entry on the new
+	 * ingredient, whose reason names what it looked like and whose {@code after_state} carries
+	 * {@code confirmedDifferentFrom}. The same shape, so that anyone reviewing overrides finds the
+	 * import's among the form's with one query. The spec says the override "is audited", and it is the
+	 * one decision here a reviewer later needs to be able to find and question.
+	 *
+	 * <p>Only this path writes an ingredient entry. An unmatched ingredient an import creates has never
+	 * had one — the import's own {@code RECIPE_IMPORTED} entry counts them — and still does not.
+	 */
+	private void auditConfirmedDifferent(AuthenticatedUser actor, ResolvedIngredient created,
+			MasterRecipeView.MasterRecipeIngredient line, IngredientNameMatcher.Match match) {
+		Map<String, Object> lookalike = new LinkedHashMap<>();
+		lookalike.put("id", match.entry().id().toString());
+		lookalike.put("name", match.entry().name());
+		lookalike.put("matchedName", match.matchedName());
+		lookalike.put("kind", match.kind().name());
+
+		Map<String, Object> after = new LinkedHashMap<>();
+		after.put("name", created.name());
+		after.put("category", IngredientCategories.forName(created.name()));
+		after.put("unit", line.qtyUnit());
+		after.put("ekadashiProhibited", false);
+		after.put("supply", false);
+		after.put("aliases", List.of());
+		after.put("libraryDerived", true);
+		after.put("confirmedDifferentFrom", lookalike);
+
+		audit.record(actor, AuditAction.INGREDIENT_ADDED, AuditEntityType.INGREDIENT, created.id(),
+				null, after,
+				"Added although it looks like “" + match.entry().name()
+						+ "”: confirmed as a different ingredient.");
+	}
+
+	/** Creates {@code base} as a library-derived ingredient of this temple, with the note on the line. */
+	private ResolvedIngredient create(String base, String note, MasterRecipeView.MasterRecipeIngredient line) {
+		// The catalogue unit is the one the recipe asked in: an ingredient first met as "200 gm"
+		// is catalogued in grams, and every later recipe and stock movement speaks that unit.
+		UUID id = UUID.randomUUID();
+		jdbc.update("""
+				INSERT INTO ingredients (
+					id, tenant_id, name, category, canonical_unit, library_derived)
+				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, true)
+				""", id, base, IngredientCategories.forName(base), line.qtyUnit());
+
+		// Nothing the import creates arrives pre-flagged for Ekadashi either: the flag is a Temple
+		// Admin's to set, and the import cannot tell a grain from a spice. That is the gap the
+		// warning box on the Recipes page exists to make honest (D-18).
+		return new ResolvedIngredient(id, base, note, line.qtyValue(), line.qtyUnit(), true);
+	}
+
+	/**
+	 * This temple's ingredients with their aliases, as the matcher reads them. RLS scopes both
+	 * queries to the temple: another temple's Green chilli is never a match.
+	 *
+	 * <p>Read once per request and not added to: what the import creates is tracked apart from it
+	 * (see {@link #plan}).
+	 */
+	private List<IngredientNameMatcher.Entry> catalogue() {
+		Map<UUID, List<String>> aliases = new LinkedHashMap<>();
+		jdbc.query("SELECT ingredient_id, alias FROM ingredient_aliases ORDER BY created_at, id", rs -> {
+			aliases.computeIfAbsent(rs.getObject("ingredient_id", UUID.class), k -> new ArrayList<>())
+					.add(rs.getString("alias"));
+		});
+		// Oldest first, so that where two ingredients tie as a match the one the temple has had
+		// longest wins — the matcher breaks a tie by the order it was given. That is the same
+		// preference V144's alias backfill applies, for the same reason.
+		List<IngredientNameMatcher.Entry> out = new ArrayList<>();
+		jdbc.query("SELECT id, name FROM ingredients ORDER BY created_at, id", rs -> {
+			UUID id = rs.getObject("id", UUID.class);
+			out.add(new IngredientNameMatcher.Entry(id, rs.getString("name"),
+					aliases.getOrDefault(id, List.of())));
+		});
+		return out;
 	}
 
 	/** See {@code MasterRecipeService.pgArray} — same reason, same escaping. */

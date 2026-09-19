@@ -1033,6 +1033,149 @@ public enum ErrorCode {
 			"The purchase order sheet isn't ready yet, so it can't go on WhatsApp.",
 			"Wait a minute, then press Send on WhatsApp again."),
 
+	// A new or renamed ingredient whose name matches one the temple already has, exactly once
+	// normalised or by close spelling (R-DUP-2, PROCUREMENT-REQUIREMENTS.md §9A, 2026-09-19).
+	// Duplicates split stock, prices and shopping-list lines, so the save stops. The refusal names the
+	// existing ingredient in its details (existingIngredientId, existingIngredientName), and the screen
+	// words the prompt itself: "Did you mean Curd? Use Curd, or add a preparation note instead." Saving
+	// anyway needs a deliberate confirmation, which is audited. Reserved by the work manager for T-251.
+	INGREDIENT_LOOKS_LIKE_EXISTING(400156, 409,
+			"There’s already an ingredient with a name very like this one.",
+			"Use the existing ingredient, or add a preparation note to the recipe line instead. If it "
+					+ "really is a different ingredient, confirm that and save again."),
+
+	// Pack sizes, an ingredient's alternate units (R-ING-1, 2026-09-19). A pack in the wrong unit
+	// family is INCOMPATIBLE_UNIT (400013), not a code of its own. Reserved for T-253. A duplicate is
+	// the same amount whatever it is called (Q-14, confirmed by Rajeev 2026-09-19).
+	PACK_SIZE_ALREADY_THERE(400157, 409,
+			"This ingredient already has a pack of that size.",
+			"Use the one that’s there, or enter a different size."),
+
+	TOO_MANY_PACK_SIZES(400158, 409,
+			"An ingredient can have at most 8 pack sizes.",
+			"Remove one you don’t use, then add this one."),
+
+	PACK_SIZE_IN_USE(400159, 409,
+			"That pack size is in use, so it can’t be removed.",
+			"A vendor sells this ingredient in it, or an order or a bill was entered in it. If a vendor uses "
+					+ "it, change what they sell it as on the vendor’s page first."),
+
+	INGREDIENT_UNIT_HAS_PACK_SIZES(400160, 409,
+			"This ingredient has pack sizes in its current kind of unit.",
+			"Keep a unit of the same kind, or remove its pack sizes first."),
+
+	// Stock-take must say what the stock is worth (R-ING-3), so nothing is costed at ₹0. Reserved for
+	// T-254.
+	STOCK_VALUE_REQUIRED(400161, 400,
+			"Enter what it would cost to buy this today.",
+			"Type the price per unit. It can’t be blank or 0, and it becomes the ingredient’s market rate."),
+
+	// A vendor's "Sells it as" must be one of that ingredient's own packs (R-VEN-1). Reserved for T-252.
+	// Also refuses a purchase-order line whose pack is not its ingredient's, or a pack on a one-off
+	// line (R-SL-3, T-260): the same fact, and the same next step, so the same code.
+	SUPPLY_PACK_NOT_THIS_INGREDIENT(400162, 400,
+			"That pack size belongs to a different ingredient.",
+			"Choose one of this ingredient’s pack sizes, or add the size to the ingredient first."),
+
+	// A supply sold in packs takes its price per pack; the per-unit list price is derived from it and
+	// never typed twice (R-VEN-1; conductor's ruling 2026-09-19). Reserved for T-252.
+	SUPPLY_PRICE_PER_PACK_ONLY(400163, 400,
+			"This vendor sells it in packs, so enter the price per pack.",
+			"Type what one pack costs. The price per unit is worked out from it."),
+
+	// "Record a delivery" on the Deliveries screen records one vendor's van across all their open
+	// orders (R-DEL-3). A line that is not on a sent or part-delivered order from that vendor is
+	// refused as a whole, never skipped: the screen was stale, or somebody else closed the order.
+	// Reserved by the work manager for T-261.
+	DELIVERY_LINE_NOT_THIS_VENDOR(400164, 409,
+			"One of these items isn’t on an open order from this vendor any more.",
+			"Reload the page, then record the delivery again."),
+
+	// Uploads: the copy of a bill (R-INV-2) and proof of payment (R-PAY-2). A photo or a PDF only,
+	// because those are what a phone camera or a scanner produces and what a browser can show back.
+	// Reserved by the work manager for T-267.
+	ATTACHMENT_TYPE_NOT_ALLOWED(400165, 400,
+			"That file isn’t a photo or a PDF.",
+			"Upload a photo (JPG, PNG, WebP or HEIC) or a PDF."),
+
+	ATTACHMENT_TOO_LARGE(400166, 413,
+			"That file is too large to upload.",
+			"Upload a file under 10 MB. A phone photo at normal quality is well under that."),
+
+	// An upload is claimed by exactly one invoice or payment, and only for what it was uploaded as.
+	// Reserved for T-267 (the claim), used by T-271 (invoices) and T-272 (payments).
+	ATTACHMENT_NOT_USABLE(400167, 409,
+			"That upload can’t be used here.",
+			"Upload the file again, then save."),
+
+	// Sub total + GST + Other charges − Discount must equal the Grand total typed from the bill
+	// (R-INV-5); the screen shows the same check before saving. Reserved for T-271.
+	INVOICE_TOTALS_DONT_ADD_UP(400168, 400,
+			"The figures don’t add up to the grand total.",
+			"Check each line’s amount and the GST, other charges and discount against the bill."),
+
+	// Only a vendor's deliveries that no standing invoice already bills can be billed (R-INV-3).
+	// A voided invoice releases its deliveries. Reserved for T-271.
+	INVOICE_DELIVERY_NOT_BILLABLE(400169, 409,
+			"One of those deliveries is already on another invoice, or isn’t from this vendor.",
+			"Reload the page and choose the deliveries again."),
+
+	// A bill for deliveries carries exactly their lines, locked: none added, none removed (R-INV-3).
+	// Reserved for T-271.
+	INVOICE_LINES_DONT_MATCH_DELIVERIES(400170, 409,
+			"The items don’t match the deliveries being billed.",
+			"Reload the page and choose the deliveries again. Anything else on the bill goes in Other charges."),
+
+	// Merging duplicate ingredients (R-DUP-3) converts within one kind of unit and never across
+	// kinds (conductor's ruling 2026-09-19). Reserved for T-270.
+	MERGE_UNITS_DIFFER(400171, 409,
+			"These ingredients are counted in different kinds of unit, so they can’t be merged.",
+			"Take the ingredient in the other kind of unit out of this group, or fix its unit first."),
+
+	// Two of the ingredients being merged are supplied by the same vendor at different prices
+	// (R-DUP-3 step 4: "a conflict on the same vendor asks which price to keep"). Reserved for T-270.
+	MERGE_SUPPLY_PRICE_CHOICE_NEEDED(400172, 409,
+			"The same vendor has a different list price for two of these ingredients.",
+			"Choose which price to keep for that vendor, then merge again."),
+
+	MERGE_GROUP_INVALID(400173, 400,
+			"This merge group can’t be used as it is.",
+			"Keep one ingredient, merge at least one other into it, and use each ingredient only once."),
+
+	// A payment is money that left the temple, so it is always above zero. A payment recorded by
+	// mistake is undone with Reverse, which writes the compensating entry itself (T-010); a
+	// hand-entered negative amount is not a product action and would carry no proof (R-PAY-2).
+	// Reserved by the work manager for T-280 (fix F7).
+	PAYMENT_AMOUNT_NOT_POSITIVE(400174, 400,
+			"A payment has to be more than ₹0.",
+			"Enter the amount paid. To undo a payment recorded by mistake, press Reverse beside it."),
+
+	// Repeating an event (Rajeev, 2026-09-19): "once every [N] weeks until [date]". The screen limits
+	// both boxes, so these are what a stale page or a hand-made request meets. Reserved by the work
+	// manager for T-307.
+	REPEAT_INTERVAL_OUT_OF_RANGE(400175, 400,
+			"An event can repeat every 1 to 12 weeks.",
+			"Choose a number from 1 to 12."),
+
+	REPEAT_END_DATE_TOO_FAR(400176, 400,
+			"The end date has to be within a year from today.",
+			"Choose an earlier end date."),
+
+	REPEAT_MAKES_NO_COPIES(400177, 400,
+			"No copies fit before that end date.",
+			"Choose a later end date, or repeat more often."),
+
+	// "This and all later ones" only means something on an event that was repeated. Reserved for T-307.
+	MEAL_NOT_IN_SERIES(400178, 409,
+			"This event doesn't repeat, so there are no later ones to cancel.",
+			"Cancel just this event instead."),
+
+	// The confirm names the later events it will cancel; if that list changed while it was open
+	// (someone else cancelled, cooked or added one), nothing is cancelled. Reserved for T-307.
+	SERIES_CHANGED_SINCE_CHECKED(400179, 409,
+			"The later events changed while you were deciding, so nothing was cancelled.",
+			"Look at the list again, then confirm."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

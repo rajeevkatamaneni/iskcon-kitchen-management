@@ -65,7 +65,12 @@ class UnitLabelAgreementTest {
 			// The recipe form's refusal when the portion unit is from another family (T-218) — "A
 			// recipe measured in Litres takes its portion in L or ml." It names the recipe's unit, with
 			// no count beside it.
-			"recipe/PortionFitsYieldValidator.java|\"A recipe measured in \" + yield.label() + \" takes its portion in \" + fits + \".\")"
+			"recipe/PortionFitsYieldValidator.java|\"A recipe measured in \" + yield.label() + \" takes its portion in \" + fits + \".\")",
+
+			// The merge tool's refusal and preview when a group mixes kinds of unit (T-270, KMS-400171):
+			// "Curd is in Kg, Curd pieces is in pieces". It names each ingredient's unit, with no count
+			// beside it; the same word goes in the refusal's details.
+			"ingredient/merge/IngredientMergeService.java|return unit.label();"
 
 			// ---- Removed by T-148, and why, so nobody puts them back. ----------------------------
 			//

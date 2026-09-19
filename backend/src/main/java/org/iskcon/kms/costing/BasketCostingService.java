@@ -72,7 +72,7 @@ public class BasketCostingService {
 	}
 
 	/**
-	 * What a basket costs at vendors' last-known prices, and which of its ingredients the figure does
+	 * What a basket costs at vendors' list prices (or, failing those, the market rate), and which of its ingredients the figure does
 	 * not cover.
 	 *
 	 * <p>An empty basket costs a rounded zero and names nothing — a day with nothing planned reports
@@ -150,6 +150,25 @@ public class BasketCostingService {
 	 * bill says per the receipt line's own unit, and {@code ReceivingService} converts to the
 	 * ingredient's canonical unit before writing {@code last_price} (INV1). So the figure this query
 	 * reads is a price somebody actually paid, expressed in exactly the unit this method assumes.
+	 *
+	 * <p><strong>Then the market rate, and never ₹0 (R-ING-3).</strong> The order is the document's:
+	 * the preferred vendor's list price, then any vendor's, then {@code ingredients.market_rate} — what
+	 * it would cost to buy today, per the same canonical unit, which a stock-take now has to supply
+	 * before stock can be added by a count. Before this, rice added to the store with no vendor was
+	 * issued to the Deity Kitchen and costed at nothing; now the value somebody typed at the shelf
+	 * carries through. "n ingredients without a price" therefore counts only ingredients with none of
+	 * the three, and it still counts them: a missing figure stays said out loud.
+	 *
+	 * <p><strong>A ₹0 list price is not a price here</strong> (the conductor's ruling, 2026-09-19). V24
+	 * lets {@code last_price} be 0, for goods given free with an order, and {@code IS NOT NULL} used to
+	 * let that zero win the {@code COALESCE} and cost the ingredient at nothing — the silent ₹0 this
+	 * work removes. So every vendor source asks {@code > 0} and a zero falls through to the next one;
+	 * an ingredient whose sources are all zero or missing is unpriced and named. The market rate needs
+	 * no such guard: V144 holds it strictly positive or null.
+	 *
+	 * <p>Every figure this method feeds reads it through {@link #cost} — the day's materials cost, cost
+	 * by meal kind, what the store issued to each kitchen, and the Today tile — so one change here is
+	 * the change in all of them, and none of them keeps a price of its own.
 	 */
 	private Map<UUID, PricedIngredient> catalogue(List<UUID> ingredientIds) {
 		String placeholders = String.join(", ", Collections.nCopies(ingredientIds.size(), "?"));
@@ -158,9 +177,10 @@ public class BasketCostingService {
 				SELECT i.id, i.name, i.canonical_unit,
 					   COALESCE(
 						   (SELECT vs.last_price FROM vendor_supplies vs
-							 WHERE vs.ingredient_id = i.id AND vs.preferred AND vs.last_price IS NOT NULL),
+							 WHERE vs.ingredient_id = i.id AND vs.preferred AND vs.last_price > 0),
 						   (SELECT max(vs.last_price) FROM vendor_supplies vs
-							 WHERE vs.ingredient_id = i.id AND vs.last_price IS NOT NULL)) AS price
+							 WHERE vs.ingredient_id = i.id AND vs.last_price > 0),
+						   i.market_rate) AS price
 				FROM ingredients i
 				WHERE i.id IN (""" + placeholders + ")",
 				(rs) -> {

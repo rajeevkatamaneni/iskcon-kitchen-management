@@ -90,9 +90,44 @@ public class VendorController {
 	@PutMapping("/{id}/supplies")
 	@PreAuthorize("hasAuthority('MANAGE_VENDORS')")
 	public ResponseEntity<Void> setSupply(
-			@PathVariable UUID id, @Valid @RequestBody SetVendorSupplyRequest request) {
-		vendorService.setSupply(id, request);
+			@PathVariable UUID id, @Valid @RequestBody SetVendorSupplyRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		vendorService.setSupply(actor, id, request);
 		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * The vendor page's "Other ingredients" table: every ticked row saved in one transaction
+	 * (R-VEN-1). Prices typed here enter the price history as ONBOARDING.
+	 */
+	@PostMapping("/{id}/supplies/bulk")
+	@PreAuthorize("hasAuthority('MANAGE_VENDORS')")
+	public ResponseEntity<Void> addSupplies(
+			@PathVariable UUID id, @Valid @RequestBody AddVendorSuppliesRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		vendorService.addSupplies(actor, id, request.rows());
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * Every vendor that supplies one ingredient, for the ingredient's page (R-ING-2). A literal path,
+	 * so Spring prefers it over {@code /{id}} and it is never read as a vendor id.
+	 */
+	@GetMapping("/supplies")
+	@PreAuthorize("hasAuthority('MANAGE_VENDORS')")
+	public List<IngredientSupplyView> suppliesOf(@RequestParam UUID ingredientId) {
+		return vendorService.suppliesOf(ingredientId);
+	}
+
+	/**
+	 * Each ingredient's preferred vendor, for the vendor page to name the vendor a tick on Preferred
+	 * replaces before it is saved (R-VEN-2). A literal path, like {@code /supplies}, so it is never
+	 * read as a vendor id.
+	 */
+	@GetMapping("/preferred")
+	@PreAuthorize("hasAuthority('MANAGE_VENDORS')")
+	public List<PreferredVendorView> preferredVendors() {
+		return vendorService.preferredVendors();
 	}
 
 	@DeleteMapping("/{id}/supplies/{ingredientId}")

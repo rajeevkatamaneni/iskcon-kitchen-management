@@ -74,7 +74,9 @@ public class RecipeTranslationService {
 		List<RecipeIngredientView> base = recipe.ingredients();
 		for (int i = 0; i < base.size(); i++) {
 			String name = i < t.ingredientNames().size() ? t.ingredientNames().get(i) : base.get(i).ingredientName();
-			lines.add(new TranslatedLine(name, base.get(i).quantity(), base.get(i).unit()));
+			// The note in the chosen language, translated with the name (R-DUP-1). Null stays null.
+			lines.add(new TranslatedLine(name, t.preparationNote(i, base.get(i).preparationNote()),
+					base.get(i).quantity(), base.get(i).unit()));
 		}
 		return new TranslatedRecipeView(recipeId, language, t.provider(), t.name(), t.categoryName(),
 				lines, t.method());
@@ -110,6 +112,26 @@ public class RecipeTranslationService {
 			}
 		}
 
+		// Each line's preparation note ("slit", "fresh grated") goes the same way as the name:
+		// glossary first, because a temple that has written down its word for "slit" wants that word,
+		// then the one MT batch. A line with no note sends nothing and stays null.
+		String[] notes = new String[lines.size()];
+		int[] noteMtIndex = new int[lines.size()];
+		for (int i = 0; i < lines.size(); i++) {
+			String note = lines.get(i).preparationNote();
+			noteMtIndex[i] = -1;
+			if (note == null || note.isBlank()) {
+				continue;
+			}
+			String override = glossary.get(note.strip().toLowerCase());
+			if (override != null) {
+				notes[i] = override;
+			} else {
+				noteMtIndex[i] = mt.size();
+				mt.add(note.strip());
+			}
+		}
+
 		List<String> out = provider.translate(mt, "en", language);
 
 		String name = out.get(0);
@@ -121,7 +143,15 @@ public class RecipeTranslationService {
 			}
 		}
 
-		return new TranslatedRecipe(name, categoryName, List.of(ingredientNames), translatedMethod, provider.name());
+		for (int i = 0; i < lines.size(); i++) {
+			if (noteMtIndex[i] >= 0) {
+				notes[i] = out.get(noteMtIndex[i]);
+			}
+		}
+
+		// Arrays.asList, not List.of: a line with no note is a null in its place, and List.of refuses nulls.
+		return new TranslatedRecipe(name, categoryName, List.of(ingredientNames), translatedMethod, provider.name(),
+				java.util.Arrays.asList(notes));
 	}
 
 	private TranslatedRecipe readCache(UUID recipeId, int version, String language) {

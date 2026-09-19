@@ -3,6 +3,7 @@ package org.iskcon.kms.ingredient;
 import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -19,6 +20,7 @@ import org.iskcon.kms.auth.Permission;
 import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.error.ErrorResponse.FieldError;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -61,19 +63,25 @@ public class IngredientService {
 
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
+	private final PackSizeService packSizeService;
 
-	public IngredientService(JdbcTemplate jdbc, AuditService auditService) {
+	public IngredientService(JdbcTemplate jdbc, AuditService auditService, PackSizeService packSizeService) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
+		this.packSizeService = packSizeService;
 	}
 
+	/**
+	 * The whole catalogue, each ingredient with its pack sizes and market rate (R-ING-1, R-ING-3).
+	 *
+	 * <p>Two queries whatever the catalogue's size: the ingredients, then every pack size in the
+	 * temple at once, matched up here. Not a pack query per row — a temple's catalogue is about 230
+	 * ingredients, and this is the list every ingredient picker loads.
+	 */
 	@Transactional(readOnly = true)
 	public List<IngredientView> list() {
-		return jdbc.query("""
-				SELECT id, name, category, canonical_unit, is_ekadashi_prohibited, is_supply,
-						library_derived, aliases, created_at
-				FROM ingredients ORDER BY name
-				""", VIEW_MAPPER);
+		Map<UUID, List<PackSizeView>> packs = packSizeService.allByIngredient();
+		return jdbc.query("SELECT " + VIEW_COLUMNS + " FROM ingredients ORDER BY name", viewMapper(packs));
 	}
 
 	/**
@@ -95,7 +103,15 @@ public class IngredientService {
 		return count == null ? 0 : count;
 	}
 
-	/** Name/alias prefix typeahead for recipe and inventory pickers. RLS scopes it to the tenant. */
+	/**
+	 * Name/alias prefix typeahead for recipe and inventory pickers. RLS scopes it to the tenant.
+	 *
+	 * <p>An alias is looked for in both places one lives: the {@code aliases} array on the row, and
+	 * the {@code ingredient_aliases} table (V144). The merge tool (R-DUP-3, T-270) writes a
+	 * merged-away name to both, so "Curd, sour" finds Curd through either; the table is read as well so
+	 * that an alias the array does not carry — one V144's backfill or an import left only there — is
+	 * not the one name the picker cannot find.
+	 */
 	@Transactional(readOnly = true)
 	public List<IngredientSummary> search(String query) {
 		String prefix = query == null ? "" : query.trim().toLowerCase();
@@ -111,8 +127,10 @@ public class IngredientService {
 				FROM ingredients
 				WHERE lower(name) LIKE ?
 				   OR EXISTS (SELECT 1 FROM unnest(aliases) a WHERE lower(a) LIKE ?)
+				   OR EXISTS (SELECT 1 FROM ingredient_aliases t
+							  WHERE t.ingredient_id = ingredients.id AND lower(t.alias) LIKE ?)
 				ORDER BY name LIMIT 20
-				""", SUMMARY_MAPPER, like, like);
+				""", SUMMARY_MAPPER, like, like, like);
 	}
 
 	@Transactional(readOnly = true)
@@ -131,6 +149,10 @@ public class IngredientService {
 		}
 		List<String> aliases = normalizeAliases(request.aliases());
 		UUID id = UUID.randomUUID();
+		String name = request.name().trim();
+
+		Optional<IngredientNameMatcher.Match> overridden =
+				guardAgainstLookalike(id, name, request.confirmDifferent());
 
 		try {
 			jdbc.update(connection -> {
@@ -153,11 +175,13 @@ public class IngredientService {
 			throw new ApplicationException(
 					ErrorCode.INGREDIENT_ALREADY_EXISTS, Map.of("name", request.name()), e);
 		}
+		syncAliasRows(id, aliases, List.of());
 
+		Map<String, Object> after = snapshot(name, request.category().trim(), unit,
+				request.ekadashiProhibited(), request.supply(), aliases);
+		overridden.ifPresent(match -> after.put("confirmedDifferentFrom", lookalikeSnapshot(match)));
 		auditService.record(actor, AuditAction.INGREDIENT_ADDED, AuditEntityType.INGREDIENT, id,
-				null, snapshot(request.name().trim(), request.category().trim(), unit,
-						request.ekadashiProhibited(), request.supply(), aliases),
-				null);
+				null, after, overridden.map(match -> overrideReason("Added", match)).orElse(null));
 		return id;
 	}
 
@@ -225,6 +249,8 @@ public class IngredientService {
 					ErrorCode.NOT_PERMITTED, Map.of("field", "ekadashiProhibited"));
 		}
 
+		requireNoPackSizesAcrossFamilies(id, Unit.valueOf(before.unit()), unit);
+
 		/*
 		  Every editable field, compared against the row. Listed rather than looped on purpose: this
 		  is the definition of "a modification" and it should be readable as one, and each side is
@@ -237,6 +263,22 @@ public class IngredientService {
 		  and every screen shows it in that order, so re-ordering somebody's aliases is a change a
 		  person can see.
 		*/
+		/*
+		  The lookalike guard (R-DUP-2) runs on a RENAME only. Saving a row whose name did not move
+		  must never be stopped by it: the catalogue already holds near-duplicates from before this
+		  guard existed ("Curd" and "Curd, sour" both, until the merge tool settles them), and an
+		  unrelated edit to either row — its unit, its aliases, its Ekadashi flag — is not the moment
+		  to relitigate that. The comparison is on the stored, trimmed name, exactly as "modified"
+		  below compares it, so " Curd " typed over "Curd" is not a rename either.
+
+		  A case-only rename ("curd" to "Curd") IS a rename and is checked. The row itself is left out
+		  of what it is compared against, so it can never match itself; what it can still meet is a
+		  different row it resembles, which is the point.
+		*/
+		Optional<IngredientNameMatcher.Match> overridden = name.equals(before.name())
+				? Optional.empty()
+				: guardAgainstLookalike(id, name, request.confirmDifferent());
+
 		boolean modified = !name.equals(before.name())
 				|| !category.equals(before.category())
 				|| !unit.name().equals(before.unit())
@@ -276,12 +318,16 @@ public class IngredientService {
 			throw new ApplicationException(
 					ErrorCode.INGREDIENT_ALREADY_EXISTS, Map.of("name", request.name()), e);
 		}
+		syncAliasRows(id, aliases, before.aliases());
 
+		Map<String, Object> after =
+				snapshot(name, category, unit, ekadashiProhibited, request.supply(), aliases);
+		overridden.ifPresent(match -> after.put("confirmedDifferentFrom", lookalikeSnapshot(match)));
 		auditService.record(actor, AuditAction.INGREDIENT_UPDATED, AuditEntityType.INGREDIENT, id,
 				snapshot(before.name(), before.category(), Unit.valueOf(before.unit()),
 						before.ekadashiProhibited(), before.supply(), before.aliases()),
-				snapshot(name, category, unit, ekadashiProhibited, request.supply(), aliases),
-				null);
+				after,
+				overridden.map(match -> overrideReason("Renamed", match)).orElse(null));
 
 		if (ekadashiProhibited != before.ekadashiProhibited()) {
 			// The compliance trail is kept findable by its own action, whichever route moved the
@@ -353,6 +399,223 @@ public class IngredientService {
 	}
 
 	// ---------------------------------------------------------------------
+	// R-DUP-2: no duplicate ingredients (T-251)
+	// ---------------------------------------------------------------------
+
+	/**
+	 * Stops a create or a rename whose name is one the temple already has, or very nearly has, and
+	 * returns the match it let through when the person has already said it is a different
+	 * ingredient — so the caller can put that on the audit trail.
+	 *
+	 * <p><b>Why.</b> Duplicate ingredients split stock, prices and shopping-list lines: "Curd", "Curd,
+	 * fresh", "Curd, sour" and "Curd, whisked" were four ingredients, so the temple held curd in four
+	 * places and bought it on four lines (PROCUREMENT-REQUIREMENTS.md §9A). Everything downstream of
+	 * the catalogue is only as clean as the catalogue, so the catalogue is where it is stopped.
+	 *
+	 * <p><b>Two checks, in this order, and the order is the decision.</b>
+	 * <ol>
+	 *   <li><b>The literal same name</b> (case-insensitive, which is what the database's own unique
+	 *       index {@code ingredients_name_per_tenant} holds) keeps its old answer,
+	 *       {@code INGREDIENT_ALREADY_EXISTS} (KMS-400034), and <em>nothing overrides it</em>. The new
+	 *       check does not supersede it, because the new check's way past — "It's a different
+	 *       ingredient" — cannot be honoured for a name the database will refuse anyway: two rows
+	 *       called "Curd" are impossible whatever anybody confirms. Offering a button that could only
+	 *       end in a second refusal would be a prompt that lies. Checked here rather than left to the
+	 *       index so it is answered before anything else is weighed; the index's own refusal is still
+	 *       caught around the INSERT and UPDATE, for the race between two people typing at once.</li>
+	 *   <li><b>A lookalike</b>: {@link IngredientNameMatcher#findMatch} over every other ingredient in
+	 *       the temple, by its name and by every alias it answers to — both the {@code aliases} array
+	 *       on the row and the {@code ingredient_aliases} table (V144), since the table was backfilled
+	 *       from the array and later writes keep them in step, but a name merged away by R-DUP-3 will
+	 *       live only in the table. An EXACT or CLOSE match refuses with
+	 *       {@code INGREDIENT_LOOKS_LIKE_EXISTING} (KMS-400156), and the refusal names the ingredient
+	 *       in its {@code details} — its id and its name — because the prompt on the screen has to say
+	 *       "Did you mean Curd?" and "Use Curd" has to know which Curd.</li>
+	 * </ol>
+	 *
+	 * <p><b>The way past.</b> {@code confirmDifferent: true} on the request says the person was shown
+	 * the prompt and confirmed it is a different ingredient. The save then goes ahead and the match
+	 * is returned, so the audit entry records the override and what it looked like — the spec says
+	 * the override "is audited", and it is the one decision here that a reviewer later needs to be
+	 * able to find and question. The flag is trusted only for the lookalike check; it never reaches
+	 * the literal-name check above, and a flag sent when nothing matched records nothing.
+	 *
+	 * <p>RLS scopes every read to the acting temple, so another temple's "Curd" is never a match.
+	 * That is the database's job and not a WHERE clause's, as everywhere else.
+	 *
+	 * @param self the row being created or renamed, left out of the comparison so it never matches
+	 *     itself (on a create it is the fresh id, which is in no row yet)
+	 */
+	private Optional<IngredientNameMatcher.Match> guardAgainstLookalike(
+			UUID self, String name, Boolean confirmDifferent) {
+
+		jdbc.query("SELECT id FROM ingredients WHERE lower(name) = lower(?) AND id <> ? LIMIT 1",
+				(rs, rowNum) -> rs.getObject("id", UUID.class), name, self)
+				.stream().findFirst().ifPresent(existing -> {
+					throw new ApplicationException(
+							ErrorCode.INGREDIENT_ALREADY_EXISTS,
+							Map.of("name", name, "existingIngredientId", existing));
+				});
+
+		Optional<IngredientNameMatcher.Match> match =
+				IngredientNameMatcher.findMatch(name, otherIngredients(self));
+		if (match.isEmpty() || Boolean.TRUE.equals(confirmDifferent)) {
+			return match;
+		}
+
+		IngredientNameMatcher.Entry existing = match.get().entry();
+		throw new ApplicationException(
+				ErrorCode.INGREDIENT_LOOKS_LIKE_EXISTING,
+				Map.of("name", name, "matchedName", match.get().matchedName(),
+						"kind", match.get().kind().name()),
+				// The temple's own words about the temple's own data, which is what ApplicationException
+				// allows `details` to carry: the ingredient this looks like, so the screen can ask
+				// "Did you mean Curd?" and send "Use Curd" to the right row. The id is the row's key
+				// rather than anything internal to the server — the screen already holds every
+				// ingredient's id from the list it loaded.
+				List.of(new FieldError("existingIngredientId", existing.id().toString()),
+						new FieldError("existingIngredientName", existing.name())),
+				null);
+	}
+
+	/**
+	 * Every ingredient in the temple except {@code self}, with every name it answers to. Ordered by
+	 * name so that the matcher's tie-break ("the order the entries were given") is the same on every
+	 * call rather than whatever order the planner happened to return.
+	 */
+	private List<IngredientNameMatcher.Entry> otherIngredients(UUID self) {
+		return jdbc.query("""
+				SELECT i.id, i.name, i.aliases,
+						COALESCE(array_agg(a.alias ORDER BY a.alias) FILTER (WHERE a.alias IS NOT NULL),
+								'{}'::text[]) AS table_aliases
+				FROM ingredients i
+				LEFT JOIN ingredient_aliases a ON a.ingredient_id = i.id
+				WHERE i.id <> ?
+				GROUP BY i.id, i.name, i.aliases
+				ORDER BY i.name
+				""", (rs, rowNum) -> {
+			var names = new LinkedHashSet<String>(readAliases(rs));
+			Array table = rs.getArray("table_aliases");
+			if (table != null) {
+				names.addAll(List.of((String[]) table.getArray()));
+			}
+			return new IngredientNameMatcher.Entry(
+					rs.getObject("id", UUID.class), rs.getString("name"), List.copyOf(names));
+		}, self);
+	}
+
+	/**
+	 * Keeps {@code ingredient_aliases} in step with the aliases typed on the ingredient, one row per
+	 * normalised name. The {@code aliases} array on the row stays exactly as it was and is still what
+	 * every screen shows; this table is what R-DUP-3's merge and the lookalike check read.
+	 *
+	 * <p>Normalised with {@link IngredientNameMatcher#normalise}, which V144 said would fill this
+	 * column for every new alias: its backfill used plain lower/trim, a strict subset. Two aliases
+	 * on one ingredient that normalise alike ("Dahi" and "Dahis") are one row, the first as typed.
+	 * An alias that normalises to nothing (punctuation only) has no row, since the table's CHECK
+	 * refuses a blank key and there is nothing in it to match on.
+	 *
+	 * <p><b>An alias another ingredient already answers to.</b> The table holds one ingredient per
+	 * name per temple, so the row cannot be written twice. A <em>newly typed</em> alias that clashes
+	 * is refused with {@code INGREDIENT_ALREADY_EXISTS} — it is the same claim as a name clash, a
+	 * name that already means another ingredient here — and the whole save rolls back with it. An
+	 * alias the ingredient <em>already had</em> is let through without a row instead: V144's backfill
+	 * gave a shared alias to the older ingredient and reported the rest rather than failing, so a
+	 * catalogue can arrive here already holding such a pair, and refusing would mean that ingredient
+	 * could never be saved again for a clash nobody introduced in this edit. The merge tool is where
+	 * those pairs are settled by a person.
+	 *
+	 * @param previous the aliases the row held before this save (empty on a create)
+	 */
+	private void syncAliasRows(UUID id, List<String> aliases, List<String> previous) {
+		Map<String, String> wanted = new LinkedHashMap<>();
+		for (String alias : aliases) {
+			String key = IngredientNameMatcher.normalise(alias);
+			if (!key.isBlank()) {
+				wanted.putIfAbsent(key, alias);
+			}
+		}
+		var previousKeys = new LinkedHashSet<String>();
+		for (String alias : previous) {
+			previousKeys.add(IngredientNameMatcher.normalise(alias));
+		}
+
+		jdbc.update(connection -> {
+			var ps = connection.prepareStatement(
+					"DELETE FROM ingredient_aliases WHERE ingredient_id = ? AND NOT (normalised_alias = ANY (?))");
+			ps.setObject(1, id);
+			ps.setArray(2, connection.createArrayOf("text", wanted.keySet().toArray()));
+			return ps;
+		});
+
+		for (Map.Entry<String, String> entry : wanted.entrySet()) {
+			// ON CONFLICT against the named constraint: a row this ingredient already holds takes the
+			// spelling as now typed, and a row another ingredient holds is left alone and reported
+			// back as zero rows, which is how the clash below is noticed without an exception that
+			// would poison the transaction.
+			int written = jdbc.update("""
+					INSERT INTO ingredient_aliases (tenant_id, ingredient_id, alias, normalised_alias)
+					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?)
+					ON CONFLICT ON CONSTRAINT ingredient_aliases_one_per_name
+					DO UPDATE SET alias = EXCLUDED.alias
+					WHERE ingredient_aliases.ingredient_id = EXCLUDED.ingredient_id
+					""", id, entry.getValue(), entry.getKey());
+			if (written == 0 && !previousKeys.contains(entry.getKey())) {
+				throw new ApplicationException(
+						ErrorCode.INGREDIENT_ALREADY_EXISTS,
+						Map.of("alias", entry.getValue(), "normalisedAlias", entry.getKey()));
+			}
+		}
+	}
+
+	/** What the audit entry keeps about the ingredient a confirmed-different save looked like. */
+	private static Map<String, Object> lookalikeSnapshot(IngredientNameMatcher.Match match) {
+		Map<String, Object> lookalike = new LinkedHashMap<>();
+		lookalike.put("id", match.entry().id().toString());
+		lookalike.put("name", match.entry().name());
+		lookalike.put("matchedName", match.matchedName());
+		lookalike.put("kind", match.kind().name());
+		return lookalike;
+	}
+
+	/**
+	 * The audit entry's reason, which the audit screen prints as written. It names the ingredient
+	 * this looked like in the temple's own words, so a reviewer reads the override without opening
+	 * the snapshot.
+	 */
+	private static String overrideReason(String verb, IngredientNameMatcher.Match match) {
+		return verb + " although it looks like \u201c" + match.entry().name()
+				+ "\u201d: confirmed as a different ingredient.";
+	}
+
+	// ---------------------------------------------------------------------
+
+	/**
+	 * Refuses moving an ingredient's canonical unit into another family while it has pack sizes
+	 * ({@code INGREDIENT_UNIT_HAS_PACK_SIZES}, KMS-400160). V144 left this to the service that edits
+	 * the ingredient, because its trigger fires on the pack side only.
+	 *
+	 * <p><b>Why.</b> A "Bag = 25 Kg" on rice that is now counted in litres would be a pack the
+	 * shopping list divides litres by, and every figure derived from it would be nonsense. The same
+	 * family is allowed — Kg to gm leaves "Bag = 25 Kg" exactly as true as it was, because packs
+	 * store the size as entered and their canonical-unit figure is worked out on every read.
+	 *
+	 * <p>The ingredient's row is locked before the packs are counted. {@link PackSizeService} takes
+	 * the same lock before it adds one, so a pack cannot slip in between this count and the unit
+	 * changing; whichever arrives second waits, then sees what the first did.
+	 */
+	private void requireNoPackSizesAcrossFamilies(UUID id, Unit from, Unit to) {
+		if (from.family() == to.family()) {
+			return;
+		}
+		jdbc.query("SELECT id FROM ingredients WHERE id = ? FOR UPDATE", (rs, n) -> null, id);
+		Integer packs = jdbc.queryForObject(
+				"SELECT count(*) FROM ingredient_pack_sizes WHERE ingredient_id = ?", Integer.class, id);
+		if (packs != null && packs > 0) {
+			throw new ApplicationException(ErrorCode.INGREDIENT_UNIT_HAS_PACK_SIZES,
+					Map.of("ingredientId", id, "from", from.name(), "to", to.name(), "packSizes", packs));
+		}
+	}
 
 	/**
 	 * Whether anything still points at this ingredient. Asked before the delete rather than after,
@@ -374,11 +637,9 @@ public class IngredientService {
 	}
 
 	private Optional<IngredientView> findById(UUID id) {
-		return jdbc.query("""
-				SELECT id, name, category, canonical_unit, is_ekadashi_prohibited, is_supply,
-						library_derived, aliases, created_at
-				FROM ingredients WHERE id = ?
-				""", VIEW_MAPPER, id).stream().findFirst();
+		Map<UUID, List<PackSizeView>> packs = Map.of(id, packSizeService.forIngredient(id));
+		return jdbc.query("SELECT " + VIEW_COLUMNS + " FROM ingredients WHERE id = ?", viewMapper(packs), id)
+				.stream().findFirst();
 	}
 
 	private boolean canManageDietaryPolicy(AuthenticatedUser actor) {
@@ -442,16 +703,31 @@ public class IngredientService {
 		return List.of((String[]) array.getArray());
 	}
 
-	private static final RowMapper<IngredientView> VIEW_MAPPER = (rs, rowNum) -> new IngredientView(
-			rs.getObject("id", UUID.class),
-			rs.getString("name"),
-			rs.getString("category"),
-			rs.getString("canonical_unit"),
-			rs.getBoolean("is_ekadashi_prohibited"),
-			rs.getBoolean("is_supply"),
-			rs.getBoolean("library_derived"),
-			readAliases(rs),
-			rs.getObject("created_at", OffsetDateTime.class).toInstant());
+	private static final String VIEW_COLUMNS = """
+			id, name, category, canonical_unit, is_ekadashi_prohibited, is_supply,
+					library_derived, aliases, created_at, market_rate, market_rate_on, market_rate_source
+			""";
+
+	/** The full view, with each ingredient's pack sizes taken from {@code packs} (none if absent). */
+	private static RowMapper<IngredientView> viewMapper(Map<UUID, List<PackSizeView>> packs) {
+		return (rs, rowNum) -> {
+			UUID id = rs.getObject("id", UUID.class);
+			return new IngredientView(
+					id,
+					rs.getString("name"),
+					rs.getString("category"),
+					rs.getString("canonical_unit"),
+					rs.getBoolean("is_ekadashi_prohibited"),
+					rs.getBoolean("is_supply"),
+					rs.getBoolean("library_derived"),
+					readAliases(rs),
+					rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+					packs.getOrDefault(id, List.of()),
+					rs.getBigDecimal("market_rate"),
+					rs.getObject("market_rate_on", LocalDate.class),
+					rs.getString("market_rate_source"));
+		};
+	}
 
 	private static final RowMapper<IngredientSummary> SUMMARY_MAPPER = (rs, rowNum) -> new IngredientSummary(
 			rs.getObject("id", UUID.class),

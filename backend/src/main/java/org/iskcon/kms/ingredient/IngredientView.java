@@ -1,6 +1,8 @@
 package org.iskcon.kms.ingredient;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,5 +40,22 @@ public record IngredientView(
 		 */
 		boolean libraryDerived,
 		List<String> aliases,
-		Instant createdAt) {
+		Instant createdAt,
+		/**
+		 * The ingredient's alternate units, smallest first (R-ING-1): "250 gm", "Bag = 25 Kg". Empty
+		 * when it has none, never null. Sent on the list as well as the detail, loaded for the whole
+		 * catalogue in one query ({@link PackSizeService#allByIngredient}).
+		 */
+		List<PackSizeView> packSizes,
+		/**
+		 * What it would cost to buy today, in rupees per canonical unit (R-ING-3), or null when no
+		 * market rate has been set. Read here only; it is written by the market-rate service (T-254)
+		 * at stock-take, from an invoice line, or by hand. The three fields are all set or all null,
+		 * which V144's {@code ingredients_market_rate_shape} holds.
+		 */
+		BigDecimal marketRate,
+		/** The day the market rate was set, or null. */
+		LocalDate marketRateOn,
+		/** Where it came from: STOCK_TAKE, INVOICE or MANUAL, or null. */
+		String marketRateSource) {
 }

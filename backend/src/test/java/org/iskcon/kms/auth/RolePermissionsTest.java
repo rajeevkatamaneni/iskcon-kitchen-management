@@ -155,6 +155,28 @@ class RolePermissionsTest {
 				allowed(User.Role.KITCHEN_MANAGER, Permission.MANAGE_VOLUNTEER_SHIFTS),
 				allowed(User.Role.TEMPLE_ADMIN, Permission.MANAGE_VOLUNTEER_SHIFTS),
 
+				// --- Receiving a delivery is its own permission (PROCUREMENT-REQUIREMENTS R-DEL-1) ---
+				// The Deliveries screen: Temple Admin, Kitchen Manager and Kitchen Staff. Kitchen Staff was
+				// open question Q-1 ("does Kitchen Staff get RECEIVE_DELIVERIES by default, or only named
+				// staff?") until Rajeev answered it on 2026-09-19: by default, the whole role. Whoever is
+				// at the gate when the van arrives can take the delivery, and the screen shows no prices.
+				// This row was refused until then and changed deliberately, with his answer (T-282).
+				allowed(User.Role.TEMPLE_ADMIN, Permission.RECEIVE_DELIVERIES),
+				allowed(User.Role.KITCHEN_MANAGER, Permission.RECEIVE_DELIVERIES),
+				allowed(User.Role.KITCHEN_STAFF, Permission.RECEIVE_DELIVERIES),
+				denied(User.Role.VOLUNTEER, Permission.RECEIVE_DELIVERIES),
+				// The operator provisions temples and receives nothing at any temple's gate.
+				denied(User.Role.SUPER_ADMIN, Permission.RECEIVE_DELIVERIES),
+
+				// --- Merging duplicate ingredients is the Temple Admin's alone (R-DUP-3) ---
+				// It re-points stock, recipes, vendor prices and order history across the whole
+				// catalogue in one act, so it sits with whoever answers for the whole temple.
+				allowed(User.Role.TEMPLE_ADMIN, Permission.MERGE_INGREDIENTS),
+				denied(User.Role.KITCHEN_MANAGER, Permission.MERGE_INGREDIENTS),
+				denied(User.Role.KITCHEN_STAFF, Permission.MERGE_INGREDIENTS),
+				denied(User.Role.VOLUNTEER, Permission.MERGE_INGREDIENTS),
+				denied(User.Role.SUPER_ADMIN, Permission.MERGE_INGREDIENTS),
+
 				// Kitchen staff run the roster for nobody, and answer nobody's leave.
 				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_STAFF_SCHEDULE),
 				denied(User.Role.KITCHEN_STAFF, Permission.APPROVE_LEAVE),

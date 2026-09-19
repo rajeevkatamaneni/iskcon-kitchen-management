@@ -58,6 +58,9 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 	private UUID tenant;
 	private UUID khichdi;
 	private UUID payasam;
+	private UUID rice;
+	private UUID salt;
+	private UUID preferredVendor;
 	private final LocalDate day = LocalDate.now(IST).plusDays(1);
 
 	@BeforeEach
@@ -72,11 +75,11 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 		insertUser("uid-staff-a", "staff-a@example.com", "KITCHEN_STAFF");
 		insertUser("uid-vol-a", "vol-a@example.com", "VOLUNTEER");
 
-		UUID rice = ingredient("Rice");
+		rice = ingredient("Rice");
 		UUID dal = ingredient("Toor Dal");
-		UUID salt = ingredient("Rock Salt");
+		salt = ingredient("Rock Salt");
 
-		UUID preferredVendor = vendor("Govind Wholesale");
+		preferredVendor = vendor("Govind Wholesale");
 		UUID otherVendor = vendor("Sri Traders");
 		// Rice: the temple has named who it buys from, so the other vendor's dearer price is ignored.
 		supply(preferredVendor, rice, "45.00", true);
@@ -148,6 +151,81 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.unpriced[0].name").value("Rock Salt"))
 				.andExpect(jsonPath("$.unpriced[0].quantity").value(0.4))
 				.andExpect(jsonPath("$.unpriced[0].unit").value("KG"));
+	}
+
+	// ---- The market-rate fallback (R-ING-3, T-254) --------------------------------------------
+
+	/**
+	 * Rock salt has no vendor, but somebody counted it at the shelf and said it would cost ₹20 a Kg to
+	 * buy today. Khichdi alone is 10 Kg of rice at ₹45 and 4 Kg of dal at ₹120, ₹930; its 400 gm of
+	 * salt adds ₹8, and the salt is no longer "without a price".
+	 */
+	@Test
+	@DisplayName("an ingredient no vendor supplies is costed at its market rate, and is no longer unpriced")
+	void marketRateCostsAnIngredientNoVendorSupplies() throws Exception {
+		marketRate(salt, "20.0000");
+		plan(khichdi, "200", "PLANNED");
+
+		cost().andExpect(status().isOk())
+				.andExpect(jsonPath("$.estimatedTotal").value(938.00))
+				.andExpect(jsonPath("$.ingredientsPriced").value(3))
+				.andExpect(jsonPath("$.ingredientsWithoutPrice").value(0))
+				.andExpect(jsonPath("$.unpriced.length()").value(0));
+	}
+
+	/**
+	 * The market rate is the last resort, not a preference: rice has a preferred vendor at ₹45, and a
+	 * market rate of ₹999 set beside it changes nothing.
+	 */
+	@Test
+	@DisplayName("a vendor's list price still wins over the market rate")
+	void listPriceWinsOverMarketRate() throws Exception {
+		marketRate(rice, "999.0000");
+		plan(khichdi, "200", "PLANNED");
+		plan(payasam, "100", "PLANNED");
+
+		cost().andExpect(jsonPath("$.estimatedTotal").value(1200.00));
+	}
+
+	/**
+	 * The conductor's ruling of 2026-09-19: a ₹0 list price is not a price. Rock salt's preferred
+	 * vendor lists it at ₹0 (V24 allows that, for goods given free), and a market rate of ₹20 is set.
+	 * Before, the zero won the COALESCE and the salt was costed at nothing, silently; now it falls
+	 * through to the market rate.
+	 */
+	@Test
+	@DisplayName("a preferred vendor at ₹0 falls through to the market rate")
+	void zeroPreferredPriceFallsThroughToTheMarketRate() throws Exception {
+		supply(preferredVendor, salt, "0.00", true);
+		marketRate(salt, "20.0000");
+		plan(khichdi, "200", "PLANNED");
+
+		cost().andExpect(jsonPath("$.estimatedTotal").value(938.00))
+				.andExpect(jsonPath("$.ingredientsWithoutPrice").value(0));
+	}
+
+	/** And a ₹0 preferred price with another vendor's real price takes that one: 16 Kg × ₹90 + ₹480. */
+	@Test
+	@DisplayName("a preferred vendor at ₹0 falls through to another vendor's list price")
+	void zeroPreferredPriceFallsThroughToAnyVendor() throws Exception {
+		admin.update("UPDATE vendor_supplies SET last_price = 0 WHERE ingredient_id = ? AND preferred", rice);
+		plan(khichdi, "200", "PLANNED");
+		plan(payasam, "100", "PLANNED");
+
+		cost().andExpect(jsonPath("$.estimatedTotal").value(1920.00));
+	}
+
+	/** Zero everywhere and no market rate: named as unpriced, never costed at ₹0. */
+	@Test
+	@DisplayName("an ingredient whose only list price is ₹0, with no market rate, is still counted as unpriced")
+	void zeroPriceWithNoMarketRateIsStillUnpriced() throws Exception {
+		supply(preferredVendor, salt, "0.00", true);
+		plan(khichdi, "200", "PLANNED");
+
+		// ₹930 is the rice and dal alone; the salt adds nothing, and says so below.
+		cost().andExpect(jsonPath("$.estimatedTotal").value(930.00))
+				.andExpect(jsonPath("$.ingredientsWithoutPrice").value(1))
+				.andExpect(jsonPath("$.unpriced[0].name").value("Rock Salt"));
 	}
 
 	@Test
@@ -479,6 +557,18 @@ class MaterialsCostIT extends AbstractIntegrationTest {
 				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
 				VALUES (?, ?, 'Grains', 'KG') RETURNING id
 				""", UUID.class, tenant, name);
+	}
+
+	/**
+	 * Written straight to the row, as a fixture: what is under test here is how costing reads the
+	 * rate, and {@code MarketRateIT} covers how it is set.
+	 */
+	private void marketRate(UUID ingredientId, String rate) {
+		admin.update("""
+				UPDATE ingredients
+				SET market_rate = ?::numeric, market_rate_on = CURRENT_DATE, market_rate_source = 'MANUAL'
+				WHERE id = ?
+				""", rate, ingredientId);
 	}
 
 	private UUID vendor(String name) {

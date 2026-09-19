@@ -20,6 +20,7 @@ import org.iskcon.kms.auth.RolePermissions;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.IngredientUnits;
+import org.iskcon.kms.ingredient.MarketRateService;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.shift.TenantSettingsService;
 import org.iskcon.kms.tenancy.TempleClock;
@@ -79,12 +80,14 @@ public class InventoryItemService {
 	private final TenantSettingsService tenantSettings;
 	private final CommittedStockService committedStockService;
 	private final IngredientUnits ingredientUnits;
+	private final MarketRateService marketRateService;
 
 	public InventoryItemService(
 			JdbcTemplate jdbc, AuditService auditService, StockMovementService stockMovementService,
 			TenantSettingsService tenantSettings, CommittedStockService committedStockService,
-			TempleClock clock, IngredientUnits ingredientUnits) {
+			TempleClock clock, IngredientUnits ingredientUnits, MarketRateService marketRateService) {
 		this.ingredientUnits = ingredientUnits;
+		this.marketRateService = marketRateService;
 		this.clock = clock;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
@@ -233,6 +236,11 @@ public class InventoryItemService {
 
 	// ---- Item management -------------------------------------------------
 
+	/**
+	 * Starts tracking a consumable, and — when the request carries one — records its opening count in
+	 * the same transaction. Any refusal of the count (a missing value, a unit from the wrong family, a
+	 * count that needs a Temple Admin) rolls back the item too, so nothing is ever left half-added.
+	 */
 	@Transactional
 	public UUID create(AuthenticatedUser actor, CreateInventoryItemRequest request) {
 		// RLS-scoped existence check: the ingredient must be this tenant's. A foreign key alone would
@@ -264,8 +272,55 @@ public class InventoryItemService {
 
 		auditService.record(actor, AuditAction.INVENTORY_ITEM_ADDED, AuditEntityType.INVENTORY_ITEM, id,
 				null, itemSnapshot(ingredientName, request.storageLocation(), request.reorderThreshold()), null);
+
+		// The opening count, in this same transaction (T-294, VERIFY-A defect 5). It goes through
+		// the adjustment's own code rather than a copy of it, so every rule a count on the item page
+		// obeys — the unit's family, no zero count, the value required and above 0 (KMS-400161) and
+		// set as the market rate — is the same rule here, and stays the same when one of them
+		// changes. A self-call does not pass through the transactional proxy, and does not need to:
+		// this method's transaction is already open, so the item, its audit row, the first lot, the
+		// market rate and its history all commit together or not at all. The adjustment reads the
+		// item back with a plain SELECT, which sees the row inserted above because it is the same
+		// transaction.
+		//
+		// The one rule it does not share is the Temple Admin's signature (T-305). Rajeev, on the
+		// Decisions Desk, 2026-09-19 (Q-22): "The first count on a new item isn't an adjustment:
+		// anyone who manages inventory can enter it. Later corrections keep the 20% rule." Before
+		// this, a first count was always "large" — there is nothing on hand to size it against — so
+		// only a Temple Admin could add an item with its stock, and a Kitchen Manager doing a
+		// stock-take of a new store room could not.
+		//
+		// "A new item" is read narrowly, and both halves are checked rather than assumed:
+		//   - the item was created by this very request (it is — the INSERT is a few lines up), and
+		//   - its ingredient has never had a movement of any kind in this temple's ledger.
+		// The second half matters because removing an item keeps its ledger (see delete()): an
+		// ingredient that was tracked, removed and added back is not new, its history is still on the
+		// books, and a count on it is a correction of that history. It goes through the 20% rule
+		// exactly as a count on the item page would. So does a count on an existing item that happens
+		// to be at zero — that is a later correction, and "later corrections keep the 20% rule".
+		//
+		// The movement is still recorded as ADJUSTMENT / COUNT_CORRECTION with the opening-count
+		// note. There is no "opening" reason in AdjustmentReason, and adding one means a migration to
+		// widen the stock_movements CHECK constraint; the note already says what it was, word for
+		// word as before, and the audit row (still written, since the count is sized as large) says
+		// who entered it.
+		if (request.openingCount() != null) {
+			CreateInventoryItemRequest.OpeningCount count = request.openingCount();
+			boolean ingredientNeverHeldStock = !hasAnyMovement(request.ingredientId());
+			adjustStock(actor, id, new AdjustStockRequest(
+					null, count.quantity(), count.unit(), AdjustmentReason.COUNT_CORRECTION,
+					OPENING_COUNT_NOTE, count.pricePerUnit()),
+					ingredientNeverHeldStock);
+		}
 		return id;
 	}
+
+	/**
+	 * The note on an opening count's movement. Word for word what "Add to inventory" wrote when it
+	 * sent the count as a second request, so the ledger reads the same for items added before and
+	 * after the two were joined.
+	 */
+	static final String OPENING_COUNT_NOTE = "Opening count, when the item was added to inventory.";
 
 	@Transactional
 	public void update(AuthenticatedUser actor, UUID itemId, UpdateInventoryItemRequest request) {
@@ -311,9 +366,28 @@ public class InventoryItemService {
 	 * Admin, so a big write-off is a leadership decision, not a floor one; and a large adjustment is
 	 * additionally written to the audit log, since routine small corrections live in the ledger alone
 	 * but an unusual one is exactly what a review looks for.
+	 *
+	 * <p><strong>And an adjustment that adds stock carries its value (R-ING-3).</strong> See
+	 * {@link #requiresStockValue}: any adjustment that adds, whatever its reason, must say what the
+	 * stock would cost to buy today, and that figure becomes the ingredient's market rate in the
+	 * same transaction as the movement — a count that was refused leaves no rate behind, and a rate
+	 * is never set by a count that did not happen.
 	 */
 	@Transactional
 	public UUID adjust(AuthenticatedUser actor, UUID itemId, AdjustStockRequest request) {
+		// Every adjustment that arrives from outside this class is a later correction, whatever the
+		// item holds — including an existing item at zero — so the 20% rule always applies here.
+		return adjustStock(actor, itemId, request, false);
+	}
+
+	/**
+	 * The adjustment itself. {@code firstCountOfNewItem} is true only when {@link #create} passes it
+	 * for an item it has just inserted whose ingredient has no ledger history at all; it lifts the
+	 * Temple Admin's signature on a large adjustment and nothing else (Rajeev, 2026-09-19 — see
+	 * {@link #create}). It is private so that no request can claim it.
+	 */
+	private UUID adjustStock(AuthenticatedUser actor, UUID itemId, AdjustStockRequest request,
+			boolean firstCountOfNewItem) {
 		ItemRow item = jdbc.query(ITEM_SELECT + " WHERE ii.id = ?", ITEM_MAPPER, itemId)
 				.stream().findFirst().orElseThrow(() -> notFound(itemId));
 		Unit canonical = Unit.valueOf(item.canonicalUnit());
@@ -342,6 +416,17 @@ public class InventoryItemService {
 		}
 		UUID batchId = opening ? UUID.randomUUID() : request.batchId();
 
+		// Asked with the other checks on what was typed, before anything about the current stock:
+		// "enter the value" is a correction to this form, and should not arrive after "that needs an
+		// admin" has already sent someone off to find one.
+		BigDecimal stockValue = null;
+		if (requiresStockValue(request)) {
+			stockValue = MarketRateService.normalise(request.pricePerUnit());
+			if (stockValue == null) {
+				throw new ApplicationException(ErrorCode.STOCK_VALUE_REQUIRED, Map.of("field", "pricePerUnit"));
+			}
+		}
+
 		BigDecimal batchBase = opening
 				? BigDecimal.ZERO : batchStockBase(item.ingredientId(), request.batchId());
 		if (batchBase == null) {
@@ -356,8 +441,10 @@ public class InventoryItemService {
 					"unit", canonical.name()));
 		}
 
+		// Still sized for a first count, so that it is still written to the audit log below: who
+		// entered a new item's opening stock is worth a record even though no admin signs it.
 		boolean large = isLargeAdjustment(deltaBase, onHandBase(item.ingredientId()));
-		if (large && !RolePermissions.has(actor.getRole(), Permission.APPROVE_LARGE_STOCK_ADJUSTMENT)) {
+		if (large && !firstCountOfNewItem && !RolePermissions.has(actor.getRole(), Permission.APPROVE_LARGE_STOCK_ADJUSTMENT)) {
 			throw new ApplicationException(ErrorCode.ADJUSTMENT_REQUIRES_ADMIN, Map.of("inventoryItemId", itemId));
 		}
 
@@ -365,6 +452,10 @@ public class InventoryItemService {
 				item.ingredientId(), item.storageLocation(), batchId,
 				request.quantity(), unit, MovementType.ADJUSTMENT,
 				null, null, request.reason(), null, null, trimToNull(request.note())));
+
+		if (stockValue != null) {
+			marketRateService.set(actor, item.ingredientId(), stockValue, MarketRateService.Source.STOCK_TAKE);
+		}
 
 		if (large) {
 			Map<String, Object> before = new LinkedHashMap<>();
@@ -383,6 +474,29 @@ public class InventoryItemService {
 					before, after, trimToNull(request.note()));
 		}
 		return movementId;
+	}
+
+	/**
+	 * Whether this adjustment is a person adding stock, which must say what it is worth (R-ING-3:
+	 * "Add to inventory ... and any count correction that <em>adds</em> stock gain a required box ...
+	 * It can't be blank or 0").
+	 *
+	 * <p><strong>Any adjustment a person makes that adds stock, whatever its reason</strong> (the
+	 * conductor's rulings, 2026-09-19). The document names "Add to inventory" and count corrections;
+	 * the conductor first ruled that a count correction on an existing batch is included, then that a
+	 * positive SPOILAGE, DAMAGE, WASTE or OTHER adjustment is too. The rule is about stock arriving on
+	 * the books with no price, not about the label on the request: §13.1 asks that no path a person
+	 * uses can add stock without a value, and a reason is only a word chosen from a dropdown. So the
+	 * test is the sign alone. An opening count (a null batch) is always positive — a negative one is
+	 * refused above — so it needs no case of its own.
+	 *
+	 * <p>Not here, deliberately: the automatic reversal {@code StockMovementService.compensate} writes
+	 * (a meal or issue correction giving back what it drew). It goes straight to the ledger without
+	 * passing through this method, puts back stock that was already counted, and has nobody at a form
+	 * to ask (the conductor's ruling, same day).
+	 */
+	private static boolean requiresStockValue(AdjustStockRequest request) {
+		return request.quantity().signum() > 0;
 	}
 
 	// ---------------------------------------------------------------------
@@ -427,6 +541,14 @@ public class InventoryItemService {
 				FROM stock_movements WHERE ingredient_id = ?
 				""", BigDecimal.class, ingredientId);
 		return value == null ? BigDecimal.ZERO : value;
+	}
+
+	/** Whether this ingredient has any row at all in the ledger — stock now, or stock once. */
+	private boolean hasAnyMovement(UUID ingredientId) {
+		Boolean any = jdbc.queryForObject(
+				"SELECT EXISTS (SELECT 1 FROM stock_movements WHERE ingredient_id = ?)",
+				Boolean.class, ingredientId);
+		return Boolean.TRUE.equals(any);
 	}
 
 	private boolean isLargeAdjustment(BigDecimal deltaBase, BigDecimal onHandBase) {

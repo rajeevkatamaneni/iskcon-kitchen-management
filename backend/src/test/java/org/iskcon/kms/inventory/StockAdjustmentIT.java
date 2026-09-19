@@ -13,6 +13,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
@@ -63,6 +65,9 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM audit_events");
+		// A count that adds stock now sets the market rate, and its append-only history holds the
+		// ingredient down.
+		admin.execute("DELETE FROM ingredient_market_rate_history");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
@@ -123,7 +128,8 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 						.header("Authorization", "Bearer valid-token")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"batchId":null,"quantity":40,"unit":"PIECES","reason":"COUNT_CORRECTION"}
+								{"batchId":null,"quantity":40,"unit":"PIECES","reason":"COUNT_CORRECTION",
+								 "pricePerUnit":25}
 								"""))
 				.andExpect(status().isCreated());
 
@@ -148,8 +154,139 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a small correction upward adds to the batch")
 	void smallCorrectionUpward() throws Exception {
-		mvc.perform(adjust(batch, "2", "KG", "COUNT_CORRECTION", null)).andExpect(status().isCreated());
+		mvc.perform(adjust(batch, "2", "KG", "COUNT_CORRECTION", null, "110"))
+				.andExpect(status().isCreated());
 		assertThat(batchStock()).isEqualByComparingTo("102");
+	}
+
+	// ---- What it would cost to buy today (R-ING-3, T-254) ---------------------------------------
+
+	@Test
+	@DisplayName("an opening count with no value is refused with KMS-400161, and writes nothing")
+	void openingCountNeedsAValue() throws Exception {
+		signIn("uid-admin-a"); // admin, so the large-approval gate isn't what stops it
+		mvc.perform(adjust(null, "40", "KG", "COUNT_CORRECTION", null))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400161"));
+		assertThat(movementCount()).as("only the seeded receipt").isEqualTo(1);
+		assertThat(marketRate()).isNull();
+		assertThat(historyCount()).isZero();
+	}
+
+	/**
+	 * "It can't be blank or 0" — and a negative is no more a price than zero is. A rate so small it
+	 * rounds to nothing at the column's four places is zero too.
+	 */
+	@Test
+	@DisplayName("an opening count valued at 0, below 0 or at a rounding-to-nothing figure is refused")
+	void openingCountValueCannotBeZero() throws Exception {
+		signIn("uid-admin-a");
+		for (String price : new String[] {"0", "-5", "0.00001"}) {
+			mvc.perform(adjust(null, "40", "KG", "COUNT_CORRECTION", null, price))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("KMS-400161"));
+		}
+		assertThat(movementCount()).isEqualTo(1);
+		assertThat(marketRate()).isNull();
+	}
+
+	/**
+	 * The opening count's value becomes the market rate, as a STOCK_TAKE, with one history row naming
+	 * who set it. Typed per canonical unit (₹ per Kg) even when the count itself is in grams: the box
+	 * is "₹ per Kg", and the count's unit says nothing about the price's.
+	 */
+	@Test
+	@DisplayName("an opening count's value sets the market rate, per stock unit, with its history")
+	void openingCountSetsTheMarketRate() throws Exception {
+		signIn("uid-admin-a");
+		mvc.perform(adjust(null, "40000", "GM", "COUNT_CORRECTION", null, "118.5"))
+				.andExpect(status().isCreated());
+
+		assertThat(marketRate()).isEqualByComparingTo("118.5");
+		assertThat(admin.queryForObject(
+				"SELECT market_rate_source FROM ingredients WHERE id = ?", String.class, ingredientId))
+				.isEqualTo("STOCK_TAKE");
+		assertThat(historyCount()).isEqualTo(1);
+		assertThat(admin.queryForMap("""
+				SELECT h.rate, h.source, h.tenant_id, u.firebase_uid
+				FROM ingredient_market_rate_history h JOIN users u ON u.id = h.set_by
+				WHERE h.ingredient_id = ?
+				""", ingredientId))
+				.containsEntry("source", "STOCK_TAKE")
+				.containsEntry("tenant_id", templeA)
+				.containsEntry("firebase_uid", "uid-admin-a");
+	}
+
+	/**
+	 * The conductor's ruling (2026-09-19): a person correcting an existing batch upwards is adding
+	 * stock by a count too, so the value is required there as well.
+	 */
+	@Test
+	@DisplayName("a count correction that adds to an existing batch needs a value too")
+	void correctionUpwardNeedsAValue() throws Exception {
+		mvc.perform(adjust(batch, "2", "KG", "COUNT_CORRECTION", null))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400161"));
+		assertThat(batchStock()).isEqualByComparingTo("100");
+
+		mvc.perform(adjust(batch, "2", "KG", "COUNT_CORRECTION", null, "110"))
+				.andExpect(status().isCreated());
+		assertThat(marketRate()).isEqualByComparingTo("110");
+	}
+
+	/**
+	 * The conductor's second ruling (2026-09-19): a person adding stock is asked its value whatever
+	 * reason they pick. The reason is a word from a dropdown; the rule is about stock arriving on the
+	 * books without a price. One run per reason: +2 Kg on the 100 Kg batch (small, so kitchen staff
+	 * may make it), refused without a value and nothing written, then saved with one, which becomes
+	 * the market rate as a STOCK_TAKE.
+	 */
+	@ParameterizedTest(name = "{0}")
+	@EnumSource(AdjustmentReason.class)
+	@DisplayName("a positive adjustment for any reason needs a value, and saving it sets the market rate")
+	void everyPositiveReasonNeedsAValue(AdjustmentReason reason) throws Exception {
+		String note = reason == AdjustmentReason.OTHER ? "Found a sack behind the dal" : null;
+
+		mvc.perform(adjust(batch, "2", "KG", reason.name(), note))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("KMS-400161"));
+		assertThat(batchStock()).as("nothing was written on the refusal").isEqualByComparingTo("100");
+		assertThat(marketRate()).isNull();
+
+		mvc.perform(adjust(batch, "2", "KG", reason.name(), note, "112"))
+				.andExpect(status().isCreated());
+		assertThat(batchStock()).isEqualByComparingTo("102");
+		assertThat(marketRate()).isEqualByComparingTo("112");
+		assertThat(admin.queryForObject(
+				"SELECT market_rate_source FROM ingredients WHERE id = ?", String.class, ingredientId))
+				.isEqualTo("STOCK_TAKE");
+		assertThat(historyCount()).isEqualTo(1);
+	}
+
+	/** Taking stock away asks nothing about its value: nothing is arriving on the books. */
+	@Test
+	@DisplayName("a correction downward and a write-off need no value, and leave the market rate alone")
+	void takingStockAwayNeedsNoValue() throws Exception {
+		mvc.perform(adjust(batch, "-2", "KG", "COUNT_CORRECTION", null)).andExpect(status().isCreated());
+		mvc.perform(adjust(batch, "-1", "KG", "SPOILAGE", null)).andExpect(status().isCreated());
+		assertThat(batchStock()).isEqualByComparingTo("97");
+		assertThat(marketRate()).isNull();
+		assertThat(historyCount()).isZero();
+	}
+
+	/**
+	 * A count that is refused sets no rate, even with a good value on it: the rate is written only
+	 * after the movement, in the same transaction. Here kitchen staff try an opening count, which is
+	 * always a large adjustment and needs an admin.
+	 */
+	@Test
+	@DisplayName("a count refused for another reason sets no market rate")
+	void refusedCountSetsNoRate() throws Exception {
+		mvc.perform(adjust(null, "40", "KG", "COUNT_CORRECTION", null, "118"))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("KMS-400025"));
+		assertThat(marketRate()).isNull();
+		assertThat(historyCount()).isZero();
 	}
 
 	@Test
@@ -184,6 +321,11 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 
 	private MockHttpServletRequestBuilder adjust(
 			UUID batchId, String qty, String unit, String reason, String note) {
+		return adjust(batchId, qty, unit, reason, note, null);
+	}
+
+	private MockHttpServletRequestBuilder adjust(
+			UUID batchId, String qty, String unit, String reason, String note, String pricePerUnit) {
 		StringBuilder json = new StringBuilder("{")
 				.append(batchId == null
 						? "\"batchId\":null,"
@@ -193,6 +335,9 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 				.append("\"reason\":\"").append(reason).append("\"");
 		if (note != null) {
 			json.append(",\"note\":\"").append(note).append("\"");
+		}
+		if (pricePerUnit != null) {
+			json.append(",\"pricePerUnit\":").append(pricePerUnit);
 		}
 		json.append("}");
 		return post("/api/v1/inventory/items/{id}/adjustments", itemId)
@@ -205,6 +350,24 @@ class StockAdjustmentIT extends AbstractIntegrationTest {
 		return admin.queryForObject(
 				"SELECT COALESCE(SUM(quantity), 0) FROM stock_movements WHERE batch_id = ?",
 				BigDecimal.class, batch);
+	}
+
+	private BigDecimal marketRate() {
+		return admin.queryForObject(
+				"SELECT market_rate FROM ingredients WHERE id = ?", BigDecimal.class, ingredientId);
+	}
+
+	private int historyCount() {
+		Integer c = admin.queryForObject(
+				"SELECT count(*) FROM ingredient_market_rate_history WHERE ingredient_id = ?",
+				Integer.class, ingredientId);
+		return c == null ? 0 : c;
+	}
+
+	private int movementCount() {
+		Integer c = admin.queryForObject(
+				"SELECT count(*) FROM stock_movements WHERE ingredient_id = ?", Integer.class, ingredientId);
+		return c == null ? 0 : c;
 	}
 
 	private void seedReceipt(UUID batchId, String qty) {

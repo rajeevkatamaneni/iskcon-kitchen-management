@@ -104,6 +104,58 @@ class RecipeTranslationIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a line's preparation note is translated with its name, glossary first, and cached (R-DUP-1)")
+	void thePreparationNoteIsTranslated() throws Exception {
+		admin.update("""
+				UPDATE recipe_ingredients SET preparation_note = 'soaked'
+				WHERE recipe_id = ? AND line_order = 1
+				""", recipe);
+
+		mvc.perform(authed(get("/api/v1/recipes/{id}/translations/kn", recipe)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ingredients[0].name").value("[kn] Rice"))
+				// No note stays no note: nothing is sent for translation and nothing comes back.
+				.andExpect(jsonPath("$.ingredients[0].preparationNote").value(org.hamcrest.Matchers.nullValue()))
+				.andExpect(jsonPath("$.ingredients[1].name").value("[kn] Toor Dal"))
+				.andExpect(jsonPath("$.ingredients[1].preparationNote").value("[kn] soaked"));
+		assertThat(translationRows("kn")).isEqualTo(1);
+
+		// A glossary entry for the note wins over MT, as it does for a name. A new version, so the
+		// cached translation above is not simply served again.
+		mvc.perform(authed(post("/api/v1/translation-glossary"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"language\":\"kn\",\"sourceTerm\":\"soaked\",\"targetTerm\":\"ನೆನೆಸಿದ\"}"))
+				.andExpect(status().isCreated());
+		admin.update("UPDATE recipes SET version = version + 1 WHERE id = ?", recipe);
+
+		mvc.perform(authed(get("/api/v1/recipes/{id}/translations/kn", recipe)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ingredients[1].preparationNote").value("ನೆನೆಸಿದ"));
+	}
+
+	@Test
+	@DisplayName("a translation cached before notes existed still shows the note, in English, rather than losing it")
+	void anOlderCachedTranslationKeepsTheNote() throws Exception {
+		admin.update("""
+				UPDATE recipe_ingredients SET preparation_note = 'soaked'
+				WHERE recipe_id = ? AND line_order = 1
+				""", recipe);
+		// What was cached before this change: no preparationNotes key at all.
+		admin.update("""
+				INSERT INTO recipe_translations (tenant_id, recipe_id, recipe_version, language, content, provider)
+				VALUES (?, ?, (SELECT version FROM recipes WHERE id = ?), 'hi', CAST(? AS jsonb), 'stub')
+				""", temple, recipe, recipe,
+				"{\"name\":\"[hi] Khichdi\",\"categoryName\":\"[hi] Rice\","
+						+ "\"ingredientNames\":[\"[hi] Rice\",\"[hi] Toor Dal\"],"
+						+ "\"method\":[],\"provider\":\"stub\"}");
+
+		mvc.perform(authed(get("/api/v1/recipes/{id}/translations/hi", recipe)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ingredients[1].name").value("[hi] Toor Dal"))
+				.andExpect(jsonPath("$.ingredients[1].preparationNote").value("soaked"));
+	}
+
+	@Test
 	@DisplayName("a glossary override beats machine translation for a term")
 	void glossaryOverrideBeatsMt() throws Exception {
 		mvc.perform(authed(post("/api/v1/translation-glossary"))

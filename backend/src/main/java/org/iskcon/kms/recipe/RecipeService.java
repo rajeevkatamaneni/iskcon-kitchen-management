@@ -112,7 +112,8 @@ public class RecipeService {
 				.orElseThrow(() -> notFound(id));
 
 		List<RecipeIngredientView> lines = jdbc.query("""
-				SELECT ri.ingredient_id, i.name AS ingredient_name, ri.quantity, ri.unit
+				SELECT ri.ingredient_id, i.name AS ingredient_name, ri.quantity, ri.unit,
+					   ri.preparation_note
 				FROM recipe_ingredients ri
 				JOIN ingredients i ON i.id = ri.ingredient_id
 				WHERE ri.recipe_id = ?
@@ -197,7 +198,7 @@ public class RecipeService {
 			List<ScaledLine> scaled = new ArrayList<>();
 			for (RecipeIngredientView line : recipe.ingredients()) {
 				ScaledQuantity q = RecipeScaler.scale(line.quantity(), Unit.valueOf(line.unit()), ratio);
-				scaled.add(new ScaledLine(line.ingredientId(), line.ingredientName(),
+				scaled.add(new ScaledLine(line.ingredientId(), line.ingredientName(), line.preparationNote(),
 						q.rawQuantity(), q.rawUnit(), q.displayQuantity(), q.displayUnit()));
 			}
 
@@ -389,7 +390,8 @@ public class RecipeService {
 		// recipe states them — the order get() returns them in, and the order a job card prints.
 		jdbc.query(connection -> {
 			var ps = connection.prepareStatement("""
-					SELECT ri.recipe_id, ri.ingredient_id, i.name AS ingredient_name, ri.quantity, ri.unit
+					SELECT ri.recipe_id, ri.ingredient_id, i.name AS ingredient_name, ri.quantity, ri.unit,
+						   ri.preparation_note
 					FROM recipe_ingredients ri
 					JOIN ingredients i ON i.id = ri.ingredient_id
 					WHERE ri.recipe_id = ANY(?)
@@ -434,11 +436,15 @@ public class RecipeService {
 		int order = 0;
 		for (RecipeIngredientLine line : lines) {
 			jdbc.update("""
-					INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
-					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?)
+					INSERT INTO recipe_ingredients (
+						tenant_id, recipe_id, ingredient_id, quantity, unit, line_order, preparation_note)
+					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?)
 					""",
 					recipeId, line.ingredientId(), line.quantity(),
-					Unit.valueOf(line.unit()).name(), order++);
+					Unit.valueOf(line.unit()).name(), order++,
+					// Blank is saved as null: a box left empty is "no note", and the column refuses
+					// whitespace (V144) rather than store a note that says nothing.
+					line.storedPreparationNote());
 		}
 	}
 
@@ -618,5 +624,6 @@ public class RecipeService {
 			rs.getObject("ingredient_id", UUID.class),
 			rs.getString("ingredient_name"),
 			rs.getBigDecimal("quantity"),
-			rs.getString("unit"));
+			rs.getString("unit"),
+			rs.getString("preparation_note"));
 }

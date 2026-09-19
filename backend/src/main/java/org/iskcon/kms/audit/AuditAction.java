@@ -86,6 +86,13 @@ public enum AuditAction {
 	INGREDIENT_DELETED,
 
 	/**
+	 * Duplicate ingredients were merged into one (R-DUP-3): every record that named them now names
+	 * the kept ingredient, and their names became its aliases. Recorded on the kept ingredient, with
+	 * the merged-away ingredients and what moved read back from the rows. Reserved for T-270.
+	 */
+	INGREDIENT_MERGED,
+
+	/**
 	 * An ingredient's Ekadashi-prohibited flag was set or cleared (E4-S6) — a religious-compliance
 	 * decision, so it is recorded with who made it and the before/after.
 	 *

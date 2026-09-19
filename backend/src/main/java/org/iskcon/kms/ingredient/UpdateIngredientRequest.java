@@ -62,5 +62,15 @@ public record UpdateIngredientRequest(
 		 */
 		Boolean ekadashiProhibited,
 
-		List<@Size(max = 200, message = "That alias is too long.") String> aliases) {
+		List<@Size(max = 200, message = "That alias is too long.") String> aliases,
+
+		/**
+		 * The person was shown "Did you mean Curd?" and confirmed this is a different ingredient
+		 * (R-DUP-2, T-251). {@code true} lets a save through the lookalike check and puts the override
+		 * on the audit trail with the name it looked like; absent or {@code false} means the check
+		 * applies. Boxed so an old client that never sends the key is simply checked. It never
+		 * overrides the literal same-name refusal, which the database would refuse anyway — see
+		 * {@code IngredientService.guardAgainstLookalike}.
+		 */
+		Boolean confirmDifferent) {
 }

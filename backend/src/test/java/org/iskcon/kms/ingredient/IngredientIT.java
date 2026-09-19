@@ -78,6 +78,45 @@ class IngredientIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("the list carries each ingredient's pack sizes, smallest first, and its market rate (T-253)")
+	void listCarriesPackSizesAndMarketRate() throws Exception {
+		UUID rice = createIngredientAsAdmin("Rice", "Grains", "KG");
+		UUID salt = createIngredientAsAdmin("Salt", "Spices", "KG");
+		// Written by the database directly: the market rate is T-254's to set, and the pack
+		// endpoints have their own IT. This checks the read side only — that the LIST returns them.
+		admin.update("""
+				UPDATE ingredients SET market_rate = 60.5, market_rate_on = DATE '2026-09-12',
+						market_rate_source = 'STOCK_TAKE' WHERE id = ?
+				""", rice);
+		admin.update("""
+				INSERT INTO ingredient_pack_sizes (tenant_id, ingredient_id, name, quantity, unit)
+				VALUES (?, ?, 'Bag', 25, 'KG'), (?, ?, NULL, 500, 'GM')
+				""", templeA, rice, templeA, rice);
+
+		mvc.perform(authed(get("/api/v1/ingredients")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[?(@.name=='Rice')].marketRate").value(60.5))
+				.andExpect(jsonPath("$[?(@.name=='Rice')].marketRateOn").value("2026-09-12"))
+				.andExpect(jsonPath("$[?(@.name=='Rice')].marketRateSource").value("STOCK_TAKE"))
+				.andExpect(jsonPath("$[?(@.name=='Rice')].packSizes[0].label").value("500 gm"))
+				.andExpect(jsonPath("$[?(@.name=='Rice')].packSizes[0].baseQuantity").value(0.5))
+				.andExpect(jsonPath("$[?(@.name=='Rice')].packSizes[1].label").value("Bag = 25 Kg"))
+				// An ingredient with neither says so with an empty list and nulls, never a missing key.
+				.andExpect(jsonPath("$[?(@.name=='Salt')].packSizes[0]").isEmpty())
+				.andExpect(jsonPath("$[?(@.name=='Salt')].marketRate").value((Object) null))
+				.andExpect(jsonPath("$[?(@.name=='Salt')].marketRateOn").value((Object) null))
+				.andExpect(jsonPath("$[?(@.name=='Salt')].marketRateSource").value((Object) null));
+
+		// And the detail says the same.
+		mvc.perform(authed(get("/api/v1/ingredients/{id}", rice)))
+				.andExpect(jsonPath("$.marketRate").value(60.5))
+				.andExpect(jsonPath("$.packSizes.length()").value(2));
+		mvc.perform(authed(get("/api/v1/ingredients/{id}", salt)))
+				.andExpect(jsonPath("$.packSizes").isArray())
+				.andExpect(jsonPath("$.packSizes.length()").value(0));
+	}
+
+	@Test
 	@DisplayName("kitchen staff may add an ordinary ingredient but not mark one prohibited")
 	void staffCannotMarkProhibited() throws Exception {
 		// Until 2026-09-08 this was written against the sattvic flag, which D-18 deleted. The rule it
