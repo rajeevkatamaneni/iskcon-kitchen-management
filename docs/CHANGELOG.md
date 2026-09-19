@@ -4444,6 +4444,33 @@ The mock page `app/dev-buttons/` was deleted.
 
 ---
 
+## DESIGN_SYSTEM v1.14 — 2026-09-19
+
+**One written exception to the colour rule, and the layout rules read by their logic** (§2, §5).
+Rajeev's answers on the Decisions Desk, 2026-09-19 (questions Q-4 and Q-18), are the sign-off.
+
+**Price-trend arrows** (§2). Q-4 asked whether a vendor's list price may show a red up arrow when
+it rose and a green down arrow when it fell (procurement requirement R-VEN-3), against the rule that
+green means only the success of the reader's own action. His answer: *"Yes, red up and green down,
+written into the design system"*. §2 now names it as the one exception: price trends only, a dash
+when the price did not change, nothing when there is no earlier price, and the arrow's shape and
+spoken name always carry the direction as well as its colour. The arrows were already built this way
+(`frontend/components/PriceTrend.tsx`); this writes the exception down.
+
+**Layout rules state intent** (§5). Q-18 asked what to do where the table rule cannot be met
+literally. His answer, as the conductor relayed it: the table rule is *"a guideline to think smart,
+NOT a rule set in stone… be faithful to the logic… if it is not possible exactly, stay as close to it
+as possible, pick the lesser of the evils and build it the best way possible… change [the rule] and
+mention it is the logic that is to be taken, not the literal rule word for word."* §5 opens with that
+sentence for the whole section, *Tables* included: readable, nothing hidden, no dead space, and the
+closest result when the letter can't be met. The quotation is the conductor's relay of his Desk
+answer, not a transcript.
+
+**Nothing else in the file changed** — the status line, §2 and §5 only. Snapshot in
+`docs/versions/DESIGN_SYSTEM_v1.14.md`.
+
+---
+
 ## Versioning convention
 
 - Version bumps to a **locked** document require the user's explicit approval, per the Ten Commandments (never silently edit an approved decision).
