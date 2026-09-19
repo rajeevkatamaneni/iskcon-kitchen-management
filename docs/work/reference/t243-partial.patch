@@ -1,0 +1,133 @@
+diff --git a/backend/src/main/java/org/iskcon/kms/shoppinglist/ShoppingListService.java b/backend/src/main/java/org/iskcon/kms/shoppinglist/ShoppingListService.java
+index 101f700..740a276 100644
+--- a/backend/src/main/java/org/iskcon/kms/shoppinglist/ShoppingListService.java
++++ b/backend/src/main/java/org/iskcon/kms/shoppinglist/ShoppingListService.java
+@@ -1,7 +1,6 @@
+ package org.iskcon.kms.shoppinglist;
+ 
+ import java.math.BigDecimal;
+-import java.math.RoundingMode;
+ import java.time.Instant;
+ import java.time.LocalDate;
+ import java.time.ZoneId;
+@@ -54,7 +53,7 @@ import org.springframework.transaction.annotation.Transactional;
+  * <p>Three demand streams merge per ingredient: the meal-plan shortfall (E4-S5), stock below its
+  * reorder level topped up to that level × a safety factor (E3-S3), and the balance a vendor never
+  * brought on an order somebody has since closed (E5-S6, moved to the close by D-26). The largest of
+- * the three wins, rounded up to a whole purchase unit.
++ * the three wins, rounded up to an amount a vendor sells ({@link BuyingAmount}, T-243).
+  *
+  * <p>Against that, D-24a and D-26: <strong>an ingredient covered by a live purchase order — draft,
+  * sent, or part-delivered with a balance still owed — is not suggested at all.</strong> Rajeev's reason for choosing creation over sending as the moment
+@@ -374,8 +373,14 @@ public class ShoppingListService {
+ 				continue;
+ 			}
+ 			Contribution c = e.getValue();
+-			BigDecimal qty = c.shortfall.max(c.thresholdTopUp).max(c.poOutstanding)
+-					.setScale(0, RoundingMode.CEILING);
++			// T-243. What is needed, taken UP to an amount a vendor sells — 2792 gm of curry leaves
++			// is asked for as 3 Kg. This replaced a plain round-up to a whole stored unit, which did
++			// nothing at all for an ingredient kept in grams and so put "2792 gm" in front of a
++			// vegetable merchant. The steps are in BuyingAmount and nowhere else. Only the computed
++			// figure goes through here: a quantity somebody typed is a Decision and is used as typed
++			// in list() below, never re-rounded.
++			BigDecimal qty = BuyingAmount.of(
++					c.shortfall.max(c.thresholdTopUp).max(c.poOutstanding), ref.unit(), List.of());
+ 
+ 			// T-130. `needed_by` is the date the temple wants the goods on the shelf, and it is the
+ 			// day of the earliest planned meal that demands them — not two days before it. The two
+diff --git a/frontend/app/shopping-list/page.tsx b/frontend/app/shopping-list/page.tsx
+index bfef3c9..6de1c0c 100644
+--- a/frontend/app/shopping-list/page.tsx
++++ b/frontend/app/shopping-list/page.tsx
+@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context";
+ import { useAuthedQuery } from "@/lib/use-authed-query";
+ import { cooksQuantity, dateWithYear, todayIso, unitLabel } from "@/lib/format";
+ import { Badge } from "@/components/ds/Badge";
++import { Button } from "@/components/ds/Button";
+ import { Loading } from "@/components/Loading";
+ import { HintedField } from "@/components/ds/InfoHint";
+ import { InlineNotice } from "@/components/ds/InlineNotice";
+@@ -381,16 +382,7 @@ function VendorTile({
+                 {/* A quantity and its unit are one reading — "55 Kg", never a 55 with a Kg
+                     somewhere under it — so the cell refuses to break between them. */}
+                 <td className={TD_FIXED_NUM} data-label="Order">
+-                  <input
+-                    type="number" min="0" step="any" defaultValue={l.suggestedQty} disabled={busy}
+-                    aria-label={`Quantity for ${l.ingredientName}`}
+-                    onBlur={(e) => { const n = Number(e.target.value); if (n !== l.suggestedQty) onQuantity(l, n); }}
+-                    className="min-w-16 rounded-control border border-hairline px-2 py-1 tabular-nums"
+-                  />{" "}
+-                  {/* The bare label, never a promoted one: the box beside it holds and submits
+-                      the ingredient's own stored unit, so calling it "gm" beside a figure in
+-                      kilograms would invite a thousandfold error. */}
+-                  <span className="text-xs text-ink-muted">{unitLabel(l.unit)}</span>
++                  <SuggestedBox line={l} busy={busy} onQuantity={onQuantity} />
+                 </td>
+                 {/* Written the way the rest of the application writes a date, and kept whole:
+                     "2026-09-" on one line and "01" on the next is not a date. */}
+@@ -660,14 +652,9 @@ function AddLine({
+           </span>
+         </label>
+ 
+-        <button
+-          type="button"
+-          disabled={busy || !ready}
+-          onClick={add}
+-          className="min-h-touch rounded-control border border-hairline px-4 transition-colors duration-state hover:bg-sunken disabled:opacity-60"
+-        >
++        <Button variant="secondary" disabled={busy || !ready} onClick={add}>
+           Add to list
+-        </button>
++        </Button>
+       </div>
+     </section>
+   );
+diff --git a/frontend/lib/format.ts b/frontend/lib/format.ts
+index 9f1fc4f..bcd9e9a 100644
+--- a/frontend/lib/format.ts
++++ b/frontend/lib/format.ts
+@@ -311,6 +311,43 @@ export function convertQuantity(value: number, from: string | null | undefined,
+   return (value * BASE_FACTOR[a]) / BASE_FACTOR[b];
+ }
+ 
++/**
++ * A quantity as a box should show it for typing into: the figure and the unit it is in, promoted to
++ * the family's large unit from 1,000 up — 3000 gm is `{ value: 3, unit: "KG" }`, 450 gm stays
++ * `{ value: 450, unit: "GM" }` (T-243).
++ *
++ * <p>Rajeev, 2026-09-19, of the shopping list's order box reading "2792 gm": unreadable. The box
++ * used to hold the stored unit on purpose, and its comment said why — a readout that said "gm"
++ * over a figure in kilograms would invite a thousandfold error. That hazard is real and this keeps
++ * clear of it the only safe way: the unit printed beside the box is the one returned here, always,
++ * and {@link fromEntry} reads what was typed in that same unit. The box and its label cannot
++ * disagree because they are one answer.
++ *
++ * <p>The same threshold as {@link quantity}, and zero stays in its own unit for the same reason.
++ * The figure is exact — no rounding — because it is a value somebody may submit unchanged; the
++ * toFixed only clears float dust (2.5 × 1000 is exact; 0.3 × 1000 is not quite).
++ */
++export function entryQuantity(value: number, unit: string): { value: number; unit: string } {
++  const code = (unit ?? "").toUpperCase();
++  const family = FAMILY[code];
++  if (!family || !Number.isFinite(value)) return { value, unit: code };
++  const inBase = value * BASE_FACTOR[code];
++  const shown = inBase === 0 ? code : Math.abs(inBase) >= 1000 ? family.large : family.small;
++  return { value: Number((inBase / BASE_FACTOR[shown]).toFixed(6)), unit: shown };
++}
++
++/**
++ * What somebody typed into a box labelled `shownUnit`, back in the unit it is stored in — 3 typed
++ * beside "Kg" on a line kept in grams is 3000 (T-243). The inverse of {@link entryQuantity}.
++ *
++ * <p>Two units that do not convert (which a box built from entryQuantity cannot produce) leave the
++ * figure as typed rather than inventing a factor.
++ */
++export function fromEntry(typed: number, shownUnit: string, storedUnit: string): number {
++  const converted = convertQuantity(typed, shownUnit, storedUnit);
++  return converted == null ? typed : Number(converted.toFixed(6));
++}
++
+ /**
+  * A quantity rounded the way a person rounds it — to a step that grows with the size of the number.
+  *

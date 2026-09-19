@@ -1233,6 +1233,36 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-19 — Procurement rebuilt end to end, events repeat as a series, and a permission is checked before a request is read (tasks T-242 to T-343)
+
+**Migrations V144 to V149**; the next free is V150. **Error codes KMS-400156 to KMS-400179**; the next
+free is KMS-400180. New permissions **RECEIVE_DELIVERIES** (Kitchen Staff hold it, Rajeev's Desk answer
+Q-1) and **MERGE_INGREDIENTS**; new audit action **INGREDIENT_MERGED**. The binding spec is
+`docs/work/PROCUREMENT-REQUIREMENTS.md`, and the ledger with every Desk answer is
+`docs/work/PROCUREMENT-PROGRESS.md`. **Committed, not deployed, and not seen working by Rajeev.**
+
+**What changes for the kitchen.** An ingredient that looks like an existing one is questioned before
+it is created, and a merge screen folds existing duplicates together. Each ingredient has its own page
+with pack sizes, a market rate and its vendors' prices. A vendor sells in a pack at a price per pack,
+with a trend arrow beside it. The shopping list suggests amounts a vendor can sell, in steps or whole
+packs. A purchase order line can be a pack. Deliveries have their own screen and carry no prices.
+Invoices are entered with their lines, the deliveries they bill, their totals and a copy of the bill,
+and are paid from their own page with proof. The old Payments page (/money) redirects to the unpaid
+invoices.
+
+**Events** repeat once every 1 to 12 weeks until a date, as a series. Cancelling asks *just this
+event* or *this and all later ones* (E4-S15 D8b, recorded under `docs/stories/` above).
+
+**Everywhere.** A request without the endpoint's permission is refused with a 403 before its body or
+path is checked (T-301). Tables share one column fitter, and amounts, rates and dates share one set of
+formatters on screens and documents alike ("12 Sept", Indian digit grouping).
+
+**Not done:** Rajeev's Desk answers Q-12, Q-20 and Q-21 put the cleanup of the master recipe library
+and the day-one reset after this release, so the merge tool is **not** to be run on staging data.
+Plan: `docs/work/CATALOGUE-AND-DAY1-PLAN.md`. A price-history graph on the ingredient page was his
+idea for later (Q-10) and is not built. Proofs: `docs/work/proof/T-242.md` to `T-343.md`, and the
+three rounds of verification in `VERIFY-*.md`, `VERIFY2-*.md` and `VERIFY3-FINAL.md`.
+
 ### 2026-09-14 — A meal is a row of its own: the planner, recording, job cards and volunteer shifts rebuilt on it, with the old meal data reset (tasks T-195 to T-199, decision D-27)
 
 **Migrations V135, V136 and V137**; staging moves from `V134` to `V137`. V138, V139 and V140 were

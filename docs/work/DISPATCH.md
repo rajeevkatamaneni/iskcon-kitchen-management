@@ -17942,3 +17942,970 @@ will find `to_on_hand_qty` in a migration and have nowhere to read why.
 - **`NotificationTemplate.DONATION_RECEIPT` must be registered with Meta** under `donation_receipt`
   before WhatsApp will carry it. Until then it falls through to SMS and email like any unapproved
   template.
+
+
+---
+
+# Procurement rework, stage 1 — planned and dispatched 2026-09-19
+
+Spec: `docs/work/PROCUREMENT-REQUIREMENTS.md` (binding). Conductor's resume file:
+`docs/work/PROCUREMENT-PROGRESS.md`. Clarifier agent `ae4684d1c214adbd1` answers builders from the
+document only. T-244 is skipped (never seen in the tree; not reused in case it was taken elsewhere).
+
+**Held by the conductor, 2026-09-19, until Rajeev answers:** Q-10, where "the ingredient page" is
+(no per-ingredient page exists), and Q-11, what a library-recipe copy does on a close but not exact
+name match. Until then: build backend/API for pack sizes, market rate and vendor link but not their
+UI placement; build the import's exact-match mapping and preparation parsing but not close-match
+behaviour.
+
+## Wave P1 — schema, and the pure name matcher (disjoint; no dependency between them)
+
+**Reservations made by the work manager before dispatch:**
+- migration **V144** → T-248 (the whole §3 data model in one file).
+- `Permission.java`: `RECEIVE_DELIVERIES`, `MERGE_INGREDIENTS` added.
+- `RolePermissions.java`: `RECEIVE_DELIVERIES` → TEMPLE_ADMIN, KITCHEN_MANAGER; `MERGE_INGREDIENTS`
+  → TEMPLE_ADMIN. KITCHEN_STAFF carries a comment naming Q-1 and is **not** granted.
+- No `ErrorCode.java`, `api.ts`, nav or route changes in this wave.
+
+### T-248 — §3 procurement data model, with its RLS and survival tests
+
+- **id:** T-248
+- **source:** PROCUREMENT-REQUIREMENTS.md §3 (AC-3.1, AC-3.2), plus the preparation note (R-DUP-1) and
+  the ingredient alias table (R-DUP-2/3); conductor's brief 2026-09-19.
+- **what:** One migration adding every table and column §3 lists: `ingredient_pack_sizes`, market-rate
+  columns on `ingredients` (+ where market-rate history lives), "sells it as" pack FK + price per pack
+  on `vendor_supplies`, `vendor_price_history` (append-only), `vendor_invoice_lines`,
+  `vendor_invoice_deliveries`, totals columns on `vendor_invoices`, `attachments` stored through the
+  existing `DocumentStorage` interface, `invoice_payments.received_by_name`,
+  `recipe_ingredients.preparation_note`, and `ingredient_aliases` (unique normalised alias per tenant,
+  backfilled per tenant from `ingredients.aliases`). Every table `enable_tenant_rls()`. No column is
+  renamed (`last_price` stays; the UI rename is stage 2). No Java service code.
+- **paths:** `backend/src/main/resources/db/migration/V144__procurement_data_model.sql` (new);
+  `backend/src/test/java/org/iskcon/kms/tenancy/ProcurementRowLevelSecurityIT.java` (new);
+  `backend/src/test/java/org/iskcon/kms/purchaseorder/ProcurementDataModelMigrationIT.java` (new);
+  `backend/src/test/java/org/iskcon/kms/tenancy/RowLevelSecurityIT.java`;
+  `backend/src/test/java/org/iskcon/kms/TenantLoopMigrationIT.java`;
+  `backend/src/test/java/org/iskcon/kms/auth/RolePermissionsTest.java`; `docs/work/proof/T-248.md`.
+- **reservations:** V144; the two permissions above (already written).
+- **wave:** P1 · **state:** proven (new ITs + 6 schema guards green; RLS control 5 red) · **proof:** `docs/work/proof/T-248.md`
+- **left:** history kept on supply removal (separate FKs to vendors/ingredients, not to vendor_supplies) and pack duplicate = same canonical quantity, both provisional (Q-13, Q-14). Gaps it names: PO lines have no pack columns (R-SL-3 needs a migration later); R-DUP-3 must re-point ingredient ids on append-only tables (vendor_price_history, ingredient_market_rate_history) — plan the lift when R-DUP-3 is dispatched.
+
+### T-249 — the ingredient name matcher: normalise, split off a preparation, find a near match
+
+- **id:** T-249
+- **source:** PROCUREMENT-REQUIREMENTS.md §9A R-DUP-1 (parsing rule) and R-DUP-2 (normalisation and
+  close-spelling match).
+- **what:** A pure Java class used later by the import (R-DUP-1), the create/rename guard (R-DUP-2)
+  and the merge proposals (R-DUP-3): split "Cashew, halved" into base + preparation note, normalise a
+  name (lower case, trimmed, punctuation and plurals removed, preparation words dropped), and find an
+  exact-normalised or close-spelling match among candidate names and aliases. No database, no Spring.
+- **paths:** `backend/src/main/java/org/iskcon/kms/ingredient/IngredientNameMatcher.java` (new);
+  `backend/src/test/java/org/iskcon/kms/ingredient/IngredientNameMatcherTest.java` (new);
+  `docs/work/proof/T-249.md`.
+- **reservations:** none.
+- **wave:** P1 · **state:** proven (147/147; control 53 red) · **proof:** `docs/work/proof/T-249.md`
+- **left for Rajeev:** preparation list provisional (Q-12); "Fresh turmeric" matches Turmeric; "ripe" not a preparation, so "Tomatos" vs "Tomato, ripe" is CLOSE not EXACT; chana/chhana is the one false CLOSE pair in the library. Import should auto-map EXACT only (close = Q-11).
+
+
+## Wave P2 — R-DUP-1 and R-DUP-2 (after P1 proven)
+
+**Reservations made by the work manager before dispatch:**
+- `ErrorCode.java`: `INGREDIENT_LOOKS_LIKE_EXISTING` = **KMS-400156** (409) → T-251.
+- `api.ts` → T-250: `preparationNote: string | null` on `RecipeIngredientView`, `ScaledLine`,
+  `TranslatedLine`; `preparationNote?: string | null` on `RecipeLineInput`.
+- `api.ts` → T-251: `confirmDifferent?: boolean` on `CreateIngredientInput` and `UpdateIngredientInput`.
+- No migration (V144 already holds `recipe_ingredients.preparation_note` and `ingredient_aliases`).
+- tsc after the reservations breaks exactly four test fixtures, all granted to T-250:
+  blank-submit-slice-a, recipe-batch-cost, recipe-detail, recipe-form-units.
+
+### T-250 — R-DUP-1: preparation note on recipe lines; import maps "Cashew, halved" to Cashew + note
+
+- **source:** PROCUREMENT-REQUIREMENTS.md §9A R-DUP-1 (and R-DUP-2's library-import clause).
+- **what:** recipe lines carry `preparation_note` end to end (create/update/view/scale/translate),
+  printed as "Green chilli · slit" on the recipe page, peek, job card, recipe PDF and translations.
+  The library copy (`RecipeImportService`) uses `IngredientNameMatcher`: split base + note, map an
+  EXACT match (name or `ingredient_aliases`) to the existing ingredient, create only the base when
+  none exists. CLOSE-only matches keep today's behaviour and are listed as held (Q-11).
+- **paths:** backend `recipe/RecipeIngredientLine.java`, `recipe/RecipeIngredientView.java`,
+  `recipe/RecipeService.java`, `recipe/RecipeScaler.java`, `recipe/ScaledLine.java`,
+  `recipe/ScaledRecipeView.java`, `recipe/CreateRecipeRequest.java`, `recipe/UpdateRecipeRequest.java`,
+  `library/RecipeImportService.java`, `document/JobCardService.java`, `document/JobCardTemplate.java`,
+  `document/RecipeCardTemplate.java`, `document/DocumentGenerationService.java`,
+  `translation/RecipeTranslationService.java`, `translation/TranslatedLine.java`,
+  `translation/TranslatedRecipeView.java` (all under `backend/src/main/java/org/iskcon/kms/`); tests
+  `recipe/RecipeIT.java`, `library/RecipeLibraryIT.java`, `document/JobCardIT.java`,
+  `document/DocumentGenerationIT.java`, `document/RecipeDocumentE2EIT.java`,
+  `translation/RecipeTranslationIT.java`, new `library/RecipeImportPreparationIT.java` (under
+  `backend/src/test/java/org/iskcon/kms/`); frontend `components/RecipeForm.tsx`,
+  `app/recipes/[id]/page.tsx`, `app/recipes/[id]/edit/page.tsx`, `components/RecipePeek.tsx`,
+  `__tests__/blank-submit-slice-a.test.tsx`, `__tests__/recipe-batch-cost.test.tsx`,
+  `__tests__/recipe-detail.test.tsx`, `__tests__/recipe-form-units.test.tsx`, new
+  `__tests__/recipe-preparation-note.test.tsx`; `docs/work/proof/T-250.md`.
+- **reservations:** api.ts fields above. **wave:** P2 · **state:** proven by tests; screen check pending local API · **proof:** `docs/work/proof/T-250.md`
+
+### T-251 — R-DUP-2: creating or renaming an ingredient is stopped on a near match
+
+- **source:** PROCUREMENT-REQUIREMENTS.md §9A R-DUP-2.
+- **what:** `IngredientService` create and rename run `IngredientNameMatcher` against the temple's
+  ingredients and `ingredient_aliases`; a match refuses with KMS-400156 naming the existing
+  ingredient in details, unless `confirmDifferent` is true, which saves and writes an audit event.
+  Aliases typed on the ingredient are kept in `ingredient_aliases` too. Frontend: a shared prompt
+  ("Did you mean Curd? Use Curd, or add a preparation note instead." · **Use Curd** · **It's a
+  different ingredient** → deliberate confirmation) on `/ingredients/new`, `/supplies/new` and the
+  inline rename on `/ingredients`. The recipe form has no inline add today (nothing to guard); the
+  "No vendor yet" and one-off paths do not exist yet and will call the same endpoint.
+- **paths:** backend `ingredient/IngredientService.java`, `ingredient/IngredientController.java`,
+  `ingredient/CreateIngredientRequest.java`, `ingredient/UpdateIngredientRequest.java` (under
+  `backend/src/main/java/org/iskcon/kms/`); tests `ingredient/IngredientIT.java`,
+  `ingredient/SupplyIngredientIT.java`, new `ingredient/DuplicateIngredientIT.java`; frontend
+  `components/IngredientForm.tsx`, new `components/DuplicateIngredientPrompt.tsx`,
+  `app/ingredients/new/page.tsx`, `app/supplies/new/page.tsx`, `app/ingredients/page.tsx`,
+  `__tests__/ingredient-new.test.tsx`, `__tests__/ingredients.test.tsx`, `__tests__/supplies.test.tsx`,
+  new `__tests__/duplicate-ingredient.test.tsx`; `docs/work/proof/T-251.md`.
+- **reservations:** KMS-400156; api.ts `confirmDifferent`. **wave:** P2 · **state:** proven by tests; screen check pending local API · **proof:** `docs/work/proof/T-251.md`
+
+**P2 status, 2026-09-19:** T-251 proven by tests (backend 868/0 incl. DuplicateIngredientIT 14;
+vitest 76/76; control 7/14 red); on-screen check done on an isolated render, not the running app.
+T-250 proven by tests (82/82; vitest 44/44; control 6/7 red), then widened by the work manager to
+`translation/TranslatedRecipe.java` (checked: no live contract held it) to translate the note.
+**Blocked for both:** the local API will not boot, because the dev server applied a mid-edit draft of V144
+at 01:50 and the final file's checksum differs. Reset SQL for the local DB only:
+`docs/work/local-v144-reset.sql`, with the conductor/Rajeev; the permission check refused it to the work manager.
+
+## Wave P3 — stage 2 backend (§5). UI placement on "the ingredient page" is held (Q-10).
+
+**Reservations made by the work manager before dispatch:**
+- `ErrorCode.java`: KMS-400157 PACK_SIZE_ALREADY_THERE, 400158 TOO_MANY_PACK_SIZES, 400159
+  PACK_SIZE_IN_USE, 400160 INGREDIENT_UNIT_HAS_PACK_SIZES → T-253; 400161 STOCK_VALUE_REQUIRED →
+  T-254; 400162 SUPPLY_PACK_NOT_THIS_INGREDIENT → T-252. Wrong-family packs reuse 400013 INCOMPATIBLE_UNIT.
+- `api.ts`: `PackSizeView`, `AddPackSizeInput`, `MarketRateSource`, `IngredientView.packSizes/
+  marketRate/marketRateOn/marketRateSource`, `addPackSize`, `removePackSize` → T-253;
+  `StockValueSuggestion`, `AdjustStockInput.pricePerUnit`, `setMarketRate`,
+  `getStockValueSuggestion` → T-254; `VendorSupplyView.unit/packSizeId/packLabel/pricePerPack/
+  previousPrice/previousPriceOn`, `SetVendorSupplyInput`, `IngredientSupplyView`,
+  `addVendorSupplies`, `listIngredientSupplies` → T-252.
+- The new required fields break 23 frontend test fixtures (tsc): fixed by T-255 once T-250 is out.
+- No migration (V144 holds the schema).
+
+### T-252 — vendor backend: pack + price per pack, bulk onboarding, price history, ingredient's vendors
+- **source:** R-VEN-1 (backend), R-VEN-3 (history writes + previous price), R-VEN-4 (MANUAL/ONBOARDING), R-ING-2 (backend).
+- **paths:** `backend/src/main/java/org/iskcon/kms/vendor/{VendorService,VendorController,SetVendorSupplyRequest,VendorSupplyView,VendorDetailView}.java`,
+  new `vendor/{AddVendorSuppliesRequest,IngredientSupplyView,VendorPriceHistoryService}.java`;
+  tests `backend/src/test/java/org/iskcon/kms/vendor/VendorIT.java`, new `vendor/VendorPriceHistoryIT.java`,
+  new `vendor/VendorOnboardingIT.java`; `docs/work/proof/T-252.md`.
+- **reservations:** 400162; api.ts vendor items above. **wave:** P3 · **state:** building
+
+### T-253 — pack sizes backend, and the ingredient view carries packs and market rate
+- **source:** R-ING-1 (backend), R-ING-3 (read side).
+- **paths:** `backend/src/main/java/org/iskcon/kms/ingredient/{IngredientService,IngredientController,IngredientView}.java`,
+  new `ingredient/{PackSizeService,PackSizeView,AddPackSizeRequest}.java`; tests
+  `backend/src/test/java/org/iskcon/kms/ingredient/IngredientIT.java`, new `ingredient/PackSizeIT.java`; `docs/work/proof/T-253.md`.
+- **reservations:** 400157–400160; api.ts pack items. **wave:** P3 · **state:** building
+
+### T-254 — market rate: set, history, stock-take value required, costing fallback
+- **source:** R-ING-3 (backend).
+- **paths:** new `backend/src/main/java/org/iskcon/kms/ingredient/{MarketRateService,MarketRateController,SetMarketRateRequest,StockValueSuggestion}.java`;
+  `backend/src/main/java/org/iskcon/kms/inventory/{InventoryItemService,AdjustStockRequest}.java`;
+  `backend/src/main/java/org/iskcon/kms/costing/BasketCostingService.java`; tests
+  `backend/src/test/java/org/iskcon/kms/costing/{IssuedFromStoreIT,MaterialsCostIT}.java`,
+  `backend/src/test/java/org/iskcon/kms/inventory/{StockAdjustmentIT,InventoryStockIT}.java`,
+  `backend/src/test/java/org/iskcon/kms/ingredient/UnitFamilyRefusalIT.java`,
+  `backend/src/test/java/org/iskcon/kms/perf/TempleScaleFixture.java`, new `ingredient/MarketRateIT.java`; `docs/work/proof/T-254.md`.
+- **reservations:** 400161; api.ts market-rate items. **wave:** P3 · **state:** building
+
+**P3 widening, 2026-09-19 (conductor's calls for T-252):** a per-unit price sent for a supply sold in
+packs is refused with **KMS-400163 SUPPLY_PRICE_PER_PACK_ONLY** (reserved by the work manager); no
+history row on a same-price re-save or on clearing a price; **migration V145** reserved to T-252 for
+the backfill of one MANUAL history row per existing non-null list price, per tenant (path
+`backend/src/main/resources/db/migration/V145__backfill_vendor_price_history.sql`, checked: no other
+contract holds a migration). The vendor dropdown on the ingredient side lists active vendors only;
+that is for the stage-2 UI task, not T-252.
+
+**T-253 proven, 2026-09-19:** PackSizeIT 12, IngredientIT 21, DuplicateIngredientIT, ErrorCodeTest,
+FieldErrorMessageTest green; control 409→500 red. The one failing guard (UnitLabelAgreementTest) is on
+T-252's `pack.label()` in VendorService, sent back to T-252. PACK_SIZE_IN_USE (400159) reworded by the
+work manager, because it also fires for invoice lines. Proof: `docs/work/proof/T-253.md`.
+**T-254 proven, 2026-09-19:** 974 passed / 0 failed across 12 classes; rice AC through the real
+endpoints (₹62/Kg at stock-take → ₹620 issued, 0 unpriced); control shows 0.0 with the fallback
+removed. Open: should a positive SPOILAGE/DAMAGE/WASTE/OTHER adjustment require a value (asked of the
+conductor). `setFromInvoiceLine` is untested until stage 6. Proof: `docs/work/proof/T-254.md`.
+**T-252:** built and proven (4 ACs, guards green, control 5/10 red). Its control's trap failed to
+restore (relative path); it restored by hand and cmp matches, but the patched VendorService sat in
+the tree ~1 minute after the lock was freed. Checked by the work manager: no CONTROL marker remains.
+Resumed to widen `last_price` to NUMERIC(14,4) in V145 (gm/ml prices need 4 places).
+**T-252 proven, 2026-09-19:** V145 also widens `vendor_supplies.last_price` to NUMERIC(14,4) (gm/ml
+prices); 42/0 on vendor ITs + migration guards. Gap it reports, for stage 4 (POs):
+`purchase_order_lines.expected_price` is still NUMERIC(12,2), so a gm-priced PO line rounds to ₹0.07.
+**T-254:** resumed on the conductor's ruling: a value is required whenever a person adds stock, for
+any reason.
+
+## Wave P4 — stage 2 screens that do not depend on Q-10 (the ingredient page is held)
+
+No new reservations: api.ts already carries every stage-2 type (written before P3). The 23 fixtures
+that tsc rejects are split by owner below. T-250's four (blank-submit-slice-a, recipe-batch-cost,
+recipe-form-units, recipe-preparation-note) wait until T-250 has handed back. Screen measurement is
+blocked until the local DB is reset (`docs/work/local-v144-reset.sql`).
+
+### T-255 — test fixtures carry the new required IngredientView fields
+- **paths:** `frontend/__tests__/{closing-a-part-delivered-order,described-po-line,donations,duplicate-ingredient,goods-return,ingredient-request-new,ingredients,lead-time-one-promise,manual-purchase-order,order-detail,recipe-new,shopping-list-add}.test.tsx`; `docs/work/proof/T-255.md`.
+- **wave:** P4 · **state:** proven (tsc clean in its files; vitest 219/219) · **proof:** `docs/work/proof/T-255.md`
+
+### T-256 — vendor page: List price, "Sells it as", arrows, "Other ingredients" onboarding table
+- **source:** R-VEN-1 (UI), R-VEN-3 (arrows + tooltip), R-VEN-4 (manual/onboarding entry).
+- **paths:** `frontend/app/vendors/[id]/page.tsx`, new `frontend/components/PriceTrend.tsx`,
+  `frontend/components/ds/Tooltip.tsx` (the shared off-screen fix R-INV-5 names), `frontend/__tests__/{vendor-lead-time,vendor-supply-edit,vendor-without-phone,blank-submit-slice-c}.test.tsx`,
+  new `frontend/__tests__/{vendor-onboarding,price-trend}.test.tsx`; `docs/work/proof/T-256.md`.
+- **wave:** P4 · **state:** proven by tests (107/107, tooltip users 303/303, control 4 red); NOT verified on screen, no screenshots (local API down). Calls for the Desk: gm/ml prices shown per Kg/L; typing in an Other-ingredients row ticks it; the page stays visible while reloading; two buttons named "Save". The blank-ingredient test was removed with the old Add supply form.
+
+### T-257 — stock-take asks "What it would cost to buy today"
+- **source:** R-ING-3 (UI at stock-take).
+- **paths:** `frontend/app/inventory/new/page.tsx`, `frontend/app/inventory/[id]/page.tsx`,
+  `frontend/components/InventoryItemForm.tsx`, `frontend/__tests__/{inventory-new,inventory-correction,inventory,movement-labels,supplies,unit-refusal-names-ingredient}.test.tsx`; `docs/work/proof/T-257.md`.
+- **wave:** P4 · **state:** proven by tests (vitest 90/90, eslint clean, control 3 red); NOT verified on screen (local API down). Open: at 390 the long label wraps in a two-column row and may misalign; measure once the API is up.
+**T-254 follow-up proven, 2026-09-19:** every positive adjustment by a person needs `pricePerUnit`,
+whatever the reason; automatic reversals are exempt. One IT per reason, 951/951; the control, narrowed back to
+COUNT_CORRECTION, makes SPOILAGE/DAMAGE/WASTE/OTHER return 201. State: proven.
+**T-250 follow-up 2, 2026-09-19:** its four fixtures carry the new IngredientView fields; tsc is clean in
+its files; vitest 4 files / 26 tests pass. Every fixture the stage-2 api.ts fields broke is now fixed or
+owned by a live P4 builder (T-256, T-257).
+
+## Wave P5 — R-VEN-2, on its own so it can be reverted (Q-2)
+
+**Reservations:** migration **V146** (one preferred per ingredient: a partial unique index, after
+resolving existing duplicates per tenant); `api.ts` `PreferredVendorView` + `listPreferredVendors`.
+No error code is expected: the rule replaces, it does not refuse.
+
+### T-258 — R-VEN-2: one preferred vendor per ingredient, "Preferred (replaces A)"
+- **paths:** `backend/src/main/resources/db/migration/V146__one_preferred_vendor_per_ingredient.sql`,
+  `backend/src/main/java/org/iskcon/kms/vendor/{VendorService,VendorController}.java`, new
+  `vendor/PreferredVendorView.java`; tests `backend/src/test/java/org/iskcon/kms/vendor/{VendorIT,VendorOnboardingIT}.java`,
+  new `vendor/OnePreferredVendorIT.java`; `frontend/app/vendors/[id]/page.tsx`,
+  `frontend/__tests__/{vendor-onboarding,vendor-supply-edit}.test.tsx`, new `frontend/__tests__/preferred-replaces.test.tsx`; `docs/work/proof/T-258.md`.
+- **wave:** P5 · **state:** building
+**T-258 proven, 2026-09-19:** V146 NOT written, and the builder's reasoning is right: one preferred
+per ingredient has been enforced since V24 (`vendor_supplies_one_preferred`), and the service already
+un-prefers A in the same transaction. The local DB has 0 duplicates. The reservation of V146 is
+released unused. Built: GET /vendors/preferred, "Preferred (replaces X)" on both tables; backend 59/0,
+vitest 86/86, control 5 red. NOT verified on screen. Proof: `docs/work/proof/T-258.md`.
+
+## Stages 1–2 merged-tree check — 2026-09-19, by the work manager, after every builder was out
+- frontend `npx tsc --noEmit`: exit 0. `npx vitest run`: **152 files, 2082 tests passed**, exit 0.
+- backend: every repo-wide guard in README lesson 3a, plus every class the batch touched (38 filters):
+  **1544 passed, 0 failed, BUILD SUCCESSFUL**.
+- Logs: scratchpad `merged-P-{tsc,vitest,backend}.log`.
+- **Not done:** no screen was measured. The local API has been down since the dev server applied a
+  mid-edit V144; the reset SQL is `docs/work/local-v144-reset.sql`, waiting on Rajeev. Tasks proven by tests
+  but not on screen: T-250, T-251 (isolated render only), T-256, T-257, T-258.
+
+---
+
+# Procurement stages 3–5 (§4 shopping list, §6 purchase orders, §7 Deliveries) — work manager, 2026-09-19
+
+Spec: `docs/work/PROCUREMENT-REQUIREMENTS.md` §4, §6, §7. Mocks: `docs/work/mocks/dev-po.page.tsx`
+(design A + design E), `dev-deliveries.page.tsx`. Progress: `docs/work/PROCUREMENT-PROGRESS.md`.
+Open with Rajeev and handled as the conductor ruled: **Q-8** (build the link, keep the recording panel
+openable filtered to one order), **Q-1** (Kitchen Staff NOT granted RECEIVE_DELIVERIES; switching the
+receiving POST to it takes recording away from Kitchen Staff until he answers), **Q-9** (build R-DEL-5
+as written; ReceivingService stops writing the list price). The local API is down (V144 checksum;
+`docs/work/local-v144-reset.sql` awaits Rajeev), so everything is proven by Testcontainers and
+isolated renders until the conductor says it is up; then every screen is measured against its mock
+at 1280 and 390.
+
+**Shape.** Stage 5's history component (R-DEL-4) is built once, first (T-262), and used by the
+Deliveries screen and the PO page. The PO page reads its history from the existing
+`GET /purchase-orders/{id}/receipts` (still MANAGE_PURCHASE_ORDERS, so Kitchen Staff keep reading it);
+the Deliveries screen reads a new `GET /deliveries`. Recording has one code path: `POST /deliveries`
+calls `ReceivingService` once per order. Frontend tasks build against api.ts stubs written by the
+work manager, so the backend and the screen for one feature can run in the same wave.
+
+## Wave Q1 — backends for §4 and §6, the shared history component, the PO create form
+
+**Reservations made by the work manager before dispatch:**
+- migration **V146** → T-260 (`purchase_order_lines`: `expected_price` to NUMERIC(14,4); nullable
+  `pack_size_id` → `ingredient_pack_sizes`, `pack_count`). V146 was reserved for T-258 and released
+  unused; `ls` shows V145 as the highest file.
+- `ErrorCode.java`: KMS-400162 SUPPLY_PACK_NOT_THIS_INGREDIENT's comment widened to cover a PO line's
+  pack (T-260; same fact, same next step). **KMS-400164 DELIVERY_LINE_NOT_THIS_VENDOR** (409) → T-261.
+- `api.ts`: `PoLineInput.packSizeId?/packCount?` → T-260/T-264; `DeliveryPartView`,
+  `DeliveryLineView`, `DeliveryReceiptLineView`, `DeliveryReceiptView`, `DeliveriesView`,
+  `RecordDeliveryLineInput`, `RecordDeliveryInput`, `RecordedDelivery`, `api.getDeliveries`,
+  `api.recordDelivery` → T-261 (server shape) / T-262, T-266 (screen). All additive; tsc unaffected.
+- Held for the Q2 pass (they break fixtures owned by Q2 tasks): `ShoppingListLineView` pack fields,
+  `PurchaseOrderLineView` pack fields, removing `ReceiptLineInput.unitPrice`, the nav entry.
+
+### T-259 — shopping list backend: buying amount (steps and packs), vendor pack suggestion
+- **source:** R-SL-2, R-SL-3 (suggestion side), R-SL-1 (server side: nothing stored in g that the
+  screen cannot promote). Reference: `docs/work/reference/BuyingAmount*.java`, `t243-partial.patch`.
+- **paths:** new `backend/src/main/java/org/iskcon/kms/shoppinglist/{BuyingAmount,BuyPackView}.java`;
+  `backend/src/main/java/org/iskcon/kms/shoppinglist/{ShoppingListService,ShoppingListLineView}.java`;
+  tests new `backend/src/test/java/org/iskcon/kms/shoppinglist/{BuyingAmountTest,ShoppingListPacksIT}.java`,
+  `backend/src/test/java/org/iskcon/kms/shoppinglist/{ShoppingListIT,HandAddedLineIT}.java`,
+  `backend/src/test/java/org/iskcon/kms/perf/{ShoppingListStatementCountIT,ShoppingListPerformanceIT}.java`;
+  `docs/work/proof/T-259.md`.
+- **reservations:** none (the api.ts shape is fixed in its brief and written at the Q2 pass).
+- **wave:** Q1 · **state:** proven (89 passed / 0 failed / 1 skipped perf; guards green; control 3 of 4 red, cmp restore) · **proof:** `docs/work/proof/T-259.md`. View: `buyPacks: List<BuyPackView(packSizeId,label,perPackQty,int count)>`, `packFromVendor`. Mixing allowed (Q-16 switch beside the step table). Pack sizes are one extra query per page load, asserted in ShoppingListStatementCountIT.
+
+### T-260 — purchase order backend: pack lines, 4-decimal prices, PDF and WhatsApp wording
+- **source:** R-SL-3 (PO line, PDF, WhatsApp "4 × Bag (25 Kg)"), R-SL-1 AC (PO, PDF, WhatsApp in
+  kg/L from 1,000), the stage-2 gap (PO line price kept 2 decimals).
+- **paths:** new `backend/src/main/resources/db/migration/V146__po_line_pack_and_price_scale.sql`;
+  `backend/src/main/java/org/iskcon/kms/purchaseorder/{PoLineInput,PurchaseOrderLineView,PurchaseOrderService,PurchaseOrderDeliveryService}.java`;
+  `backend/src/main/java/org/iskcon/kms/document/{DocumentGenerationService,PurchaseOrderSheetTemplate}.java`;
+  `backend/src/main/java/org/iskcon/kms/ingredient/PackSizeService.java` (in-use check must count PO lines);
+  tests `backend/src/test/java/org/iskcon/kms/purchaseorder/{PurchaseOrderIT,DescribedPurchaseLineIT,PurchaseOrderWhatsAppIT,ProcurementDataModelMigrationIT}.java`,
+  `backend/src/test/java/org/iskcon/kms/document/{PurchaseOrderDocumentIT,PurchaseOrderSheetTemplateTest,PurchaseOrderTranslationIT,DocumentGenerationIT}.java`,
+  `backend/src/test/java/org/iskcon/kms/ingredient/PackSizeIT.java`, new
+  `backend/src/test/java/org/iskcon/kms/purchaseorder/PurchaseOrderPackLineIT.java`; `docs/work/proof/T-260.md`.
+- **reservations:** V146; KMS-400162 (widened); api.ts `PoLineInput` pack fields.
+- **wave:** Q1 · **state:** proven (run 1 939/940, the one failure its own V146 migration test, fixed; run 2 61/61 incl. guards and RLS; control 8 of 12 red, cmp restore) · **proof:** `docs/work/proof/T-260.md`.
+  Calls: packs decide the amount (a disagreeing quantity is ignored); a pack line's price is read per the sent `unit` and restated in the pack's unit; a blank price now takes the list price **converted into the line's unit** (before this it copied per stock unit, so tea in gm got ₹400/gm, a live defect fixed); a half pack pair is VALIDATION_FAILED on the line. The WhatsApp text lists item names only; amounts travel in the sheet (pinned by a test).
+  **For stage 6:** V144's `invoice_lines_pack_shape` CHECK passes on NULL (a bill line with a pack and no count is accepted). Fix it in the stage-6 migration. **For the conductor:** the sheet prints "₹1500.00", not the "₹1,500" in the ruling, because the sheet's existing formatter has no digit grouping.
+
+### T-262 — the per-item delivery history component (R-DEL-4), built once
+- **source:** R-DEL-4; mock `dev-deliveries.page.tsx` `ItemHistory`, `ofTotal`, `partsOf`.
+- **paths:** new `frontend/components/DeliveryHistory.tsx`; new `frontend/__tests__/delivery-history.test.tsx`;
+  `docs/work/proof/T-262.md`.
+- **reservations:** api.ts `DeliveryPartView` (read only).
+- **wave:** Q1 · **state:** proven (vitest 14/14, eslint clean, control 4 red; its trap failed on a relative path, it restored by hand and cmp matched, and the work manager checked the file: `aria-expanded={open}` is back) · **proof:** `docs/work/proof/T-262.md`. Props: parts, unit, orderedQty, completedOn, plus optional itemName (screen readers only). Measured in isolated headless Chrome at 1280/390; not on the running app.
+
+### T-263 — "Create a purchase order": straight to the form, header, design-A items table and combobox
+- **source:** R-PO-1, R-PO-2, R-PO-3; mock `dev-po.page.tsx` design A (`DesignA`, `IngredientCombobox`,
+  `OrderFields`, `GrowingNote`, `ItemsHeading`, `UnitCell`, `TotalCell`, `OrderTotal`).
+- **paths:** `frontend/app/orders/page.tsx`, `frontend/app/orders/new/page.tsx`,
+  `frontend/app/orders/new/lines/page.tsx` (removed or reduced to a redirect), new
+  `frontend/components/ItemCombobox.tsx` (reused later by R-INV-3), tests
+  `frontend/__tests__/{manual-purchase-order,orders,lead-time-one-promise}.test.tsx`, new
+  `frontend/__tests__/{po-create-form,item-combobox}.test.tsx`; `docs/work/proof/T-263.md`.
+- **reservations:** none.
+- **wave:** Q1 · **state:** proven (vitest 7 files 100/100, tsc 0, eslint 0; control 10 red, restore cmp identical) · **proof:** `docs/work/proof/T-263.md`. /orders/new is the form; /orders/new/lines redirects keeping ?vendor=. Isolated headless-Chrome render only: at 1280, Vendor and Needed by share a row (both top 125); at 390 the dropdown is 256px and not clipped. Deviations it names: number boxes min-w-28 (the table rule forbids fixed widths), totals rounded to paise, confirmation says "was created", a "no active vendor" line replaces "Add vendor".
+
+## Wave Q2 — §7 backend, and the three screens (after Q1 proven, 2026-09-19)
+
+**Reservations made by the work manager before dispatch:**
+- `api.ts`: `ShoppingListLineView.buyPacks/packFromVendor` + `BuyPackView` (matches T-259) → T-264;
+  `PurchaseOrderLineView.packSizeId/packLabel/packQuantity/packCount` (matches T-260) → T-264/T-265;
+  `ReceiptLineInput.unitPrice` **removed** (R-DEL-5) → T-261 (server), T-265 (the old form goes).
+- `nav.ts`: Deliveries after Purchase orders, icon `package-import`, roles ADMIN + MANAGER only (Q-1) → T-266.
+- KMS-400164 (written at Q1) → T-261. No migration (V146 holds the pack columns).
+- tsc after the reservations breaks exactly: shopping-list, shopping-list-add (→ T-264);
+  closing-a-part-delivered-order, described-po-line, goods-return, lead-time-one-promise,
+  order-detail (→ T-265).
+
+### T-261 — Deliveries backend: GET/POST /deliveries, RECEIVE_DELIVERIES, no price at the gate
+- **source:** R-DEL-1 (API + permission), R-DEL-2 (data), R-DEL-3 (recording), R-DEL-4 (parts), R-DEL-5 (price removed; ReceivingService stops writing the list price — Q-9 open, built as written).
+- **paths:** new `backend/src/main/java/org/iskcon/kms/receiving/{DeliveriesController,DeliveriesService,DeliveriesView,DeliveryLineView,DeliveryPartView,DeliveryReceiptView,DeliveryReceiptLineView,RecordDeliveryRequest,RecordDeliveryLineInput,RecordedDelivery}.java`;
+  `backend/src/main/java/org/iskcon/kms/receiving/{ReceivingController,ReceivingService,ReceiptLineInput}.java`;
+  tests new `backend/src/test/java/org/iskcon/kms/receiving/DeliveriesIT.java`,
+  `backend/src/test/java/org/iskcon/kms/receiving/{ReceivingIT,ReturnToVendorIT}.java`,
+  `backend/src/test/java/org/iskcon/kms/purchaseorder/{PurchaseOrderLeadTimeIT,DescribedPurchaseLineIT,PurchaseOrderClosingIT}.java`,
+  `backend/src/test/java/org/iskcon/kms/invoice/VendorInvoiceIT.java`, `backend/src/test/java/org/iskcon/kms/vendor/VendorPerformanceIT.java`,
+  `backend/src/test/java/org/iskcon/kms/meal/MealRebuildMigrationIT.java`,
+  `backend/src/test/java/org/iskcon/kms/auth/{RolePermissionsTest,AccessControlEnforcementIT}.java`; `docs/work/proof/T-261.md`.
+- **reservations:** KMS-400164; api.ts Deliveries types (server must match exactly).
+- **wave:** Q2 · **state:** proven (receiving classes 42/42, then 1130/1130 with guards and contract tests; control 2 red, restored) · **proof:** `docs/work/proof/T-261.md`. Kitchen Staff lose recording until Q-1 (a test asserts their 403). The price removal has no control, because the field no longer exists, so the price cannot arrive by construction. Four ReceivingIT price tests were reversed and DeliveriesIT asserts no last_price or history change. No reader sums `unit_price`. Contract widened with `receiving/OlderDeliveriesView.java` (30-day ruling).
+
+### T-264 — shopping list screen: readable amounts, packs, "No vendor yet" lines
+- **source:** R-SL-1, R-SL-2 (screen), R-SL-3 (screen, PO lines in packs), R-SL-4.
+- **paths:** `frontend/app/shopping-list/page.tsx`, `frontend/components/PurchaseOrderEditor.tsx` (additive only: orders/[id] imports it and is T-265's), `frontend/lib/format.ts` (additive only), tests
+  `frontend/__tests__/{shopping-list,shopping-list-add,format}.test.ts*`, new `frontend/__tests__/{shopping-list-packs,shopping-list-no-vendor}.test.tsx`; `docs/work/proof/T-264.md`.
+- **reservations:** api.ts shopping-list and PO-line pack fields; PoLineInput pack fields.
+- **wave:** Q2 · **state:** proven (115 own + 108 order-screen tests; tsc, eslint clean; control 9 red, exact restore) · **proof:** `docs/work/proof/T-264.md`. Isolated render only; **awaiting Rajeev's review of the screen**. At 1280 the "Use this vendor next time" tick sits under the dropdown, because the table has no room for both side by side. **Open, separate task:** PurchaseOrderEditor overflows its card by 14px at 390; this was there before T-264 and also affects the order page.
+
+### T-265 — the purchase order page: one merged table with per-item history, link to Deliveries
+- **source:** R-PO-4 (mock dev-po design E), R-DEL-4 (uses T-262), R-DEL-5 (old form's "Price paid" goes with the form), Q-8 (link built; button later).
+- **paths:** `frontend/app/orders/[id]/page.tsx`, `frontend/app/orders/po-status.tsx`, tests
+  `frontend/__tests__/{order-detail,closing-a-part-delivered-order,described-po-line,goods-return,lead-time-one-promise}.test.tsx`, new `frontend/__tests__/po-merged-table.test.tsx`; `docs/work/proof/T-265.md`.
+- **reservations:** api.ts PO-line pack fields; `unitPrice` removal.
+- **wave:** Q2 · **state:** proven (145/145 across 9 files incl. design-system; tsc 0; eslint clean; control 4 red, byte-identical restore) · **proof:** `docs/work/proof/T-265.md`. Widened by the work manager to `frontend/__tests__/invoice-order-picker.test.tsx`, after checking no live contract held it: the status chip is now a neutral "Part delivered" everywhere (mock E). Isolated render only. **Open, for the shared table rule (not this task):** between 1024 and about 1100px the menu leaves the card 680px, and the five short columns take 632px, so Item gets 46px at 1024.
+
+### T-266 — the Deliveries screen
+- **source:** R-DEL-1..5 (mock dev-deliveries), Q-8 (panel openable for one order via `?order=`).
+- **paths:** new `frontend/app/deliveries/page.tsx`, new `frontend/components/RecordDeliveryPanel.tsx`, `frontend/__tests__/nav.test.ts`, new `frontend/__tests__/{deliveries,record-delivery-panel}.test.tsx`; `docs/work/proof/T-266.md`.
+- **reservations:** nav entry; api.ts Deliveries types and methods.
+- **wave:** Q2 · **state:** proven (77/77 across its files + delivery-history + design-system; tsc 0 tree-wide; eslint clean; control 5 red, cmp restore) · **proof:** `docs/work/proof/T-266.md`. Isolated render only. Deviation for Rajeev: the mock's panel overran its card at 1280 when Expiry shows, so it uses the design system's 12px cell spacing. Open: DeliveryHistory's Today pill uses `todayIso()` (the browser clock) rather than `DeliveriesView.today`. Checked by the work manager: `todayIso()` is the temple's day in the temple's zone (the app-wide convention), so no follow-up; the two agree except on a device whose clock is wrong; the Returned column shows the quantity only (the API carries no return reason or date).
+
+**Conductor rulings relayed during Q1 (binding; carry them into Q2 briefs):**
+- R-SL-2 pack rule (T-259): least left over first, then fewer packs on a tie (tea 416 g → 1 × 500 g).
+  Mixing sizes is ALLOWED as the provisional default (1,200 g → 1 × 1 Kg + 1 × 250 g, which becomes
+  **two PO lines**), with single-size as a switch in the same place, pending Rajeev (Desk Q-16).
+  → T-264 must turn a mixed suggestion into one PO line per pack size.
+- R-DEL-4 (T-262): leave out what wasn't recorded. No receiver means no "· Received by: …"; no reason
+  means "2 Kg rejected" with no brackets.
+- PO prices (T-260, and T-265 on the PO page): a pack line shows "₹1,500 / bag · ₹60 / Kg", the same
+  label in every view; a plain pack reads "2 × 500 gm"; the rate follows the unit the quantity is shown
+  in ("3 Kg" → "₹71.20 / Kg"); money through the existing rupee formatter, 2 decimals.
+
+**Conductor rulings relayed during Q2 (binding):**
+- T-265 (R-PO-4): the document is silent, so the mock wins. Design E has no price column and no total, so the merged table carries no prices. One "Return to vendor" per item row, asking which delivery when there were several (at most what that delivery received, minus what's already returned). One-off items show Delivered and "▸ N deliveries" like any row; there is no separate "Arrived <date>" note. The clarifier was told the precedent.
+- T-264 (R-SL): no new price column (the "List price" rename only where a price already shows); orders from a tile carry the expected price (the list price, per pack when in packs); the bulk bar is "Order these from [vendor ▾]" over the existing Include tick; "Use this vendor next time" appears beside each line's dropdown and once in the bulk bar. Awaiting Rajeev's review of the screen before done.
+- T-261/T-266 (Received tab): the last 30 days, newest first, with a style-E "Show older deliveries" button loading 30 days more each time, date-bounded on the server. The work manager extended api.ts: `DeliveriesView.receivedFrom/hasOlder`, `OlderDeliveriesView`, `api.getOlderDeliveries(before)` → `GET /api/v1/deliveries/received?before=`. T-261's contract gains `receiving/OlderDeliveriesView.java`.
+- T-266: optional Expiry on every catalogue line, none on one-off lines, no perishable setting. "Received now" starts blank on both tabs, with still-to-come beside it and "Everything arrived" as the fill (a named, document-justified difference from the mock). Entry is in the ordered unit, decimals allowed: "2.8 bags (70 Kg)", with the stock-unit equivalent beside the box. `?order=` on a fully delivered order shows its history and "Everything on PO-… has been delivered.", with no form.
+
+## Stages 3–5 merged-tree check — 2026-09-19, by the work manager, after every builder was out
+- frontend `npx tsc --noEmit`: exit 0. `npx vitest run`: **160 files, 2192 tests passed**, exit 0. eslint
+  on every touched file: exit 0.
+- backend: every repo-wide guard in README lesson 3a, plus every class stages 1–5 touched (43 filters,
+  45 classes): **1384 passed, 0 failed, 0 skipped, BUILD SUCCESSFUL**.
+- Logs: scratchpad `merged-Q-{tsc,vitest,eslint,backend}.log`.
+- **Not done:** no screen was measured on the running app (the local API is down; the reset SQL waits on
+  Rajeev). All UI tasks (T-262..T-266) are proven by tests and isolated renders only. Once the API is up,
+  each must be measured against its mock at 1280/390 as the role it is for.
+- **Open, for new tasks:** the shared table rule squeezes the PO page's Item column to 46px between
+  1024 and about 1100px (T-265); PurchaseOrderEditor overflows its card by 14px at 390 (predates T-264);
+  V144's `invoice_lines_pack_shape` CHECK passes on NULL (fix in the stage-6 migration); the PO sheet
+  prints "₹1500.00" with no grouping, where the ruling wrote "₹1,500" (T-260).
+
+---
+
+# Procurement stages 6–7 (§8 invoices, §9 payments, §9A R-DUP-3 merge) and fixes F1–F3 — work manager, 2026-09-19
+
+Spec: `docs/work/PROCUREMENT-REQUIREMENTS.md` §8, §9, §9A. Mock: `docs/work/mocks/dev-invoices.page.tsx`
+(design A = the create form's items table; design D = an existing invoice's page with Pay this invoice).
+The local API is down (V144 checksum; `docs/work/local-v144-reset.sql` awaits Rajeev): everything is
+proven by Testcontainers and isolated renders until the conductor says it is up; then each screen is
+measured against its mock at 1280 and 390 as its role, DOM geometry + pixel comparison.
+
+**Conductor rulings, 2026-09-19 (binding; relayed to the clarifier):**
+1. An invoice line for an ingredient the vendor has no supply link for creates the `vendor_supplies`
+   link, not preferred, so R-VEN-4 can set its list price.
+2. PROVISIONAL (Desk Q-17): "total owed" and the Unpaid / Due this week / overdue filters show only to
+   MANAGE_VENDOR_PAYMENTS holders; everyone else sees the Invoices list as today. One condition.
+3. A merge within one unit family converts stock, prices, history and pack sizes into the kept
+   ingredient's unit via `Unit.baseFactor()`/`InventoryUnits`; across families it is refused
+   (KMS-400171) with details naming both units.
+4. Voiding an invoice releases its deliveries for billing again.
+5. Q-5 open: the line rate is Amount ÷ Billed qty (pre-GST, as §12 suggests); the step that turns a
+   saved line into the list price / history price is ONE function, commented pending Q-5.
+
+**Shape.** Uploads first (T-267: storage, claim, the two shared screen parts), because the invoice and
+payment backends both claim an upload and both screens show one. Invoice and payment backends are
+disjoint files in one package and run together (their ITs are disjoint too: VendorInvoiceIT posts
+invoices; InvoicePaymentIT and InvoiceCorrectionIT insert invoices by SQL and post payments). The
+invoice form builds the totals block once, in both modes, so the invoice page (next wave) reuses it.
+Migration order: V147 → T-270 (merge, wave R1), V148 → T-271 (wave R2), so a local DB that boots between
+waves never sees a gap filled out of order.
+
+**Reservations made by the work manager before dispatch (all waves, one pass):**
+- `ErrorCode.java`: KMS-400165 ATTACHMENT_TYPE_NOT_ALLOWED, 400166 ATTACHMENT_TOO_LARGE, 400167
+  ATTACHMENT_NOT_USABLE → T-267 (400167 also used by T-271, T-272); 400168 INVOICE_TOTALS_DONT_ADD_UP,
+  400169 INVOICE_DELIVERY_NOT_BILLABLE, 400170 INVOICE_LINES_DONT_MATCH_DELIVERIES → T-271; 400171
+  MERGE_UNITS_DIFFER, 400172 MERGE_SUPPLY_PRICE_CHOICE_NEEDED, 400173 MERGE_GROUP_INVALID → T-270.
+  Missing uploads and cash fields are field errors with the standard required message (VALIDATION_FAILED).
+- Migrations: **V147** → T-270, **V148** → T-271 (includes the V144 `invoice_lines_pack_shape` NULL fix).
+- `api.ts`: helpers `upload()`, `attachmentBlob()`; types `AttachmentKind`, `AttachmentView`,
+  `InvoiceLineInput`, `RecordInvoiceInput` (amount/scanRef/purchaseOrderId removed; lines, receiptIds,
+  totals, billAttachmentId added), `BillableDeliveryView/LineView`, `InvoiceLineView`,
+  `InvoiceDeliveryView`, `VendorInvoiceDetailView` (getInvoice now returns it), `RecordInvoicePaymentInput`,
+  `InvoicePaymentView.receivedByName/attachments`, `Merge*View`, `MergeGroupInput`; methods
+  `uploadBill`, `invoiceBill`, `uploadPaymentFile`, `paymentFile`, `listBillableDeliveries`,
+  `listMergeProposals`, `previewMerge`, `mergeIngredients`. Endpoints named in each method's comment.
+- `nav.ts`: the Payments (/money) item removed (R-PAY-4) → T-275.
+- tsc after the reservations fails in exactly: `app/invoices/new/page.tsx` (→ T-273),
+  `app/money/page.tsx` (→ T-275), `__tests__/invoice-detail.test.tsx`, `__tests__/invoice-void.test.tsx` (→ T-274).
+- No `RolePermissions.java` change: MERGE_INGREDIENTS (Temple Admin) exists since P1; paying stays
+  MANAGE_VENDOR_PAYMENTS (Temple Admin); creating an invoice stays MANAGE_PURCHASE_ORDERS.
+
+## Wave R1 — uploads, the merge backend, the PO layout fixes, the Invoices list filters
+
+### T-267 — uploads: store, claim, fetch; the shared upload and thumbnail parts
+- **source:** R-INV-2, R-PAY-2, R-PAY-3 (storage side), §3 `attachments`; T-248 proof.
+- **paths:** new `backend/src/main/java/org/iskcon/kms/attachment/*.java`; `backend/src/main/resources/application.yml`
+  (multipart limits only); `backend/src/main/java/org/iskcon/kms/error/GlobalExceptionHandler.java` (over-size upload → 400166 only),
+  `backend/src/test/java/org/iskcon/kms/error/GlobalExceptionHandlerTest.java`; new `backend/src/test/java/org/iskcon/kms/attachment/*IT.java`;
+  `backend/src/test/java/org/iskcon/kms/auth/AccessControlEnforcementIT.java`; new
+  `frontend/components/AttachmentUpload.tsx`, new `frontend/components/AttachmentThumb.tsx`, new
+  `frontend/__tests__/attachment-upload.test.tsx`; `docs/work/proof/T-267.md`.
+- **reservations:** 400165–400167; api.ts upload/blob helpers and the four attachment methods.
+- **wave:** R1 · **state:** proven (AttachmentIT 26 + lesson-3a guards; vitest 33/33; two controls red, byte restore; isolated render 1280/390) · **proof:** `docs/work/proof/T-267.md`. Claim API: `claimBill(attachmentId, invoiceId)`, `claimForPayment(attachmentId, expectedKind, paymentId)`, `billOf(invoiceId)`, `ofPayments(paymentIds)`, `openBill`, `openPaymentFile`; 400167, or 400030 when the parent is another temple's. Multipart limit 32 MB (Cloud Run's), service refuses >10 MB with 400166. Open: abandoned uploads never cleaned up; >32 MB in a browser not verified.
+
+### T-269 — F2 + F3: the PO page Item column never squeezes; the PO editor fits its card at 390
+- **source:** conductor's fixes F2, F3 (open defects from T-265 and T-264); DESIGN_SYSTEM v1.13 §5.
+- **paths:** `frontend/components/ds/table.ts`, `frontend/app/globals.css` (table rules only),
+  `frontend/app/orders/[id]/page.tsx`, `frontend/components/PurchaseOrderEditor.tsx`,
+  `frontend/app/shopping-list/page.tsx`; tests `frontend/__tests__/{table-rule,design-system}.test.ts`,
+  `frontend/__tests__/{po-merged-table,order-detail,closing-a-part-delivered-order,described-po-line,goods-return,lead-time-one-promise,shopping-list,shopping-list-add,shopping-list-packs,shopping-list-no-vendor,library-recipe-ingredients,shift-attendance}.test.tsx`; `docs/work/proof/T-269.md`.
+- **reservations:** none. **wave:** R1 · **state:** proven (14 files 236/236; full vitest 2221/2222, the 1 = reserved invoice-void; control 5/6 red) · **proof:** `docs/work/proof/T-269.md`. PO Item 46→122 @1024, 82→140 @1060, 122→180 @1100, 302→360 @1280; editor overflow → 0 @390. **Open for Rajeev:** vendor Supplies @1024 and two shopping-list groups @1024 still squeezed (short columns alone exceed the box; only cards would fit, ruled out ≥1024); headings go to 3 lines as last resort @1024 (2 lines left Item 1px short); headings now wrap @1280 on PO and vendor Supplies.
+- **conductor ruling mid-wave (relayed):** §5 unchanged; no cards at ≥1024; when short of room, short-value columns' long headers wrap first (cells stay one line); Item ≥ its longest word and ≥ any other text column; fix in table.ts width sharing; measure order page at 1024/1060/1100/1280 + one other many-column table.
+
+### T-270 — R-DUP-3 merge backend: proposals, preview, one transaction per group, aliases, audit
+- **source:** R-DUP-3 (all five effects + alias + AC), conductor ruling 3; T-249 matcher (Q-12 provisional list); T-248's note on append-only tables.
+- **paths:** new `backend/src/main/java/org/iskcon/kms/ingredient/merge/*.java`;
+  new `backend/src/main/resources/db/migration/V147__ingredient_merge.sql`;
+  `backend/src/main/java/org/iskcon/kms/ingredient/IngredientService.java` (alias search only, if needed);
+  new `backend/src/test/java/org/iskcon/kms/ingredient/merge/*.java`;
+  `backend/src/test/java/org/iskcon/kms/tenancy/RowLevelSecurityIT.java`,
+  `backend/src/test/java/org/iskcon/kms/TenantLoopMigrationIT.java`; `docs/work/proof/T-270.md`.
+- **reservations:** V147; 400171–400173; api.ts merge types and methods (server must match exactly).
+- **wave:** R1 · **state:** proven (20 merge tests + lesson-3a guards + IngredientIT, DuplicateIngredientIT, AccessControlEnforcementIT, ProcurementRowLevelSecurityIT, TenantDeletionIT green; two controls red, trap restored) · **proof:** `docs/work/proof/T-270.md`. V147: one SECURITY DEFINER `merge_ingredient_ledger_rows` limited to re-pointing four append-only ledgers (and converting their per-unit rates); ordinary UPDATE/DELETE still refused. Catalogue: 13 FK columns to ingredients, a test fails if a new one lacks a rule. Proposals = EXACT normalised matches only. Merged-away rows deleted after a catalogue count of 0; names go to both `ingredients.aliases` and `ingredient_aliases`. Audit: INGREDIENT_MERGED on kept + INGREDIENT_DELETED per merged-away. Not verified: table ownership on staging.
+- **conductor ruling mid-wave (relayed):** notes combine moved-first ("sour, whisked"), skipping a word already present; lines in one recipe stay separate, even with the same ingredient and note (quantities never added).
+- **widened mid-wave:** `backend/src/test/java/org/iskcon/kms/ingredient/UnitLabelAgreementTest.java` (one ALLOWED line; checked: no live R1 contract holds it). Work manager added `AuditAction.INGREDIENT_MERGED` (no DB constraint on action).
+
+### T-275 — R-INV-8 Invoices list filters and total owed; R-PAY-4 /money goes
+- **source:** R-INV-8, R-PAY-4, R-INV-1 (the list's button becomes "Create an invoice"; same file), conductor ruling 2 (provisional, Q-17).
+- **paths:** `frontend/app/invoices/page.tsx`, `frontend/app/money/page.tsx` (becomes the redirect),
+  `frontend/__tests__/{invoices,payables}.test.tsx`, `frontend/__tests__/nav.test.ts`, new
+  `frontend/__tests__/invoices-filters.test.tsx`; `docs/work/proof/T-275.md`.
+- **reservations:** nav.ts Payments removal (done). **wave:** R1 · **state:** proven (vitest 65/65, control 16 red) · **proof:** `docs/work/proof/T-275.md`. Due this week = today..+7; payer Unpaid = money still owed, others = PENDING; badge now "Unpaid"; /money 307 server-side. Non-payers see All · Unpaid · Overdue · Paid · Voided. Seen: long vendor name breaks mid-word at 1280 (not its file).
+- **conductor ruling mid-wave (relayed):** total owed is always everything owed, unfiltered; one filter set All · Unpaid · Due this week · 1–30 days overdue · 31+ days overdue · Paid · Voided replaces the Status dropdown and the Overdue-only tick; the four money filters + total owed payers only (Q-17); others see All · Paid · Voided plus what they had.
+
+## Wave R2 — invoice and payment backends, the create-invoice form (after T-267 proven)
+
+### T-271 — invoice backend: lines, deliveries, totals, upload, price step (R-INV-3..7 server, R-VEN-4)
+- **paths:** `backend/src/main/java/org/iskcon/kms/invoice/{VendorInvoiceService,VendorInvoiceController,VendorInvoiceView,RecordInvoiceRequest,RecordInvoiceResponse}.java`, new `invoice/{InvoiceLineInput,InvoiceLineView,InvoiceDeliveryView,VendorInvoiceDetailView,BillableDeliveryView,BillableDeliveryLineView,InvoicePriceStep}.java` (+ other new `invoice/Invoice*`/`Billable*` files);
+  `backend/src/main/java/org/iskcon/kms/vendor/{VendorPriceHistoryService,VendorService}.java`, `backend/src/main/java/org/iskcon/kms/ingredient/{MarketRateService,PackSizeService}.java`;
+  new `backend/src/main/resources/db/migration/V148__invoice_lines.sql`;
+  tests `backend/src/test/java/org/iskcon/kms/invoice/VendorInvoiceIT.java`, new `invoice/{InvoiceLinesIT,InvoicePriceStepIT}.java`,
+  `backend/src/test/java/org/iskcon/kms/purchaseorder/ProcurementDataModelMigrationIT.java`,
+  `backend/src/test/java/org/iskcon/kms/ingredient/{MarketRateIT,PackSizeIT}.java`, `backend/src/test/java/org/iskcon/kms/vendor/VendorPriceHistoryIT.java`; `docs/work/proof/T-271.md`.
+- **conductor rulings mid-wave (builder's proposals accepted):** a bill's price takes effect from its bill date; an older bill entered late goes into history in date order without changing the current list price or market rate, and the arrow compares the latest two by date; credits come off the difference, no basis → null ("—"), never ₹0; description optional on a direct invoice.
+- **reservations:** V148; 400168–400170 (+400167 via AttachmentService). **wave:** R2 · **state:** proven (1216/1216 incl. guards, GivingPageIT, VendorPerformanceIT, vendor ITs, AttachmentIT, payment ITs; five controls each red on the right test, cmp restore) · **proof:** `docs/work/proof/T-271.md`. Q-5 function: `InvoicePriceStep.ratePerStockUnit` (pre-GST). Expected = Σ delivered kept qty × order line price over priced lines; difference = sub total − credits − expected, null with no basis. V148: pack CHECK fixed, unique index over unreleased delivery links (concurrent double-bill refused, tested). A non-existent delivery id is 409 KMS-400169, not 404.
+
+### T-272 — payment backend: proof mandatory, cash fields, attachments on the payment list
+- **paths:** `backend/src/main/java/org/iskcon/kms/invoice/{InvoicePaymentService,InvoicePaymentController,InvoicePaymentView,RecordInvoicePaymentRequest}.java`;
+  tests `backend/src/test/java/org/iskcon/kms/invoice/{InvoicePaymentIT,InvoiceCorrectionIT}.java`, new `invoice/PaymentProofIT.java`; `docs/work/proof/T-272.md`.
+- **reservations:** api.ts payment types. **wave:** R2 · **state:** proven (PaymentProofIT 19/19, InvoicePaymentIT 5/5, InvoiceCorrectionIT 15/15, AttachmentIT, AccessControlEnforcementIT, lesson-3a guards; control 15/19 red, cmp restore) · **proof:** `docs/work/proof/T-272.md`. Fields that don't belong to the method are ignored, not refused. A hand-entered negative correction (allowed since V40, never sent by the form) needs no proof, like a reversal: flagged to the conductor. Not verified: one query for all attachments has no statement-count test.
+
+### T-273 — "Create an invoice": the form, deliveries, design-A items, totals block, bill upload
+- **paths:** `frontend/app/invoices/new/page.tsx`,
+  new `frontend/components/InvoiceTotals.tsx`, new `frontend/components/InvoiceItemsTable.tsx`,
+  `frontend/components/ds/Tooltip.tsx` (R-INV-5, only if the Grand-total check shows it still runs off),
+  tests `frontend/__tests__/invoice-order-picker.test.tsx`, new `frontend/__tests__/{invoice-create-form,invoice-totals}.test.tsx`; `docs/work/proof/T-273.md`.
+- **conductor rulings mid-wave (relayed):** save → /invoices/{id}?recorded=N&duplicate=1; one tick box per unbilled delivery, exact R-INV-3 wording (document-driven addition, mock has none); "Add a pack size…" last option of the unit list, vendor page's inline fields, saved before the line; pack lines show the stock-unit total underneath ("4 × Bag (25 Kg)" / "100 Kg"); rate follows the displayed unit.
+- **widened mid-wave:** `frontend/__tests__/invoices.test.tsx`, three old-form tests only (T-275 done; no live contract holds it).
+- **wave:** R2 · **state:** proven (24 files 404/404, eslint 0, tsc only the two reserved files; control 6 red, identical restore) · **proof:** `docs/work/proof/T-273.md`. InvoiceTotals: editable `{subTotal, value: InvoiceTotalsDraft, onChange, tried?}`, read-only `{readOnly: true, subTotal, gstAmount, otherCharges, otherChargesNote, discount, grandTotal}`; exports `totalsCheck`, `addsUpMessage`. Tooltip.tsx changed (tap at 390 zoomed and jumped scroll 133px; fixed, tip measured inside the viewport). Totals pixel-identical to the mock at 1280; the other differences are each tied to a requirement ID in the proof.
+
+## Wave R3 — the invoice's page with paying, the merge screen, the PO sheet's rupees
+
+### T-274 — an existing invoice's page (design D) and Pay this invoice (R-INV-7, R-PAY-1..3)
+- **paths:** `frontend/app/invoices/[id]/page.tsx`, new `frontend/components/PayInvoiceForm.tsx`,
+  tests `frontend/__tests__/{invoice-detail,invoice-void}.test.tsx`, new `frontend/__tests__/pay-invoice.test.tsx`; `docs/work/proof/T-274.md`.
+- **carry into the brief (conductor):** read ?recorded=N&duplicate=1 and show the existing confirmation and duplicate warning; the flash-capture effect ref-guarded (memory: it OOM-loops vitest otherwise), the query cleared after reading. Reuse T-273's InvoiceTotals read-only.
+- **wave:** R3 · **state:** proven (38/38 own, tsc clean tree-wide, eslint 0; control 7 red, restored) · **proof:** `docs/work/proof/T-274.md`. Isolated render vs mock D at 1280/390. Held → T-277: totals block 171px taller than the mock (no compact read-only mode); header uses PageHeader's markup locally because the shared PageHeader's `flex-none` actions can't wrap (481px page at 390); `invoice-create-form.test.tsx` red on ItemCombobox's curly quotes (changed 04:55 outside this wave).
+
+### T-276 — the merge screen (R-DUP-3 UI)
+- **paths:** new `frontend/app/ingredients/merge/page.tsx`, `frontend/app/ingredients/page.tsx` (one link, MERGE_INGREDIENTS holders),
+  tests `frontend/__tests__/ingredients.test.tsx`, new `frontend/__tests__/ingredient-merge.test.tsx`; `docs/work/proof/T-276.md`.
+- **wave:** R2 · **state:** proven (vitest 71/71, tsc only reserved errors, eslint 0; control 6 red across three breaks, trap restore) · **proof:** `docs/work/proof/T-276.md`. Isolated render 1280/390, nothing clipped. /ingredients/merge + "Merge duplicates" link, Admin only. Picker is a plain catalogue list, not ItemCombobox (its one-off option means nothing here). No mock: Rajeev reviews the screen.
+
+### T-268 — F1: the PO sheet prints rupees like every other view ("₹1,500")
+- **paths:** `backend/src/main/java/org/iskcon/kms/document/{PurchaseOrderSheetTemplate,DocumentGenerationService}.java`, new `backend/src/main/java/org/iskcon/kms/document/SheetRupees.java` (if a helper is needed),
+  tests `backend/src/test/java/org/iskcon/kms/document/{PurchaseOrderSheetTemplateTest,PurchaseOrderDocumentIT,PurchaseOrderTranslationIT,DocumentGenerationIT}.java`, `backend/src/test/java/org/iskcon/kms/purchaseorder/{PurchaseOrderPackLineIT,PurchaseOrderWhatsAppIT}.java`; `docs/work/proof/T-268.md`.
+- **widened mid-wave:** `backend/src/test/java/org/iskcon/kms/purchaseorder/DescribedPurchaseLineIT.java` (expected text l.541-544; checked: T-271, T-273 do not hold it).
+- **found, not in scope:** `donation/Rupees.java` uses Java's en-IN NumberFormat, which prints ₹100,000 not ₹1,00,000, so donation amounts from ₹1 lakh up are grouped wrongly. Reported to the conductor as a new item.
+- **wave:** R2 · **state:** proven (1129/1129 incl. guards, JobCardIT, DocumentGenerationIT, DescribedPurchaseLineIT; control 3/23 red, byte restore) · **proof:** `docs/work/proof/T-268.md`. New `document/SheetRupees.java`, Indian grouping by hand; the PO sheet is the only document printing money.
+
+### T-277 — follow-ups from T-274: compact read-only totals, PageHeader actions wrap, the curly-quote test
+- **source:** T-274 held items; R-INV-7 (mock D wins where the document is silent); conductor's quotes ruling; DESIGN_SYSTEM §layout (no local workarounds for a shared defect, as R-INV-5 ruled for the tooltip).
+- **paths:** `frontend/components/InvoiceTotals.tsx`, `frontend/components/ds/PageHeader.tsx`, `frontend/app/invoices/[id]/page.tsx`, tests `frontend/__tests__/{invoice-totals,invoice-create-form,invoice-detail,pay-invoice}.test.tsx`, `frontend/__tests__/design-system.test.ts`, new `frontend/__tests__/page-header.test.tsx`; `docs/work/proof/T-277.md`.
+- **wave:** R4 · **state:** proven (tsc clean, full vitest 2289 passed, eslint clean, control red) · **proof:** `docs/work/proof/T-277.md`. Invoice page totals 342→171px = mock D; create form 0 px changed; PageHeader actions wrap, invoice page 481→390 at 390; 9 other PageHeader pages 0 px changed (stubbed data). Desk: note capped at 15rem; zero discount shows "₹0" not "− ₹0".
+
+## Stages 6–7 merged-tree check — 2026-09-19, by the work manager, after every builder was out
+- backend: every repo-wide guard in README lesson 3a plus AccessControlEnforcementIT, GlobalExceptionHandlerTest, attachment.*, ingredient.merge.*, invoice.*, IngredientIT, DuplicateIngredientIT, MarketRateIT, PackSizeIT, VendorPriceHistoryIT, VendorIT, VendorOnboardingIT, GivingPageIT, VendorPerformanceIT, ProcurementDataModelMigrationIT, ProcurementRowLevelSecurityIT, TenantDeletionIT, document.*, DescribedPurchaseLineIT, PurchaseOrderPackLineIT, PurchaseOrderWhatsAppIT, ShoppingListIT, DeliveriesIT: **1464 tests, 0 failures, 0 errors, 1 skipped**, BUILD SUCCESSFUL (counts from build/test-results XML).
+- frontend: `npx tsc --noEmit` exit 0; `npx vitest run` **167 files, 2289 passed**; eslint over all 109 changed files + api.ts + nav.ts: 0 errors, 1 unused-disable warning.
+- Logs: scratchpad `merged-R-{backend,tsc,vitest,eslint}.log`. Migrations used: V147 (T-270), V148 (T-271); next is V149.
+- **Not done:** nothing measured on the running app (local API down). Every UI task (T-267, T-269, T-273, T-274, T-275, T-276, T-277) is proven by tests and isolated renders only.
+- **For the conductor / Rajeev:** tables still squeezed at 1024 (vendor Supplies, two shopping-list groups; T-269); 3-line headings as last resort; headings wrap at 1280 on PO and vendor Supplies; a hand-entered negative payment needs no proof (T-272); a missing delivery id is 409 not 404 (T-271); no mock for the merge screen or the Invoices list (Rajeev reviews); abandoned uploads never cleaned up (T-267); donation/Rupees.java groups ₹1 lakh+ as ₹100,000 (new item); T-277 desk items (note capped 15rem, zero discount "₹0").
+
+## Fix wave S — F5, F6, F7, F9, F10 (2026-09-19, work manager)
+
+**Shape.** S1 runs four builders on disjoint files: F5 tables (T-278, frontend table fitter + measurement), F6 Indian
+grouping (T-279, backend formatters + a frontend test), F7 payment amount (T-280, payment backend), F9 one meaning of
+"Unpaid" (T-281, invoice list backend + Invoices list page). S2 is F10 (T-282, Kitchen Staff take deliveries), after
+T-278 is out, because both want `app/orders/[id]/page.tsx` and `app/deliveries/page.tsx`. No migration in this wave
+(V149 still free).
+
+**Reservations made by the work manager before dispatch (one pass):**
+- `ErrorCode.java`: **KMS-400174 PAYMENT_AMOUNT_NOT_POSITIVE** (400) "A payment has to be more than ₹0." / "Enter the
+  amount paid. To undo a payment recorded by mistake, press Reverse beside it." → T-280.
+- `RolePermissions.java`: RECEIVE_DELIVERIES granted to KITCHEN_STAFF, Q-1 comment replaced with Rajeev's answer
+  (2026-09-19) → T-282.
+- `nav.ts`: Deliveries item roles `[ADMIN, MANAGER, KITCHEN]`, comment updated → T-282. `nav.test.ts` is red on this
+  until T-282 flips it (expected).
+- `api.ts`: `listInvoices(filters: { status?, overdue?, owed? })`, `owed: true` → `?owed=true` → T-281.
+- API restart needed (RolePermissions, ErrorCode, then T-280/T-281 server code): the work manager's message to the
+  conductor was refused by the permission classifier, so it goes in the report instead.
+
+### T-278 — F5: tables share width by content; headings wrap only when needed; no mid-word breaks
+- **source:** conductor's fix F5 (2026-09-19); DESIGN_SYSTEM §5 rule 2; T-269 open items; T-275 finding.
+- **paths:** `frontend/components/ds/table.ts`, `frontend/app/globals.css` (table rules only),
+  `frontend/__tests__/{table-rule,design-system}.test.ts`, `frontend/__tests__/shift-attendance.test.tsx`;
+  only if a local fix is unavoidable: `frontend/app/{shopping-list,vendors/[id],orders/new,orders/[id],deliveries,ingredients/merge}/page.tsx`,
+  `frontend/components/{PurchaseOrderEditor,InvoiceItemsTable,RecordDeliveryPanel,IngredientMergeGroup}.tsx` and their
+  existing tests; `docs/work/proof/T-278.md`. NOT `app/invoices/page.tsx` (T-281 holds it).
+- **reservations:** none. **wave:** S1 · **state:** proven (85 tests; control 9 red, byte restore; tsc 0 in its files; eslint 0; 45 page×width runs: split words 15→0, sideways scroll 5→0, clipped controls 0) · **proof:** `docs/work/proof/T-278.md`. Only table.ts + globals.css changed; no page file. Table dropdowns size to the shown option (fixed LEAD TIME wrap @1280). Name columns @1024: Supplies 45→105, Kalasipalya 37→92, Sri Balaji 37→105, Invoices 36→106, merge 37→93. **For Rajeev:** "No vendor yet" @1024 is the last resort (7px into card padding, badges 2–4 lines, no word broken). Invoices mid-word @1280 not reproduced. Headless Chromium, not his Chrome.
+
+### T-279 — F6: Indian grouping (₹1,00,000; ₹1,00,00,000) in every formatter
+- **source:** conductor's fix F6; T-268 finding (Java en-IN NumberFormat has one grouping size).
+- **paths:** `backend/src/main/java/org/iskcon/kms/donation/Rupees.java`, `backend/src/main/java/org/iskcon/kms/document/SheetRupees.java`,
+  new `backend/src/main/java/org/iskcon/kms/document/IndianNumbers.java`, `backend/src/main/java/org/iskcon/kms/ingredient/Quantities.java`,
+  `backend/src/main/java/org/iskcon/kms/document/DocumentGenerationService.java` (`say` only);
+  tests new `backend/src/test/java/org/iskcon/kms/document/IndianNumbersTest.java`,
+  `backend/src/test/java/org/iskcon/kms/ingredient/QuantitiesTest.java`,
+  `backend/src/test/java/org/iskcon/kms/document/{PurchaseOrderSheetTemplateTest,DocumentGenerationIT,DonationReceiptTemplateTest}.java`,
+  `backend/src/test/java/org/iskcon/kms/donation/{DonationLedgerIT,DonationReceiptIT}.java`;
+  `frontend/lib/format.ts` (only if wrong), new `frontend/__tests__/money-indian-grouping.test.ts`; `docs/work/proof/T-279.md`.
+- **reservations:** none. **wave:** S1 · **state:** proven (backend 1131, 1 failure = the reserved RolePermissionsTest row; vitest 21/21, tsc 0; control 9 red, SHA-1 restore) · **proof:** `docs/work/proof/T-279.md`. Defect reached the split-gift WhatsApp text, donations ledger label, 80G receipt, every quantity (PO sheet, job cards). /invoices on screen "₹5,00,000". Not checked live: PDF/WhatsApp (needs restart). Outside contract, raw figures: StaffPayService audit text, VendorInvoiceService error details, MealPlanService, JobCardService.plain().
+
+### T-280 — F7: a payment must be above zero; proof required for every payment
+- **source:** conductor's fix F7; R-PAY-2; T-272 finding.
+- **paths:** `backend/src/main/java/org/iskcon/kms/invoice/{InvoicePaymentService,RecordInvoicePaymentRequest}.java`;
+  tests `backend/src/test/java/org/iskcon/kms/invoice/{InvoicePaymentIT,InvoiceCorrectionIT,PaymentProofIT}.java`;
+  `docs/work/proof/T-280.md`.
+- **reservations:** KMS-400174. **wave:** S1 · **state:** proven (invoice.* green, PaymentProofIT 31/31 incl. 12 new; guards green except RolePermissionsTest's Kitchen Staff row, which is the reserved Q-1 grant T-282 flips; controls 8 and 19 red, byte restore) · **proof:** `docs/work/proof/T-280.md`. Two now-dead checks removed (already-paid sign guard, below-zero check). Not on the live API (needs restart).
+
+### T-281 — F9: "Unpaid" shows the same rows for everyone: money still owed
+- **source:** conductor's fix F9; T-275 finding.
+- **paths:** `backend/src/main/java/org/iskcon/kms/invoice/{VendorInvoiceController,VendorInvoiceService}.java` (list only);
+  new `backend/src/test/java/org/iskcon/kms/invoice/InvoiceListOwedIT.java`; `frontend/app/invoices/page.tsx`;
+  `frontend/__tests__/{invoices,payables,invoices-filters}.test.tsx`; `docs/work/proof/T-281.md`.
+- **reservations:** api.ts `listInvoices` `owed`. **wave:** S1 · **state:** proven (InvoiceListOwedIT 3/3, invoice.* + guards green except the reserved RolePermissionsTest row; vitest 50/50, tsc 0, eslint 0; control red, byte restore) · **proof:** `docs/work/proof/T-281.md`. Today page's overdue bills now also require money owed (old 2-arg list kept). Open: a PENDING invoice with nothing owed keeps its red Overdue badge under All (fix reaches the invoice page; not done). Screen check awaits API restart.
+
+### T-282 — F10: Kitchen Staff take deliveries (Q-1 answered)
+- **source:** Rajeev's answer to Q-1, 2026-09-19, relayed by the conductor.
+- **paths:** tests `frontend/__tests__/nav.test.ts`,
+  `backend/src/test/java/org/iskcon/kms/auth/RolePermissionsTest.java`,
+  `backend/src/test/java/org/iskcon/kms/receiving/{DeliveriesIT,ReceivingIT,ReturnToVendorIT}.java`,
+  `backend/src/test/java/org/iskcon/kms/purchaseorder/DescribedPurchaseLineIT.java` (comments only); `docs/work/proof/T-282.md`.
+- **reservations:** RolePermissions grant, nav.ts roles (done by work manager). **wave:** S1d (its two page files moved out: the deliveries guard to T-285, the PO page link to T-289) · **state:** proven (16 backend classes incl. guards green; nav.test 16/16; control 3 backend + 1 nav red, checksum restore) · **proof:** `docs/work/proof/T-282.md`. Kitchen Staff open /deliveries and record on both POST routes (IT); Volunteer 403, nothing written. Still expecting a refusal, owned elsewhere: `po-merged-table.test.tsx:225` (→ T-289), `deliveries.test.tsx:174` (→ T-285). Live API + screen wait for the restart and T-285.
+
+### T-283 — F11 + F12: record Rajeev's Q-4 and Q-5 answers (design system v1.14; Q-5 comments)
+- **source:** Rajeev's Desk answers 2026-09-19, relayed by the conductor: Q-4 "Yes, red up and green down, written into
+  the design system"; Q-5 "Before GST (the line amount as typed)".
+- **paths:** `docs/DESIGN_SYSTEM.md`, new `docs/versions/DESIGN_SYSTEM_v1.14.md`,
+  `backend/src/main/java/org/iskcon/kms/invoice/InvoicePriceStep.java` (comment only),
+  `frontend/components/PriceTrend.tsx` (comment only); `docs/work/proof/T-283.md`. NOT `V144__procurement_data_model.sql`
+  (applied migration; editing its comment changes the Flyway checksum). NOT `docs/CHANGELOG.md` (release agent's):
+  the v1.14 entry is drafted in the proof for the release agent to apply.
+- **reservations:** none. **wave:** S1 (docs/comments only, disjoint) · **state:** proven (design-system + price-trend 38/38; snapshot cmp identical; code diffs comment-only) · **proof:** `docs/work/proof/T-283.md`. PriceTrend already matches the rule. CHANGELOG v1.14 entry drafted in the proof for the release agent. Outside contract: `PROCUREMENT-REQUIREMENTS.md` still lists Q-4/Q-5 open (l.465-466, R-VEN-3) — conductor's file.
+
+**Added mid-wave (conductor, 2026-09-19): verifier C's defects (`docs/work/proof/VERIFY-C.md`) and the F10 addendum.**
+The deliveries page guard (`app/deliveries/page.tsx:61`, roles → permission) moved from T-282 to T-285, so one task holds
+that page. Reservation made: `api.ts` `DeliveryReceiptLineView.returns: DeliveryReturnView[]` and new
+`DeliveryReturnView { quantity, reason: ReturnReason, returnedOn }` → T-285 (tsc now fails only in
+`__tests__/deliveries.test.tsx`, T-285's, plus stale `.next/types/app/dev-deliveries` left by the verifier's deleted mock copy).
+
+### T-284 — C2: the sidebar truncates nothing; plus a local Kitchen Manager account for verifiers
+- **source:** VERIFY-C defect 2; conductor 2026-09-19 (test setup: make one local staff account a Kitchen Manager,
+  through the app as Temple Admin, local kms_verify only).
+- **paths:** `frontend/components/Sidebar.tsx`, `frontend/__tests__/sidebar-scroll.test.tsx`, new
+  `frontend/__tests__/sidebar-names.test.tsx`; `docs/work/proof/T-284.md`.
+- **reservations:** none (Sidebar.tsx menu rows untouched). **wave:** S1b (disjoint from T-278) · **state:** proven (13/13, eslint 0; control 6/7 red, byte restore; both names full at 1024/1280/390 on the running app) · **proof:** `docs/work/proof/T-284.md`. Temple name wraps between words when too long for 18px; user name wraps (row 44→56px). Widened mid-wave (no other holder): `ROLE_LABELS` gains KITCHEN_MANAGER "Kitchen manager" (Staff screen's words). Local Kitchen Manager: `ikms.kitchen-staff.5@trading4good.org` (Madhava Das), changed on the Staff screen, 204. Label not seen on screen (builder may not type that account's password).
+
+### T-285 — C1, C3, C4 + F10 guard: the Deliveries screen matches the mock, fits at 1024, shows returns; guarded by permission
+- **source:** VERIFY-C defects 1, 3, 4; F10 addendum (Kitchen Staff get "Not your page").
+- **paths:** `frontend/app/deliveries/page.tsx`, `frontend/components/RecordDeliveryPanel.tsx`,
+  `frontend/components/DeliveryHistory.tsx` (only if needed); tests `frontend/__tests__/{deliveries,record-delivery-panel,delivery-history}.test.tsx`;
+  backend `backend/src/main/java/org/iskcon/kms/receiving/{DeliveriesService,DeliveryReceiptLineView}.java`, new
+  `receiving/DeliveryReturnView.java`, new `backend/src/test/java/org/iskcon/kms/receiving/DeliveryReturnsShownIT.java`;
+  `docs/work/proof/T-285.md`.
+- **reservations:** api.ts `returns` / `DeliveryReturnView`. **wave:** S2 · **state:** proven (vitest 97/97; backend 1056/1056 incl. DeliveriesIT, DeliveryReturnsShownIT, ReturnToVendorIT, guards; control 5 frontend + 4 backend red, byte restore; tsc only stale dev-*; eslint 0) · **proof:** `docs/work/proof/T-285.md`. C1: after T-278 the mock itself renders 12px cells, so the panel uses the mock's classes as they are — at 1280 same padding, 894px, 0 overflow. C3: the mock also runs 133px past its card at 1024; panel switches to phone cards under 714px — nothing past the card at 1024/1060/1100/390. C4: "Carrot, grated 1 Kg, spoiled, 9 Sept" on the running app. Guard by permission; server's today for the pill. **Left, for Rajeev:** Received tab Date 136px vs Vendor/Items 101 @1024 (shared fitter's narrowing order; a local fix breaks the table-rule guard). Kitchen Staff on the running app not verified.
+- **widened mid-wave:** `backend/src/test/java/org/iskcon/kms/receiving/DeliveriesIT.java` (add "returns" to the field-name list only; checked: no flying contract holds it, T-282 proven).
+
+**Added mid-wave (conductor, 2026-09-19): Rajeev answered Q-10 and Q-11. Two build tasks, disjoint from every fix.**
+Reservations made (api.ts): `getIngredient(id)` → `GET /api/v1/ingredients/{id}` (endpoint exists, MANAGE_RECIPES) → T-286;
+`ImportCloseMatchView`, `ImportCloseMatchDecision`, `importCloseMatches(masterRecipeId)` →
+`GET /api/v1/recipes/import/{id}/close-matches`, `importRecipe(masterRecipeId, token?, decisions?)` (body `{decisions}`)
+→ T-287. No new error code: an unanswered close match reuses KMS-400156 INGREDIENT_LOOKS_LIKE_EXISTING with
+`closeMatches` in details. No migration. No route/nav entry: the detail page is reached from the Ingredients list.
+
+### T-286 — G1 (Q-10): the ingredient's own page, /ingredients/[id]
+- **source:** Rajeev's Q-10 answer via the conductor, 2026-09-19; R-ING-1, R-ING-2, R-ING-3, R-VEN-2, R-VEN-3.
+- **paths:** new `frontend/app/ingredients/[id]/page.tsx`, new `frontend/components/ingredient/*.tsx`,
+  `frontend/app/ingredients/page.tsx` (name → link only), tests `frontend/__tests__/ingredients.test.tsx`, new
+  `frontend/__tests__/ingredient-detail*.test.tsx`; `docs/work/proof/T-286.md`. Backend only by coming back to the work manager.
+- **reservations:** api.ts `getIngredient`. **wave:** S1c · **state:** proven (91/91 incl. design-system + preferred-replaces after send-back; eslint 0; control red, shasum restore; driven as Temple Admin on Amla: packs, market rate ₹60/Kg, vendor link; re-measured 1280 and 390 (iframe), nothing clipped) · **proof:** `docs/work/proof/T-286.md`. Screenshots for Rajeev: `/private/tmp/claude-501/-Users-Rajeev-Workspace-kitchen-management-system/79bf5e51-4f9e-420c-b419-747d070a92df/scratchpad/T-286-shots/`. Follow-ups: access.tsx maps permissions to roles (frontend knows only the role); supply.tsx copies the vendor page's helpers (T-293 takes the rate part). Only driven as Temple Admin.
+
+### T-287 — G2 (Q-11): one screen for close matches when a library recipe is copied
+- **source:** Rajeev's Q-11 answer via the conductor, 2026-09-19; R-DUP-1, R-DUP-2; T-250's `heldCloseMatch`.
+- **paths:** `backend/src/main/java/org/iskcon/kms/library/RecipeImportService.java`,
+  `backend/src/main/java/org/iskcon/kms/recipe/RecipeController.java` (import endpoints only), new
+  `backend/src/main/java/org/iskcon/kms/library/{ImportCloseMatchView,ImportCloseMatchDecision,ImportRecipeRequest}.java`;
+  tests `backend/src/test/java/org/iskcon/kms/library/RecipeImportPreparationIT.java`, new
+  `backend/src/test/java/org/iskcon/kms/library/RecipeImportCloseMatchIT.java`;
+  `frontend/app/recipes/page.tsx`, `frontend/app/recipes/library/[id]/page.tsx` (the copy action only), new
+  `frontend/components/ImportCloseMatches.tsx`, tests new `frontend/__tests__/import-close-matches.test.tsx` and the
+  existing tests of those two pages; `docs/work/proof/T-287.md`.
+- **reservations:** api.ts close-match types and methods; KMS-400156 reused. **wave:** S1c · **state:** proven (backend 1095/1095 incl. guards, DuplicateIngredientIT, AccessControlEnforcementIT, new RecipeImportCloseMatchIT 10; vitest 53; eslint 0; controls 4 + 5 red, byte restore; isolated render 1280/390 keyboard-only) · **proof:** `docs/work/proof/T-287.md`. 400156 details are flattened field errors (api.ts comment corrected by the work manager); bad answer = 400001 with `decisions[i].…` field errors; one question per repeated base name. Matcher untouched (Q-12). Running app awaits restart.
+
+**Added mid-wave (conductor, 2026-09-19): verifier B's defects (`docs/work/proof/VERIFY-B.md`).** D-1 is F5 (T-278).
+D-6 (title tracking comes from the mock using a `<p>`) and D-7 (the "No vendor is active yet…" sentence) are listed in
+the report as Rajeev's to accept; the work manager builds nothing for them and reports them up. D-5(d) (the close-part-
+delivered panel) likewise. Not touched: the WhatsApp PO template's "It was raised on" — an approved Meta template;
+changing it means resubmission (reported up).
+
+### T-288 — D-2, D-3, D-8: the PO create form orders in the readable unit and in packs; rates follow the unit shown
+- **source:** VERIFY-B D-2, D-3, D-8; R-SL-1, R-SL-3, R-ING-1, R-PO-1..3; conductor's T-260 ruling (rate in the unit the
+  quantity shows; pack lines "₹1,500 / bag · ₹60 / Kg").
+- **paths:** `frontend/app/orders/new/page.tsx`, `frontend/components/PurchaseOrderEditor.tsx`, `frontend/lib/format.ts` (one shared readable-unit rate formatter),
+  `frontend/components/ItemCombobox.tsx` (only if needed); tests `frontend/__tests__/{described-po-line,lead-time-one-promise}.test.tsx`,
+  the create-form tests (`grep -l orders/new`), new `frontend/__tests__/po-create-units-packs.test.tsx`;
+  backend `backend/src/main/java/org/iskcon/kms/document/DocumentGenerationService.java` (pack/price text only),
+  `backend/src/test/java/org/iskcon/kms/document/PurchaseOrderSheetTemplateTest.java`,
+  `backend/src/test/java/org/iskcon/kms/purchaseorder/PurchaseOrderPackLineIT.java`; `docs/work/proof/T-288.md`.
+- **widened mid-wave (by the conductor):** `backend/src/test/java/org/iskcon/kms/document/PurchaseOrderDocumentIT.java` (one assertion, ">₹71.20 / Kg<"). No other S2 contract holds it.
+- **reservations:** none (no server change to PO lines needed). **wave:** S2 · **state:** proven (backend 1094 passed incl. guards and PO document ITs; vitest 11/12 files green, the 1 = table-rule on `app/deliveries/page.tsx`, T-285 in progress) · **proof:** `docs/work/proof/T-288.md`. Shared formatter: `readableRate` in `frontend/lib/format.ts`. Driven as Temple Admin: PO-2026-0056 (VERIFY-B Poha 3 Kg at ₹60 / Kg sent as 3 KG; VERIFY-B Rice 4 × Bag (25 Kg) at ₹1,500 / bag · ₹60 / Kg), read back on the order page and sheet. **For Rajeev (two deviations from the mock, to fit 1024):** type-ahead spans three empty cells; quantity box 80px (form was 775–891px in 680). Builder reports the running API picked up the sheet change without a restart (gradle watcher + DevTools reloaded it) — so the watcher may be ON. Left: shopping-list panel "₹0.50 / gm" (→ T-293).
+
+### T-289 — D-4, D-5, F10 link: "created" everywhere; the PO page matches mock E; Kitchen Staff see the delivery link
+- **source:** VERIFY-B D-4, D-5(a–c); F10 (Q-1 answered).
+- **paths:** `frontend/app/orders/[id]/page.tsx`, `frontend/app/shopping-list/page.tsx` (wording only);
+  tests `frontend/__tests__/{po-merged-table,order-detail,closing-a-part-delivered-order,goods-return,shopping-list,shopping-list-add,shopping-list-packs,shopping-list-no-vendor}.test.tsx`;
+  `docs/work/proof/T-289.md`.
+- **reservations:** none. **wave:** S2 · **state:** proven (8 files 131 tests; tsc only allowed stale; eslint 0; control 6 red, byte restore; D-5 measured vs mock E at 1280/1024 on the running app) · **proof:** `docs/work/proof/T-289.md`. No "raise" left in either file (also "That date is before the order was created."). Badge fixed on the order page only: the shared status chip on /orders and the invoice picker keeps the old weight (for Rajeev). At 390 the table stays flush (mock padding would put names 24px right of "Items"; logic rule). Kitchen Staff see the Deliveries link; the page admits them once T-285 lands.
+
+**Added mid-wave (conductor, 2026-09-19): verifier D's defects (`docs/work/proof/VERIFY-D.md`).** D4 is with Rajeev —
+nothing built. **D5 done by the work manager in the reserved file:** every apostrophe inside the message strings of
+this build's codes (KMS-400156 … 400174, `ErrorCode.java`) is now curly (17 changed; comments untouched). Frontend tests
+that quote the old straight text (`duplicate-ingredient`, `inventory-new`, `attachment-upload`, `ingredient-merge`) stub the
+server's message, so they stay green; ErrorCodeTest runs in the merged check. Older codes (400001 "isn't", 400021
+"don't") are app-wide and older than this build: reported up, not changed.
+
+### T-290 — D1, D2, D3: the create-invoice form's delivery ticks, phone line layout, no dead space
+- **source:** VERIFY-D D1, D2, D3; R-INV-3 (wording first); CLAUDE.md layout rules; mock A.
+- **paths:** `frontend/app/invoices/new/page.tsx`, `frontend/components/InvoiceItemsTable.tsx`; tests
+  `frontend/__tests__/{invoice-create-form,invoice-order-picker}.test.tsx`; backend only if the sort belongs in
+  `VendorInvoiceService` (billable query ORDER BY) + `backend/src/test/java/org/iskcon/kms/invoice/InvoiceLinesIT.java`;
+  `docs/work/proof/T-290.md`.
+- **reservations:** none. **wave:** S2 · **state:** proven (vitest 38/38; backend invoice.* + guards 1123 passed; controls red (18 vitest, 2 backend), byte restore) · **proof:** `docs/work/proof/T-290.md`. Tick labels end with what came ("· 45 Kg" / "· 4 items"), "· 2nd that day" when still equal (API sends date only); sorted by order then day, page and server. 390 cards 269→245 = mock; pack lines still span (210px won't fit 171). 1280: four boxes on one row, deliveries full width below; 460×176 hole gone. Five-delivery layouts measured with the list endpoint stubbed. Server sort live after restart.
+
+**Added mid-wave (conductor, 2026-09-19): Q-12 held; Q-13, Q-14, Q-15, Q-17 confirmed as built.** No change to the
+preparation-word list or the matcher, and no merge run on any data (T-287 told). Work manager updated the Q-14 note in
+`ErrorCode.java` (reserved file). Other markers go to T-291. Q-16 (mixing pack sizes) is not in the confirmed list:
+`BuyingAmount.java` and `shopping-list/page.tsx` stay marked provisional. Markers inside applied migrations are left
+alone (Flyway checksum).
+
+### T-291 — record Rajeev's Q-1, Q-13, Q-14, Q-15, Q-17 answers in code comments (no behaviour change)
+- **source:** conductor 2026-09-19; `docs/work/PROCUREMENT-PROGRESS.md` Decisions.
+- **paths:** `backend/src/main/java/org/iskcon/kms/ingredient/PackSizeService.java`,
+  `backend/src/main/java/org/iskcon/kms/receiving/{DeliveriesController,ReceivingController}.java`,
+  `frontend/app/invoices/page.tsx` (comments only); any other Q-13/Q-15 marker is reported, not edited; `docs/work/proof/T-291.md`.
+- **reservations:** none. **wave:** S1e · **state:** proven (comment-only diff; compileJava green; eslint 0; tsc only known unrelated) · **proof:** `docs/work/proof/T-291.md`. No Q-13 or Q-15 marker exists in code. Stale Q-1 comments left for their page owners: `app/deliveries/page.tsx:53` (→ T-285), `app/orders/[id]/page.tsx:217, :451` (→ T-289).
+
+**Added mid-wave (conductor, 2026-09-19): Rajeev's Q-18 answer.** Layout rules state intent; follow their logic and
+choose the closest, lesser-evil result. T-278 told to finish with its last-resort behaviour (text columns share
+evenly, words whole, only emails/URLs break at @ . -; /users at 1024 is the known case) and record each choice.
+T-283 reopened to add the line at the head of DESIGN_SYSTEM §5 in v1.14 — done: line + dated quote, Status line, snapshot identical, CHANGELOG draft updated in the proof; design-system.test 23/23 (one earlier 2/23 red run attributed to T-286's in-progress files, not captured). Flagged, not changed: §5 still calls 44px touch targets "Non-negotiable". Standing brief for
+every later builder: decide layout edge cases by the rule's logic, record the choice in the proof, don't escalate.
+
+**Added mid-wave (conductor, 2026-09-19): verifier A's defects (`docs/work/proof/VERIFY-A.md`).** A1 is F5 (T-278).
+Not a defect (conductor's ruling): undoing a movement restores stock without asking a value. Reservation made: api.ts
+`CreateInventoryItemInput.openingCount?: { quantity, unit, pricePerUnit } | null`, saved in the item's transaction → T-294.
+A3 (one readable-unit rate formatter everywhere) is the same rule as D-8: T-288 adds the shared formatter to
+`frontend/lib/format.ts` and uses it on the PO screens and sheet; T-293 (S3) moves every other view onto it.
+
+### T-292 — A2, A7, A8: the vendor page's pack error, hidden focus stop, unlabelled Preferred
+- **source:** VERIFY-A 2, 7, 8; DESIGN_SYSTEM §5 rule 6.
+- **paths:** `frontend/app/vendors/[id]/page.tsx`, `frontend/components/ds/InfoHint.tsx` (only if A7's cause is there);
+  tests `frontend/__tests__/{vendors,preferred-replaces,vendor-onboarding,vendor-lead-time,vendor-supply-edit,vendor-without-phone}.test.tsx`,
+  new `frontend/__tests__/vendor-page-verify-a.test.tsx`; `docs/work/proof/T-292.md`.
+- **wave:** S2 · **state:** proven (8 new tests, each red without its fix, byte restore; vitest 402/402 across 23 files; tsc only stale dev-*; eslint 0; headless Chromium) · **proof:** `docs/work/proof/T-292.md`. A2 error clears on change and on each press. A7 fixed in shared `InfoHint.tsx`: below 1024 an "i" in a hidden heading isn't rendered; phone hint line above the cards (conductor's option 2). A8 "Lead time — Preferred —". A1: Ingredient 100–105px @1024, 158–179 @1280, no split words.
+
+### T-293 — A3: every rate in the readable unit through the one shared formatter
+- **source:** VERIFY-A 3; D-8 rule; consistency across views.
+- **paths:** `frontend/components/IngredientMergeGroup.tsx`, `frontend/app/invoices/[id]/page.tsx`, `frontend/app/shopping-list/page.tsx` (rate text only),
+  `frontend/components/ingredient/*.tsx` (T-286's supply helpers), `frontend/app/vendors/[id]/page.tsx` (rate helpers only),
+  their tests; `docs/work/proof/T-293.md`. InvoiceItemsTable's rate goes with T-290.
+- **wave:** S3 · **state:** proven (vitest 19 files 326; control 18 red across 7 views, byte restore; tsc only stale dev-*; eslint 0) · **proof:** `docs/work/proof/T-293.md`. Every rate via `readableRate` or new `readablePackRate`; local copies deleted. Live: Ginger "₹260 / Kg" on merge, vendor, ingredient pages; tomato "₹60 / Kg" on merge, vendor, shopping list; invoice pack "₹1,500 / bag · ₹60 / Kg". Merge with a pack shows per-Kg + chip. **For Rajeev:** /orders/new type-ahead hint "₹32/Kg" (no spaces, per R-PO-3 mock) left; a gm ingredient's price is still typed per gm in the stock-value and List price boxes. Not live: gm pack line on the shopping list (test covers it).
+
+### T-294 — A4, A5, A6: Add to inventory fits at 390 and saves in one transaction; the Issued notice names both fixes
+- **source:** VERIFY-A 4, 5, 6; R-ING-3.
+- **paths:** backend `backend/src/main/java/org/iskcon/kms/inventory/{CreateInventoryItemRequest,InventoryItemService,InventoryItemController}.java`,
+  new `backend/src/test/java/org/iskcon/kms/inventory/InventoryOpeningCountIT.java`;
+  `frontend/app/inventory/new/page.tsx`, `frontend/components/InventoryItemForm.tsx`, `frontend/app/issued-from-store/page.tsx` (the notice);
+  tests `frontend/__tests__/{inventory-new,issued-from-store}.test.tsx`; `docs/work/proof/T-294.md`.
+- **reservations:** api.ts `openingCount`. **wave:** S1f (disjoint from T-278, T-286) · **state:** proven (backend 1104/1104 incl. InventoryOpeningCountIT: happy path + 5 refusals leave nothing; vitest 65/65; eslint 0; three controls red, identical restore; 390/1280 measured on the running app) · **proof:** `docs/work/proof/T-294.md`. Form one column below 768px (640 cut a real name). Notice: "…are left out until they have a vendor’s list price or a market rate." **For Rajeev:** a first count counts as a large adjustment (KMS-400025, Temple Admin only), so a Kitchen Manager or Kitchen Staff adding an item with a count is now refused outright — before, it half-saved. Save on the running app awaits restart.
+
+## Fix wave S merged-tree check — 2026-09-19, by the work manager, after every builder was out
+- backend: repo-wide guards (README lesson 3a) + GlobalExceptionHandlerTest + invoice.*, receiving.*, auth.*, document.*,
+  library.*, inventory.*, DonationLedgerIT, DonationReceiptIT, QuantitiesTest, PurchaseOrderPackLineIT, DescribedPurchaseLineIT,
+  PurchaseOrderWhatsAppIT, DuplicateIngredientIT, IngredientIT, MarketRateIT, PackSizeIT, TodayIT: **1588 tests, 0 failures,
+  0 errors, 1 skipped**, BUILD SUCCESSFUL (counts from build/test-results XML).
+- frontend: `npx vitest run` **174 files, 2413 passed**; `npx tsc --noEmit` errors only in stale `.next/types/app/dev-{po,invoices,deliveries}`
+  (verifiers' deleted mock copies; next dev regenerates `.next`); eslint over all 124 changed files + new dirs: 0 errors, 1 unused-disable warning.
+- Logs: scratchpad `mS-{backend,tsc,vitest,eslint}.log`. No migration used; next is still V149.
+- **API restart needed** (work manager's request to the conductor was refused by the classifier): RolePermissions (Q-1),
+  ErrorCode (400174 + curly quotes), T-279, T-280, T-281, T-285, T-287, T-290, T-294 server code. T-288 reports the running API
+  hot-reloaded its change, so the watcher may be on.
+
+## Fix wave 3 — round-2 verification defects (2026-09-19, work manager)
+
+**Source:** `docs/work/proof/VERIFY2-SUMMARY.md` and VERIFY2-A..D (exact repros); conductor's brief 2026-09-19 with the
+A-N5 ruling (on "Use <existing>", the rest of the typed name becomes the recipe line's preparation note; no
+preparation-word list, which stays on hold, Q-12). C-5 (VERIFY-C minor 5: invalid body gives 400 before 403) is the same
+defect as X-1 and is folded into T-301.
+
+**Shape.** 3a runs four builders on disjoint files: T-296 ingredient page (A-N1..A-N4), T-297 library copy note (A-N5),
+T-299 tables at 1024 + unnamed pack text (C-1, C-2, D-N2), T-301 permission before validation (X-1, C-5). 3b runs
+T-298 (B-N1, B-N2) and T-300 (D-N1), small frontend tasks, after 3a's verify runs clear the lock. **Reservations: none**
+— no migration (V149 still free), no error code (the refusal is the existing 403 KMS-400021), no api.ts change (A-N5
+fills the existing `ImportCloseMatchView.note`), no route/nav. T-297 and T-301 change server code: they ask the conductor
+("main") to restart the API; builders never start or stop it.
+
+### T-296 — A-N1..A-N4: the ingredient page's stale pack error, unit on the trend tooltip, labelled Preferred, Link a vendor rows
+- **source:** VERIFY2-A N1, N2, N3, N4; DESIGN_SYSTEM §5 rule 6; CLAUDE.md layout rules.
+- **paths:** `frontend/components/ingredient/{PackSizes,IngredientVendors,supply,IngredientFacts,MarketRate,access}.tsx`,
+  `frontend/components/PriceTrend.tsx`, `frontend/app/vendors/[id]/page.tsx` (the PriceTrend `format` only),
+  `frontend/app/ingredients/[id]/page.tsx`; tests `frontend/__tests__/{ingredient-detail,price-trend,vendor-page-verify-a,vendors,vendor-supply-edit}.test.tsx`,
+  new `frontend/__tests__/ingredient-page-verify2.test.tsx`; `docs/work/proof/T-296.md`. NOT `lib/format.ts` (use `readableRate`/`readablePackRate` as they are).
+- **reservations:** none. **wave:** 3a · **state:** proven (vitest 7 files 100/100; controls red for N1–N4, byte-identical restore; tsc/eslint clean; live as Temple Admin: N1 clears on every change path, N2 tip "₹1,250 on 19 Sept" beside "₹1,600 / bag", N3 "Preferred —" @390, N4 two rows @1024 with Lead time box and button level) · **proof:** `docs/work/proof/T-296.md`. N2 follows the conductor's later ruling (PROCUREMENT-PROGRESS l.127: keep R-VEN-3 '₹X on <date>', amount in the row's leading unit), helper `previousPriceText` in supply.tsx used by both pages. **For Rajeev:** 56px gap beside Lead time @1024. Left: stale comment `app/vendors/[id]/page.tsx:657`. Headless Chromium.
+
+### T-297 — A-N5: "Use <existing>" on a library copy keeps the rest of the name as the preparation note
+- **source:** VERIFY2-A N5; conductor's ruling 2026-09-19; R-DUP-1, R-DUP-2.
+- **paths:** `backend/src/main/java/org/iskcon/kms/library/{RecipeImportService,ImportCloseMatchView}.java`;
+  tests `backend/src/test/java/org/iskcon/kms/library/{RecipeImportCloseMatchIT,RecipeImportPreparationIT}.java`;
+  `frontend/components/ImportCloseMatches.tsx`, `frontend/__tests__/import-close-matches.test.tsx`; `docs/work/proof/T-297.md`.
+  NOT the name matcher or its preparation-word list (Q-12 hold).
+- **reservations:** none (existing `note` field). **wave:** 3a · **state:** proven (RecipeImportCloseMatchIT 22/22, control 4 red, md5 restore; library + guards 1259/1260, the 1 = T-301's in-flight AccessControlEnforcementIT; vitest 44/44, tsc/eslint clean; Allam Uragaya saved Ginger · peeled, Mustard · split in kms_verify; dialog 1280/1024/390 nothing clipped) · **proof:** `docs/work/proof/T-297.md`. New dialog line (builder's wording): "The line will read “Ginger · peeled” if you use it."; answered row "Using Ginger · peeled." Archived VERIFY2-A's earlier Allam Uragaya copy in kms_verify. Headless Chromium.
+
+### T-299 — C-1, C-2, D-N2: short values never shredded at 1024; an unnamed pack says its size once
+- **source:** VERIFY2-C defects 1, 2; VERIFY2-D N2; Q-18 (follow the rule's logic); DESIGN_SYSTEM §5 rule 2.
+- **paths:** `frontend/components/ds/table.ts`, `frontend/app/globals.css` (table rules only),
+  `frontend/app/deliveries/page.tsx`, `frontend/components/{RecordDeliveryPanel,DeliveryHistory}.tsx`,
+  `frontend/app/invoices/page.tsx`; tests `frontend/__tests__/{table-rule,design-system}.test.ts`,
+  `frontend/__tests__/{deliveries,record-delivery-panel,delivery-history,invoices,invoices-filters,payables}.test.tsx`;
+  `docs/work/proof/T-299.md`.
+- **reservations:** none. **wave:** 3a · **state:** proven (vitest 131/131; controls 6 red, cmp restore; tsc 0, eslint clean; 51 page×width runs: 0 mid-word splits, 0 sideways scroll) · **proof:** `docs/work/proof/T-299.md`. D-N2: table.ts adds a word joiner after inner hyphens in any word containing a digit (every table; copy strips it) — /invoices @1024 Against 85→126, both roles. C-1: DeliveryHistory pieces wrap from 1024 up — Order 63→123, Still owed 57→119. C-2: "1 × 500 gm"; "2 × 500 gm (1 Kg)", "1 bag (25 Kg)" kept. **For Rajeev:** Received tab @1280 all histories open, Items 216→164px (up to 25 lines); shopping-list "No vendor yet" @1024 10px past its content (was 7; last resort, inside card padding). Headless Chromium.
+- **follow-up found:** the same doubled unnamed pack ("1 × 500 gm" over "500 gm") on the PO page, invoice page and invoice form → T-302.
+
+### T-301 — X-1 + C-5: the permission refusal comes before body validation
+- **source:** VERIFY2 cross-group (A, B, C); VERIFY-C minor 5; conductor's brief ("on every new/changed endpoint in this build; add tests").
+- **paths:** new `backend/src/main/java/org/iskcon/kms/auth/PermissionFirst*.java` (one or two files: the check and its
+  registration), `backend/src/main/java/org/iskcon/kms/auth/SecurityConfiguration.java` (only if registration needs it),
+  new `backend/src/test/java/org/iskcon/kms/auth/PermissionBeforeValidationIT.java`,
+  `backend/src/test/java/org/iskcon/kms/auth/AccessControlEnforcementIT.java`; `docs/work/proof/T-301.md`.
+  Any other existing test asserting the old order → back to the work manager.
+- **reservations:** none. **wave:** 3a · **state:** proven (PermissionBeforeValidationIT 41 endpoints + 4 in AccessControlEnforcementIT, 103/103; control 41 red, hash restore; 12 packages + guards 2097/2098, the 1 = its own test record's missing @NotBlank message, fixed, FieldErrorMessageTest re-run 6/6; live after restart: Volunteer 403 KMS-400021, anonymous 401, Kitchen Staff 400 field errors) · **proof:** `docs/work/proof/T-301.md`. Mechanism: `auth/PermissionFirstInterceptor.java` + `PermissionFirstConfiguration.java` evaluate the handler's @PreAuthorize before argument binding — **app-wide, every endpoint**, not only procurement; skips rules that read arguments (none today). Guard fails if a controller gains an unlisted write endpoint.
+
+### T-298 — B-N1, B-N2: /orders/new shows the unit it creates; an empty order gets only its own message
+- **source:** VERIFY2-B N-1, N-2.
+- **paths:** `frontend/app/orders/new/page.tsx`, `frontend/components/ItemCombobox.tsx` (only if needed);
+  tests `frontend/__tests__/{po-create-form,po-create-units-packs,manual-purchase-order,described-po-line,lead-time-one-promise}.test.tsx`;
+  `docs/work/proof/T-298.md`. NOT `lib/api.ts` (`toApiError`) or `components/ErrorNotice.tsx` — back to the work manager if needed.
+- **reservations:** none. **wave:** 3b (started when T-297 returned) · **state:** proven (5 files 81/81; 6 new tests red on the original page, cmp restore; eslint clean; tsc clean on the merged tree at hand-back check; live as Temple Admin, Kitchen Staff, Kitchen Manager: options read "· Kg", lines stored KG (PO-0071..0073, cancelled); banner 112px/3 paragraphs → 60px/1 line @1280, 86px @390) · **proof:** `docs/work/proof/T-298.md`. Builder's call after the clarifier: a vendor pack with no price names the pack, "Bag (25 Kg)" (unit-tested only, no data). Past-date refusal test-only.
+- **follow-up found:** the same generic "Check your connection" + KMS-0000 on local refusals at `app/orders/[id]/page.tsx` ~582, ~609, ~978 and `app/shopping-list/page.tsx` ~466 → T-303 (after T-302 frees the PO page).
+
+### T-300 — D-N1: a long payment reference or receiver name wraps on a phone
+- **source:** VERIFY2-D N1.
+- **paths:** `frontend/app/invoices/[id]/page.tsx`; tests `frontend/__tests__/{invoice-detail,pay-invoice}.test.tsx`;
+  `docs/work/proof/T-300.md`. NOT `globals.css` / `table.ts` (T-299's) — if the fix belongs there, stop and report.
+- **reservations:** none. **wave:** 3b (started when T-296 returned) · **state:** proven (invoice-detail + pay-invoice 26/26; control red, md5 restore; tsc/eslint clean; live: both invoices @390 scrollWidth 390, gutters 16/16, cards 358, reference 2 lines; 1280 identical; INV-E @1024 gutter 3→32, "Paid by" 36→92px) · **proof:** `docs/work/proof/T-300.md`. Reference is now a wrapping text column; a single token wider than the phone card breaks inside itself (Q-18 lesser evil). **Open (table fitter, not this page):** at ≥1024 an unspaced token over ~35 chars still widens the page (60 chars → 1349); a real UTR fits. Cash "Received by …" on 0917 @1024 reads 4 lines at 107px (unchanged).
+
+### T-302 — C-2 everywhere: an unnamed single pack says its size once on the PO page, invoice page and invoice form
+- **source:** T-299 finding (proof l.159); C-2 rule; consistency across views.
+- **paths:** `frontend/app/orders/[id]/page.tsx` (`OrderedCell` only), `frontend/app/invoices/[id]/page.tsx` (`LineQuantity` only),
+  `frontend/components/InvoiceItemsTable.tsx` (`Amount` only); tests `frontend/__tests__/{po-merged-table,order-detail,invoice-detail,invoice-create-form}.test.tsx`;
+  `docs/work/proof/T-302.md`. Disjoint from T-298 (orders/new). T-299, T-300 done.
+- **reservations:** none. **wave:** 3c · **state:** proven (4 files 84/84; 3 new tests red without the fix, cmp restore; tsc/eslint clean; live as Temple Admin 1280/1024/390: PO row @390 191→171px, invoice row 71→51 @1280, 192→152 @390; named packs unchanged; no sideways scroll) · **proof:** `docs/work/proof/T-302.md`. Rule written inline 3 times (T-299's `repeatsPack` not exported). Data: two Tea deliveries, invoice T302-TEA-1 in kms_verify. **Found:** the form's Billed qty readout (InvoiceItemsTable) still doubles → T-303.
+
+### T-303 — local refusals show only their own message (PO page, shopping list); the unnamed-pack rule in one helper, incl. the invoice form's Billed qty
+- **source:** T-298 finding (B-N2 rule); T-302 finding (Billed qty doubling; rule copied inline in 4 places).
+- **paths:** `frontend/app/orders/[id]/page.tsx`, `frontend/app/shopping-list/page.tsx` (the local-refusal calls; OrderedCell),
+  `frontend/app/invoices/[id]/page.tsx` (LineQuantity), `frontend/components/{InvoiceItemsTable,RecordDeliveryPanel,DeliveryHistory}.tsx` (the pack text only),
+  `frontend/lib/format.ts` (one new exported helper only); tests `frontend/__tests__/{po-merged-table,order-detail,closing-a-part-delivered-order,goods-return,shopping-list,shopping-list-add,shopping-list-packs,shopping-list-no-vendor,invoice-detail,invoice-create-form,record-delivery-panel,delivery-history}.test.tsx`,
+  new `frontend/__tests__/pack-repeat.test.ts`; `docs/work/proof/T-303.md`. NOT `lib/api.ts`, `components/ErrorNotice.tsx`. Nothing else in flight.
+- **reservations:** none. **wave:** 3d (after T-302, alone) · **state:** proven (213 tests; 11 new red with the old files, byte-identical restore; tsc/eslint clean; live as Temple Admin: four refusals 3 paragraphs → 1, 112→60px @1280, nothing saved; invoice form Tea Billed qty row 93→69px @1280) · **proof:** `docs/work/proof/T-303.md`. One `repeatsPack` in lib/format.ts used in five places, inline copies gone; rounding per place unchanged. **For Rajeev:** the PO page's refusal sits at the top of the page, off-screen above Save at 390 (predates this).
+
+## Fix wave 3 merged-tree check — 2026-09-19, by the work manager, after every builder was out
+- frontend: `npx tsc --noEmit` 0; `npx eslint . --max-warnings=0` 0; `npx vitest run` **176 files, 2461 passed**.
+- backend: repo-wide guards (README 3a: BaseQuantityIT, UnitLabelAgreementTest, TempleClockTest, CommunicationSendGuardSourceTest,
+  ErrorCodeTest, FieldErrorMessageTest, NextStepPermissionTest, RolePermissionsTest, RowLevelSecurityIT, TenantLoopMigrationIT)
+  + GlobalExceptionHandlerTest, auth.*, library.*, recipe.*, receiving.*, invoice.*, purchaseorder.*, DuplicateIngredientIT:
+  **1506 tests, 0 failures, 0 errors, 0 skipped**, BUILD SUCCESSFUL (counts from build/test-results XML).
+- Logs: scratchpad `m3-{tsc,eslint,vitest,backend}.log`. No migration, error code, permission, api.ts or nav reservation used; next is still V149.
+- API was restarted by the conductor for T-297 and T-301 during the wave. Nothing committed.
+
+## Wave RS — repeating events: "once every N weeks until a date", a series, and "this or all later" on cancel (2026-09-19, work manager)
+
+**Source:** Rajeev in the terminal, 2026-09-19, relayed by the conductor: *"Let us change for many weeks to 'until' a
+date and also give them the option to pick the duration between repeats, and a cancel of this repeating event should
+ask JUST this event OR all events from this point onwards. An example of how it would look on screen: 'Repeat
+Children's Bhagavad-gita Reading once every [1] week / weeks (if the selected value is more than 1) until 31 Dec
+2026'. Let us build it now… I want it to have all the bells and whistles possible."* Temple users asked him for it.
+This supersedes EPIC-4 E4-S15 **D8 "Recurrence is a copy, not a series"** and UAT-086's "copies were chosen
+deliberately over a recurrence rule"; the story is amended (not deleted) in T-309 and the release agent records it
+in CHANGELOG. Each copy stays an ordinary meal, editable alone.
+
+**Shape and why serial.** T-308 (screens) reads the API T-307 adds, so it waits for T-307 proven, however disjoint the
+files; T-309 (UAT/story) copies T-308's final wording, so it waits for T-308. **api.ts is written by the work manager
+between RS1 and RS2, from T-307's proof, not from this plan** — so the client type describes what the server actually
+returns. No nav/route/permission change (MANAGE_MEAL_PLANS throughout, permission-first via T-301's interceptor).
+
+**The contract T-307 implements** (the work manager writes api.ts to it):
+- `POST /api/v1/meals/{id}/repeat` body `{everyWeeks:int 1..12, until:"YYYY-MM-DD"}` (replaces `?weeks=`). Dates =
+  source date + k×everyWeeks weeks, k≥1, while ≤ until. `until` ≤ today-at-the-temple + 1 year. Skips, each named by
+  date: a fasting day the dishes don't suit (as today, never acknowledged on the planner's behalf) and a date where the
+  same event (day, kind, name) is already planned and live. Result `{copies, preparations, dates[], skippedFasting[],
+  skippedAlreadyPlanned[], lastDate|null, series}`.
+- `GET /api/v1/meals/{id}/repeat-preview?everyWeeks=&until=` — the same walk, nothing written, same result shape.
+- Every `ServedMeal` (MealView) gains required-nullable `series {seriesId, everyWeeks, until, position|null, count}`.
+- `GET /api/v1/meals/{id}/later-in-series` → `{seriesId, later:[{mealId, planDate, edited, volunteersSignedUp}],
+  lastDate|null, volunteersToTell}` — later = same series, date after this one and ≥ today at the temple, still
+  PLANNED, not recorded, not cooked.
+- `POST /api/v1/meals/{id}/cancel` body gains `scope: "THIS" | "THIS_AND_LATER"` (default THIS) and
+  `expectedMealIds[]` (the later ids the confirm showed); result gains `mealsCancelled`, `lastDate`.
+
+### T-307 — backend: series table, interval/until repeat with preview, series summary, cancel this-or-later
+- **source:** Rajeev 2026-09-19 (above); E4-S15 D8 superseded; T-301 permission-first.
+- **paths:** new `backend/src/main/resources/db/migration/V149__meal_series.sql`;
+  `backend/src/main/java/org/iskcon/kms/meal/{MealController,MealPlanService,ServedMeal,ServedMealService,RepeatEventResult,CancelMealRequest}.java`,
+  new `backend/src/main/java/org/iskcon/kms/meal/{RepeatEventRequest,MealSeriesView,LaterInSeries,CancelledMeals}.java` (names are suggestions; stay in `meal/`);
+  tests `backend/src/test/java/org/iskcon/kms/meal/{MealPlanIT,MealRequests}.java`, new `backend/src/test/java/org/iskcon/kms/meal/MealSeriesIT.java`,
+  `backend/src/test/java/org/iskcon/kms/auth/PermissionBeforeValidationIT.java` (add MealController's repeat, cancel);
+  `docs/work/proof/T-307.md`. Read-only but must stay green: `tenant/TenantDeletionIT`, `RowLevelSecurityIT`, `TenantLoopMigrationIT`, `ErrorCodeTest`.
+  NOT `ErrorCode.java`, `RolePermissions.java`, `AuditAction.java`, `ShiftService` (use its existing methods), `frontend/**`.
+- **reservations:** migration **V149**; codes **KMS-400175 REPEAT_INTERVAL_OUT_OF_RANGE, KMS-400176 REPEAT_END_DATE_TOO_FAR,
+  KMS-400177 REPEAT_MAKES_NO_COPIES, KMS-400178 MEAL_NOT_IN_SERIES, KMS-400179 SERIES_CHANGED_SINCE_CHECKED** (added to
+  ErrorCode.java by the work manager). **wave:** RS1 · **state:** proven (1394 tests 0 failures incl. MealSeriesIT 13/13, PermissionBeforeValidationIT 91/91, guards; control 9/33 red, byte-identical restore; live on :8080 after restart, Flyway V149: repeat/preview/summary/later/cancel-later, stale ids 409 400179, Volunteer 403 first) · **proof:** `docs/work/proof/T-307.md`. Deviations accepted: cancel always answers `{volunteersTold, mealsCancelled, lastDate}`; repeating a fully cancelled meal → existing KMS-400046; all dates skipped → 200 copies 0, nothing written; composite FK (tenant_id, series_id). Found: copies could land on past dates → T-340 (as T-310); `MealFixture.deleteAll` does not clear meal_series → T-340 (as T-310).
+- **api.ts written by the work manager at RS2 from T-307's proof:** `MealSeries`, `RepeatEventResult` (new shape), `LaterOccurrence`, `LaterInSeries`, `CancelScope`, `CancelledMeal` + `mealsCancelled`/`lastDate`, `MealView.series` (required-nullable); `repeatEvent(mealId, everyWeeks, until, token)`, `previewRepeat(...)`, `laterInSeries(mealId, token)`, `cancelMeal(mealId, reason, token, series?)`. tsc then fails only in MealServices.tsx (T-308's).
+
+### T-308 — screens: the repeat sentence with live count and preview, the series line, the cancel choice
+- **source:** Rajeev 2026-09-19; ux-writing for copy; Q-18 layout logic; CLAUDE.md layout rules.
+- **paths:** `frontend/components/planner/MealServices.tsx`, `frontend/app/planner/meal/[id]/page.tsx` (series line only);
+  tests `frontend/__tests__/{planner-day-routes,planner-shift,planner,meal-composer,crew-pebble,meal-correction,meal-recording,calendar,calendar-correction,shift-attendance}.test.tsx`,
+  `frontend/__tests__/staff-fixtures.ts` (fixtures gain `series: null`), new `frontend/__tests__/repeat-series.test.tsx`; `docs/work/proof/T-308.md`.
+  NOT `lib/api.ts` (reserved; written by the work manager before RS2), `lib/format.ts`, `components/ConfirmLayer`/`ds/*`.
+- **reservations:** api.ts types/methods (written, above). **wave:** RS2 (after T-307 proven) · **state:** proven (12 vitest files 305/305 incl. repeat-series 22 and design-system; tsc/eslint clean; control 9 anchors → 12 red, md5 restore; live as Temple Admin at 1280/1024/390: sentence one line at 1280, wraps by phrase at 1024 and 390, docScroll = width at all three; cancel dialog buttons side by side 44px; KMS-400179 forced live; all test events cancelled through the UI) · **proof:** `docs/work/proof/T-308.md`
+
+### T-340 (allocated as T-310; renumbered) — no repeat copy on a past date; test cleanup clears meal_series
+- **source:** T-307 proof "Not done" (copies land in the past; MealFixture.deleteAll). Work manager's judgement under the standing go-ahead (reversible): a copy on a past date is an unrecorded meal nobody will cook, and it inflates the "went out and never written down" count.
+- **paths:** `backend/src/main/java/org/iskcon/kms/meal/MealPlanService.java` (the repeat walk only), tests `backend/src/test/java/org/iskcon/kms/meal/{MealSeriesIT,MealPlanIT,MealFixture}.java`; `docs/work/proof/T-340.md`. Disjoint from T-308 (frontend only). No API shape change: past dates are simply not candidates.
+- **reservations:** none. **wave:** RS2 · **state:** proven (meal.* + guards + TodayIT 1251/1251; control 3 MealSeriesIT red, byte-identical restore; live after the conductor's restart: preview from a 30 Aug event lists 20 Sep onward only, all-past range 400177) · **proof:** `docs/work/proof/T-340.md`. MealSeriesIT's cancelThisAndLater now builds its past occurrence directly and links it (assertions unchanged).
+
+### T-341 (allocated as T-311; renumbered) — the planner day page says "planned was saved." after planning a meal
+- **source:** conductor 2026-09-19, `docs/work/proof/E2E-LOCAL.md` defect 2 (day page renders `${saved} was saved.` with saved=planned; the planner page already says "The meal was planned.").
+- **paths:** `frontend/app/planner/[date]/page.tsx` (saved notice only), `frontend/app/planner/page.tsx` (saved sentence only), new `frontend/components/planner/savedNotice.ts`, new `frontend/__tests__/planner-saved-notice.test.tsx`; `docs/work/proof/T-341.md`. Disjoint from T-308 (MealServices, meal/[id], planner*.test.tsx are T-308's; T-311 runs them read-only).
+- **reservations:** none. **wave:** RS2 · **state:** proven (4 vitest files 100/100; control 1/7 red on the old day page, byte-identical restore; eslint clean; tsc errors only in T-308's in-flight MealServices.tsx; live as Temple Admin: banner DOM text "The meal was planned.") · **proof:** `docs/work/proof/T-341.md`. One `savedNotice(flag)` used by both pages. Known edge left: an event literally named "planned", edited, would read "The meal was planned." (fix is on the edit page's flag; T-308 holds that file).
+
+### T-309 — UAT-086, E4-S15 D8 amendment, traceability
+- **paths:** `docs/uat/UAT-086-an-event-of-its-own.md`, `docs/uat/TRACEABILITY.md`, `docs/stories/EPIC-4-meal-planning-calendar.md` (E4-S15 only); `docs/work/proof/T-309.md`.
+- **reservations:** none. **wave:** RS3 (after T-308 proven) · **state:** proven (docs only: UAT-086 repeat steps 45–70, travel renumbered 71–80 with in-file references fixed; E4-S15 D8 struck and superseded by D8b 'Amended 2026-09-19 at Rajeev's request (terminal)'; TRACEABILITY rows; every quoted UI string grepped in MealServices.tsx; not run against the app). CHANGELOG untouched — **release agent: record the E4-S15 D8 amendment (locked stories) in CHANGELOG.** · **proof:** `docs/work/proof/T-309.md`
+
+## Wave RS merged-tree check — 2026-09-19, by the work manager, after T-307, T-308, T-310, T-311 were out (T-309 is docs only)
+- frontend: `npx tsc --noEmit` 0; `npx eslint . --max-warnings=0` 0; `npx vitest run` **179 files, 2507 passed**.
+- backend: meal.*, auth.*, today.*, costing.*, shift.*, ShoppingListStatementCountIT and the README 3a guards (BaseQuantityIT, UnitLabelAgreementTest, TempleClockTest, CommunicationSendGuardSourceTest, ErrorCodeTest, FieldErrorMessageTest, NextStepPermissionTest, RolePermissionsTest, RowLevelSecurityIT, TenantLoopMigrationIT, TenantDeletionIT, MetaTemplateRulesTest, NotificationTemplateTest): **1563 tests, 0 failures, 0 errors, 0 skipped**, BUILD SUCCESSFUL (test task executed; counts from build/test-results XML).
+- Logs: scratchpad `rs-{tsc,eslint,vitest,backend}.log`. Reservations used: V149, KMS-400175..400179, api.ts series types. Next free: V150, KMS-400180. T-number: see the collision note below. Nothing committed.
+
+**T-number collision, found 2026-09-19 at RS3.** Another work stream in this checkout allocated **T-310 and T-311** for the
+E2E-LOCAL defects at the same time as this wave did, without a ledger row here, and its builders' proofs overwrote
+`docs/work/proof/T-310.md` and `T-311.md`. Those two files now hold the other stream's tasks and are left as they are.
+This wave's two tasks are renumbered **T-340** and **T-341**; their builders rewrote their proofs from their own records
+to `T-340.md` / `T-341.md`. The code was never at risk (disjoint files, confirmed by the merged-tree check). Rule for the
+conductor: two work managers running at once must take ids from disjoint ranges, or one ledger — the proof filename is
+the only thing the id protects, and it is exactly what collided.
+
+## Release — procurement rework and repeating events committed to main (2026-09-19, release agent)
+- **Tasks:** T-242, T-245–T-247 (older work in the tree), T-248–T-305, T-307–T-312, T-340, T-341, T-343. T-306 is excluded
+  (its proof stays local-only), as are `frontend/app/dev-*`.
+- **State for every task above: committed to `main`; not deployed.** The deploy waits for the main session's go (the
+  staging freeze starts Sat 19 Sep 20:00 PDT). Nothing is verified by Rajeev.
+- **Commits, oldest first:** the hand-made buttons and idle sign-out (group 1); the backend in five, by area: data model,
+  duplicates, ingredients, vendors and prices (V144, V145, V147); shopping list and orders (V146); deliveries; invoices and
+  payments (V148); permission-first and shared document dates. Then the frontend in one commit, the design system v1.14,
+  repeating events (V149, backend and frontend together), and these docs.
+- **Why the frontend is one commit:** `lib/api.ts` gains required fields that the test fixtures of every area rely on, so
+  splitting the screens by area gives intermediate commits that don't type-check. Each backend commit and each cumulative
+  state was compiled on its own (`compileJava compileTestJava`, `tsc --noEmit`) before committing. `lib/api.ts` went in
+  without its repeating-events hunks, which came with the repeating-events commit.
+- **One test fix at the release gate:** `OneTimeDonationIT` "every recurring-donation endpoint is gone" got 403 instead of
+  404 once T-301 checked permissions first (`GET /donations/recurring` hits `/donations/{donationId}`, which a volunteer
+  may not read). The test now signs in as a Temple Admin, so the 404 is the only possible answer. No product code changed.
+- **Next free:** migration V150, error code KMS-400180.
