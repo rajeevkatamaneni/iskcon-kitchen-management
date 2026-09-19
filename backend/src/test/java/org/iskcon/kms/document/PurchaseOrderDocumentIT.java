@@ -166,7 +166,66 @@ class PurchaseOrderDocumentIT extends AbstractIntegrationTest {
 				.andExpect(status().isForbidden());
 	}
 
+	@Test
+	@DisplayName("the sheet writes rupees the screen's way: ₹1,500, ₹71.20 / Kg and a total of ₹1,01,535.60 (T-268, T-288)")
+	void rupeesOnTheSheetMatchTheScreen() throws Exception {
+		UUID curryLeaves = ingredient("Curry Leaves");
+		UUID poId = admin.queryForObject("""
+				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, created_by)
+				VALUES (?, 'PO-2026-0046', ?, 'SENT', ?) RETURNING id
+				""", UUID.class, tenant, vendor, staffId);
+		// 2500 Kg at ₹40 is ₹1,00,000; 1 Kg at ₹1,500; 500 gm at ₹0.0712 a gram is ₹35.60.
+		line(poId, rice, "2500", "KG", "40", 0);
+		line(poId, dal, "1", "KG", "1500", 1);
+		line(poId, curryLeaves, "500", "GM", "0.0712", 2);
+
+		// The print view and the PDF worker build the sheet from the same model and template
+		// (DocumentGenerationService.buildSheetModel), so this is the text the PDF is printed from.
+		String html = mvc.perform(authed(get("/api/v1/purchase-orders/{poId}/print", poId)))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+
+		org.assertj.core.api.Assertions.assertThat(html)
+				.contains(">₹40 / Kg<")
+				.contains(">₹1,500 / Kg<")
+				// A rate per gram held to four places, said per Kg (T-288, VERIFY-B D-8: a rate
+				// follows the readable unit, so a 500 gm line is priced per Kg, never "₹0.07 / gm").
+				.contains(">₹71.20 / Kg<")
+				// Indian grouping on the total, with its paise.
+				.contains(">₹1,01,535.60<")
+				// The old form, fixed two places and no grouping, is gone.
+				.doesNotContain("₹1500")
+				.doesNotContain("₹101535")
+				.doesNotContain("₹40.00");
+	}
+
+	@Test
+	@DisplayName("the sheet writes dates the screen's way: 20 Sept 2026, not the US 20 Sep 2026 (T-310)")
+	void datesOnTheSheetMatchTheScreen() throws Exception {
+		UUID poId = admin.queryForObject("""
+				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, needed_by, created_by)
+				VALUES (?, 'PO-2026-0047', ?, 'DRAFT', DATE '2026-09-20', ?) RETURNING id
+				""", UUID.class, tenant, vendor, staffId);
+		line(poId, rice, "10", "KG", "40", 0);
+
+		String html = mvc.perform(authed(get("/api/v1/purchase-orders/{poId}/print", poId)))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+
+		// The screens format with en-GB (frontend/lib/format.ts), which abbreviates September "Sept".
+		org.assertj.core.api.Assertions.assertThat(html)
+				.contains("20 Sept 2026")
+				.doesNotContain("20 Sep 2026");
+	}
+
 	// ---------------------------------------------------------------------
+
+	private void line(UUID poId, UUID ingredient, String quantity, String unit, String price, int order) {
+		admin.update("""
+				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit, expected_price, line_order)
+				VALUES (?, ?, ?, CAST(? AS numeric), ?, CAST(? AS numeric), ?)
+				""", tenant, poId, ingredient, quantity, unit, price, order);
+	}
 
 	private String requestVersion(UUID poId) throws Exception {
 		String body = mvc.perform(authed(post("/api/v1/purchase-orders/{poId}/pdf", poId)))

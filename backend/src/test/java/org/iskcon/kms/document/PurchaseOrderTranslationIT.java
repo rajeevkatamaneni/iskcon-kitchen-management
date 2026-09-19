@@ -184,6 +184,29 @@ class PurchaseOrderTranslationIT extends AbstractIntegrationTest {
 		assert enProv == null : "English sheet should have no translation provenance";
 	}
 
+	@Test
+	@DisplayName("a Kannada sheet prints the same rupee figures as the English one, untranslated (T-268)")
+	void kannadaSheetKeepsTheRupeeFigures() throws Exception {
+		UUID poId = po(hindiVendor, "PO-2026-0047");
+		// 30 Kg at ₹1,500 a Kg is ₹45,000.
+		admin.update("UPDATE purchase_order_lines SET expected_price = 1500 WHERE po_id = ?", poId);
+
+		String kn = mvc.perform(authed(get("/api/v1/purchase-orders/{poId}/print", poId).param("language", "kn")))
+				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		String en = mvc.perform(authed(get("/api/v1/purchase-orders/{poId}/print", poId).param("language", "en")))
+				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+		// The sheet really is in Kannada (the stub provider tags what it translated)...
+		assertThat(kn).contains("[kn] Rice");
+		// ...and the money on it is the English sheet's, character for character: numbers and the
+		// ₹ sign are never sent to translation, so the grouping cannot be mangled on the way.
+		for (String figure : new String[] {">₹1,500 / Kg<", ">₹45,000<"}) {
+			assertThat(en).contains(figure);
+			assertThat(kn).contains(figure);
+		}
+		assertThat(kn).doesNotContain("[kn] ₹").doesNotContain("₹1500").doesNotContain("₹45000");
+	}
+
 	// ---------------------------------------------------------------------
 
 	private String requestPdf(UUID poId, String language) throws Exception {

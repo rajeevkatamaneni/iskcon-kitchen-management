@@ -36,6 +36,13 @@ import org.iskcon.kms.vendor.OrderUrgency;
  * @param orderUrgency where today stands against {@code orderBy}, computed as the line is read
  *     rather than stored, because it changes at midnight without anything in the row changing. Null
  *     exactly when {@code orderBy} is.
+ * @param buyPacks what {@code suggestedQty} is in packs (R-SL-2, R-SL-3; T-259), largest first, and
+ *     empty when it is not — an ingredient with no pack sizes, rounded to a step instead. On a line
+ *     somebody typed a quantity into, the typed figure is never re-rounded, and this describes it
+ *     only when it is an exact whole number of the vendor's pack: 100 Kg typed against Bag = 25 Kg
+ *     is 4 bags, 90 Kg is nothing, because "4 bags" beside a typed 90 would be two orders on one line.
+ * @param packFromVendor true when {@code buyPacks} is the preferred vendor's "Sells it as" pack
+ *     (R-SL-3), and false when it is the ingredient's own pack sizes or empty.
  */
 public record ShoppingListLineView(
 		UUID ingredientId,
@@ -55,5 +62,7 @@ public record ShoppingListLineView(
 		List<String> shortPurchaseOrders,
 		boolean included,
 		boolean edited,
-		LocalDate excludedSince) {
+		LocalDate excludedSince,
+		List<BuyPackView> buyPacks,
+		boolean packFromVendor) {
 }

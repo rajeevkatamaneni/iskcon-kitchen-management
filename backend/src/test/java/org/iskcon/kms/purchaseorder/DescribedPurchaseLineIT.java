@@ -7,7 +7,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -16,6 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.iskcon.kms.AbstractIntegrationTest;
+import org.iskcon.kms.auth.TokenVerifier;
 import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +44,9 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 
 	private static final ObjectMapper JSON = new ObjectMapper();
 
+	/** The Kitchen Manager's bearer token, used only to record deliveries (T-261). */
+	private static final String MANAGER_TOKEN = "manager-token";
+
 	/** The temple's own zone, which is the day an arrival is recorded in — never the JVM's. */
 	private static final ZoneId TEMPLE_ZONE = ZoneId.of("Asia/Kolkata");
 
@@ -70,6 +73,18 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
 				VALUES (?, 'uid-staff-a', 'Staff A', 'staff-a@example.com', '+919876500081', 'KITCHEN_STAFF', 'ACTIVE')
 				""", tenant);
+		// Deliveries are received by a Kitchen Manager since T-261, on a token of their own so that
+		// everything else in this class is still done by Staff A exactly as before. Recording a
+		// delivery moved to RECEIVE_DELIVERIES, which Kitchen Staff did not hold while Rajeev's open
+		// question Q-1 was unanswered. He answered it on 2026-09-19: Kitchen Staff get it by default
+		// (T-282, asserted in DeliveriesIT). The manager still receives here because who receives is
+		// not what this class is about.
+		admin.update("""
+				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
+				VALUES (?, 'uid-manager-a', 'Manager A', 'manager-a@example.com', '+919876500082', 'KITCHEN_MANAGER', 'ACTIVE')
+				""", tenant);
+		stubVerifier.accept(MANAGER_TOKEN,
+				new TokenVerifier.VerifiedSubject("uid-manager-a", "manager-a@example.com", "+919876500082"));
 		rice = admin.queryForObject("""
 				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
 				VALUES (?, 'Rice', 'Grains', 'KG') RETURNING id
@@ -260,7 +275,8 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 				: "a refused receipt leaves no header behind";
 		assert admin.queryForObject("SELECT count(*) FROM stock_movements", Integer.class) == 0;
 
-		// The rice receives normally, with a price, which is the ordinary path still working.
+		// The rice receives normally, which is the ordinary path still working. The client still
+		// sends a price here on purpose: since T-261 (R-DEL-5) it must go nowhere.
 		mvc.perform(receive(UUID.fromString(id), "{\"idempotencyKey\":\"k1\",\"lines\":[{\"poLineId\":\""
 						+ riceLine + "\",\"receivedQty\":30,\"rejectedQty\":0,\"unitPrice\":58.50}]}"))
 				.andExpect(status().isCreated());
@@ -277,11 +293,14 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 		assert admin.queryForObject(
 				"SELECT count(*) FROM goods_receipt_lines WHERE po_line_id = ?", Integer.class, stoolLine) == 0
 				: "no receipt line for the described line";
-		assert admin.queryForObject("SELECT count(*) FROM vendor_supplies", Integer.class) == 1
-				: "one supply row, for the rice; a stool is not something a vendor supplies in the catalogue sense";
+		// REVERSED AT T-261 (R-DEL-5). This used to assert one supply row, for the rice, priced at the
+		// ₹58.50 the delivery carried. A delivery writes no price now, so it creates no supply row at
+		// all — for the rice or, as before, for the stools.
+		assert admin.queryForObject("SELECT count(*) FROM vendor_supplies", Integer.class) == 0
+				: "a delivery creates no supply row: not for the rice, and never for a stool";
 		assert admin.queryForObject(
-				"SELECT last_price FROM vendor_supplies WHERE ingredient_id = ?", BigDecimal.class, rice)
-				.compareTo(new BigDecimal("58.50")) == 0;
+				"SELECT count(*) FROM goods_receipt_lines WHERE unit_price IS NOT NULL", Integer.class) == 0
+				: "no price is stored on a receipt line";
 
 		// CHANGED ON PURPOSE AT T-066, and the assertion it replaces mattered, so here is why.
 		//
@@ -521,10 +540,10 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 		assert html.contains("Rice");
 
 		// The rate is a price for ONE of the unit, so it takes the singular: four stools at ₹250 each
-		// print "₹250.00 / piece", never "/ pieces" (T-148). Rice's rate is unchanged, "/ Kg".
-		assert html.contains("₹250.00 / piece<") : "a rate per piece reads \"/ piece\"; got " + html;
+		// print "₹250 / piece", never "/ pieces" (T-148). Rice's rate is unchanged, "/ Kg".
+		assert html.contains("₹250 / piece<") : "a rate per piece reads \"/ piece\"; got " + html;
 		assert !html.contains("/ pieces") : "no rate may read \"/ pieces\"; got " + html;
-		assert html.contains("₹45.00 / Kg<") : "a rate per kilo still reads \"/ Kg\"; got " + html;
+		assert html.contains("₹45 / Kg<") : "a rate per kilo still reads \"/ Kg\"; got " + html;
 
 		// Non-English is where it was loud: translateLines called toLowerCase() on each name for the
 		// glossary lookup, and a null name threw NullPointerException — a 500 on a screen somebody
@@ -585,7 +604,8 @@ class DescribedPurchaseLineIT extends AbstractIntegrationTest {
 	}
 
 	private MockHttpServletRequestBuilder receive(UUID poId, String json) {
-		return authed(post("/api/v1/purchase-orders/{poId}/receipts", poId))
+		return post("/api/v1/purchase-orders/{poId}/receipts", poId)
+				.header("Authorization", "Bearer " + MANAGER_TOKEN)
 				.contentType(MediaType.APPLICATION_JSON).content(json);
 	}
 

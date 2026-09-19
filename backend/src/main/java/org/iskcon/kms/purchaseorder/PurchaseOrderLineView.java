@@ -33,6 +33,15 @@ import java.util.UUID;
  * <p>It is, since T-066, <em>accountable for</em>: {@code arrivedOn} is the acknowledgement that
  * the goods turned up, recorded on the line instead of in the ledger. That is what closes an order
  * the store room can never receive.
+ *
+ * <p><strong>The last four describe a line ordered in a pack</strong> (R-SL-3, T-260), and are all
+ * null together on a line that was not. {@code packLabel} is the pack as an order words it, "Bag (25
+ * Kg)" — or the plain size, "500 gm", for a pack with no name — so the sheet's "4 × Bag (25 Kg)" is
+ * {@code packCount} and this. {@code packQuantity} is one pack's size in this line's {@code unit}
+ * (25 on a KG line), which is what a screen needs to turn an amount back into packs. {@code quantity}
+ * and {@code unit} still hold the whole amount in a real unit, 100 KG, and every consumer that sums or
+ * receives against a line goes on reading those and nothing else. Appended at the end because the
+ * wire shape is fixed by {@code frontend/lib/api.ts}.
  */
 public record PurchaseOrderLineView(
 		UUID id,
@@ -42,7 +51,11 @@ public record PurchaseOrderLineView(
 		BigDecimal quantity,
 		String unit,
 		BigDecimal expectedPrice,
-		LocalDate arrivedOn) {
+		LocalDate arrivedOn,
+		UUID packSizeId,
+		String packLabel,
+		BigDecimal packQuantity,
+		BigDecimal packCount) {
 
 	/**
 	 * True once this line is accounted for by something other than a goods receipt (T-066).

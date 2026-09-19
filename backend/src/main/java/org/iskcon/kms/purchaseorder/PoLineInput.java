@@ -23,6 +23,18 @@ import java.util.UUID;
  * instead of the specific code with the next step on it. The exclusivity check therefore lives in
  * {@code PurchaseOrderService.insertLines}, alongside the unit-family check that is decided about
  * the whole order for the same reason.
+ *
+ * <p><strong>A catalogue line may be ordered in a pack</strong> (R-SL-3, T-260): {@code packSizeId}
+ * names one of the ingredient's own pack sizes and {@code packCount} says how many — the "4 × Bag
+ * (25 Kg)" the sheet prints. Both or neither. When they are sent, <em>the pack decides the amount</em>:
+ * the server stores {@code quantity = packCount × the pack's size}, in the pack's unit, and ignores
+ * the {@code quantity} sent beside it, so the stock-unit amount (100 Kg) that receiving and costing
+ * read can never disagree with the packs the vendor was asked for. {@code quantity} stays required all
+ * the same, because every line must still say an amount and a client that knows nothing about packs
+ * sends exactly what it sent before. {@code unit} keeps one job on a pack line: it is the unit
+ * {@code expectedPrice} is a price per, and the server converts that price into the pack's unit when
+ * the two differ (₹0.0712 per gm on a line stored in Kg is ₹71.20 per Kg). See
+ * {@code PurchaseOrderService.resolvePack}.
  */
 public record PoLineInput(
 		UUID ingredientId,
@@ -31,5 +43,7 @@ public record PoLineInput(
 		@Positive(message = "Enter an amount greater than zero.")
 		BigDecimal quantity,
 		@NotBlank(message = "Choose a unit.") String unit,
-		@PositiveOrZero(message = "A price cannot be less than nothing.") BigDecimal expectedPrice) {
+		@PositiveOrZero(message = "A price cannot be less than nothing.") BigDecimal expectedPrice,
+		UUID packSizeId,
+		@Positive(message = "Order at least one pack.") BigDecimal packCount) {
 }

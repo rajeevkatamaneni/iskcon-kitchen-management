@@ -46,8 +46,12 @@ public class DocumentGenerationService {
 	 * without for dates — and stripping the fixed zone left them character for character identical.
 	 * A zone belongs to the temple whose sheet is being printed, so every instant is zoned at the
 	 * point of formatting and a plain LocalDate needs no zone at all.
+	 *
+	 * <p>The format itself is {@link DisplayDates#DAY}, shared with every other document and the
+	 * WhatsApp messages (T-312). T-310 pinned it to British English here, so the sheet writes
+	 * "20 Sept 2026" as the screens do; {@code DisplayDates} says why.
 	 */
-	private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy");
+	private static final DateTimeFormatter DATE = DisplayDates.DAY;
 
 
 	private final TempleClock clock;
@@ -214,26 +218,57 @@ public class DocumentGenerationService {
 		boolean anyTotal = false;
 		for (int i = 0; i < po.lines().size(); i++) {
 			var l = po.lines().get(i);
+			// A sheet somebody carries to a vendor and buys against, so the cook's form — and the
+			// unit written the way it is said, rather than the name the column happens to store it as.
+			// 2792 gm is said "3 Kg" (R-SL-1: nothing from 1,000 g/ml up in g/ml).
+			String amount = Quantities.cooks(l.quantity(), l.unit());
+			// A line ordered in a pack reads as the vendor sells it: "4 × Bag (25 Kg)" (R-SL-3).
+			// The stock-unit amount (100 Kg) stays on the line for receiving and costing; the
+			// vendor is asked for the bags.
+			String quantityText = l.packCount() == null ? amount
+					: say(l.packCount()) + " × " + l.packLabel();
 			String price = null;
 			if (showPrices && l.expectedPrice() != null) {
 				// The rate names the unit it is a rate for. It never did, which went unnoticed while
 				// the quantity beside it was always printed in that same stored unit — the reader
 				// could infer it. Now that a 0.6 Kg line reads "600 gm", inferring it gives the
-				// wrong answer by a factor of a thousand, so the sheet says it: "₹45.00 / Kg".
+				// wrong answer by a factor of a thousand, so the sheet says it: "₹45 / Kg".
 				// Untranslated, like every other number and unit on this sheet.
 				//
 				// A rate is a price for ONE of the unit, so the unit is asked for its word at a count
 				// of one: "₹80 / piece", not "₹80 / pieces" (T-148). That is not a trick to reach the
 				// singular — the one is really there, it is the "per" read aloud. Kg, gm, L and ml
-				// have one word at every count, so a KG line still reads "₹45.00 / Kg".
-				price = money(l.expectedPrice()) + " / " + Unit.valueOf(l.unit()).label(BigDecimal.ONE);
+				// have one word at every count, so a KG line still reads "₹45 / Kg".
+				//
+				// T-260, conductor's ruling 2026-09-19: the rate is said per the unit the quantity is
+				// SHOWN in, not the one it is stored in. A 2792 gm line reads "3 Kg", so its rate reads
+				// "₹71.20 / Kg" and not "₹0.07 / gm" — a figure two places cannot even hold since
+				// expected_price went to four (V146), and a unit the reader would have to convert
+				// against the Kg beside it. Same money formatter as every other figure on the sheet.
+				//
+				// T-288 (VERIFY-B D-8) finished that thought: a rate is said per the READABLE unit,
+				// which for a mass or a volume is always Kg or L, whatever the quantity beside it.
+				// Following the quantity alone left a single 500 gm tea pack reading "₹250 / 500 gm ·
+				// ₹0.50 / gm" on the same sheet as pepper at "₹800 / Kg" — two ways of saying one kind
+				// of price, and the per-gram one is a figure nobody in a market quotes. See rateUnit.
+				//
+				// A pack line shows both, exactly as the vendor page and the invoice word a pack
+				// price: "₹1,500 / bag · ₹60 / Kg" (same ruling: "Same label in every view").
+				//
+				// Every figure goes through money(), which writes rupees the way the screen does
+				// (T-268): Indian grouping, paise only where there are any. See SheetRupees.
+				Unit stored = Unit.valueOf(l.unit());
+				Unit shown = rateUnit(stored);
+				String perUnit = money(l.expectedPrice().multiply(BigDecimal.valueOf(shown.baseFactor()))
+						.divide(BigDecimal.valueOf(stored.baseFactor()), 6, java.math.RoundingMode.HALF_UP))
+						+ " / " + shown.label(BigDecimal.ONE);
+				price = l.packCount() == null || l.packQuantity() == null ? perUnit
+						: money(l.expectedPrice().multiply(l.packQuantity())) + " / " + packWord(l.packLabel())
+								+ " · " + perUnit;
 				total = total.add(l.expectedPrice().multiply(l.quantity()));
 				anyTotal = true;
 			}
-			// A sheet somebody carries to a vendor and buys against, so the cook's form — and the
-			// unit written the way it is said, rather than the name the column happens to store it as.
-			lines.add(new PurchaseOrderSheetTemplate.Line(
-					ingredientNames.get(i), Quantities.cooks(l.quantity(), l.unit()), price));
+			lines.add(new PurchaseOrderSheetTemplate.Line(ingredientNames.get(i), quantityText, price));
 		}
 		String totalText = anyTotal ? money(total) : null;
 
@@ -322,11 +357,62 @@ public class DocumentGenerationService {
 		return language == null || language.isBlank() || "en".equalsIgnoreCase(language);
 	}
 
+	/**
+	 * Every rupee figure on the purchase order sheet: line rates, pack prices and the total. Written
+	 * the screen's way since T-268, "₹1,500" and "₹71.20" where it used to print "₹1500.00", because
+	 * the vendor page and the paper the vendor is handed must name the same price the same way. The
+	 * PO sheet is the only document with money on it built here: the recipe card, job card and work
+	 * order carry none, and the donation receipt is handed its amount already formatted.
+	 */
 	private static String money(BigDecimal amount) {
-		return "₹" + amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+		return SheetRupees.format(amount);
 	}
 
-	private RecipeCardTemplate.CardModel buildModel(UUID recipeId, BigDecimal targetYield, String language) {
+	/**
+	 * The unit a rate is said per: Kg for anything weighed, L for anything poured, and a piece for
+	 * anything counted — "₹60 / Kg" for curry leaves kept in grams, "₹500 / Kg" for a 500 gm tea
+	 * pack, never "₹0.06 / gm" (T-288, VERIFY-B D-8; the conductor's rule, 2026-09-19).
+	 *
+	 * <p>Why the large unit and not the unit the quantity happens to be printed in, which is what
+	 * T-260 did: a quantity below 1,000 gm is rightly printed in gm ("500 gm"), but a price per gram
+	 * is a figure of a few paise that two places round to a different price, and no vendor quotes
+	 * one. The screens say the same — the vendor page, the create form's type-ahead and the shared
+	 * {@code ratePerReadableUnit} in {@code frontend/lib/format.ts} all state a gm or ml price per Kg
+	 * or L — so the paper the vendor is handed names the price the way the screen did.
+	 */
+	private static Unit rateUnit(Unit stored) {
+		return switch (stored) {
+			case GM, KG -> Unit.KG;
+			case ML, L -> Unit.L;
+			case PIECES -> Unit.PIECES;
+		};
+	}
+
+	/**
+	 * The word a pack's price is "per": "bag" for "Bag (25 Kg)", and the size itself, "500 gm", for a
+	 * pack with no name — the vendor page's rule (its {@code packWord}), so a pack price reads the same
+	 * on the sheet as on the screen: "₹1,500 / bag".
+	 */
+	private static String packWord(String packLabel) {
+		int at = packLabel.indexOf(" (");
+		return at > 0 ? packLabel.substring(0, at).toLowerCase(java.util.Locale.ROOT) : packLabel;
+	}
+
+	/**
+	 * A pack count as a person writes it: 4, not 4.000; Indian grouping, as every figure on the sheet.
+	 * Through {@link IndianNumbers} since T-279, because the JDK's en-IN NumberFormat it used before
+	 * groups in threes and would have printed 1,00,000 packets as "100,000".
+	 */
+	private static String say(BigDecimal count) {
+		return IndianNumbers.group(count, 0, 3);
+	}
+
+	/**
+	 * The recipe card's content. Package-private, not private, so that DocumentGenerationIT can read
+	 * what the card says: the stub renderer keeps only the HTML's length, and whether the
+	 * preparation note reached the card (R-DUP-1) is a fact about the words.
+	 */
+	RecipeCardTemplate.CardModel buildModel(UUID recipeId, BigDecimal targetYield, String language) {
 		RecipeView recipe = recipeService.get(recipeId);
 		String templeName = templeName();
 		String generatedOn = DATE.format(Instant.now().atZone(clock.zone()));
@@ -343,7 +429,9 @@ public class DocumentGenerationService {
 			List<RecipeIngredientView> lines = recipe.ingredients();
 			for (int i = 0; i < lines.size(); i++) {
 				rows.add(new RecipeCardTemplate.Row(
-						ingredientName(t, i, lines.get(i).ingredientName()),
+						RecipeIngredientView.withPreparation(
+								ingredientName(t, i, lines.get(i).ingredientName()),
+								preparationNote(t, i, lines.get(i).preparationNote())),
 						Quantities.cooks(lines.get(i).quantity(), lines.get(i).unit())));
 			}
 		} else {
@@ -354,7 +442,9 @@ public class DocumentGenerationService {
 				// only this one rounds the way a cook rounds, and a card that agreed with the scaler
 				// and disagreed with the job card would be the same fault in a new place.
 				rows.add(new RecipeCardTemplate.Row(
-						ingredientName(t, i, lines.get(i).ingredientName()),
+						RecipeIngredientView.withPreparation(
+								ingredientName(t, i, lines.get(i).ingredientName()),
+								preparationNote(t, i, lines.get(i).preparationNote())),
 						Quantities.cooks(lines.get(i).rawQuantity(), lines.get(i).rawUnit())));
 			}
 		}
@@ -372,12 +462,22 @@ public class DocumentGenerationService {
 				yieldText, rows, method, recipe.notes(), generatedOn);
 	}
 
-	/** The translated ingredient name for a line when translating, else the English name. */
+	/**
+	 * The translated ingredient name for a line when translating, else the English name.
+	 *
+	 * <p>The name only. The line's preparation note, from {@link #preparationNote}, is added after
+	 * it by the callers above, in the one printed form "Green chilli · slit" (R-DUP-1).
+	 */
 	private static String ingredientName(TranslatedRecipe t, int index, String fallback) {
 		if (t != null && index < t.ingredientNames().size()) {
 			return t.ingredientNames().get(index);
 		}
 		return fallback;
+	}
+
+	/** The translated preparation note for a line when translating, else the note as written. */
+	private static String preparationNote(TranslatedRecipe t, int index, String fallback) {
+		return t == null ? fallback : t.preparationNote(index, fallback);
 	}
 
 	private String templeName() {

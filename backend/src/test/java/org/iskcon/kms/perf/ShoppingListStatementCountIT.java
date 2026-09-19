@@ -141,6 +141,7 @@ class ShoppingListStatementCountIT extends AbstractIntegrationTest {
 
 		long walks = sentBy(statements, "inventory.CommittedStockService.plannedDishes");
 		long recipeReads = sentBy(statements, "recipe.RecipeService");
+		long packReads = sentBy(statements, "ingredient.PackSizeService");
 
 		// Softly, so that both counts are reported. These are two independent defects that happened to
 		// be fixed together, and a hard assertion on the first would hide the second from anybody
@@ -156,6 +157,15 @@ class ShoppingListStatementCountIT extends AbstractIntegrationTest {
 					.as("statements RecipeService sent for one read of the shopping list — every recipe the"
 							+ " buying window needs is fetched in one batch, not one recipe at a time (T-141)")
 					.isEqualTo(STATEMENTS_PER_RECIPE_BATCH);
+
+			// T-259 added one statement to a page load, on purpose: the buying amount needs every
+			// ingredient's pack sizes, and they are read for the whole list at once. The vendor's
+			// "Sells it as" pack rides on the preferred-vendor query that was already there, so it
+			// adds nothing. One read per line would be forty on a forty-line list.
+			softly.assertThat(packReads)
+					.as("statements PackSizeService sent for one read of the shopping list — every"
+							+ " ingredient's pack sizes in one query, not one per line (T-259)")
+					.isEqualTo(1);
 		});
 	}
 

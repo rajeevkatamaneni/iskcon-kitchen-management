@@ -1,7 +1,6 @@
 package org.iskcon.kms.shoppinglist;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -16,6 +15,8 @@ import java.util.UUID;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.IngredientUnits;
+import org.iskcon.kms.ingredient.PackSizeService;
+import org.iskcon.kms.ingredient.PackSizeView;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.InventoryItemService;
 import org.iskcon.kms.inventory.InventoryUnits;
@@ -54,7 +55,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Three demand streams merge per ingredient: the meal-plan shortfall (E4-S5), stock below its
  * reorder level topped up to that level × a safety factor (E3-S3), and the balance a vendor never
  * brought on an order somebody has since closed (E5-S6, moved to the close by D-26). The largest of
- * the three wins, rounded up to a whole purchase unit.
+ * the three wins, rounded up to an amount a vendor sells — the preferred vendor's pack, the
+ * ingredient's pack sizes, or a step ({@link BuyingAmount}, T-259).
  *
  * <p>Against that, D-24a and D-26: <strong>an ingredient covered by a live purchase order — draft,
  * sent, or part-delivered with a balance still owed — is not suggested at all.</strong> Rajeev's reason for choosing creation over sending as the moment
@@ -81,11 +83,13 @@ public class ShoppingListService {
 	private final IngredientUnits ingredientUnits;
 	private final LeadTimes leadTimes;
 	private final TempleClock clock;
+	private final PackSizeService packSizes;
 
 	public ShoppingListService(
 			JdbcTemplate jdbc, SufficiencyService sufficiencyService,
 			InventoryItemService inventoryItemService, IngredientUnits ingredientUnits,
-			LeadTimes leadTimes, TempleClock clock) {
+			LeadTimes leadTimes, TempleClock clock, PackSizeService packSizes) {
+		this.packSizes = packSizes;
 		this.jdbc = jdbc;
 		this.sufficiencyService = sufficiencyService;
 		this.inventoryItemService = inventoryItemService;
@@ -247,9 +251,16 @@ public class ShoppingListService {
 			// it differs. A line asking for nothing is not a line — which for a suggestion means the
 			// demand has been met, and for a hand-added row cannot happen, because its quantity is
 			// the number somebody typed and the column refuses a zero.
-			BigDecimal qty = decision != null && decision.quantity() != null
-					? decision.quantity()
-					: s.quantity();
+			//
+			// T-259, R-SL-2: "A quantity edited by hand is never re-rounded." The typed figure goes
+			// out exactly as typed, and describeTyped only says whether it happens to be a whole
+			// number of the vendor's pack; the computed figure was already taken up to a buying
+			// amount in suggestions().
+			boolean typed = decision != null && decision.quantity() != null;
+			BuyingAmount.Result bought = typed
+					? BuyingAmount.describeTyped(decision.quantity(), s.ref().unit(), s.vendorPack())
+					: s.bought();
+			BigDecimal qty = bought.quantity();
 			if (qty.signum() <= 0) {
 				continue;
 			}
@@ -275,7 +286,9 @@ public class ShoppingListService {
 					// The named mitigation for an untick that persists: a line coming back says when
 					// somebody decided against it, so a stale untick announces itself the moment it
 					// starts costing something. Read off updated_at, which needs no new column.
-					decision != null && !decision.included() ? decision.decidedOn(clock.zone()) : null));
+					decision != null && !decision.included() ? decision.decidedOn(clock.zone()) : null,
+					bought.packs(),
+					bought.fromVendor()));
 		}
 
 		out.sort(Comparator.comparing(ShoppingListLineView::ingredientName, String.CASE_INSENSITIVE_ORDER)
@@ -312,6 +325,10 @@ public class ShoppingListService {
 		Map<UUID, PreferredVendor> vendors = preferredVendorsByIngredient();
 		Map<UUID, Integer> recordedLeadTimes = leadTimes.recordedByIngredient();
 		Set<UUID> coveredByLiveOrder = ingredientsOnLiveOrders();
+		// T-259. Every ingredient's pack sizes in one statement for the whole list, never one per
+		// line: this runs on every page load, and ShoppingListStatementCountIT is there because a
+		// per-line read is exactly what crept back in before.
+		Map<UUID, List<PackSizeView>> packsByIngredient = packSizes.allByIngredient();
 
 		Map<UUID, Contribution> merged = new LinkedHashMap<>();
 
@@ -374,8 +391,25 @@ public class ShoppingListService {
 				continue;
 			}
 			Contribution c = e.getValue();
-			BigDecimal qty = c.shortfall.max(c.thresholdTopUp).max(c.poOutstanding)
-					.setScale(0, RoundingMode.CEILING);
+			PreferredVendor vendor = vendors.get(ingredientId);
+			List<BuyingAmount.Pack> packs = packsByIngredient.getOrDefault(ingredientId, List.of()).stream()
+					.map(p -> new BuyingAmount.Pack(p.id(), p.name(), p.quantity(), Unit.valueOf(p.unit())))
+					.toList();
+			// The vendor's "Sells it as" pack is one of the ingredient's own — V144's composite
+			// foreign key refuses any other — so it is found among the packs just read, and no
+			// second query is needed for it.
+			BuyingAmount.Pack vendorPack = vendor == null || vendor.packSizeId() == null
+					? null
+					: packs.stream().filter(p -> p.id().equals(vendor.packSizeId())).findFirst().orElse(null);
+			// T-259, R-SL-2 and R-SL-3. What is needed, taken UP to an amount a vendor sells: the
+			// vendor's pack (100 Kg short, sold as Bag = 25 Kg, is 4 bags), else the ingredient's
+			// pack sizes (tea 416 gm is 1 × 500 gm), else a step (2792 gm of curry leaves is 3 Kg).
+			// This replaced a plain round-up to a whole stored unit, which did nothing at all for an
+			// ingredient kept in grams and so put "2792 gm" in front of a vegetable merchant. The
+			// rules are in BuyingAmount and nowhere else. Only the computed figure goes through here;
+			// a quantity somebody typed is a Decision and is used as typed in list() above.
+			BuyingAmount.Result bought = BuyingAmount.of(
+					c.shortfall.max(c.thresholdTopUp).max(c.poOutstanding), ref.unit(), vendorPack, packs);
 
 			// T-130. `needed_by` is the date the temple wants the goods on the shelf, and it is the
 			// day of the earliest planned meal that demands them — not two days before it. The two
@@ -390,11 +424,11 @@ public class ShoppingListService {
 			// defaulted here so a screen can still say the order-by date was our assumption and not
 			// the vendor's word. LeadTimes.orderBy applies the fallback; nothing multiplies a null.
 			Integer leadTimeDays = recordedLeadTimes.get(ingredientId);
-			PreferredVendor vendor = vendors.get(ingredientId);
 
 			out.put(ingredientId, new Suggestion(
 					ref,
-					qty,
+					bought,
+					vendorPack,
 					InventoryUnits.fromBase(
 							onHandBase.getOrDefault(ingredientId, BigDecimal.ZERO), ref.unit()),
 					neededBy,
@@ -587,13 +621,14 @@ public class ShoppingListService {
 	private Map<UUID, PreferredVendor> preferredVendorsByIngredient() {
 		Map<UUID, PreferredVendor> map = new LinkedHashMap<>();
 		jdbc.query("""
-				SELECT vs.ingredient_id, vs.vendor_id, v.name
+				SELECT vs.ingredient_id, vs.vendor_id, v.name, vs.pack_size_id
 				FROM vendor_supplies vs
 				JOIN vendors v ON v.id = vs.vendor_id
 				WHERE vs.preferred
 				""", rs -> {
 			map.put(rs.getObject("ingredient_id", UUID.class), new PreferredVendor(
-					rs.getObject("vendor_id", UUID.class), rs.getString("name")));
+					rs.getObject("vendor_id", UUID.class), rs.getString("name"),
+					rs.getObject("pack_size_id", UUID.class)));
 		});
 		return map;
 	}
@@ -665,7 +700,8 @@ public class ShoppingListService {
 	/** One computed line, before anybody has had an opinion about it. */
 	private record Suggestion(
 			IngredientRef ref,
-			BigDecimal quantity,
+			BuyingAmount.Result bought,
+			BuyingAmount.Pack vendorPack,
 			BigDecimal currentStock,
 			LocalDate neededBy,
 			LocalDate orderBy,
@@ -676,13 +712,21 @@ public class ShoppingListService {
 			BigDecimal thresholdTopUp,
 			BigDecimal poOutstanding,
 			List<String> shortPurchaseOrders) {
+
+		/** The computed buying amount, which is what an edit is compared against in updateLine. */
+		BigDecimal quantity() {
+			return bought.quantity();
+		}
 	}
 
 	private record IngredientRef(String name, Unit unit) {
 	}
 
-	/** The vendor an ingredient's order would go to, and the name to print beside the line. */
-	private record PreferredVendor(UUID vendorId, String vendorName) {
+	/**
+	 * The vendor an ingredient's order would go to, the name to print beside the line, and the pack
+	 * it sells the ingredient in ("Sells it as", R-VEN-1) — null when it sells in the stock unit.
+	 */
+	private record PreferredVendor(UUID vendorId, String vendorName, UUID packSizeId) {
 	}
 
 	/** Outstanding PO demand for one ingredient: total in base units and the PO numbers behind it. */

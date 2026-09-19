@@ -1,6 +1,7 @@
 package org.iskcon.kms.purchaseorder;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -18,6 +19,8 @@ import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.error.ErrorResponse;
 import org.iskcon.kms.ingredient.IngredientUnits;
+import org.iskcon.kms.ingredient.Quantities;
+import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.notification.TenantWhatsAppSettingsService;
 import org.iskcon.kms.tenancy.TempleClock;
 import org.iskcon.kms.vendor.LeadTimes;
@@ -198,11 +201,17 @@ public class PurchaseOrderService {
 		// ORDER BY on COALESCE for the same reason: ordering on i.name alone would sort every
 		// described line together under NULL rather than into the alphabetical run its own words
 		// belong in.
+		//
+		// The pack join is a LEFT JOIN for the same reason: most lines are not ordered in a pack
+		// (R-SL-3, T-260), and an inner join would drop every one of them.
 		List<PurchaseOrderLineView> lines = jdbc.query("""
 				SELECT l.id, l.ingredient_id, i.name AS ingredient_name, l.description, l.quantity,
-					   l.unit, l.expected_price, l.arrived_on
+					   l.unit, l.expected_price, l.arrived_on,
+					   l.pack_size_id, l.pack_count, p.name AS pack_name, p.quantity AS pack_size_quantity,
+					   p.unit AS pack_unit, p.base_quantity AS pack_base_quantity
 				FROM purchase_order_lines l
 				LEFT JOIN ingredients i ON i.id = l.ingredient_id
+				LEFT JOIN ingredient_pack_sizes p ON p.id = l.pack_size_id
 				WHERE l.po_id = ?
 				ORDER BY l.line_order, COALESCE(i.name, l.description)
 				""", LINE_MAPPER, id);
@@ -293,25 +302,64 @@ public class PurchaseOrderService {
 		return new CreatedPurchaseOrder(id, poNumber);
 	}
 
-	/** One vendor's last-known prices, applied to the lines that did not bring one. */
+	/**
+	 * One vendor's last-known prices, applied to the lines that did not bring one.
+	 *
+	 * <p><strong>Converted into the line's own unit</strong> (T-260). {@code last_price} is a price
+	 * per one of the ingredient's <em>canonical</em> unit, and {@code expected_price} is a price per
+	 * one of the <em>line's</em> unit. Those were copied across as if they were the same thing, which
+	 * they are for a line typed in the stock unit and are not otherwise: tea kept in Kg at ₹400 / Kg
+	 * and ordered as 500 gm would have been written as ₹400 per gm. It mattered little while nearly
+	 * every line was typed in the stock unit, and it matters now, because a line ordered in a pack is
+	 * stored in the pack's unit, and "Pack = 500 gm" of an ingredient kept in Kg is exactly that case.
+	 * Four places, the scale of both columns since V145 and V146.
+	 */
 	private List<LineDraft> withLastKnownPrices(UUID vendorId, List<LineDraft> lines) {
 		if (lines.stream().noneMatch(l -> l.expectedPrice() == null && l.ingredientId() != null)) {
 			return lines;
 		}
 		Map<UUID, BigDecimal> lastPrices = new LinkedHashMap<>();
+		Map<UUID, Unit> canonical = new LinkedHashMap<>();
 		jdbc.query("""
-				SELECT ingredient_id, last_price FROM vendor_supplies
-				WHERE vendor_id = ? AND last_price IS NOT NULL
+				SELECT s.ingredient_id, s.last_price, i.canonical_unit
+				FROM vendor_supplies s
+				JOIN ingredients i ON i.id = s.ingredient_id
+				WHERE s.vendor_id = ? AND s.last_price IS NOT NULL
 				""", rs -> {
-			lastPrices.put(rs.getObject("ingredient_id", UUID.class), rs.getBigDecimal("last_price"));
+			UUID ingredientId = rs.getObject("ingredient_id", UUID.class);
+			lastPrices.put(ingredientId, rs.getBigDecimal("last_price"));
+			canonical.put(ingredientId, Unit.valueOf(rs.getString("canonical_unit")));
 		}, vendorId);
 		return lines.stream()
 				.map(l -> l.expectedPrice() != null || l.ingredientId() == null
+						|| !lastPrices.containsKey(l.ingredientId())
 						? l
-						: new LineDraft(l.ingredientId(), l.description(), l.quantity(), l.unit(),
-								lastPrices.get(l.ingredientId())))
+						: l.withExpectedPrice(perUnit(lastPrices.get(l.ingredientId()),
+								canonical.get(l.ingredientId()), l.unit())))
 				.toList();
 	}
+
+	/**
+	 * A price per one {@code from}, said per one of {@code to}: ₹71.20 / Kg is ₹0.0712 / gm. Left as
+	 * it is when {@code to} is not a unit of the same family, because that line is about to be refused
+	 * by {@link IngredientUnits#requireSameFamily} and a converted price for it would mean nothing.
+	 */
+	private static BigDecimal perUnit(BigDecimal price, Unit from, String to) {
+		Unit target;
+		try {
+			target = Unit.valueOf(to);
+		} catch (IllegalArgumentException e) {
+			return price;
+		}
+		if (price == null || from == null || from == target || from.family() != target.family()) {
+			return price;
+		}
+		return price.multiply(BigDecimal.valueOf(target.baseFactor()))
+				.divide(BigDecimal.valueOf(from.baseFactor()), PRICE_SCALE, RoundingMode.HALF_UP);
+	}
+
+	/** Four places: the scale of {@code expected_price} (V146) and of the list price it is filled from (V145). */
+	private static final int PRICE_SCALE = 4;
 
 	// ---- Lifecycle ------------------------------------------------------
 
@@ -989,25 +1037,89 @@ public class PurchaseOrderService {
 	 * against, and no arithmetic anywhere that will convert it.
 	 */
 	private void insertLines(UUID poId, List<LineDraft> lines) {
+		List<LineDraft> resolved = new ArrayList<>();
 		for (int i = 0; i < lines.size(); i++) {
 			LineDraft l = lines.get(i);
 			requireExactlyOneSubject(l, i);
 			if (l.ingredientId() != null) {
 				ingredientUnits.requireSameFamily(l.ingredientId(), IngredientUnits.parse(l.unit()));
 			}
+			// Third, and only once the line is known to be a well-formed line of its ingredient: a
+			// pack is a fact about an ingredient, so it cannot be judged before there is one.
+			resolved.add(resolvePack(l, i));
 		}
 
 		int[] order = {0};
-		for (LineDraft l : lines) {
+		for (LineDraft l : resolved) {
 			jdbc.update("""
 					INSERT INTO purchase_order_lines (
 						id, tenant_id, po_id, ingredient_id, description, quantity, unit, expected_price,
-						line_order)
+						line_order, pack_size_id, pack_count)
 					VALUES (gen_random_uuid(), NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						?, ?, ?, ?, ?, ?, ?)
+						?, ?, ?, ?, ?, ?, ?, ?, ?)
 					""", poId, l.ingredientId(), l.description(), l.quantity(), l.unit(),
-					l.expectedPrice(), order[0]++);
+					l.expectedPrice(), order[0]++, l.packSizeId(), l.packCount());
 		}
+	}
+
+	/**
+	 * A line ordered in a pack, turned into the amount it stands for (R-SL-3, T-260).
+	 *
+	 * <p><strong>The pack decides the amount, and the quantity sent beside it is not consulted.</strong>
+	 * "100 Kg short, sold as Bag = 25 Kg → 4 bags … The line also keeps its stock-unit quantity (100 Kg)
+	 * for stock and costing." So the line is written as {@code packCount × the pack's size}, in the
+	 * pack's own unit: 4 × Bag = 25 Kg is 100 KG. What the vendor is asked for is the four bags, so
+	 * that is the figure that must be true; a quantity worked out on the screen from the same two
+	 * numbers can only agree with it or be the one that is wrong. The alternatives were weighed and
+	 * set aside: refusing a disagreement would need a code of its own for a mistake the person can't
+	 * see or fix (the screen did the arithmetic, not them), and trusting the client's figure would let
+	 * a stale box put 90 Kg into stock against an order for four bags. Recorded in T-260's proof.
+	 *
+	 * <p><strong>The price moves with the unit.</strong> {@code expectedPrice} arrives per one of the
+	 * {@code unit} the client sent. If the pack is in another unit of the same family — a line sent
+	 * in gm, ordered in "Bag = 25 Kg" — the price is restated per one of the pack's unit, so the row
+	 * never holds a per-gram price beside a quantity in Kg.
+	 *
+	 * <p><strong>Refusals.</strong> A half-pair (a pack with no count, or a count with no pack) is a
+	 * malformed request and gets {@code VALIDATION_FAILED} with a field error naming the line. A pack
+	 * on a one-off line, or a pack of another ingredient, gets {@code KMS-400162}
+	 * ({@code SUPPLY_PACK_NOT_THIS_INGREDIENT}): the same fact as a vendor's "Sells it as" naming the
+	 * wrong ingredient's pack, with the same next step. The lookup is by id <em>and</em> ingredient,
+	 * under RLS, so another temple's pack is "not this ingredient's" too; the composite foreign key
+	 * {@code po_lines_pack_of_this_ingredient} (V146) stands behind it for any path that gets past.
+	 */
+	private LineDraft resolvePack(LineDraft l, int index) {
+		if (l.packSizeId() == null && l.packCount() == null) {
+			return l;
+		}
+		if (l.packSizeId() == null || l.packCount() == null) {
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED,
+					Map.of("lineIndex", index, "field", l.packSizeId() == null ? "packSizeId" : "packCount"),
+					List.of(new ErrorResponse.FieldError(
+							"Line " + (index + 1),
+							l.packSizeId() == null
+									? "Choose which pack, or order this line without one."
+									: "Say how many packs to order.")),
+					null);
+		}
+		if (l.ingredientId() == null) {
+			throw new ApplicationException(ErrorCode.SUPPLY_PACK_NOT_THIS_INGREDIENT,
+					Map.of("lineIndex", index, "packSizeId", l.packSizeId()));
+		}
+		Map<String, Object> pack = jdbc.queryForList("""
+				SELECT quantity, unit FROM ingredient_pack_sizes WHERE id = ? AND ingredient_id = ?
+				""", l.packSizeId(), l.ingredientId()).stream().findFirst()
+				.orElseThrow(() -> new ApplicationException(ErrorCode.SUPPLY_PACK_NOT_THIS_INGREDIENT,
+						Map.of("lineIndex", index, "packSizeId", l.packSizeId(),
+								"ingredientId", l.ingredientId())));
+		BigDecimal size = (BigDecimal) pack.get("quantity");
+		String packUnit = (String) pack.get("unit");
+		// The client's unit was checked against the ingredient above, and V144's trigger holds every
+		// pack to its ingredient's family, so the two are always convertible here.
+		BigDecimal price = perUnit(l.expectedPrice(), Unit.valueOf(l.unit()), packUnit);
+		return new LineDraft(l.ingredientId(), l.description(), l.packCount().multiply(size), packUnit,
+				price, l.packSizeId(), l.packCount());
 	}
 
 	/**
@@ -1085,7 +1197,7 @@ public class PurchaseOrderService {
 	private List<LineDraft> toLines(List<PoLineInput> inputs) {
 		return inputs.stream()
 				.map(i -> new LineDraft(i.ingredientId(), trimToNull(i.description()), i.quantity(),
-						i.unit().trim(), i.expectedPrice()))
+						i.unit().trim(), i.expectedPrice(), i.packSizeId(), i.packCount()))
 				.toList();
 	}
 
@@ -1112,9 +1224,16 @@ public class PurchaseOrderService {
 		return new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("purchaseOrderId", id));
 	}
 
-	/** Exactly one of {@code ingredientId} and {@code description} is set — see insertLines. */
+	/**
+	 * Exactly one of {@code ingredientId} and {@code description} is set — see insertLines. The pack
+	 * pair is both-or-neither once {@link #resolvePack} has passed it.
+	 */
 	private record LineDraft(UUID ingredientId, String description, BigDecimal quantity, String unit,
-			BigDecimal expectedPrice) {
+			BigDecimal expectedPrice, UUID packSizeId, BigDecimal packCount) {
+
+		LineDraft withExpectedPrice(BigDecimal price) {
+			return new LineDraft(ingredientId, description, quantity, unit, price, packSizeId, packCount);
+		}
 	}
 
 	private static final String HEADER_SELECT = """
@@ -1174,7 +1293,39 @@ public class PurchaseOrderService {
 			rs.getBigDecimal("quantity"),
 			rs.getString("unit"),
 			(BigDecimal) rs.getObject("expected_price"),
-			rs.getObject("arrived_on", LocalDate.class));
+			rs.getObject("arrived_on", LocalDate.class),
+			rs.getObject("pack_size_id", UUID.class),
+			rs.getString("pack_unit") == null ? null
+					: packLabel(rs.getString("pack_name"), rs.getBigDecimal("pack_size_quantity"),
+							Unit.valueOf(rs.getString("pack_unit"))),
+			// One pack in the LINE's unit, from the size in base units: the line is written in the
+			// pack's unit, so this is normally the pack's own figure, but asking the base quantity
+			// keeps it right for any line whose unit is not the pack's.
+			rs.getString("pack_unit") == null ? null
+					: plain(rs.getBigDecimal("pack_base_quantity").divide(
+							BigDecimal.valueOf(Unit.valueOf(rs.getString("unit")).baseFactor()), 6,
+							RoundingMode.HALF_UP)),
+			rs.getString("pack_unit") == null ? null : plain(rs.getBigDecimal("pack_count")));
+
+	/**
+	 * A pack as an order words it (R-SL-3): "Bag (25 Kg)", so a line reads "4 × Bag (25 Kg)"; the
+	 * plain size, "500 gm", for a pack with no name (conductor's ruling 2026-09-19: "2 × 500 gm").
+	 *
+	 * <p>Not the ingredient chip's "Bag = 25 Kg" ({@code PackSizeService.label},
+	 * {@code VendorService.packLabel}): the document gives the order its own form. The size goes
+	 * through {@link Quantities#exact} exactly as theirs does, so one pack's size is never written two
+	 * ways, and no unit word is written by hand ({@code UnitLabelAgreementTest}).
+	 */
+	static String packLabel(String name, BigDecimal quantity, Unit unit) {
+		String size = Quantities.exact(quantity, unit);
+		return name == null ? size : name + " (" + size + ")";
+	}
+
+	/** 4.000 as 4 and 25.000000 as 25: a count and a size read as a person writes them. */
+	private static BigDecimal plain(BigDecimal value) {
+		BigDecimal stripped = value.stripTrailingZeros();
+		return stripped.scale() < 0 ? stripped.setScale(0) : stripped;
+	}
 
 	private static final RowMapper<PoEventView> EVENT_MAPPER = (rs, n) -> new PoEventView(
 			rs.getString("event_type"),

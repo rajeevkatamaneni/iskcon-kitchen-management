@@ -11,6 +11,7 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.document.DocumentGenerationService;
 import org.iskcon.kms.document.DocumentService;
+import org.iskcon.kms.document.DisplayDates;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.notification.NotificationRecipient;
@@ -275,7 +276,14 @@ public class PurchaseOrderDeliveryService {
 		return lines.size() + " item(s): " + names + suffix;
 	}
 
-	/** Short and unambiguous in a message that may be read on a small screen. */
-	private static final java.time.format.DateTimeFormatter WHEN =
-			java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy");
+	/**
+	 * Short and unambiguous in a message that may be read on a small screen.
+	 *
+	 * <p>The same formatter as the attached PO sheet and every other document, {@link DisplayDates#DAY}
+	 * (T-312), so the vendor's message reads "needed by 20 Sept 2026" beside a sheet and a screen that
+	 * say the same. T-311 had pinned a private copy to British English; that copy is now the shared
+	 * one. Only the parameter values are formatted here — the Meta template text around them is
+	 * untouched, so nothing needs re-registering.
+	 */
+	private static final java.time.format.DateTimeFormatter WHEN = DisplayDates.DAY;
 }

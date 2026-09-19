@@ -475,6 +475,70 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 		assertThat(header.path("parameters").get(0).path("document").path("filename").asText()).isEqualTo("PO-2026-0203.pdf");
 	}
 
+	/**
+	 * R-SL-3 and R-SL-1 on the WhatsApp text (T-260): what the message itself carries for a line
+	 * ordered in packs.
+	 *
+	 * <p>The answer is no amount at all. The body is "Purchase order {no} for {vendor} is ready:
+	 * {summary}. It was raised on {date}, and the items are needed by {date} at the latest.", and
+	 * {@code summary} is the item names and a count, never a quantity. The amounts travel in the PDF in
+	 * the message's header, which is the sheet {@code PurchaseOrderPackLineIT} reads "4 × Bag (25 Kg)"
+	 * off. So there is nothing in the text to word as packs or to put in Kg, and this pins that: if a
+	 * quantity is ever added to the summary, this fails and says the pack wording has to go with it.
+	 */
+	@Test
+	@DisplayName("the WhatsApp text for a pack line names the item only; its amount travels in the attached sheet")
+	void theWhatsAppTextCarriesNoAmountForAPackLine() throws Exception {
+		UUID bag = admin.queryForObject("""
+				INSERT INTO ingredient_pack_sizes (tenant_id, ingredient_id, name, quantity, unit)
+				VALUES (?, ?, 'Bag', 25, 'KG') RETURNING id
+				""", UUID.class, tenant, rice);
+		UUID poId = admin.queryForObject("""
+				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, sent_at, created_by)
+				VALUES (?, 'PO-2026-0260', ?, 'SENT', now(), ?) RETURNING id
+				""", UUID.class, tenant, vendor, staffId);
+		admin.update("""
+				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit, expected_price,
+						pack_size_id, pack_count)
+				VALUES (?, ?, ?, 100, 'KG', 60, ?, 4)
+				""", tenant, poId, rice, bag);
+		UUID sheet = sheet(poId, 1, "en", "READY", pdf("pack sheet"));
+
+		UUID notificationId = send(poId);
+		Map<String, Object> params = storedParams(notificationId);
+
+		assertThat(params.get("summary")).isEqualTo("1 item(s): Rice");
+		assertThat(params.get("documentId")).as("the sheet with the amounts goes with it").isEqualTo(sheet.toString());
+		// Every parameter the text is built from, and none of them is an amount. (Asserted on the keys
+		// rather than by searching the stored JSON for "100": the document id is a uuid, and a uuid
+		// may contain any three digits.)
+		assertThat(params.keySet()).containsExactlyInAnyOrder(
+				"poNumber", "vendor", "summary", "raised", "neededBy", "documentId");
+	}
+
+	/**
+	 * T-311: the dates in the vendor's message are written the way every screen and the attached
+	 * sheet write them. With no locale the formatter took the JVM default, US English, and wrote
+	 * "20 Sep 2026" beside a sheet reading "20 Sept 2026". September is the only month where the two
+	 * differ, so both dates are in September; March is there to show the other months are unchanged.
+	 */
+	@Test
+	@DisplayName("the WhatsApp dates are written the screen's way: 20 Sept 2026, not the US 20 Sep 2026 (T-311)")
+	void theWhatsAppDatesMatchTheScreen() throws Exception {
+		UUID poId = admin.queryForObject("""
+				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, sent_at, created_by,
+						order_date, needed_by)
+				VALUES (?, 'PO-2026-0311', ?, 'SENT', now(), ?, DATE '2026-09-20', DATE '2027-03-05') RETURNING id
+				""", UUID.class, tenant, vendor, staffId);
+		line(poId);
+		sheet(poId, 1, "en", "READY", pdf("dated sheet"));
+
+		Map<String, Object> params = storedParams(send(poId));
+
+		assertThat(params.get("raised")).isEqualTo("20 Sept 2026");
+		assertThat(params.get("neededBy")).isEqualTo("5 Mar 2027");
+	}
+
 	// ---------------------------------------------------------------------
 
 	private UUID send(UUID poId) throws Exception {

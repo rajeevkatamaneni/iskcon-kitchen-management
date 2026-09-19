@@ -71,6 +71,10 @@ class DocumentGenerationIT extends AbstractIntegrationTest {
 	void tearDown() {
 		TenantContext.clear();
 		admin.execute("DELETE FROM documents");
+		admin.execute("DELETE FROM po_events");
+		admin.execute("DELETE FROM purchase_order_lines");
+		admin.execute("DELETE FROM purchase_orders");
+		admin.execute("DELETE FROM vendors");
 		admin.execute("DELETE FROM recipe_ingredients");
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
@@ -136,7 +140,88 @@ class DocumentGenerationIT extends AbstractIntegrationTest {
 				.andExpect(status().isNotFound());
 	}
 
+	@Test
+	@DisplayName("the recipe PDF prints a line's preparation note after its name, at base and scaled (R-DUP-1)")
+	void thePdfPrintsThePreparationNote() {
+		UUID chilli = insertIngredient("Green chilli");
+		insertLine(chilli, "0.5", "KG", 2);
+		admin.update("UPDATE recipe_ingredients SET preparation_note = 'slit' WHERE ingredient_id = ?", chilli);
+
+		TenantContext.set(temple);
+		try {
+			String base = RecipeCardTemplate.render(generationService.buildModel(recipe, null, "en"));
+			String scaled = RecipeCardTemplate.render(
+					generationService.buildModel(recipe, new java.math.BigDecimal("200"), "en"));
+
+			assertThat(base).contains("<td>Green chilli · slit</td><td class=\"amt\">500 gm</td>");
+			assertThat(scaled).contains("<td>Green chilli · slit</td><td class=\"amt\">1 Kg</td>");
+			// A line with no note prints its name alone — no dangling separator.
+			assertThat(base).contains("<td>Rice</td>").doesNotContain("Rice ·");
+		} finally {
+			TenantContext.clear();
+		}
+	}
+
+	/**
+	 * F6 (T-279): a figure of a lakh or more on the PO sheet is grouped the Indian way. The sheet's
+	 * rupees were already right (T-268 grouped them by hand); its quantities were not, because
+	 * {@code Quantities} used the JDK's en-IN formatter, which groups in threes — so a bulk order of
+	 * 1,50,000 leaf plates went to the vendor as "150,000 pieces". This is the text the PDF is printed
+	 * from: the print view and the PDF worker share {@code buildSheetModel}.
+	 */
+	@Test
+	@DisplayName("the PO sheet writes lakhs the Indian way: 1,50,000 pieces, 2,50,000 Kg, a total of ₹1,03,00,000 (T-279)")
+	void thePurchaseOrderSheetGroupsLakhs() {
+		UUID adminId = admin.queryForObject(
+				"SELECT id FROM users WHERE firebase_uid = 'uid-admin'", UUID.class);
+		UUID vendor = admin.queryForObject("""
+				INSERT INTO vendors (tenant_id, name, address, gstin, phone)
+				VALUES (?, 'Govind Wholesale', '12 Market Rd, Bengaluru', '29ABCDE1234F1Z5', '+919812345678')
+				RETURNING id
+				""", UUID.class, temple);
+		UUID plates = admin.queryForObject("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, 'Leaf plates', 'Test', 'PIECES') RETURNING id
+				""", UUID.class, temple);
+		UUID rice = admin.queryForObject(
+				"SELECT id FROM ingredients WHERE tenant_id = ? AND name = 'Rice'", UUID.class, temple);
+		UUID po = admin.queryForObject("""
+				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, created_by)
+				VALUES (?, 'PO-2026-0279', ?, 'SENT', ?) RETURNING id
+				""", UUID.class, temple, vendor, adminId);
+		// 1,50,000 plates at ₹2 is ₹3,00,000; 2,50,000 Kg of rice at ₹40 is ₹1,00,00,000. The sheet
+		// prints a rate per line and one total, so the total, ₹1,03,00,000, is the rupee figure here.
+		poLine(po, plates, "150000", "PIECES", "2", 0);
+		poLine(po, rice, "250000", "KG", "40", 1);
+
+		TenantContext.set(temple);
+		String html;
+		try {
+			html = generationService.renderPurchaseOrderHtml(po, "en");
+		} finally {
+			TenantContext.clear();
+		}
+
+		assertThat(html)
+				.contains("1,50,000 pieces")
+				.contains("2,50,000 Kg")
+				.contains("₹2 / piece")
+				.contains("₹40 / Kg")
+				.contains("₹1,03,00,000")
+				// The JDK's grouping, in threes, is nowhere on the sheet.
+				.doesNotContain("150,000")
+				.doesNotContain("250,000")
+				.doesNotContain("10,300,000");
+	}
+
 	// ---------------------------------------------------------------------
+
+	private void poLine(UUID po, UUID ingredient, String quantity, String unit, String price, int order) {
+		admin.update("""
+				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit, expected_price, line_order)
+				VALUES (?, ?, ?, CAST(? AS numeric), ?, CAST(? AS numeric), ?)
+				""", temple, po, ingredient, quantity, unit, price, order);
+	}
 
 	private void generateWithin(UUID doc) {
 		TenantContext.set(temple);
