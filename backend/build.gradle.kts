@@ -30,6 +30,8 @@ repositories {
 extra["testcontainersVersion"] = "1.21.4"
 
 dependencies {
+	// Local only: restarts the app in seconds when classes recompile. Never in the boot jar.
+	developmentOnly("org.springframework.boot:spring-boot-devtools")
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
