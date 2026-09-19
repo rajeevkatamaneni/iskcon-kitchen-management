@@ -1,129 +1,140 @@
-# UAT-044: Receiving — full, short and rejected
+# UAT-044: The Deliveries screen — expected, part delivered, received
 
 | | |
 |---|---|
-| **Feature area** | Ordering — receiving |
-| **Technical stories** | E5-S6 (receiving: full, partial and rejected deliveries, amended 2026-08-31) |
-| **Roles exercised** | Kitchen staff |
-| **Depends on** | UAT-040 (a sent order), UAT-037 (vendor prices) |
-| **Environment needs** | None |
+| **Feature area** | Ordering — receiving what vendors bring |
+| **Technical stories** | E5-S6 (receiving); procurement release 2026-09-19: R-DEL-1 (menu and access), R-DEL-2 (three tabs and the summary), R-DEL-3 (recording a delivery across a vendor's orders), R-DEL-4 (delivery history), R-DEL-5 (dates, pills, no price), AC-DEL, and Rajeev's answer to Q-1 (kitchen staff record deliveries). Tasks T-261, T-262, T-266, T-285, T-299, T-343 |
+| **Roles exercised** | Kitchen staff, kitchen manager, temple admin, volunteer (to prove the refusal) |
+| **Depends on** | UAT-039 and UAT-040 (order A, sent) |
+| **Environment needs** | None. Steps 22–25 are run **the next day** |
+
+> **Rewritten 2026-09-19.** The earlier script received goods from a **Receive delivery** button on the
+> order, typed a **Price paid** on each line, and wrote that price back to the vendor. All three are gone:
+> deliveries are recorded on this screen, and **the price now comes only from the invoice** (UAT-045). If
+> you see *Price paid* anywhere, that is a defect.
 
 ## What this feature is for
 
-The truck rarely brings exactly what was ordered. Sacks are short, some goods arrive spoiled, and
-occasionally the wrong thing turns up. Inventory must reflect **the truck, not the order** — so
-receiving records what actually arrived, what was refused and why, and what is still owed.
-
-It is also **the one moment somebody knows what the food actually cost**. The lorry brings a bill,
-and the storekeeper standing in front of it is the only person in the building who can see it. Until
-now, a vendor's price was whatever somebody last typed on the vendor screen — and the shopping list,
-every costing figure and the price the temple quotes for outside catering all read that number as if
-it were current.
+The person at the gate needs one place that says who is coming today, what they still owe, and what
+already came. And when the van arrives with goods from three different orders, they record it once, for
+that vendor, not order by order. There are no prices on this screen: the gate counts sacks; the bill
+comes later.
 
 ## How it is supposed to work
 
-- Receiving is line by line: **received now**, **rejected** with a reason, an **expiry** for what is
-  accepted, and the **price paid**.
-- **Only received goods enter stock.** Rejected goods never do.
-- Each delivery of an ingredient becomes its own **lot** on the inventory screen, identified by the
-  date it arrived and the expiry you gave it — the store reads its lots soonest-to-expire first.
-- **Price paid** is per line, in rupees **per the line's own unit**, pre-filled from what the order
-  expected and hinted underneath with *expected ₹45 / Kg*. It is **editable, and optional**.
-  - A price you give is written back as **the vendor's last-known price** for that ingredient.
-  - **Leaving it blank stores nothing and overwrites nothing.** "The bill hasn't come yet" and "this
-    costs nothing" are different statements.
-  - A price is **not** a gate. Nothing is flagged, and nothing needs approving, however far it is from
-    what was expected.
-  - A line **rejected in full** teaches nothing about what the vendor charges and writes no price back.
-- What is still outstanding keeps the order **Partially received**, and comes back onto the next
-  suggested shopping list, marked with where it came from.
-- A second delivery completing the order flips it to **Received**.
-- Submitting the same delivery twice must not book the stock twice — or re-price anything.
+- **Deliveries** is in the menu under **Ordering**, right after **Purchase orders**. Temple admin,
+  kitchen manager and kitchen staff have it. Nobody else sees it or can open it.
+- A small summary at the top — **Due today**, **Overdue**, **Partly delivered**, **Received this week** —
+  then three tabs:
+  - **Expected**: sent orders not fully delivered, one card per vendor, with what is still to come and
+    when it was needed by.
+  - **Partly delivered**: what is still owed, and for how long.
+  - **Received**: a dated history of the last 30 days — date, vendor, items, received by, rejected,
+    returned — with **Show older deliveries** for more.
+- **One Record a delivery button per vendor.** It lists everything that vendor still owes across all
+  their open orders, each line with its order number in small text. Per line: **Received now**,
+  **Rejected on delivery** with a **Reason**, and **Expiry**. Amounts are typed in the unit the line was
+  ordered in (2 bags), and stock receives the stock-unit amount (50 Kg). **Everything arrived** fills in
+  whatever is still to come.
+- **Rejected goods stay owed.** The rest of a part delivery is recorded exactly the same way.
+- Each item's history opens from a quiet **▸ N deliveries**: `12 Sept · 30 Kg received · 2 Kg rejected
+  (spoiled) · Received by: Karuna Murti Das`, then `Received 30 of 50 Kg ordered`, or when complete
+  `Received 50 of 50 Kg ordered · complete 15 Sept`. No order number in these lines.
+- **Dates are always dates.** Today's gets a blue **Today** pill beside it; a late one gets an amber pill.
+  The word "Today" never replaces the date.
+- **No prices anywhere on this screen.**
 
 ## Before you start
 
-- **Sign in as:** `ikms.kitchen-staff.1@trading4good.org` (kitchen staff)
-- **Start at:** **/orders** → the **Sent** order to Sri Balaji Provisions
-- **Set it up to match the worked example:** the order should have a line for **36 Kg of Rice** (edit it
-  while it is still a draft, or create a fresh order).
-- On **/vendors**, make sure Sri Balaji's **Rice** supply has a **Last price** of **`45`**. That is the
-  figure the form should pre-fill and hint with, and the one step 10 checks has changed.
-- Write down Rice's current stock before you begin.
+- **Sign in as:** `ikms.kitchen-staff.5@trading4good.org` (kitchen manager) and, on **/orders/new**
+  (UAT-039), create **order C**: vendor **UAT Rice Traders**, **UAT Groundnut Oil** × Tin (15 L)
+  quantity `1`, **Needed by today**. Open it and press **Mark sent**.
+- Order A (UAT Bulk Rice 4 × Bag (25 Kg), UAT Tea 1 × 500 gm) is already sent (UAT-040).
+- On **/inventory**, write down UAT Bulk Rice's on-hand figure (20 Kg if you followed UAT-090).
+- **Then sign in as:** `ikms.kitchen-staff.1@trading4good.org` (kitchen staff)
 
 ## Steps
 
-### The delivery
+### The screen, and who can open it
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open the sent order and press **Receive delivery** | A line-by-line form headed **Record a delivery**: Item, Ordered, Received so far, **Received now**, **Rejected**, Reason, **Expiry**, **Price paid** |
-| 2 | Read the note above the form | *Rejected goods need a reason and never enter stock. The price is what the bill says — correct it if it differs, or leave it blank for a delivery that came without one.* |
-| 3 | Look at the **Price paid** box on the Rice line **before typing anything** | It is **already filled in with `45`**, and underneath it says **expected ₹45 / Kg** — what the order budgeted, still visible rather than replaced |
-| 4 | On the Rice line, enter **received 30**, **rejected 2** with reason **spoiled**, expiry six months out, and change **Price paid** to `52` | Accepted. Nothing warns you, nothing asks for approval, and no flag appears — a delivery that came in dearer is a fact, not an exception |
-| 5 | Press **Record delivery** | The delivery is recorded; the order's status becomes **Partially received** |
-| 6 | Go to **/inventory** → **Rice** | Stock is up by **30 Kg exactly** — not 32, not 36 — in a **new lot** carrying the expiry you entered and today as its arrival date |
-| 7 | Look at Rice's **Movement history** | One row of +30, referencing this purchase order. **No row** for the 2 rejected |
-| 8 | Back on the order, look at the lines | Rice shows 30 received of 36, with 2 rejected recorded and **6 still outstanding** |
-| 9 | Go to **/shopping-list** and press **Regenerate** | The 6 Kg shortfall reappears as a line, with its reason showing it came from this order |
+| 1 | Look at the menu under **Ordering** | Shopping list, Purchase orders, **Deliveries**, Vendors … — Deliveries straight after Purchase orders |
+| 2 | Open **Deliveries** | Heading **Deliveries** and *What vendors are bringing, and what has come in.* A small summary: **Due today**, **Overdue**, **Partly delivered**, **Received this week**, quieter than the page heading. Three tabs: **Expected**, **Partly delivered**, **Received** |
+| 3 | Read the **Expected** tab | A **UAT Rice Traders** card with **one** **Record a delivery** button and a table Item · Order · Still to come · Needed by: UAT Bulk Rice · order A · **4 bags (100 Kg)** · its date; UAT Tea · order A · **1 × 500 gm**; UAT Groundnut Oil · order C · **1 tin (15 L)** or similar · **today's date with a blue Today pill beside it** |
+| 4 | Search the whole page for **₹**, **price**, **rate** and **paid** | None of them |
 
-### The price goes where it is meant to, and only where it is meant to
+### The first part of the delivery
 
 | # | Do this | You should see |
 |---|---|---|
-| 10 | Go to **/vendors** → **Sri Balaji Provisions** → **Supplies** | Rice's **Last price** now reads **52** — the delivery corrected it, without anybody retyping it on this screen |
-| 11 | Check the **Preferred** ticks on that page | **Unchanged.** A delivery says what a thing cost; it does not say who the temple would rather buy from |
-| 12 | Look at **Toor Dal**'s price on the same page | **Unchanged** — nothing was received against it |
-| 13 | Return to the order and record a second delivery of **6 Kg** — but **clear the Price paid box** and leave it empty | The order flips to **Received** |
-| 14 | Go back to the vendor's Supplies | Rice's Last price is **still 52**. **A blank price stored nothing and overwrote nothing** — it did not become ₹0 |
-| 15 | Check inventory again | Two lots now, 30 Kg and 6 Kg, each with its own expiry and arrival date |
-| 16 | On a fresh order, receive a line where you **reject the whole quantity** and still type a price | The vendor's last price for that ingredient is **unchanged** — nothing was bought, at that price or any other |
-| 17 | On a fresh order, receive an ingredient this vendor has **never supplied before**, giving a price | A **new supply row** appears on that vendor's page for it, with the price. They have now demonstrably supplied it |
-| 18 | Look at what a price is per | The hint says the **line's own unit** — *expected ₹45 / Kg*, not "per gram" or "per order". If a line is in `gm`, the price is per gram |
+| 5 | Press **Record a delivery** on UAT Rice Traders | A panel listing **all three lines from both orders**, each with its order number in small text under the item. Columns: Item · Still to come · Received now · Rejected on delivery · Reason · Expiry. **No Price paid.** Every Received now box is **empty**, and UAT Bulk Rice's box is labelled in **Bag (25 Kg)** |
+| 6 | Press **Save delivery** without typing anything | **Type what arrived on at least one line, or press Everything arrived.** Nothing saved |
+| 7 | Look at the **Reason** list on UAT Bulk Rice before typing a rejected amount | It can't be chosen yet |
+| 8 | On UAT Bulk Rice type Received now `5` | Refused beside the line: **Only 4 bags (100 Kg) is still to come** (or the same amount written that way) |
+| 9 | Received now `4`, Rejected on delivery `1` | Refused: **Received and rejected add up to more than the … still to come** |
+| 10 | Received now `2`, Rejected on delivery `1`, Reason **Damaged**, Expiry six months from today. Leave the other two lines empty. Press **Save delivery** | A **green** line: **Delivery from UAT Rice Traders recorded. 1 item went into stock. 3 lines are still to come from them.** |
+| 11 | Look at UAT Bulk Rice on the Expected tab | Still to come **2 bags (50 Kg)**, with a note under it that it **includes** the rejected amount, dated today. **Rejected goods are still owed** |
+| 12 | Open **/inventory** → UAT Bulk Rice | Up by **exactly 50 Kg** — not 75, not 100 — in a new batch carrying the expiry you gave. The movement history has one delivery row of +50 Kg and **nothing** for the rejected bag |
 
-### The refusals
+### Part delivered
 
 | # | Do this | You should see |
 |---|---|---|
-| 19 | Press **Record delivery** twice in quick succession on a fresh order (double-click the button) | Stock increases **once**, not twice — and the vendor's price is written **once**, not twice |
-| 20 | Try to record a delivery with **nothing** in any received or rejected box | Refused: *Enter what arrived on at least one line.* (the server's own answer is `KMS-400053`, *A delivery line must record something received or something rejected*) |
-| 21 | Try to reject a quantity **without** giving a reason | Refused |
-| 22 | Type a **negative** price, or letters, in **Price paid** | Refused: *A price is an amount in rupees. Leave it blank if the bill hasn't arrived.* |
-| 23 | Try to receive against a **draft** order | Refused — you can only receive against a sent order |
+| 13 | Open the **Partly delivered** tab | Order A's UAT Bulk Rice: Ordered **4 bags (100 Kg)** · Received **2 bags (50 Kg)** · Still owed **2 bags (50 Kg)** · Owed for (how long). Every figure in the same unit, the bags with Kg in brackets |
+| 14 | Press **▸ 1 delivery** under UAT Bulk Rice | It opens and reads *&lt;today's date&gt;* **Today** **· 50 Kg received · 25 Kg rejected (damaged) · Received by:** *&lt;your name&gt;*, and under it **Received 50 of 100 Kg ordered**. No order number. It is small and quiet, not a heading |
+| 15 | Close and open it again with the keyboard (Tab to it, Enter) | It opens and closes; a screen reader hears whether it is expanded |
+
+### The rest, recorded the same way
+
+| # | Do this | You should see |
+|---|---|---|
+| 16 | Sign in as the **kitchen manager**. On **Partly delivered**, press **Record a delivery** for UAT Rice Traders | The same panel, with **Received now empty** again, listing what is still owed: UAT Bulk Rice 2 bags (50 Kg), UAT Tea, UAT Groundnut Oil |
+| 17 | Press **Everything arrived** | Every Received now box fills with what is still to come: **2** bags, **1**, **1** |
+| 18 | Clear the **UAT Groundnut Oil** box, and press **Save delivery** | Green: **Delivery from UAT Rice Traders recorded. 2 items went into stock.**, naming **UAT Bulk Rice is complete: 100 of 100 Kg.**, and ending **1 line is still to come from them.** |
+| 19 | Open the **Received** tab | Two rows for today: date, **UAT Rice Traders**, the items, **Received by** your two names, and the damaged bag in **Rejected** |
+| 20 | Open UAT Bulk Rice's history on the Received tab | Two lines, oldest first: the first as in step 14, then *&lt;today&gt;* **Today · 50 Kg received · Received by:** *&lt;kitchen manager's name&gt;*, and the closing line **Received 100 of 100 Kg ordered · complete** *&lt;today&gt;* **Today** |
+| 21 | Open order A on **/orders** | **Received**. Its table shows Delivered **100 Kg** and two lines of history (UAT-040 step 11 onwards) |
+
+### The next day: late
+
+| # | Do this | You should see |
+|---|---|---|
+| 22 | **The next day**, open **Deliveries** | The summary reads **Overdue 1 vendor** (or one more than before), in amber |
+| 23 | Read UAT Groundnut Oil on **Expected** | Its needed-by date — yesterday's — written as a date, with an amber **1 day late** pill beside it. The same size and shape as the Today pill |
+| 24 | Record it (Record a delivery → Everything arrived → Save delivery) | Green, ending **Nothing more is owed by them.** UAT Rice Traders leaves the Expected tab |
+| 25 | On **Received**, scroll to the foot | If the temple has deliveries older than 30 days, **Show older deliveries** loads the 30 days before. If it has none, the button is not there |
+
+### Widths and access
+
+| # | Do this | You should see |
+|---|---|---|
+| 26 | Measure every tab at **1280px**, **1024px** and **390px**, with the panel open and with every history open | Nothing truncated, nothing scrolls sideways. At 1024 an opened history does not squeeze the short columns beside it into several lines. At 390 the panel lines become cards and **Everything arrived** and **Save delivery** can be reached |
+| 27 | Sign in as the **temple admin** | Deliveries is in the menu and works the same |
+| 28 | Sign in as `ikms.volunteer.1@trading4good.org` | **No Deliveries** in the menu. Typing **/deliveries** shows **Not your page**, with nothing from the screen behind it |
+| 29 | *(Technical tester only.)* As the volunteer, call `GET /api/v1/deliveries` on the system address in README §2 with the volunteer's token | **403**, `KMS-400021`. The server refuses, not just the menu |
 
 ## It passes if
 
-- [ ] Received quantities enter stock; rejected quantities never do.
-- [ ] The expiry entered at receiving appears on the lot, and each delivery makes its own lot.
-- [ ] The order becomes **Partially received** with the correct outstanding quantity.
-- [ ] The outstanding quantity comes back onto the shopping list, with its provenance.
-- [ ] A second delivery completes the order.
-- [ ] **Price paid is pre-filled from the order, hinted with what was expected, editable, and optional.**
-- [ ] A price given **lands on the vendor's supply row** for that ingredient.
-- [ ] **A blank price changes no existing price**, and never becomes zero.
-- [ ] A line rejected in full writes no price back.
-- [ ] A price is per the line's own unit.
-- [ ] A price never touches the **Preferred** flag.
-- [ ] A duplicate submission does not double-count stock or re-price anything.
-- [ ] An empty line, a reasonless rejection and a nonsense price are all refused.
+- [ ] Deliveries sits under Ordering after Purchase orders, and only temple admin, kitchen manager and kitchen staff can see or open it; the server refuses anyone else.
+- [ ] The three tabs and the summary show what the requirements say, with no price, rate or ₹ anywhere.
+- [ ] One Record a delivery per vendor lists every line that vendor owes across all their orders, each with its order number.
+- [ ] Amounts are typed in the ordered unit (bags) and stock receives the stock-unit amount (Kg), exactly.
+- [ ] A rejection needs a reason, stays owed, and never enters stock.
+- [ ] Everything arrived fills in what is still to come; the rest of a part delivery is recorded the same way.
+- [ ] The history reads in the exact wording, with no order number, and completes with `Received N of N … ordered · complete <date>`.
+- [ ] Dates are always dates; today's has a blue Today pill, a late one an amber pill of the same size.
+- [ ] Nothing is truncated or scrolls sideways at 1280, 1024 or 390.
 
 ## Watch out for
 
-- **Step 6 is the one that matters most.** If stock rose by 32 or 36, the temple's records now disagree
-  with its shelves. Blocker.
-- **A blank price becoming ₹0 on the vendor's page.** That is the failure this design exists to
-  prevent: it would tell the shopping list, every costing screen and the temple's catering quote that
-  an ingredient is free. Blocker.
-- The expiry date not making it onto the lot — the first-expiring-first logic in UAT-035 depends on it.
-- A price being written back for goods that were **rejected**.
-- **Units.** If the Rice line were in `gm`, ₹0.05 per gram is ₹50 a kilo, and the vendor's per-Kg
-  price must read 50 and not 0.05. If you can arrange an order line in grams for an ingredient held in
-  kilos, do it and check — being wrong by a factor of a thousand here is worth a Blocker.
-- Any warning, flag or approval step appearing because the price differs from what was expected. There
-  should be none.
-- Receiving more than was ordered: try entering 50 against a 36 Kg line. Record what happens;
-  deliveries genuinely do overshoot sometimes, and how the product handles it is worth knowing.
-- The rejection reason not being stored — it is read back per vendor and by reason on
-  **/vendor-performance** (UAT-077).
+- **Stock that rose by 75 or 100 Kg at step 12.** The shelf and the records would disagree. Blocker.
+- **Price paid, or any ₹, on this screen.** The price belongs to the invoice now. Major.
+- **"Today" in place of a date**, or a Today pill in amber or a late pill in blue. Minor, but note it.
+- **The same delivery recorded twice** by a double press of Save delivery: stock must rise once.
+- A line from a **different** vendor in the panel, or a line from a cancelled order.
+- `KMS-400164` — *One of these items isn’t on an open order from this vendor any more.* — is what you meet
+  if someone else closed or recorded the order while your panel was open. Reload and record again.
 
 ## Report anything wrong
 

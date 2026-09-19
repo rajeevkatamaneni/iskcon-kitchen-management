@@ -81,7 +81,7 @@ schedule both go, or neither does.
 | # | Do this | You should see |
 |---|---|---|
 | 14 | Sign in as `ikms.temple-admin.1@trading4good.org` and open **/planner** | The calendar is still there for the surviving temple, this month and the next |
-| 15 | Open **/shopping-list** and press **Regenerate** (UAT-038) | It rebuilds. The shopping-list work still runs |
+| 15 | Open **/shopping-list** (UAT-038) | It is worked out and shown. *(Amended 2026-09-19: there is no Regenerate button since T-132; the list is worked out each time the page opens.)* |
 | 16 | Print or download a recipe card (UAT-019) | The PDF is generated. Document work still runs |
 | 17 | Check that a shift reminder is still scheduled (UAT-052) | Still scheduled and still arriving |
 | 18 | Sign in as `ikms.temple-admin.2@trading4good.org` — the **second** temple — and open **/planner** | Its calendar is intact too. One temple's deletion took nothing from another's |

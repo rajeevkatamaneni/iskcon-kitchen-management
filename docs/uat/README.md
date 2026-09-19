@@ -7,8 +7,8 @@ Everything you need is here and in each test document. Start at the top and work
 
 ## 1. How this pack works
 
-There are **84 tests**. Each one covers a single feature, end to end, and is written so that
-somebody who has never seen the product can run it. Every test document has the same shape:
+There are **90 tests** (three of them withdrawn and kept as a record). Each one covers a single
+feature, end to end, and is written so that somebody who has never seen the product can run it. Every test document has the same shape:
 
 | Section | What it gives you |
 |---|---|
@@ -86,10 +86,11 @@ wastes everyone's time.
 
 | Switch | What breaks while it is off | Tests affected |
 |---|---|---|
-| **Background worker** (`KMS_WORKER_ENABLED`) | Nothing scheduled runs: Vaishnava calendar build, PDF generation, shift reminders, low-stock digest, shopping-list refresh, payment reconciliation | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 038, 041, 052 |
-| **Document renderer** (`DOCUMENTS_RENDERER`) | PDFs come out as placeholders, not real documents | UAT-019, 020, 041, 042 |
+| **Background worker** (`KMS_WORKER_ENABLED`) | Nothing scheduled runs: Vaishnava calendar build, PDF generation, shift reminders, low-stock digest, shopping-list refresh, payment reconciliation | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 041, 052 (UAT-038 no longer needs it: the shopping list is worked out when the page opens) |
+| **Document renderer** (`DOCUMENTS_RENDERER`) | PDFs come out as placeholders, not real documents | UAT-019, 020, 041, 042, 043, 092 |
 | **Translation provider** (`TRANSLATION_PROVIDER`) | "Translated" text comes back tagged, not really translated | UAT-020, 021, 042 |
-| **Message channels** (WhatsApp / SMS / email adapters) | No message ever actually arrives — sends are only recorded | UAT-009, 028, 043, 047, 052, 053, 055 |
+| **Message channels** (WhatsApp / SMS / email adapters) | No message ever actually arrives — sends are only recorded | UAT-009, 028, 043, 047, 052, 053, 055, 092 |
+| **File storage** (cloud storage for uploads) | A copy of a bill or a proof of payment can't be kept, so an invoice or a payment can't be saved, and a thumbnail won't open again | UAT-045, 046, 092 |
 | **Payment provider** (`PAYMENTS_PROVIDER`, Razorpay test mode) | No checkout opens; a donation is recorded but never confirmed, so it never reaches the ledger | UAT-055, 056, 058, 059 |
 
 Each affected test repeats this under **Before you start**, so you always know. Where a feature can
@@ -119,6 +120,13 @@ whatever country the *reader's* browser was set to.
 
 **4. Money is grouped the Indian way.** **₹1,15,000**, not ₹115,000 and not ₹115,000.00 — lakhs and
 crores, with the rupee sign.
+
+Also worth knowing, since the procurement release of 2026-09-19: deliveries are recorded on the
+**Deliveries** screen, not on the purchase order; there is **no Payments page** (the old address
+**/money** opens the unpaid invoices, and a bill is paid from its own page); what a vendor charges is
+called its **List price**, never *Last price*; and a price is never typed at delivery — it comes from the
+invoice. Seeing *Price paid*, *Raise an order*, *Record an invoice* or *Rejected at the gate* anywhere is
+a defect.
 
 Also worth knowing: the screen that suggests what to buy is the **Shopping list**, at
 **/shopping-list**. It used to be called the Order List; the old address **/order-list** still works
@@ -243,16 +251,16 @@ run there, or on paper and then there — whichever suits you.
 
 | # | Test | Roles | Technical stories |
 |---|---|---|---|
-| [UAT-037](UAT-037-vendors.md) · [#100](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/100) | Vendors and what they supply | Kitchen staff | E5-S1 |
-| [UAT-038](UAT-038-the-shopping-list.md) · [#101](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/101) | The suggested shopping list | Kitchen staff | E5-S2 |
-| [UAT-039](UAT-039-generate-purchase-orders.md) · [#102](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/102) | Turn the shopping list into purchase orders — **partly withdrawn 2026-09-12 (T-153):** steps 1–5 and 9, the removed tick-and-generate flow, do not run; rewrite wanted for the vendor-tile flow | Kitchen staff | E5-S3, E5-S2 |
-| [UAT-040](UAT-040-purchase-order-lifecycle.md) · [#103](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/103) | Send and cancel a purchase order | Kitchen staff | E5-S3 |
-| [UAT-041](UAT-041-the-po-sheet.md) · [#104](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/104) | The purchase-order sheet: print and PDF | Kitchen staff | E5-S4 |
+| [UAT-037](UAT-037-vendors.md) · [#100](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/100) | Vendors and what they supply — *supplies amended 2026-09-19* | Kitchen staff | E5-S1, R-VEN-1 |
+| [UAT-038](UAT-038-the-shopping-list.md) · [#101](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/101) | The shopping list — amounts, packs and vendors — *rewritten 2026-09-19* | Kitchen manager, kitchen staff | E5-S2, R-SL-1–4 |
+| [UAT-039](UAT-039-generate-purchase-orders.md) · [#102](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/102) | Create a purchase order — *rewritten 2026-09-19* for the vendor tile and the new create form | Kitchen manager, kitchen staff, temple admin | E5-S3, E5-S2, R-PO-1–3, R-SL-3 |
+| [UAT-040](UAT-040-purchase-order-lifecycle.md) · [#103](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/103) | A purchase order's page — send, cancel, what arrived, and returns — *rewritten 2026-09-19* | Kitchen manager, kitchen staff | E5-S3, R-PO-4 |
+| [UAT-041](UAT-041-the-po-sheet.md) · [#104](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/104) | The purchase-order sheet: print and PDF — *amended 2026-09-19* (packs, rates, dates) | Kitchen staff | E5-S4, R-SL-1, R-SL-3 |
 | [UAT-042](UAT-042-po-in-the-vendors-language.md) · [#105](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/105) | The order in the vendor's language | Kitchen staff | E5-S5 |
-| [UAT-043](UAT-043-send-a-po-on-whatsapp.md) · [#106](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/106) | Send an order on WhatsApp | Kitchen staff | E5-S7 |
-| [UAT-044](UAT-044-receiving-a-delivery.md) · [#107](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/107) | Receiving: full, short and rejected | Kitchen staff | E5-S6 |
-| [UAT-045](UAT-045-record-a-vendor-invoice.md) · [#108](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/108) | Record a vendor's bill | Kitchen staff | E5-S8 |
-| [UAT-046](UAT-046-pay-a-vendor-invoice.md) · [#109](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/109) | Pay a vendor's bill | Temple admin | E7-S8 |
+| [UAT-043](UAT-043-send-a-po-on-whatsapp.md) · [#106](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/106) | Send an order on WhatsApp — *amended 2026-09-19* | Kitchen staff | E5-S7, R-SL-1, R-SL-3 |
+| [UAT-044](UAT-044-receiving-a-delivery.md) · [#107](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/107) | The Deliveries screen — expected, part delivered, received — *rewritten 2026-09-19* | Kitchen staff, kitchen manager, temple admin | E5-S6, R-DEL-1–5 |
+| [UAT-045](UAT-045-record-a-vendor-invoice.md) · [#108](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/108) | Create an invoice — the bill, its deliveries, its lines and its totals — *rewritten 2026-09-19* | Temple admin, kitchen manager, kitchen staff | E5-S8, R-INV-1–6, R-VEN-4 |
+| [UAT-046](UAT-046-pay-a-vendor-invoice.md) · [#109](https://github.com/rajeevkatamaneni/iskcon-kitchen-management/issues/109) | The invoice page, what is owed, and paying it — *rewritten 2026-09-19* | Temple admin (pays); kitchen manager, kitchen staff (refused) | E7-S8, R-INV-7, R-INV-8, R-PAY-1–4 |
 
 ### Part 7 — People and seva
 
@@ -325,7 +333,28 @@ that no longer exists; it changes the meal-kind picker, so re-run UAT-032 after 
 |---|---|---|---|
 | [UAT-084](UAT-084-when-the-grinder-is-due.md) | When the grinder is due — servicing, and the record of it | Temple admin, kitchen staff | E3-S10 |
 | [UAT-085](UAT-085-the-equipment-screen.md) | The equipment screen | Kitchen staff, temple admin | E3-S11 |
-| [UAT-086](UAT-086-an-event-of-its-own.md) | An event of its own — and the end of catering | Kitchen staff, temple admin | E4-S15, E4-S16 |
+| [UAT-086](UAT-086-an-event-of-its-own.md) | An event of its own — and the end of catering; repeating as a series (steps 45–70) and the van warning (steps 81–86), both 2026-09-19 | Kitchen staff, temple admin | E4-S15, E4-S16 |
+
+### Part 13 — The procurement release of 2026-09-19
+
+Prices now come from the bills the temple pays, item by item, and an order, its deliveries, its invoice
+and its payment are tied together. **Run Part 13's first four tests before Part 6**, because they make
+the data (**UAT Bulk Rice**, **UAT Rice Traders**, and the rest) that UAT-038 to UAT-046 then order,
+receive, bill and pay for, in this order: UAT-087, UAT-088, UAT-089, UAT-090, then UAT-038, 039, 040
+(steps 1–10), 044, 040 (steps 11–23), 045, 046, and last UAT-091 and UAT-092. UAT-092 is the whole chain
+again, on staging, on fresh data; its Part A must be done **before** the release is deployed.
+
+| # | Test | Roles | Requirements |
+|---|---|---|---|
+| [UAT-087](UAT-087-one-ingredient-not-five.md) | One ingredient, not five — duplicates and preparation notes | Temple admin, kitchen manager, kitchen staff | R-DUP-1, R-DUP-2 |
+| [UAT-088](UAT-088-the-ingredient-page.md) | The ingredient page — pack sizes, market rate, vendors and prices | Temple admin, kitchen manager, kitchen staff | R-ING-1, R-ING-2, R-ING-3, R-VEN-2, R-VEN-3 |
+| [UAT-089](UAT-089-onboarding-a-vendors-price-list.md) | Onboarding a vendor's price list (and a vendor named Market) | Temple admin, kitchen manager | R-VEN-1, R-VEN-2, R-VEN-3, R-VEN-4 |
+| [UAT-090](UAT-090-what-the-stock-is-worth.md) | What the stock is worth — the first count and the market rate | Kitchen manager, kitchen staff, temple admin | R-ING-3 |
+| [UAT-091](UAT-091-merge-duplicate-ingredients.md) | Merge duplicate ingredients | Temple admin | R-DUP-3 |
+| [UAT-092](UAT-092-buying-end-to-end-on-staging.md) | Buying, end to end, on staging | All staff roles, second temple admin | §10, AC-3.1, AC-3.2 |
+
+Also amended for this release, so that none describes a removed screen: UAT-005, 022, 024, 025, 037, 041,
+043, 060, 061, 073, 075, 076, 077, 082 and 083.
 
 **Not yet listed above:** UAT-067 to UAT-074 — the kitchens-and-issuing pack and the units-and-quantities
 test — are in this folder and are run from their own documents. This index has not caught up with

@@ -6,7 +6,7 @@
 | **Technical stories** | E4-S15 (events, and the end of catering) · E4-S16 (travel time for a delivered event, in **§travel**) |
 | **Roles exercised** | Kitchen staff, temple admin |
 | **Depends on** | UAT-032 (plan a meal), UAT-015 (recipes), UAT-034 (sufficiency) |
-| **Environment needs** | None for steps 1–70. Steps 64–67 need a volunteer account and a second browser window. **§travel** is written to be run **twice** — once with no map provider configured, once with one |
+| **Environment needs** | None for steps 1–70, or for the van warning (steps 81–86). Steps 64–67 need a volunteer account and a second browser window. **§travel** is written to be run **twice** — once with no map provider configured, once with one |
 
 > **This test replaces UAT-033**, which tested a *Catering order* kind that no longer exists. If you
 > are holding a printed pack with UAT-033 in it, throw that page away.
@@ -224,6 +224,22 @@ and its own job card. And the *Catering order* kind is gone: a temple that does 
 | 79 | Re-open that plan | It is there, whole, with everything you typed. A map service that could not find a street has not cost you the meal plan |
 | 80 | Plan a delivery to somewhere **hours away** — another city — and save | **Accepted.** The estimate is advice, never a rule. A temple that wants to send food two hours away may. If a long drive is ever *refused*, that is a **Major** defect |
 
+### §travel — Time to load the van
+
+*Added 2026-09-19.* Rajeev had the warning reworded that day. It works from what is typed, so it needs
+**no map provider**: run it in either §travel run. The ready-by time, the guests' serving time and the
+**Estimated travel time** box (minutes, which you can type yourself) decide it. The food must arrive
+before the guests eat, and anything under **30 minutes** spare for loading and setting up is a warning.
+
+| # | Do this | You should see |
+|---|---|---|
+| 81 | Open the delivered event from step 27 to edit it. **Ready by** `12:00`, guests eat at `13:00`, **Estimated travel time** `45` | Under **Ready by**, in amber, and the box edged amber: **You’ll only have 15 minutes to load the van and set up for service at the destination.** **Save** still works: it is a warning |
+| 82 | Change the travel time to `59` | **You’ll only have 1 minute to load the van and set up for service at the destination.** — *minute*, singular |
+| 83 | Change it to `30` | No warning at all. Thirty minutes spare is enough |
+| 84 | Change it to `70` | In red, under Ready by: **The food arrives 10 minutes late. Make it ready earlier, or change when guests eat.** **Save** is dead, with **The delivery cannot arrive in time** beside it. (`KMS-400079` is the server's answer behind it) |
+| 85 | Change **Ready by** to `11:00`, keeping 70 minutes | The red line goes and no amber warning shows either (120 − 70 = 50 minutes spare). Save |
+| 86 | Look at the same fields on a **pickup** event and an **in-house** event | Neither shows the warning or the late refusal; there is no van to load |
+
 ## It passes if
 
 - [ ] A Saturday reading is planned as its own preparation, with its own name, dishes and job card.
@@ -250,6 +266,7 @@ and its own job card. And the *Catering order* kind is gone: a temple that does 
 - [ ] **§travel** — with no provider configured, the planner works exactly as before and shows a quiet unavailable line.
 - [ ] **§travel** — an address that cannot be found reports `KMS-400078` and **the plan still saves**.
 - [ ] **§travel** — the estimate is never a reason a plan is refused.
+- [ ] **§travel** — a delivery with under 30 minutes spare shows the amber *You’ll only have N minutes to load the van and set up for service at the destination.* (singular at 1) and still saves; one that arrives after the guests eat is refused in red with Save dead.
 
 ## A note on how a refusal shows itself
 

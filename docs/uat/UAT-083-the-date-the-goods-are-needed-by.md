@@ -46,7 +46,7 @@ supplier's record after the deliveries had already happened.
 - **Set the scene:**
   1. Make the shopping list produce something (UAT-038): plan a meal that goes short, or drop an item
      below its reorder threshold.
-  2. On **/shopping-list**, press **Regenerate**, then generate purchase orders (UAT-039). You need
+  2. Open **/shopping-list** (it is worked out when it opens; there is no Regenerate button since T-132), then create each vendor's order from its tile's **Generate purchase order** (UAT-039). You need
      **two** drafts to work with — if only one vendor is suggested, add a second short ingredient
      that a different vendor supplies.
 - **Start at:** **/orders**, and open one of the drafts.
@@ -61,14 +61,14 @@ supplier's record after the deliveries had already happened.
 |---|---|---|
 | 1 | Look under the vendor's name at the top of the order | A line reading **Needed by** and a date, written the Indian way — *12 Sept 2026*, never *Sep 12, 2026* |
 | 2 | Look for the words *Fixed when the order was sent* | **Not there.** This order has not been sent |
-| 3 | Press **Edit lines** | The **Edit this draft** panel opens, and the **first** thing in it is a **Needed by** date box |
+| 3 | Press **Edit** (called *Edit lines* until 2026-09-10) | The **Edit this draft** panel opens, and the **first** thing in it is a **Needed by** date box |
 | 4 | Look at what is in the box | The date from step 1, already filled in — not blank, and not today |
 | 5 | Read the line under the box | *Leave it blank if there is no date to meet* |
 | 6 | Open the date picker and try to choose a day **before the order's own date** | The picker will not offer it — the days before the order are unavailable |
 | 7 | **Type** a date before the order's own date straight into the box (some browsers let you past the picker), and press **Save changes** | **Refused**, without the order changing: *That date is before the order was raised. Choose a day on or after it.* If it reaches the server you get **`KMS-400014`** — *That date is before the order was raised.* Either way the draft is untouched |
 | 8 | Set the date to **tomorrow** | The line under the box turns **gold** and reads **Sooner than the 2 days a vendor usually gets** |
 | 9 | Press **Save changes** anyway | **Accepted.** A warning is not a refusal. The header now reads **Needed by** tomorrow's date |
-| 10 | Press **Edit lines** again and set the date to **ten days from today** | The gold line is gone, replaced by *Leave it blank if there is no date to meet*. Ten days is more notice than the vendor usually gets |
+| 10 | Press **Edit** again and set the date to **ten days from today** | The gold line is gone, replaced by *Leave it blank if there is no date to meet*. Ten days is more notice than the vendor usually gets |
 | 11 | Save, and check the header | **Needed by**, ten days out, in the Indian form |
 | 12 | Edit once more, **clear the box completely**, and save | Accepted. The header now reads **No needed-by date** — a sentence, not a blank space and not a dash on its own |
 | 13 | Reload the page | Still **No needed-by date**. It was really cleared, not just forgotten by the screen |
@@ -80,8 +80,8 @@ supplier's record after the deliveries had already happened.
 |---|---|---|
 | 15 | Press **Send** on that order (UAT-040) | The order is **Sent** |
 | 16 | Read the header | **Needed by**, still five days out — and under it **Fixed when the order was sent** |
-| 17 | Look for **Edit lines** | **Gone.** A sent order has no edit panel and no date box |
-| 18 | Prove the server refuses it, not just the screen. Open the **second** draft in **two browser tabs**. In tab 1 press **Edit lines** and change the needed-by date. In tab 2, **send** that order. Now go back to tab 1 and press **Save changes** | **Refused**: *A sent purchase order can't be changed.* — *Raise a new one for the difference.*, quoting **`KMS-400050`** |
+| 17 | Look for **Edit** | **Gone.** A sent order has no edit panel and no date box |
+| 18 | Prove the server refuses it, not just the screen. Open the **second** draft in **two browser tabs**. In tab 1 press **Edit** and change the needed-by date. In tab 2, **send** that order. Now go back to tab 1 and press **Save changes** | **Refused**: *A sent purchase order can't be changed.* — *Raise a new one for the difference.*, quoting **`KMS-400050`** |
 | 19 | Reload tab 1 | The order is **Sent**, with the needed-by date it had **when it was sent** — not the one you typed in tab 1 |
 | 20 | Look at a **cancelled** order, and one that has been **received** (UAT-044) | Both show the readout and *Fixed when the order was sent*, and neither offers a field |
 

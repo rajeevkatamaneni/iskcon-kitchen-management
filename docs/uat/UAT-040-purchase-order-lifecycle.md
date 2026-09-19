@@ -1,68 +1,101 @@
-# UAT-040: Send and cancel a purchase order
+# UAT-040: A purchase order's page — send, cancel, what arrived, and returns
 
 | | |
 |---|---|
-| **Feature area** | Ordering — purchase order lifecycle |
-| **Technical stories** | E5-S3 (purchase order generation and lifecycle) |
-| **Roles exercised** | Kitchen staff |
-| **Depends on** | UAT-039 |
+| **Feature area** | Ordering — the purchase order page |
+| **Technical stories** | E5-S3 (purchase order lifecycle); T-013 (goods back to the vendor), T-142 (closing a part-delivered order); procurement release 2026-09-19: R-PO-4 (one merged table, "Rejected on delivery", history per item, deliveries recorded on the Deliveries screen). Tasks T-265, T-289 |
+| **Roles exercised** | Kitchen manager, kitchen staff, volunteer (to prove the refusal) |
+| **Depends on** | UAT-039 (orders A and B); steps 11–18 need UAT-044's two deliveries against order A |
 | **Environment needs** | None (sending on WhatsApp is UAT-043) |
+
+> **Rewritten 2026-09-19.** The earlier script read an **Activity** and a **Documents** section, pressed
+> **Receive delivery** on the order, and used **Edit lines**. None of those is on the page now: the
+> button is **Edit**, deliveries are recorded on the **Deliveries** screen (UAT-044), and the order shows
+> one merged table instead of separate items and deliveries tables.
 
 ## What this feature is for
 
-A purchase order moves through a life: drafted, sent to the vendor, partly delivered, complete — or
-cancelled. Each step has to be deliberate and recorded, so that "did we actually order that?" always
-has an answer.
+The order page answers "what did we ask for, and what has actually come?" in one place: every item,
+what was ordered, what was delivered, what was turned away at delivery, and what went back to the
+vendor, with the history of each delivery a click away.
 
 ## How it is supposed to work
 
-- The states are **Draft → Sent → Partially received → Received**, or **Cancelled**.
-- An order can be edited **only while it is a draft**.
-- Cancelling requires a **reason**.
-- Every step records who did it and when, and the order carries an activity trail you can read.
-- Steps that make no sense — receiving a draft, editing a sent order — are refused.
+- The states are **Draft → Sent → Part delivered → Received**, or **Closed** (part delivered, and the
+  rest will not come), or **Cancelled**. Only a draft can be edited.
+- The header says when it was sent (**Sent <date>** or **Not sent yet**) and **Needed by <date>**.
+- **One table**, headed **Items**: Item · **Ordered** · **Delivered** · **Rejected on delivery** ·
+  **Returned**, and the actions. Under each item a quiet **▸ N deliveries** opens the history of what
+  came, in date order.
+- The words **Rejected at the gate** and **Fixed when the order was sent** are gone, and so is the
+  separate **Deliveries received** table.
+- Deliveries are **recorded on the Deliveries screen**. The page links there with **Record a delivery
+  on the Deliveries screen →**. There is no record button on the order itself (Rajeev, 2026-09-19).
+- Goods can still go back to the vendor with **Return to vendor** on the item's row.
 
 ## Before you start
 
-- **Sign in as:** `ikms.kitchen-staff.1@trading4good.org` (kitchen staff)
-- **Start at:** **/orders** (menu: **Purchase orders**), with the two draft orders from UAT-039.
-- *Note, 2026-09-12 (T-153): UAT-039's tick-lines-and-generate steps are withdrawn, because that flow was removed. Raise the two drafts instead from each vendor tile's **Generate purchase order** button on **/shopping-list** (T-134).*
-- **Keep the Sri Balaji order for UAT-044** (you will receive a delivery against it). Use the Nandini
-  order, or a fresh one, for the cancellation steps.
+- **Sign in as:** `ikms.kitchen-staff.5@trading4good.org` (kitchen manager)
+- **Start at:** **/orders**, with orders A and B from UAT-039 in **Draft**.
 
 ## Steps
 
+### Draft, sent, cancelled
+
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open the **Sri Balaji Provisions** draft order | Its number, vendor, lines, and actions including **Mark sent**, **Cancel**, **Print**, **Generate PDF** |
-| 2 | Edit a line quantity while it is a draft | Accepted |
-| 3 | Press **Mark sent** | Status becomes **Sent**; the activity trail records who sent it and when |
-| 4 | Try to edit a line now | Refused: *This purchase order can no longer be edited* (`KMS-400050`) |
-| 5 | Look at the **Activity** section | Entries for creation and for sending, each with an actor and a time |
-| 6 | Look at **Documents** | Either a sheet generated on sending, or a note that none exists yet (UAT-041) |
-| 7 | Open the **Nandini** draft order and press **Cancel** | You are asked for a **reason** before anything happens |
-| 8 | Try to cancel with the reason blank | Refused — a cancellation must be explained |
-| 9 | Cancel with the reason `Vendor closed for the festival week` | Status becomes **Cancelled**; the reason is on the record |
-| 10 | Try to **Mark sent** the cancelled order | Refused (`KMS-400051` or `KMS-400055`) — a cancelled order is closed |
-| 11 | Try to **Receive delivery** on the cancelled order | Refused |
-| 12 | Go to **/orders** and filter by status | Draft, Sent and Cancelled orders each appear under their own filter |
-| 13 | Check the purchase-order list columns | Vendor, Status, Needed by, Ordered — enough to see at a glance what is outstanding |
+| 1 | Open **order A** | Its number, a **Draft** chip, **Not sent yet**, **Needed by** *&lt;the date&gt;*. Buttons: a document language list, **Generate PDF**, **Print**, **Edit**, **Mark sent** (and **Send on WhatsApp** only if the vendor has a phone number) |
+| 2 | Press **Edit**, change **Needed by** to four days from today, and save | Saved. The header shows the new date |
+| 3 | Press **Mark sent** | The chip reads **Sent** and the header **Sent** *&lt;today&gt;*. **Edit** is gone |
+| 4 | Look for the line **Fixed when the order was sent** | Not there |
+| 5 | Read the **Items** table | Item · Ordered · Delivered · Rejected on delivery · Returned. UAT Bulk Rice ordered **4 × Bag (25 Kg)** with **100 Kg** under it; Delivered **—**. No price column |
+| 6 | Press **Record a delivery on the Deliveries screen →** | The Deliveries screen opens showing only order A's lines (UAT-044 records the deliveries) |
+| 7 | Open **order B** and, at the foot, press **Cancel this purchase order** | A reason is asked for before anything happens |
+| 8 | Try to cancel with the reason blank | Refused. A cancellation must say why |
+| 9 | Give the reason `Ordered by mistake` and press **Cancel order** | The chip reads **Cancelled**, with the reason on the order. There is no **Mark sent** and no link to record a delivery |
+| 10 | Cancel the two orders the kitchen staff and temple admin made in UAT-039 the same way | Both **Cancelled** |
+
+### After the deliveries (run UAT-044 first)
+
+| # | Do this | You should see |
+|---|---|---|
+| 11 | Open **order A** again | Chip **Received** (or **Part delivered** if UAT Tea has not all come). UAT Bulk Rice: Ordered **4 × Bag (25 Kg) / 100 Kg**, Delivered **100 Kg**, Rejected on delivery **25 Kg**, Returned **—** |
+| 12 | Look for a second table of deliveries on the page, and for the words **Rejected at the gate** | Neither exists |
+| 13 | Under UAT Bulk Rice press **▸ 2 deliveries** | It opens (a screen reader hears it as expanded) and reads, oldest first, in this shape: *&lt;date&gt;* **· 50 Kg received · 25 Kg rejected (damaged) · Received by:** *&lt;name&gt;* and *&lt;date&gt;* **· 50 Kg received · Received by:** *&lt;name&gt;*, then **Received 100 of 100 Kg ordered · complete** *&lt;date&gt;*. No order number in these lines |
+| 14 | Press it again, and try it with the keyboard (Tab, then Enter) | It closes and opens the same way |
+| 15 | On the UAT Bulk Rice row press **Return to vendor** | A form **Return goods to the vendor**. Because the item came in two deliveries, it asks which **Delivery** it goes back from. Then **Quantity**, **Reason** — a list: damaged, spoiled, wrong item, not delivered, other — (*Say why, so the vendor’s record shows it.*) and **Note** (optional) |
+| 16 | Choose the second delivery, leave **Quantity** empty, press **Record return** | Refused: **Enter how much went back to the vendor.** |
+| 17 | Quantity `5` (Kg), Reason **spoiled**, press **Record return** | The Returned column reads **5 Kg**. On **/inventory**, UAT Bulk Rice is down by exactly **5 Kg**, and its movement history has the return |
+| 18 | Open **/deliveries**, tab **Received** | The return shows in the Returned column: **UAT Bulk Rice 5 Kg, spoiled,** *&lt;date&gt;* |
+
+### The list, widths and roles
+
+| # | Do this | You should see |
+|---|---|---|
+| 19 | Open **/orders** | Columns Vendor · Status · Generated · Sent · Needed by, and a **Status** filter: All, Draft, Sent, Part delivered, Received, Closed, Cancelled |
+| 20 | Filter by **Cancelled**, then **Received** | Only those orders each time |
+| 21 | Open order A at **1280px**, **1024px** and **390px** with the history open | Nothing cut off; nothing scrolls sideways; at 390 each item is a card with every value labelled |
+| 22 | Sign in as `ikms.kitchen-staff.1@trading4good.org` (kitchen staff) and open order A | The same page. The history opens; **Return to vendor** is offered |
+| 23 | Sign in as `ikms.volunteer.1@trading4good.org` and type order A's address | **Not your page** |
 
 ## It passes if
 
-- [ ] A draft can be edited; a sent order cannot (`KMS-400050`).
-- [ ] Marking sent changes the status and records who and when.
-- [ ] Cancelling requires a reason and records it.
-- [ ] A cancelled order cannot be sent or received against.
-- [ ] The activity trail reads as a history of the order.
-- [ ] The status filter works.
+- [ ] A draft can be edited; a sent order cannot, and **Edit** is gone once it is sent.
+- [ ] Sending shows **Sent <date>**; cancelling needs a reason and ends the order.
+- [ ] The page has **one** table: Item · Ordered · Delivered · Rejected on delivery · Returned.
+- [ ] An item delivered in two parts shows the right Delivered total and exactly two history lines, in the exact wording, with the closing line.
+- [ ] **Rejected at the gate**, **Fixed when the order was sent** and a separate deliveries table appear nowhere.
+- [ ] The page links to the Deliveries screen and has no record button of its own.
+- [ ] **Return to vendor** needs a quantity and a reason, asks which delivery when there were several, and takes the stock back down.
 
 ## Watch out for
 
-- An order that can be edited after sending — that means the vendor and the temple hold different documents. Blocker.
-- A cancellation with no reason recorded, or a reason that vanishes from the trail.
-- Status changing without the activity trail gaining an entry.
-- Whether an order can go **backwards** (Sent → Draft). Try it; record what happens.
+- **Delivered totals that do not add up** to the history lines under them. Add them by hand. Major.
+- **Rejected goods counted as delivered.** 50 + 50 delivered with 25 rejected is 100 delivered and 25
+  rejected, not 125. Major.
+- An order that can go backwards (Sent → Draft), or be edited after it is sent. Blocker.
+- **Close this order, part delivered** appears on a part-delivered order for when the rest will never
+  come. It is not part of this release; if you use it, UAT-077 explains what its three choices do.
 
 ## Report anything wrong
 

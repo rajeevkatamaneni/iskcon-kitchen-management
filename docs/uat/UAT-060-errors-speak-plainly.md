@@ -42,7 +42,7 @@ Deliberately provoke each of these and record what you see.
 | 5 | Cook a meal without enough stock (UAT-035) | `KMS-400042` | Names what is short |
 | 6 | Plan khichdi on Ekadashi (UAT-036) | `KMS-400048` | Explains the fast and offers both choices |
 | 7 | Edit a sent purchase order (UAT-040) | `KMS-400050` | Explains only drafts can be changed |
-| 8 | Record a delivery line with nothing in it (UAT-044) | `KMS-400053` | Asks for a received or rejected quantity |
+| 8 | On **/deliveries**, press **Record a delivery** and then **Save delivery** with nothing typed (UAT-044) | No code: the screen stops it first with *Type what arrived on at least one line, or press Everything arrived.* (`KMS-400053` is the server's answer behind it) | Asks for what arrived |
 | 9 | Record a direct invoice with no description (UAT-045) | `KMS-400054` | Asks for a description or a purchase order |
 | 10 | Overpay an invoice (UAT-046) | `KMS-400069` | States the outstanding balance |
 | 11 | Sign up for a full shift (UAT-049) | `KMS-400061` | Offers the waitlist |

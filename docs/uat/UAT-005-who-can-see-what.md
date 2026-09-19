@@ -33,11 +33,12 @@ operator must not read a temple's donations. This test walks the whole boundary,
 |---|---|---|---|---|
 | /tenants (Temples) | ✅ | ❌ | ❌ | ❌ |
 | /operations | ✅ | ❌ | ❌ | ❌ |
-| /recipes, /ingredients, /inventory, /equipment, /planner, /vendors, /shopping-list, /orders, /invoices, /donations, /volunteers | ❌ | ✅ | ✅ | ❌ |
+| /recipes, /ingredients, /inventory, /equipment, /planner, /vendors, /shopping-list, /orders, /deliveries, /invoices, /donations, /volunteers | ❌ | ✅ | ✅ | ❌ |
+| /ingredients/merge (Merge duplicates) | ❌ | ✅ | ❌ | ❌ |
 | /ledger (Donations ledger) | ❌ | ✅ | ❌ | ❌ |
 | /wishlist | ❌ | ✅ | ❌ | ❌ |
 | /staff-schedule | ❌ | ✅ | ❌ | ❌ |
-| /money (Payments) | ❌ | ✅ | ❌ | ❌ |
+| /money — *amended 2026-09-19:* the Payments page is gone; the address now opens **/invoices?filter=unpaid** for anyone who can see invoices | ❌ | ↪ | ↪ | ❌ |
 | /users (People) | ❌ | ✅ | ❌ | ❌ |
 | /audit (Audit log) | ❌ | ✅ | ❌ | ❌ |
 | /my-shifts | ❌ | ❌ | ✅ | ✅ |
@@ -50,10 +51,10 @@ operator must not read a temple's donations. This test walks the whole boundary,
 |---|---|---|
 | 1 | Sign in as `ikms.super-admin.1@trading4good.org` | Menu shows **Temples**, **Operations** only |
 | 2 | Type **/ledger** into the address bar | *Not your page* |
-| 3 | Sign out. Sign in as `ikms.temple-admin.1@trading4good.org` | Menu shows the full temple list: Recipes, Ingredients, Inventory, Equipment, Meal plan, Vendors, Shopping list, Purchase orders, Invoices, Donations, Volunteers, Donations ledger, Wish list, Staff schedule, Payments, People, Audit log, Profile |
+| 3 | Sign out. Sign in as `ikms.temple-admin.1@trading4good.org` | Menu shows the full temple list: Recipes, Ingredients, Inventory, Equipment, Meal plan, Vendors, Shopping list, Purchase orders, **Deliveries**, Invoices, Donations, Volunteers, Donations ledger, Wish list, Staff schedule, People, Audit log, Profile. **No Payments** (removed 2026-09-19) |
 | 4 | Type **/tenants** | *Not your page* |
-| 5 | Sign out. Sign in as `ikms.kitchen-staff.1@trading4good.org` | Menu shows the kitchen destinations **and My shifts** — but **no** Donations ledger, Wish list, Staff schedule, Payments, People, Audit log |
-| 6 | Type **/money** into the address bar | *Not your page* |
+| 5 | Sign out. Sign in as `ikms.kitchen-staff.1@trading4good.org` | Menu shows the kitchen destinations **and My shifts** — but **no** Donations ledger, Wish list, Staff schedule, People, Audit log. **Deliveries** is there (kitchen staff record deliveries, Rajeev 2026-09-19); **Payments** is in nobody's menu |
+| 6 | Type **/money** into the address bar | You land on **/invoices** with **Unpaid** chosen, and no **Total owed** and no way to pay (UAT-046) |
 | 7 | Type **/users** | *Not your page* |
 | 8 | Type **/audit** | *Not your page* |
 | 9 | Sign out. Sign in as `ikms.volunteer.1@trading4good.org` | You land on **My shifts**. The menu offers only **My shifts**, **Available shifts**, **Profile** |

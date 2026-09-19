@@ -44,7 +44,7 @@ screen — not merely readable.
 | 8 | Open **Inventory**, then an item | Tables fit or scroll within their own area |
 | 9 | Open **Meal plan** | The month grid is the hardest screen on a phone. Record honestly whether it is usable, or whether it needs sideways scrolling |
 | 10 | Open **Purchase orders** and one order, and start a receiving entry | The line-by-line delivery form is workable on a phone — this is a screen someone genuinely fills in while standing next to a truck |
-| 11 | Sign in as the **temple admin** and open **People**, **Payments** and **Donations ledger** | Each is usable; wide tables scroll within themselves |
+| 11 | Sign in as the **temple admin** and open **People**, **Invoices** (the Payments page was removed on 2026-09-19; paying is on an invoice's page, UAT-046) and **Donations ledger** | Each is usable; wide tables scroll within themselves |
 | 12 | Turn the phone to landscape and back on two or three screens | Nothing breaks or loses your place |
 | 13 | View a translated recipe (UAT-020) on the phone | The Indian script renders correctly and is legible |
 | 14 | Note any screen where you had to pinch-zoom to use it | List them all — that list is the finding |

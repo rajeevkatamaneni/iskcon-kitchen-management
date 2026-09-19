@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Feature area** | Ordering — vendor management |
-| **Technical stories** | E5-S1 (vendor management, amended 2026-08-31) |
+| **Technical stories** | E5-S1 (vendor management, amended 2026-08-31); supplies amended 2026-09-19 for R-VEN-1 (the full onboarding test is **UAT-089**) |
 | **Roles exercised** | Kitchen staff, temple admin |
 | **Depends on** | UAT-013 (ingredients) |
 | **Environment needs** | None |
@@ -23,8 +23,11 @@ dropped them wrote at the time.
 - A vendor has a name, contact person, **phone with country code** (this is the WhatsApp destination),
   optional email, address, GSTIN, a **preferred language** for documents, notes, and a
   **contract end date**.
-- Each vendor is mapped to the **ingredients they supply**, with a last-known price, and one vendor can
-  be marked **preferred** for an ingredient — which is what the shopping list suggests.
+- Each vendor is mapped to the **ingredients they supply**, with a **list price** (per the pack they sell it
+  in), and one vendor can be marked **preferred** for an ingredient — which is what the shopping list
+  suggests. *Amended 2026-09-19:* supplies are added from the **Other ingredients** table on the vendor's
+  page, several at once; the old one-at-a-time form and the name "Last price" are gone. UAT-089 tests
+  that table in full.
 - A vendor can be **deactivated**: they vanish from new orders but their history stays readable.
 - **Deactivating requires a reason.** The button that commits it stays refused until there are words in
   the box, and the server refuses a blank one too (`KMS-400011`). **Bringing a vendor back** accepts a
@@ -61,9 +64,9 @@ dropped them wrote at the time.
 | 5 | Add **Sri Balaji Provisions** properly, with `+919900000001`, contact `Balaji`, GSTIN `29ABCDE1234F1Z5`, language **Hindi**, and **no** contract end date | It appears in the list: Vendor, Phone, Language, **Contract ends** (reading **—**), Status **Active** |
 | 6 | Add **Nandini Dairy Agency**, `+919900000002`, language **Kannada** | Two vendors |
 | 7 | Try to add a third vendor also called `Sri Balaji Provisions` | Refused: *A vendor with that name already exists* (`KMS-400049`) |
-| 8 | Open **Sri Balaji Provisions** | Its page: Details (editable), a **Supplies** section, and an **Active and inactive** section |
-| 9 | Add supplies: `Rice` with last price `52`, `Toor Dal` with `140`, `Sugar` with `46`; mark Rice and Toor Dal **Preferred** | Three rows in Supplies, two marked preferred |
-| 10 | Open **Nandini Dairy Agency** and add `Ghee` at `620`, marked **Preferred** | Recorded |
+| 8 | Open **Sri Balaji Provisions** | Its page: Details (editable), a **Supplies** section, an **Other ingredients** section, and an **Active and inactive** section |
+| 9 | In **Other ingredients**, tick `Rice` with List price (₹) `52`, `Toor Dal` with `140`, `Sugar` with `46`; tick **Preferred** on Rice and Toor Dal. Press **Save** | **3 ingredients added to Supplies.** Three rows in Supplies, under the heading **List price**, two marked preferred |
+| 10 | Open **Nandini Dairy Agency**, tick `Ghee` in Other ingredients at `620`, **Preferred**, and **Save** | **1 ingredient added to Supplies.** |
 | 11 | Edit Sri Balaji's preferred language to **Telugu**, save, and reload | The change persists (change it back to Hindi afterwards) |
 
 ### Dropping a vendor needs a reason
@@ -94,16 +97,16 @@ dropped them wrote at the time.
 | 28 | Go back to **/vendors** | The same warning is on their row, and the **Contract ends** column shows the date |
 | 29 | Check their **status** | Still **Active**. Still ticked as preferred for Rice and Toor Dal |
 | 30 | Set the date to **yesterday** and save | The warning reads **Contract ended** with the date. **The vendor is still Active** |
-| 31 | Go to **/shopping-list** and press **Regenerate** (UAT-038) | Rice and Toor Dal still suggest **Sri Balaji Provisions**. An expired contract changes nothing about who the shopping list picks |
+| 31 | Go to **/shopping-list** (UAT-038) | Rice and Toor Dal, if on the list, are still in the **Sri Balaji Provisions** tile. An expired contract changes nothing about who the shopping list picks |
 | 32 | Set the date to **six months out** and save | **No warning at all**, on the page or in the list. Six months is well past the temple's contract horizon — 30 days unless it has been changed (UAT-080) |
 | 33 | Clear the date entirely and save | No warning, and the column reads **—** |
-| 34 | Press **Remove** on one supply line | It is removed from that vendor's supplies |
+| 34 | Press **Remove** on the **Sugar** supply line | It is removed from Supplies and appears again under **Other ingredients**. The sentence *Edit a row to change any of the three.* is nowhere on the page |
 
 ## It passes if
 
 - [ ] Both vendors can be created with contact details, GSTIN, a preferred language and a contract end date.
 - [ ] A phone without a country code is refused; a duplicate vendor name is refused with `KMS-400049`.
-- [ ] Supplies can be mapped with prices, and a preferred vendor set per ingredient.
+- [ ] Supplies can be added from Other ingredients with list prices, and a preferred vendor set per ingredient.
 - [ ] **Deactivating cannot be committed without a reason**, and whitespace does not count as one.
 - [ ] The reason comes back on the vendor's page with the **author's name** and the **moment** it was written.
 - [ ] Bringing a vendor back **accepts** a reason and does not demand one; without one it reads **No reason given**.

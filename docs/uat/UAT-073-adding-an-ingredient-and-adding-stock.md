@@ -53,7 +53,7 @@ the one a person can learn once.
 | 5 | Scroll the form down, if it is long enough to scroll | The action header **stays put**. You never have to scroll back up to find the save |
 | 6 | Look at the foot of the form | No second **Save** or **Add** button. No *← Back* link |
 | 7 | Press **Add ingredient** with the name empty | Refused **on this screen**, with the missing field marked. You are not thrown back to the list |
-| 8 | Fill in `Dry Ginger`, category `Spices`, unit `gm`, and save | You land back on **/ingredients**, with a green line confirming **Dry Ginger** was added, and it is in the list |
+| 8 | Fill in `Dry Ginger`, category `Spices`, unit `gm`, and save. *(If you are asked **Did you mean Ginger?** — added 2026-09-19, UAT-087 — choose **It’s a different ingredient**, then **Keep it separate**: dry ginger is bought and stocked separately.)* | You land back on **/ingredients**, with a green line confirming **Dry Ginger** was added, and it is in the list |
 | 9 | **Refresh the page** | The green line does **not** come back |
 | 10 | Wait a few seconds without touching anything | The green line clears itself |
 | 11 | Add a second ingredient, then press the browser's **Back** button | You go back through the form, not into a replayed confirmation. The green line does not fire again |
@@ -65,10 +65,10 @@ the one a person can learn once.
 | # | Do this | You should see |
 |---|---|---|
 | 14 | Open **/inventory** | The list, with **Add to inventory** at the **top right**, and **no form on the page** |
-| 15 | Press **Add to inventory** | A screen of its own, the same shape again. Fields: Ingredient, Storage location, what is on the shelf today, the level to warn at, Notes |
+| 15 | Press **Add to inventory** | A screen of its own, the same shape again. Fields: Ingredient, Storage location, **How much is on the shelf now**, **Tell me when stock drops below**, **What it would cost to buy today (₹)**, Notes. *(Amended 2026-09-19: the value box is new, R-ING-3. It is greyed until an ingredient is chosen and only required when something is on the shelf; UAT-090 tests it.)* |
 | 16 | Look at the foot, and scroll | No second button at the foot; the action header stays put |
 | 17 | Save with no ingredient chosen | Refused on the screen, field marked |
-| 18 | Track **Dry Ginger**, location `Main store`, warn below `100` | Back on **/inventory** with a green line confirming it, and the row in the list |
+| 18 | Track **Dry Ginger**, location `Main store`, nothing on the shelf, warn below `100` | Back on **/inventory** with a green line confirming it, and the row in the list |
 | 19 | Refresh, and wait | The line does not replay, and it clears itself |
 | 20 | Press **Add to inventory**, then **Cancel** | Back on the list, nothing tracked |
 | 21 | Look at the inventory empty state (a temple with nothing tracked) | A sentence about what to start with, and an **Add to inventory** button. **No "above"** |

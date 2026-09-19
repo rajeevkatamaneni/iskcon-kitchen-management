@@ -32,8 +32,9 @@ that much *at least*, and probably more.
 - Each row carries how many **requests** were filled, how many distinct **ingredients** went over the
   counter, the **estimate**, and how many of its ingredients have **no known price**.
 - Several requests to one kitchen make **one row**, not several.
-- The costing is the same estimate as everywhere else: **materials only**, at vendors' last-known
-  prices, with unpriced ingredients counted and named rather than costed at zero.
+- The costing is the same estimate as everywhere else: **materials only**, at the preferred vendor's
+  **list price**, else any vendor's, else the ingredient's **market rate** *(amended 2026-09-19, R-ING-3)*,
+  with ingredients that have none of these counted and named rather than costed at zero.
 - **Consumption is not an issue.** A kitchen that plans its meals in this application draws its stock
   as consumption and is costed on the *Cost per serving* report instead; its row here, if it has one,
   is from before it opted in, and says so.
@@ -45,10 +46,12 @@ that much *at least*, and probably more.
 - **Start at:** **/issued-from-store** (menu: **Kitchen** → **Issued from store**)
 - **You need issuing to have happened.** Finish **UAT-070** first. If you have not, do this much:
 
-  1. On **/vendors** (UAT-037), make sure **Rice**, **Toor Dal** and **Ghee** have a **Last price**.
+  1. On **/vendors** (UAT-037), make sure **Rice**, **Toor Dal** and **Ghee** have a **List price**.
      Without prices every row here is ₹0 and the test proves nothing.
-  2. On **/ingredients**, add **Rock Salt** (category *Spices*, unit `gm`) with **no vendor** — the
-     deliberately unpriced ingredient.
+  2. On **/ingredients**, add **Rock Salt** (category *Spices*, unit `gm`) with **no vendor** and **no market rate** —
+     the deliberately unpriced ingredient. *Amended 2026-09-19:* get it into the store as a **gift of goods**
+     (UAT-028), not with a count on Add to inventory, because a count now asks what it would cost and that
+     sets a market rate (UAT-090).
   3. As kitchen staff, raise **two** ingredient requests from **Deity Kitchen** (UAT-068) and **one**
      from **Prasadam Kitchen**, each asking for Rice and Toor Dal, and one of the Deity requests also
      asking for **Rock Salt**.
@@ -69,7 +72,7 @@ that much *at least*, and probably more.
 | 8 | Check Deity Kitchen's **Requests** column | It reads **2** — its two requests are **one row**, not two rows |
 | 9 | Look for **Sweets Kitchen** | It is **not on the table at all**. A kitchen the store issued nothing to is absent, not a row of zeroes |
 | 10 | Look under **Deity Kitchen**'s name | **1 ingredient has no known price** — Rock Salt was issued and is counted and named, never costed at ₹0 |
-| 11 | Read the notice at the top again | Rock Salt is **named** there too, as left out until a vendor price is recorded |
+| 11 | Read the notice at the top again | Rock Salt is **named** there too: **Rock Salt is left out until it has a vendor’s list price or a market rate.** |
 | 12 | Look at the **All kitchens** row at the foot | Requests and Estimated materials are the totals. The **Ingredients** cell is **blank** — two kitchens issued the same rice were issued one ingredient between them, and adding the columns would say two |
 | 13 | Switch the period between **Week**, **Month** and **Year** | The same kitchens over a different range; step back to a month before the temple existed |
 | 14 | On an empty period | **The store issued nothing in this period** — a sentence, not a table of zeroes |

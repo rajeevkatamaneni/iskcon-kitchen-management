@@ -76,15 +76,15 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E4-S13 | What an outside event is for | *Superseded by E4-S15* — **UAT-086** |
 | E4-S14 | Today, rewritten around the meal, including what is waiting for you (`fb52eba`) | *No UAT test.* UAT-062 (2026-08-14) predates it |
 | E4-S15 | Events, and the end of catering; since 2026-09-19 an event repeats as a series (D8b, replacing D8's copies) | **UAT-086**; the meal-kind picker it changes in UAT-032. Repeating and cancelling a series: **UAT-086 steps 45–70**, rewritten 2026-09-19 (they tested unlinked copies before) |
-| E4-S16 | Travel time for a delivered event | **UAT-086** §travel |
-| E5-S1 | Vendor management | **UAT-037**; D2, the contract-end horizon as a temple setting, in **UAT-080** |
-| E5-S2 | Auto-generated shopping list | **UAT-038**, UAT-039 |
-| E5-S3 | Purchase order generation and lifecycle | UAT-039, **UAT-040**; D1–D5, the needed-by date, in **UAT-083** |
-| E5-S4 | PO document: PDF and print | **UAT-041** |
+| E4-S16 | Travel time for a delivered event | **UAT-086** §travel; the van-loading warning, reworded 2026-09-19, in steps 81–86 |
+| E5-S1 | Vendor management | **UAT-037**; D2, the contract-end horizon as a temple setting, in **UAT-080**; supplies, list prices and onboarding (R-VEN-1 to 4) in **UAT-089** and UAT-088 — see §1a |
+| E5-S2 | Auto-generated shopping list | **UAT-038** (rewritten 2026-09-19 for R-SL-1 to 4), UAT-039 |
+| E5-S3 | Purchase order generation and lifecycle | **UAT-039** (rewritten 2026-09-19: the tile and the create form, R-PO-1 to 3), **UAT-040** (rewritten: the order page, R-PO-4); D1–D5, the needed-by date, in **UAT-083** |
+| E5-S4 | PO document: PDF and print | **UAT-041** (amended 2026-09-19: packs, rates, dates); the real PDF on staging in UAT-092 |
 | E5-S5 | PO translation | **UAT-042** |
-| E5-S6 | Receiving | **UAT-044** |
-| E5-S7 | WhatsApp PO delivery | **UAT-043** |
-| E5-S8 | Vendor invoice capture | **UAT-045** |
+| E5-S6 | Receiving | **UAT-044** (rewritten 2026-09-19 as the Deliveries screen, R-DEL-1 to 5); returns in UAT-040 steps 15–18 |
+| E5-S7 | WhatsApp PO delivery | **UAT-043** (amended 2026-09-19); on staging with the PDF in UAT-092 step 6 |
+| E5-S8 | Vendor invoice capture | **UAT-045** (rewritten 2026-09-19 for R-INV-1 to 6) |
 | E5-S9 | Vendor performance | **UAT-077**; D6, an order with no needed-by date, also in UAT-083. *UAT-077 still says on-time is scored per order; T-124 made it per item* |
 | E6-S1 | Staff profiles and weekly schedule | **UAT-047**. *Its step 16 asks whether staff can see their own schedule; T-006 built that answer after the script was written* |
 | E6-S2 | Volunteer shift posting | **UAT-048** |
@@ -113,7 +113,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E7-S5 | Wish list management | **UAT-057** |
 | E7-S6 | Wish list and sponsorship | **UAT-058** |
 | E7-S7 | Donations ledger | **UAT-059** — *amended 2026-09-10, not withdrawn: the ledger aggregates three kinds of gift, not four, and step 6 (the Recurring filter) is struck out* |
-| E7-S8 | Vendor invoice payment recording | **UAT-046** |
+| E7-S8 | Vendor invoice payment recording | **UAT-046** (rewritten 2026-09-19: paid from the invoice, with proof; R-INV-7, R-INV-8, R-PAY-1 to 4) |
 | E7-S9 | Payment webhook infrastructure | UAT-055 (replay/idempotency), UAT-058 |
 | E7-S10 | The donations ledger by period, against the same point last year | *No UAT test.* UAT-059 has no step for periods or the comparison |
 | E9-S1 | A notice board that spans the platform | *No UAT test* |
@@ -192,8 +192,8 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | T-026, T-027, T-028, T-132 (with T-133), T-134, T-135 (with T-136), T-139, T-140, T-141, T-153 | Ordering: an order raised by hand, vendor first; a shopping-list line added by hand; editing a line keeps its vendor; the shopping list worked out on every read; a tile per vendor with the order written in a panel; the order screen's buttons, with WhatsApp only where it works; the generate endpoint retired (D-7, D-24) (E5-S2, E5-S3) | **UAT-039**, UAT-040, UAT-077, UAT-081, UAT-083 amended for T-134 and T-153 (`dd0d765`); UAT-039 step 10 asks for an order by hand. *No step for a hand-added shopping-list line.* T-139 to T-141 automated only |
 | T-090, T-130, T-131, T-137 | A vendor's lead time is recorded per supply, is one promise enforced on Mark sent, and a shortage says the day it must be ordered (D-25) (E5-S1, E5-S2) | *No UAT test* |
 | T-013, T-066, T-103, T-107, T-124, T-126, T-129, T-142 | Goods can go back to a vendor; described lines can be acknowledged so an order can close; on-time scored per item; a cancelled, sent order can name the vendor who never came; closing a part-delivered order releases the rest, and the score is shown but never edited (D-26) (E5-S6, E5-S9) | *No UAT step.* UAT-077 still says on-time is per order |
-| T-082 | The invoice form picks the vendor, then that vendor's own open order (E5-S8) | *No UAT step.* UAT-045 predates it |
-| T-010, T-071, T-206, T-207 | A bill can be voided or credited and a payment reversed; a credit note settles its variance; a bill with unreversed payments cannot be voided; counter cash and voided bills stop showing as mismatches (E5-S8, E7-S8) | *No UAT test* |
+| T-082 | The invoice form picks the vendor, then that vendor's own open order (E5-S8) | Superseded by R-INV-3: the form picks the vendor, then its unbilled deliveries — **UAT-045** steps 3–4, 14 |
+| T-010, T-071, T-206, T-207 | A bill can be voided or credited and a payment reversed; a credit note settles its variance; a bill with unreversed payments cannot be voided; counter cash and voided bills stop showing as mismatches (E5-S8, E7-S8) | **UAT-046** steps 25–29 (void refused with a live payment, reverse, void, credit note). *Counter-cash mismatches: no step* |
 | T-012, T-068, T-069, T-070 (with T-072), T-081, T-205, `0337924` | A hand-recorded donation can be voided with its stock reversed; struck bills and struck gifts stop counting; a wish-list gift that no longer fits is split; voiding the gift behind a fulfilled wish reopens it; a draft order nobody sent is not money spent (E3-S5, E7-S5, E7-S6) | *No UAT test* |
 | T-110 (with T-020, T-073) | A donation opens on its own page with its 80G receipt and the donor's other gifts (E7-S4, E7-S7) | *No UAT test.* UAT-059 predates it |
 | T-179 | My donations: a volunteer lists their own gifts and downloads each receipt (E7-S2) | *No UAT test* |
@@ -203,6 +203,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | T-213, T-214, T-215 | Phase A fixes: every shift form box named by its label; Today names an event meal by its own name; a new, unsaved meal counts who is rostered so Volunteers requested prefills | *No UAT test* |
 | T-209 | Equipment taken off the job card, on screen, print and PDF (E4-S11) | *No UAT test* — E4-S11 has none |
 | T-307, T-308, T-310 | An event repeats once every 1 to 12 weeks until a date, as a linked series: a live count and the skipped dates before pressing, the series line on every occurrence, and cancel *just this event* or *this and all later ones*; no copy on a past date (E4-S15 D8b) | **UAT-086** steps 45–56 (repeat, preview, skips, `KMS-400175`–`400177`), 57–61 (the copies, the series line, editing one alone), 62–69 (both cancels, the edited one named, volunteers, `KMS-400179`, no question when nothing is later), 70 (kitchen staff). `KMS-400178` and "never a cooked or recorded one" automated only (`MealSeriesIT`) |
+| T-245 to T-306, T-310 to T-312, T-343 | The procurement release (R-… in `docs/work/PROCUREMENT-REQUIREMENTS.md`) and its fixes | **§1a** below maps every requirement; UAT-038 to UAT-046 rewritten or amended, UAT-087 to UAT-092 new |
 | T-022, T-062, T-064 (with T-065), T-075, T-076, T-078, T-092, T-093, T-145, T-152, T-189, T-210 | Tests for five screens that had none; CI heap and Spring context counts; flaky tests fixed; the linter, and rules-of-hooks linting; local development migrates as `kms_migration` | *Automated tests only — no manual surface* |
 | T-058 | Held cleanups: four fixed, five dropped, three sent back to Rajeev | *No UAT step* |
 | T-017, T-018, T-091 | Stopped before building; nothing shipped | *Nothing built — no test* |
@@ -214,7 +215,7 @@ tests alone, per Commandment 6. **That sentence held to 2026-08-20 and no longer
 added since say *No UAT test* or *No UAT step*, which means a surface nobody has scripted, not one
 accepted on automated tests.
 
-Complete to 2026-09-14: every story in `docs/stories/`, every task from T-000 to T-216 (Phase B's
+Complete to 2026-09-14, and for the procurement release of 2026-09-19 (§1a): every story in `docs/stories/`, every task from T-000 to T-216 (Phase B's
 T-200 to T-210, T-212 and T-216 were committed in `69da777` and released to staging on 2026-09-14, after Phase A in `74d3535` and its fixes in `6dd436c`), and the work between 2026-08-20 and 2026-09-06 that
 had no task id. Commits in that stretch that only fixed a defect in a story already listed have no row
 of their own.
@@ -225,6 +226,69 @@ each changes. Work with neither a story nor a task id is keyed by its commit or 
 
 Cross-cutting tests: **UAT-060** (error presentation) and **UAT-061** (phone usability) apply to every
 epic and belong to no single story.
+
+---
+
+## 1a. The procurement release (2026-09-19) — every requirement and what covers it
+
+The requirements are `docs/work/PROCUREMENT-REQUIREMENTS.md`; Rajeev's rulings on its open questions are
+in `docs/work/PROCUREMENT-PROGRESS.md` under *Decisions*. Every `R-…` and every numbered AC maps to at
+least one test. Steps are the test's own numbers. The tests describe the app as built and ruled: kitchen
+staff record deliveries (Q-1), one preferred vendor with "Preferred (replaces …)" (Q-2), a vendor named
+**Market** for cash buys (Q-3), red up and green down for price trends (Q-4), list price **before GST**
+(Q-5), no record button on the order page (Q-8), price only on the invoice (Q-9), only payers see the
+total owed (Q-17), the invoice page's allowed extras (Q-19), and the first count on a new item needing no
+Temple Admin (Q-22).
+
+| Requirement | What it asks | Covered by |
+|---|---|---|
+| AC-3.1 | Each new table is tenant-isolated | **UAT-092** Part C (a second temple opens none of the first's ingredient page, order, invoice, vendor, deliveries or total owed). The database proof is automated (`ProcurementRowLevelSecurityIT`) |
+| AC-3.2 | Existing data survives the upgrade unchanged | **UAT-092** Part A (orders, invoices, payments and on-hand read the same before and after the deploy). Automated in `ProcurementDataModelMigrationIT` |
+| R-SL-1 | Readable amounts: nothing of 1,000 gm/ml or more in gm/ml, on the list, the order, the PDF, WhatsApp | **UAT-038** steps 6–7, 8–9 (typed in the unit shown); UAT-041 steps 6–7; UAT-043 step 10; UAT-092 steps 3–6 |
+| R-SL-2 | Buying amount rounded up: packs (fewest, least left over), else the step table; a hand edit never re-rounded | **UAT-038** steps 5 (1 × 500 gm for 416 gm), 6 (2,792 gm → 3 Kg), 8–9 (edited, not re-rounded), 18. The boundaries (999 gm, 1 Kg, 10 Kg, 100 Kg) are automated (`BuyingAmountTest`) |
+| R-SL-3 | Order in the vendor's pack: "4 × Bag (25 Kg)" on the list, the order, the PDF, WhatsApp, keeping 100 Kg for stock | **UAT-038** step 3; **UAT-039** steps 2, 7, 15; UAT-040 step 5; UAT-041 step 6; UAT-043 step 10; UAT-044 steps 5, 10–12 (entered in bags, stock in Kg) |
+| R-SL-4 | "No vendor yet" lines: Choose vendor, Use this vendor next time, bulk Order these from | **UAT-038** steps 4, 11–16 |
+| R-ING-1 | Pack sizes on the ingredient: chips, hint, validation (positive, same family, no duplicate, at most 8), used by the list | **UAT-088** steps 2–10, 26; UAT-089 steps 8–9, 12 (a pack made on the vendor page); UAT-045 steps 23–25 (made from a bill); UAT-038 step 5 |
+| R-ING-2 | Link a vendor from the ingredient page, the same record as the vendor page | **UAT-088** steps 14–20, 27 |
+| R-ING-3 | Market rate on the page; required value at stock-take and on any correction that adds stock; set by invoices; costing falls back to it; never ₹0 | **UAT-090** (all); **UAT-088** steps 11–13, 27–28; UAT-045 steps 13, 21; UAT-075 step 17a; UAT-076 setup; UAT-024 step 5; UAT-092 steps 2, 14–16 |
+| R-VEN-1 | Vendor page: Supplies kept, "Edit a row…" removed, "List price" everywhere, the Other ingredients table with search, category filter, ticks, Sells it as, price, lead time, Preferred; nothing truncated at 1280 and 390 | **UAT-089** steps 1–13, 21–22; UAT-037 steps 8–10, 34; UAT-092 step 1 |
+| R-VEN-2 | One preferred vendor, with "Preferred (replaces A)" before saving | **UAT-088** steps 17–19; **UAT-089** steps 16–18 |
+| R-VEN-3 | Price history and the red-up / green-down / grey-dash marker with the previous price and date, by mouse and keyboard | **UAT-088** steps 16, 21–25, 30; UAT-089 steps 11, 14–15; UAT-045 steps 13, 21, 31; UAT-092 step 14 |
+| R-VEN-4 | A list price comes from typing it (vendor or ingredient page) or from each saved invoice line; never from the delivery | **UAT-089** steps 6–15 (typed); **UAT-088** steps 16, 21–25 (typed); **UAT-045** steps 13, 21, 30–31 (from the bill, before GST, a late bill not overwriting); UAT-044 steps 4–5 (no price at delivery) |
+| R-PO-1 | "Create a purchase order" goes straight to the form; "Raise an order" gone | **UAT-039** steps 8–9 |
+| R-PO-2 | Vendor beside Needed by; no Deliver to; growing note; "Items"; no "Nothing on this order yet." | **UAT-039** steps 10–12, 27 |
+| R-PO-3 | The items table and its type-ahead: vendor's items first with list price, Other ingredients, one-off items, keyboard and mouse, live totals, not clipped at 390 | **UAT-039** steps 13–27, 29; UAT-087 step 28 |
+| R-PO-4 | The order page's merged table, "Rejected on delivery", "▸ N deliveries", link to Deliveries, Return to vendor kept | **UAT-040** steps 4–6, 11–18, 21–22 |
+| R-DEL-1 | Deliveries in the menu after Purchase orders; `RECEIVE_DELIVERIES` (temple admin, kitchen manager, kitchen staff); no prices | **UAT-044** steps 1, 4, 27–29; UAT-005 step 5 |
+| R-DEL-2 | Expected, Partly delivered, Received (30 days and older), and the summary strip | **UAT-044** steps 2–3, 13, 19, 22, 25 |
+| R-DEL-3 | One Record a delivery per vendor across all their open orders; Received now, Rejected on delivery + reason, Expiry; ordered unit in, stock unit to stock; Everything arrived; green confirmation; rejected stays owed; the rest the same way | **UAT-044** steps 5–12, 16–18, 24 |
+| R-DEL-4 | The per-item history and its exact wording, no order number, the same component on every tab and on the order page, keyboard accessible | **UAT-044** steps 14–15, 20; **UAT-040** steps 13–14 |
+| R-DEL-5 | Dates always dates; blue Today pill; amber late pill of the same size; no Price paid | **UAT-044** steps 3, 5, 14, 22–23 |
+| AC-DEL | A partial then the rest, with both parts in the history; the menu and API refuse anyone without the permission; nothing truncated or sideways at 1280 and 390 | **UAT-044** steps 10–20, 26, 28–29; UAT-092 steps 7–8 |
+| R-INV-1 | "Create an invoice" opens the form directly | **UAT-045** steps 1–2 |
+| R-INV-2 | The bill is an upload, photo or PDF, required, with the camera on a phone | **UAT-045** steps 10–12, 20, 35; UAT-092 steps 9–11 (kept in cloud storage) |
+| R-INV-3 | Billed per delivery: unbilled deliveries offered, lines pulled in and locked; direct invoices by hand with the same type-ahead | **UAT-045** steps 3–4, 14–15, 26–30; UAT-046 step 28 (a void releases the delivery) |
+| R-INV-4 | Item · Ordered · Delivered · Billed qty · Amount · Rate; billed defaults to delivered; amber over-billing line; packs and rates per pack and per unit; a new pack defined on the spot | **UAT-045** steps 4–5, 15–18, 22–25, 28–29 |
+| R-INV-5 | The totals block, right-aligned; the check with a green tick and no sentence, or the red line and no save; Other charges with a note; the tooltip fixed in the shared component | **UAT-045** steps 5–9, 19, 34 |
+| R-INV-6 | Saving writes the lines, links the deliveries and updates list price and history | **UAT-045** steps 12–14, 21, 30–31 |
+| R-INV-7 | The invoice page: summary, items, totals, Invoiced vs received from the lines, bill thumbnail, Payments; the allowed extras (credit note, void, reverse, Delivery billed, Billed qty) | **UAT-046** steps 10–13, 25–29 |
+| R-INV-8 | Filters Unpaid · Due this week · 1–30 · 31+ with the total owed; others see the plain filters | **UAT-046** steps 2–9, 31–32 |
+| R-PAY-1 | Pay this invoice on the page, amount defaults to what is left, only for those who could pay before (the Temple Admin) | **UAT-046** steps 14, 22–24, 33–36 |
+| R-PAY-2 | Proof required: one upload for UPI / bank / cheque; Received by, signed note and photo for cash; no ID-type field; the method swaps the fields | **UAT-046** steps 14–16, 18–21, 30; UAT-092 steps 12–13 |
+| R-PAY-3 | "Paid by", and proof thumbnails (two for cash) | **UAT-046** steps 17, 21 |
+| R-PAY-4 | No Payments menu item; /money redirects to /invoices?filter=unpaid; nothing links to /money | **UAT-046** steps 1–2, 35; UAT-005 steps 3, 5–6 |
+| R-DUP-1 | The preparation note on a recipe line, printed everywhere; the library import maps "Cashew, halved" to Cashew with the note | **UAT-087** steps 13–27 |
+| R-DUP-2 | A near-duplicate name stops the save with "Did you mean …?", Use / It's a different ingredient (confirmed and audited), on every path that creates or renames an ingredient | **UAT-087** steps 1–12, 20–24, 28; UAT-091 step 15 (after a merge); UAT-073 step 8 |
+| R-DUP-3 | The merge tool (Temple Admin only): proposals, preview, price choice, unit clash, all five effects, alias, audit | **UAT-091** (all). Merging real ingredients on staging is held by Rajeev (Q-20); the test merges only a pair it makes |
+| R-DUP-4 | The order of work: stop new duplicates before building on the data; run the merge before the end-to-end check | A build-order rule with no screen of its own. Its effect is tested: new duplicates stopped (**UAT-087**) and existing ones merged (**UAT-091**), both before the chain in **UAT-092** |
+| §10 | The end-to-end story: packs → order → send → two deliveries → two invoices → one UPI and one cash payment → arrow → a real ₹ on Issued from the temple store and Cost per serving | **UAT-092** Part B (on staging); the same chain in parts in UAT-038 → 039 → 040 → 044 → 045 → 046 |
+| Van warning (Rajeev, 2026-09-19, `MealComposer`) | "You’ll only have N minutes to load the van and set up for service at the destination." | **UAT-086** steps 81–86 |
+| Repeating events (T-307, T-308, T-309, T-340, T-341) | A series, and cancelling just this one or this and all later ones | **UAT-086** steps 45–70 (already rewritten by T-309) |
+
+**Checked only on staging** (the local stack uses stand-ins): the real PO PDF (UAT-041, UAT-092 step 5),
+WhatsApp with the PDF attached (UAT-043, UAT-092 step 6), uploads kept in cloud storage and opened again
+from another device (UAT-045, UAT-046, UAT-092 steps 9–13), a phone's camera from the upload
+(UAT-045 step 35, UAT-092 step 13), and existing data surviving the deploy (UAT-092 Part A).
 
 ---
 
@@ -266,9 +330,10 @@ not be raised as a product defect.
 | Switch | Tests that cannot pass while it is off |
 |---|---|
 | Background worker | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 038, 041, 052, **071**, **074** (steps 35–41 only), **086** |
-| Document renderer | UAT-019, 020, 041, 042, **071**, **074** (steps 35–41 only) |
+| Document renderer | UAT-019, 020, 041, 042, **071**, **074** (steps 35–41 only), **092** |
 | Translation provider | UAT-020, 021, 042, **071** (steps 15–20 only) |
-| Message channels | UAT-009, 023, 028, 043, 047, 052, 053, 055, **074** (step 40 only) |
+| Message channels | UAT-009, 023, 028, 043, 047, 052, 053, 055, **074** (step 40 only), **092** |
+| File storage (uploads) | **045**, **046**, **092** |
 | Payment provider (test mode) | UAT-055, 056, 058, 059 |
 
 Fully runnable **today**, with no environment changes: UAT-001–018, 021, 022, 024–028, 035, 037,

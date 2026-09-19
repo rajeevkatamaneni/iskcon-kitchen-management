@@ -39,7 +39,7 @@ should be the ones to sign it. The threshold is a fifth of what is on hand.
 | 2 | Adjust by `-20` (well over a fifth of 45), reason **Spoilage** | **Refused:** *This adjustment is large enough that a Temple Admin has to approve it* (`KMS-400025`), advising you to ask an admin or split it |
 | 3 | Check the stock and history | Unchanged — nothing was recorded, not even partially |
 | 4 | Try the same as four separate `-5` adjustments | Each is accepted individually. **Record this**: whether splitting is an intended escape hatch (the refusal message itself suggests it) or a hole worth closing is a question for the team |
-| 5 | Bring Rice back to 50 Kg (`+20`, reason *Count correction* — note whether **this** large increase is also refused for staff, and record the answer) | Record what happened |
+| 5 | Bring Rice back to 50 Kg (`+20`, reason *Count correction*) | *Amended 2026-09-19:* the form asks **What it would cost to buy today (₹ per Kg)** (UAT-090). Then **refused** for kitchen staff (`KMS-400025`): a large correction upward needs a Temple Admin too. Only the **first count on a new item** is exempt (Rajeev, 2026-09-19). Make it as the admin instead |
 | 6 | Sign out. Sign in as the **temple admin**, open Rice, adjust by `-20`, reason **Spoilage**, note `Sack found spoiled after monsoon damp` | Accepted |
 | 7 | Look at the item's **Movement history** | The large adjustment is there with its reason and note |
 | 8 | Go to **/audit** | The large adjustment appears, naming you as the actor, with the reason |

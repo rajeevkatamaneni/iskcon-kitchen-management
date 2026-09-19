@@ -28,6 +28,8 @@ breakfast *and* lunch, so their pay can only ever be split by guesswork.
 - Rows are sorted **dearest serving first**, so reading top to bottom is the answer.
 - **Every figure says it is an estimate of materials only**, and ingredients with no known price are
   **counted and named** rather than quietly costed at zero.
+- *Amended 2026-09-19 (R-ING-3).* An ingredient's price is the preferred vendor's **list price**, then any
+  vendor's, then its **market rate**. Only an ingredient with none of the three has no known price.
 - Where nobody counted the people at a meal, that meal is in the kind's **total** but out of the
   **cost per serving**, and the number of meals left out is said beside the figure. A kind with no
   head count anywhere shows **—** and sorts to the foot.
@@ -43,10 +45,11 @@ breakfast *and* lunch, so their pay can only ever be split by guesswork.
 - **Start at:** **/cost-per-serving** (menu: **Kitchen** → **Cost per serving**)
 - **Set the scene**, because a fresh temple has nothing to compare:
 
-  1. On **/vendors** (UAT-037) make sure **Rice**, **Toor Dal** and **Ghee** each have a **Last price**
+  1. On **/vendors** (UAT-037) make sure **Rice**, **Toor Dal** and **Ghee** each have a **List price**
      against a vendor. Without prices every figure here is zero and the test proves nothing.
   2. On **/ingredients** add **Rock Salt** (category *Spices*, unit `gm`) and give it **no vendor at
-     all**. This is the deliberately unpriced ingredient.
+     all** and **no market rate**. This is the deliberately unpriced ingredient. Don't put it in inventory
+     with a count: that would give it a market rate (UAT-090).
   3. On **/recipes** open **Khichdi** (UAT-015) and add a line of **Rock Salt `200` gm**.
   4. On **/planner**, click **today** and plan **two meals**, in the composer:
 
@@ -66,7 +69,7 @@ breakfast *and* lunch, so their pay can only ever be split by guesswork.
 | 2 | Open it | Heading **Cost per serving**, and under it: *What a serving costs at each kind of meal, so a prasadam plate can be read against a feast plate* |
 | 3 | Look at the period control | **Week / Month / Year**, opening on **Month**, with arrows to step back and forward. It opens on this month |
 | 4 | Read the notice above the table | It begins **Estimated, materials only**, and goes on: *Labour, fuel and the rest of what a meal costs are not in these figures.* |
-| 5 | Read the rest of that notice | It says **1 ingredient has no known price**, and names **Rock Salt** as left out until a vendor price is recorded |
+| 5 | Read the rest of that notice | The heading says **Estimated, materials only · 1 ingredient has no known price**, and the notice reads **Rock Salt has no list price or market rate, so it is left out.** |
 | 6 | Look at the columns | Kind of meal · Meals · Servings · Estimated materials · Cost per serving |
 | 7 | Find the **Lunch** and **Breakfast** rows | Both are there, with the temple's own names for them. The dearer serving is **above** the cheaper one |
 | 8 | Under the **Lunch** kind name | A small line: **1 ingredient has no known price** — Rock Salt is named, not silently costed at ₹0 |
@@ -79,6 +82,7 @@ breakfast *and* lunch, so their pay can only ever be split by guesswork.
 | 15 | Cancel that Dinner meal on the planner and reload the report | The Dinner row is **gone** — a cancelled meal contributes nothing, and a kind nobody cooked does not appear |
 | 16 | Switch to **Week**, then **Year**, then back to **Month** | The same kinds over a different range; the figures grow with the range, never shrink |
 | 17 | Step **back** with the arrow until you reach a month before the temple cooked anything | **Nothing was cooked in this period** — a sentence, not a table of zeroes |
+| 17a | *(Added 2026-09-19.)* Step forward again to this month. Open **Rock Salt**'s ingredient page (UAT-088) and **Set market rate**: the box reads **Market rate (₹ per Kg)**; type `20`. Reload this report | Rock Salt is **no longer named**. Lunch's **Estimated materials** rises by the Rock Salt in its Khichdi, costed at the market rate. With every ingredient priced, the heading reads **Estimated, materials only — from list prices, or the market rate** |
 | 18 | Sign out and sign in as `ikms.volunteer.1@trading4good.org`. Look at the menu | There is **no Cost per serving** item |
 | 19 | While still signed in as the volunteer, type **/cost-per-serving** into the address bar | **Not your page** — *You don't have access to this part of the app. Ask your temple administrator.* No figures are shown, even for a moment |
 
@@ -86,7 +90,7 @@ breakfast *and* lunch, so their pay can only ever be split by guesswork.
 
 - [ ] The screen lists the temple's own kinds of meal, one row each, dearest serving first.
 - [ ] Every figure is labelled **Estimated, materials only**, above the table and against the kinds.
-- [ ] The unpriced ingredient is **counted and named**, both overall and against the kind that used it.
+- [ ] The unpriced ingredient is **counted and named**, both overall and against the kind that used it; once it has a market rate it is costed at that and no longer named.
 - [ ] A meal of several preparations counts as **one** meal, with one head count.
 - [ ] Estimated materials ÷ Servings gives the Cost per serving on each row.
 - [ ] The **All meals** row leaves the per-serving cell blank.

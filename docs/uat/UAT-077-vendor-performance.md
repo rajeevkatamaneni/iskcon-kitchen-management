@@ -72,14 +72,14 @@ exactly the one you want to find, and neither figure alone finds him.
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open **/shopping-list** and press **Regenerate** | Rice and Toor Dal appear with a **Needed by** date of **yesterday**; Sugar appears with **Needed by —** |
+| 1 | Open **/shopping-list** (it is worked out each time it opens; there is no Regenerate button since T-132) | Rice and Toor Dal appear with a **Needed by** date of **yesterday**; Sugar appears with **Needed by —** |
 | 2 | Generate purchase orders (UAT-039) and **send** the one to **Sri Balaji Provisions** | It is **Sent**, with **Needed by** yesterday |
 | 3 | Open **/vendor-performance** | Heading **Vendor performance**, and under it: *Whether each supplier delivers when they said, brings what was ordered, and what is still outstanding with them* |
 | 4 | Read the notice above the table **before** reading a number | It explains: on time is per **whole order**, not per ingredient; it is measured at the **first delivery**, so the fill rate beside it is what says whether everything came; and drafts and cancelled orders are left out, while the open column is **today's** position whenever the order was placed |
 | 5 | Look at the columns | Vendor · Orders on time · Fill rate · Rejected · Open now |
 | 6 | Look at Sri Balaji's **Orders on time** cell | A percentage **and, underneath it, the counts** — *0 of 1*. **A percentage with no counts under it is a defect** |
 | 7 | Look at the **Open now** cell | **1**, with an amber badge reading **1 1–30 days overdue** — the order is sent, unfilled, and its needed-by date was yesterday |
-| 8 | Go back to the order and **record a delivery** (UAT-044): on the Rice line, received **30** of 36, **rejected 2** with reason **Spoiled**; leave Toor Dal empty | Recorded; the order goes **Partially received** |
+| 8 | On **/deliveries**, press **Record a delivery** for Sri Balaji Provisions (UAT-044): on the Rice line, received **30** of 36, **rejected 2** with reason **Spoiled**; leave Toor Dal empty | Recorded; the order goes **Part delivered** |
 | 9 | Reload **/vendor-performance** | **Orders on time** still *0 of 1* — the delivery came after the day it was wanted. **Fill rate** is now a figure with *across 2 lines* under it, and it is well under 100%: one line part-filled, one line not filled at all |
 | 10 | Check the fill-rate arithmetic by hand | Per **line**, as a fraction, then averaged: Rice 30 of 36 and Toor Dal 0 of its quantity → about **42%**. It is **not** kilos added to kilos, and the 2 rejected sacks are **not** in it |
 | 11 | Look at the **Rejected** cell | **1**, with **Spoiled 1** underneath — grouped by reason, commonest first |
@@ -94,7 +94,7 @@ exactly the one you want to find, and neither figure alone finds him.
 | 15 | Look at that vendor's **Orders on time** counts | The order with no date is shown separately — *… · 1 with no date*. It is **not** counted as delivered on time |
 | 16 | Look at that vendor's **Open now** cell | The order is counted as open, in the **current** bucket — there is no date for it to be overdue against, so no amber badge |
 | 17 | Look at the badges under each vendor's name | Every vendor here carries **Too few orders to rank** — under five judged orders. **The figures are still shown**; they are not hidden |
-| 18 | *(Takes a few minutes.)* Build Sri Balaji up to **five** judged orders: press **Regenerate** on the shopping list — the unreceived Rice and Toor Dal come back as outstanding — then generate and send again. Repeat until five of their orders are Sent with yesterday's date | Sri Balaji's **Too few orders to rank** badge is **gone**, they sort **above** the vendors that still carry it, and the counts read *0 of 5* |
+| 18 | *(Takes a few minutes.)* Build Sri Balaji up to **five** judged orders: reload the shopping list — the unreceived Rice and Toor Dal come back as outstanding — then generate and send again. Repeat until five of their orders are Sent with yesterday's date | Sri Balaji's **Too few orders to rank** badge is **gone**, they sort **above** the vendors that still carry it, and the counts read *0 of 5* |
 | 19 | Go to **/vendors** and **make Nandini Dairy Agency inactive**, with a reason (UAT-037) | Recorded |
 | 20 | Reload **/vendor-performance** | Nandini is **still on the report**, with a **No longer used** badge and every figure they had. Their record is exactly what somebody reads before bringing them back |
 | 21 | Look at the **All vendors** row at the foot | The totals, with the counts under the on-time percentage there too |
@@ -105,8 +105,8 @@ exactly the one you want to find, and neither figure alone finds him.
 
 | # | Do this | You should see |
 |---|---|---|
-| 24 | Plan a meal on **/planner** for **five days from today**, big enough to go short. Regenerate the shopping list | The new lines carry a **Needed by** date **three days from today** |
-| 25 | Generate the order, **send** it, and **record the delivery in full today** | The order goes **Received** |
+| 24 | Plan a meal on **/planner** for **five days from today**, big enough to go short. Reload the shopping list | The new lines carry a **Needed by** date **three days from today** |
+| 25 | Generate the order, **send** it, and **record the delivery in full today** on **/deliveries** (Record a delivery → Everything arrived) | The order goes **Received** |
 | 26 | Reload **/vendor-performance** today | That order is **not judged at all** — its needed-by date has not passed. It appears in **Open now** as *current* only until it was received, and it moves no percentage |
 | 27 | **Come back four days later** and reload | The order is now judged, and it counted **on time** — the delivery was booked before the day it was wanted. The on-time counts go up by one on both sides |
 | 28 | Sign out; sign in as `ikms.volunteer.1@trading4good.org`. Look at the menu, then type **/vendor-performance** | No menu item; the address gives **Not your page** |

@@ -17,9 +17,11 @@ program — is what makes the ordering flow usable in practice.
 ## How it is supposed to work
 
 - **Send on WhatsApp** goes to the vendor's recorded number. If the order is still a draft, sending it
-  moves it to Sent, with a confirmation first.
+  moves it to Sent at once. *(Amended 2026-09-19: there is no confirmation step, and the order page has
+  no activity trail any more; it shows **Sent <date>** in its header.)*
 - The translated sheet is sent when one exists; otherwise the English one.
-- The send and its delivery status are recorded on the order's activity trail.
+- The order's PDF sheet goes with the message (T-200), written the way the screens write it: packs as
+  **4 × Bag (25 Kg)**, dates like **20 Sept 2026**.
 - A number that fails is surfaced on the order, with the fallback of downloading and sharing by hand,
   and the vendor is flagged for a phone recheck.
 - Resending is allowed, but rate-limited, so a vendor is never spammed by an anxious sender.
@@ -38,25 +40,25 @@ program — is what makes the ordering flow usable in practice.
 | # | Do this | You should see |
 |---|---|---|
 | 1 | On the order, find **Send on WhatsApp** | The action is offered on a draft or sent order |
-| 2 | Press it on a **draft** order | You are told it will also mark the order as sent, and asked to confirm |
-| 3 | Confirm | The order becomes **Sent**, and the activity trail records the WhatsApp send with who and when |
+| 2 | Press it on a **draft** order | It is sent straight away, with no question first |
+| 3 | Read the order's header | The chip reads **Sent** and the header **Sent** *&lt;today&gt;* |
 | 4 | Check the phone you set as the vendor's number | The order sheet arrives on WhatsApp — as a document or a link that opens one |
 | 5 | Open what arrived | It is this order: the right number, the right vendor, the right lines |
 | 6 | Press **Send on WhatsApp** again immediately | Refused: *This purchase order was just sent on WhatsApp* (`KMS-400056`), asking you to give the vendor a moment |
 | 7 | Change the vendor's phone to a number that cannot receive WhatsApp (for example `+919999999999`) and send again after the rate limit passes | A clear failure on the order — not a crash — with guidance to download the sheet and share it by hand (`KMS-500002`) |
 | 8 | Go to **/vendors** | That vendor is flagged for a WhatsApp recheck |
 | 9 | Try to send a **cancelled** order | Refused: *This purchase order can't be sent to a vendor* (`KMS-400055`) |
-| 10 | Read the activity trail on the order | Every send attempt is there, successful or not, with its outcome |
+| 10 | Send order A (UAT-039) to your own number and open the PDF that arrives | UAT Bulk Rice reads **4 × Bag (25 Kg)** with **₹1,450 / bag · ₹58 / Kg**; dates read like **20 Sept 2026**; no figure of 1,000 gm or more |
 
 ## It passes if
 
 - [ ] The order can be sent to the vendor's WhatsApp number from inside the app.
-- [ ] Sending a draft moves it to Sent, after a confirmation.
+- [ ] Sending a draft moves it to Sent.
 - [ ] The message actually arrives and contains the right order.
 - [ ] An immediate resend is rate-limited (`KMS-400056`).
 - [ ] An undeliverable number produces a clear failure with a usable fallback, and flags the vendor.
 - [ ] A cancelled order cannot be sent.
-- [ ] Every attempt is on the activity trail.
+- [ ] The PDF that arrives writes packs, prices and dates as the screens do.
 
 ## Watch out for
 

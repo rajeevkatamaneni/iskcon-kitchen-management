@@ -38,7 +38,7 @@ becomes part of the item's permanent history rather than overwriting it.
 | 2 | Press **Adjust stock** | A form: the batch to adjust, a reason, a change (e.g. `-2`), a unit, and a note field marked required for *Other* |
 | 3 | Read the reason choices | Spoilage, Damage, Count correction, Waste, Other |
 | 4 | Record a small loss: change `-2`, reason **Spoilage** | Stock falls by 2. The item's **Movement history** gains a row showing the date, type, change and reason |
-| 5 | Record a correction upward: change `+1`, reason **Count correction** | Stock rises by 1; another history row |
+| 5 | Record a correction upward: change `+1`, reason **Count correction** | As soon as the change is above zero a box appears, **What it would cost to buy today (₹ per Kg)**, filled in from the preferred vendor's list price or the market rate; it can't be blank or 0 *(added 2026-09-19, R-ING-3; UAT-090)*. Save: stock rises by 1; another history row; Rice's market rate reads what you entered, *Set at a stock count* |
 | 6 | Choose reason **Other** and leave the note blank | Refused — a note is required to explain "Other" |
 | 7 | Choose **Other** with the note `Spilled during transfer to the deity kitchen` and change `-1` | Accepted; the note appears in the history |
 | 8 | Try to remove more than exists — if 48 Kg is on hand, enter `-100` | Refused: *That would take the stock below zero* (`KMS-400041`), with advice to check against the real count |
