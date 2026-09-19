@@ -102,3 +102,112 @@ Neither was run, because step 1 stopped the check. What they need, found while l
 Worth knowing before Reload: once the header is accepted, the approved po_delivery goes back into
 Meta's review. Purchase orders on WhatsApp are refused until Meta approves it again. Changing the
 header type later means another review.
+
+---
+
+## Resumed 2026-09-14 20:25–20:45 UTC, after Rajeev entered the App ID and set up the webhook
+
+Same rules as before: Temple Admin through the app's API, no Meta token or secret seen, no Chrome.
+API revision `kms-staging-api-00168-zjc`. **No WhatsApp message was sent.**
+
+### Result
+
+- **Resumable upload (`/<APP_ID>/uploads`) with the stored System User token: yes, accepted.**
+- **Media upload (`/<PHONE_NUMBER_ID>/media`): not reached.** po_delivery is back in Meta's review,
+  so no order was sent.
+- **po_delivery at Meta: PENDING**, now registered with the DOCUMENT header. Still PENDING 12 minutes
+  after Reload.
+- **Meta's sample Test webhook: not received.** No POST reached the webhook by 20:45 UTC.
+- **Real delivery-status webhook: not reached**, because nothing was sent.
+
+### 1. App ID and webhook verification
+
+`GET /api/v1/settings/whatsapp` at ~20:25 UTC:
+
+```
+'connected': True, 'appId': '1920408082251143', 'verifiedAt': '2026-09-14T20:22:29.334319Z',
+'webhookSeenAt': None, 'templatesPending': {'changed': 1, ...}
+```
+
+The App ID is stored, and it is the id suggested above. Meta's verification handshake reached
+staging. From the Cloud Run request log (path token redacted here):
+
+```
+2026-09-14T20:28:32.652177Z  GET  200  facebookplatform/1.0 (+http://developers.facebook.com)
+```
+
+That is the GET handshake, answered 200. `webhookSeenAt` stays null, which is correct: only a signed
+POST (`WhatsAppWebhookController`, `settings.markWebhookSeen`) stamps it.
+
+**Sample Test webhook: not seen.** Requests to `/api/v1/public/webhooks/whatsapp/*` since 20:29 UTC,
+checked every minute until 20:45: none. No "callback" warning lines either, such as an unknown token
+or a bad signature.
+
+- Either Test was not pressed in that window, or Meta's Test did not reach staging.
+- If Rajeev presses it again, a handled one shows as a POST 200 in the request log and sets
+  `webhookSeenAt`.
+- A POST whose signature does not match the stored app secret logs
+  `Rejected a WhatsApp callback for temple … with a missing or invalid signature`.
+
+### 2. Template registration with the PDF header (Reload)
+
+`POST /api/v1/settings/whatsapp/templates/reload` at 20:32:57 UTC: **HTTP 200 in 51.3 s.**
+The body was not captured (a script error on my side), so the facts come from the logs and the reads
+that followed.
+
+Logs for that request (`req=83ee32cc-…`):
+
+```
+20:33:40.618 INFO TenantWhatsAppSettingsService - Submitted 21 of 21 WhatsApp templates for temple f935450b-…: 0 new, 20 already held, 1 held under another category, 0 not registered
+20:33:40.618 INFO TenantWhatsAppSettingsService - Reload for temple f935450b-…: 1 reworded at Meta, 0 still waiting for new wording
+20:33:48.682 INFO WhatsAppTemplateComparison - Compared 21 WhatsApp templates with Meta for temple f935450b-…: 21 identical, 0 identical only after trimming, 0 worded differently, 0 not held, 0 not answered, 0 with a different header
+```
+
+No `Meta would not start an upload session…` or `Meta would not take the bytes…` line was logged.
+The edit carries the handle the upload returned, so the upload succeeded with the stored token.
+
+`GET …/templates/meta-comparison` afterwards:
+
+```
+{"name": "po_delivery", "ourCategory": "UTILITY", "metaCategory": "UTILITY", "metaStatus": "PENDING",
+ "held": true, "bodyMatchesExactly": true, "ourHeaderFormat": "DOCUMENT", "metaHeaderFormat": "DOCUMENT",
+ "headerMatches": true}
+```
+
+`GET /api/v1/settings/whatsapp` afterwards:
+
+```
+'templatesSubmittedAt': '2026-09-14T20:32:58.092Z',
+'templatesPending': {'changed': 0, 'refused': 0, 'accountChanged': False, 'unchecked': 0}
+refusedTemplates: [wishlist_gift_split — held as marketing]
+```
+
+`donation_thank_you` has dropped off the "held as marketing" list, so Meta now holds it as UTILITY.
+`wishlist_gift_split` is still held as marketing.
+
+Polled po_delivery's status every ~70 s:
+
+```
+20:36:02 PENDING … 20:44:15 PENDING (8 polls, no change)
+```
+
+### 3 and 4. Send and delivery webhook — not done
+
+The brief said to send only once the template is approved. po_delivery is PENDING, so:
+
+- no purchase order was created for Mahalakshmi Stores;
+- nothing was sent;
+- no delivery webhook was waited for.
+
+The two WhatsApp messages allowed are both unused.
+
+To finish once Meta approves po_delivery:
+
+- The comparison shows `metaStatus: APPROVED`, or Meta's template_status webhook, if that field is
+  subscribed.
+- Then create an order for Mahalakshmi Stores (`+12693523612`, `kn`) and send it with
+  `POST /api/v1/purchase-orders/{id}/whatsapp`.
+- Media upload result: a log line `WhatsApp send failed for template po_delivery: …` means it failed;
+  a delivered message means it worked.
+- Then watch for a POST to the webhook with a `statuses` entry. With the app unpublished, Meta's banner
+  says only dashboard test webhooks are delivered, so this may never come. That is the open question.

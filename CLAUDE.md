@@ -30,6 +30,30 @@
 > test**. Item 3 is the Kannada word-order defect, not yet started.
 
 
+> ## ✅ Verify, never estimate — MANDATORY, for every agent and every check
+>
+> Added 2026-09-18 at Rajeev's instruction, after a layout was reported "even" from an eyeballed
+> screenshot when it was 92px against 55px, having been asked twice to check.
+>
+> - **Never estimate or imagine a result.** Not in a UI, a picture, code, data, a test run or anything
+>   else. Measure it: pixel analysis of a full-resolution screenshot, DOM geometry, the actual file,
+>   the actual command output. If something hasn't been measured, say "not verified", never "it's fine".
+> - **Check under his conditions**, not just yours: his screenshot, his screen width, his role, his
+>   data. If you could only check one condition, say which one.
+> - **He can see things you can't.** When Rajeev says something is wrong, start from "he's right" and
+>   find out why. Never re-assert.
+> - **Being asked twice means be twice as careful.** Every repeat costs him time and money.
+> - **Doing it right takes longer, and that's accepted. Always.** It's still cheaper than the mistake
+>   and the rework.
+>
+> **Before building, ask** (Rajeev, 2026-09-18): What am I doing? Why? Is this the best way? Is there
+> a smarter, better way? **After building, check:** did it come out the way I pictured it? Is there a
+> problem now that wasn't visible before it was built? If so, fix it before reporting.
+>
+> **Layout rules he has had to repeat:** a new row only when things genuinely can't sit side by side
+> (buttons that fit go next to each other, at the same size). No dead space: a big empty block beside
+> squeezed or clipped content is always wrong.
+
 Read `docs/PROJECT_COMMANDMENTS.md` first. It is the governing agreement for how this project is run, and it takes precedence over anything here.
 
 ## What this is

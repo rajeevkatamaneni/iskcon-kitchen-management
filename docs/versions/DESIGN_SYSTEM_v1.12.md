@@ -1,6 +1,6 @@
 # Design System
 
-**Status:** v1.13 — secondary buttons are raised (style E) so they read as buttons, the press lives on the base button style so every button has it, and the recipe page's download icon is allowed, 2026-09-19 (§4, §6). v1.12 — every table reads left, no column is cut off, and spare width is shared evenly between the columns, replacing v1.11's table rule, 2026-09-18 (§5, *Tables*). v1.11 — how every table lays out its columns, and what a table becomes below 1024px; festivals get their own saffron colour, 2026-09-18 (§2, §5, *Tables*). v1.10 — what each status colour means, restated as one rule, and the sidebar becomes a drawer below 1024px rather than 768px, 2026-09-18 (§3, §5). v1.9 — nothing is a pill: badges, chips and controls take the buttons' corner, 2026-09-17 (§4). v1.8 — which forms get a screen of their own, restated: five fields, and a record from another part of the app opens as a layer, 2026-09-12 (§4). v1.7 — the `danger` row stopped naming a deleted feature, 2026-09-11 (§3). v1.6 — what lifts under the pointer and what only changes tone, 2026-08-30 (§4). v1.5 — colour became the temple's choice, and the focus ring got a token of its own, 2026-08-28 (§2, §4). v1.4 — the accent darkened to clear AA on button text, and the words and the geometry of a form settled, 2026-08-21 (§2, §4, §9). v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
+**Status:** v1.12 — every table reads left, no column is cut off, and spare width is shared evenly between the columns, replacing v1.11's table rule, 2026-09-18 (§5, *Tables*). v1.11 — how every table lays out its columns, and what a table becomes below 1024px; festivals get their own saffron colour, 2026-09-18 (§2, §5, *Tables*). v1.10 — what each status colour means, restated as one rule, and the sidebar becomes a drawer below 1024px rather than 768px, 2026-09-18 (§3, §5). v1.9 — nothing is a pill: badges, chips and controls take the buttons' corner, 2026-09-17 (§4). v1.8 — which forms get a screen of their own, restated: five fields, and a record from another part of the app opens as a layer, 2026-09-12 (§4). v1.7 — the `danger` row stopped naming a deleted feature, 2026-09-11 (§3). v1.6 — what lifts under the pointer and what only changes tone, 2026-08-30 (§4). v1.5 — colour became the temple's choice, and the focus ring got a token of its own, 2026-08-28 (§2, §4). v1.4 — the accent darkened to clear AA on button text, and the words and the geometry of a form settled, 2026-08-21 (§2, §4, §9). v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
 **Applies to:** every screen in the application.
 
 Grounded in reference sites Rajeev selected (cocoon.com, stripe.com, docs.stripe.com, apple.com, melaniedaveid.com) and one explicit anti-reference (Google Cloud Console). The v1.1 palette takes its terracotta/charcoal direction from ISKCON's own saffron-orange identity (iskconsv.com); the spacing, type, and restraint are unchanged.
@@ -335,36 +335,6 @@ Rows were tried lifted, on the live site, and the reasons not to are not aesthet
 the one piece of motion on a control that is hit hundreds of times a day, and it earns that by being
 the only confirmation a touch device gives that the tap landed at all.
 
-**The press lives on the base button style, `.btn`, not on the `Button` component.** While held, a
-button scales to the `press` token (0.96) and drops 1px, over the `press` duration (120ms, `ease-out`),
-and springs back on release. A disabled button does not move. With reduced motion asked for, it does
-not move either and keeps only the inset shade a pressed button already had. Any button drawn with
-the `btn` class gets this, whether it comes through `Button`, `ButtonLink` or is written by hand.
-A button that uses neither does not, so a new button is built on `btn`.
-
-*Added 2026-09-19 (v1.13), Rajeev's decision on the Decisions Desk. Until then the press was written
-into the `Button` component alone, and about sixty hand-made buttons across twenty-nine screens never
-pressed.*
-
-### Secondary buttons are raised
-
-Every secondary-level button, the neutral second action (`Button variant="ghost"`, `.btn-secondary`)
-and the quiet one (`Button variant="secondary"`, `.btn-quiet`, as on "Ask for volunteers") alike,
-takes one look: the card colour (`raised`) as its fill, dark `ink` text, a 1px `ink-muted` border with
-a 2px `ink-secondary` bottom edge, and a small shadow, like a key. The same corner
-(`rounded-control`) and the same 44px height as the primary button. Under the pointer the fill steps to
-`sunken` and the shadow grows a little. Keyboard focus shows the focus ring. The primary, danger and
-warning buttons are not affected.
-
-Floors, measured in all 15 packs: text at least 4.5:1 on the fill, at rest and under the pointer;
-the border at least 3:1 against the card and against the grey `sunken` boxes buttons sit beside.
-
-*Added 2026-09-19 (v1.13). Rajeev chose this look, style E, from a mock of eight (T-238), because
-neither secondary look read as something to press: the quiet one was accent text in a pale accent
-hairline with no fill, and the neutral one a white fill in a pale grey hairline, and neither edge
-reached 3:1 against the card. The glossy packs' gradient on the white button and the frosted packs'
-blur are given up for it, as the mock showed.*
-
 Not shipped: `hover:bg-raised/60` on rows, which is what the first eleven palettes made invisible.
 It assumed `raised` was darker than `canvas`, which is true of terracotta and false of most of the
 packs that followed — Terracotta's own `raised` is `#FEFEFF` on a `#FFF7F4` canvas. `sunken` is the
@@ -437,10 +407,6 @@ box in a table grows to fit its figure.
 **Tabler**, outline only, one consistent stroke weight. Around 5,800 icons, MIT licensed.
 
 **Navigation only, and never without text.** Icons appear in the sidebar and in genuinely universal affordances (search). Every action elsewhere — Edit, Delete, Send, Download — is a text label.
-
-**One exception: the recipe page's download.** On a recipe, the small download icon beside the language picker, which saves the recipe as a PDF in the language chosen, may stay an icon. It carries a spoken name and a tooltip ("Download recipe as PDF") and is a full 44px touch target. Nowhere else.
-
-*Added 2026-09-19 (v1.13), Rajeev's decision on the Decisions Desk (question 8). The icon was already built that way; the rule is changed to match it rather than the icon to match the rule.*
 
 The reasoning: people navigate by shape and position before they read, so after a week a kitchen manager reaches for the box icon without processing the word "Inventory". That is real speed for daily users, and it makes a collapsed mobile navigation bar workable where six text labels would be cramped.
 

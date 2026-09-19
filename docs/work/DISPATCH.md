@@ -1,5 +1,17 @@
 # Dispatch ledger
 
+## ▶ LOCAL BUILD (2026-09-17 to 2026-09-19): T-217 to T-241, released 2026-09-19
+
+These were built and checked against the local stack (`docs/work/LOCAL-STACK.md`), not dispatched
+through this ledger, so none of them had a row here. Rajeev verified them locally on 2026-09-18/19
+and approved commit, CI and a staging deploy. Proofs are `docs/work/proof/T-217.md` to `T-241.md`.
+T-220, T-238 and T-241 were throwaway mocks for him to choose from; none of their pages remain.
+
+- **Migration:** `V143` (T-230, "Catering sabjis" becomes "Bulk sabjis", per tenant). No new error codes.
+- **Shipped:** `9702d32` (backend), `ddb8daa` (design system and shell), `323d064` (screens), and
+  the docs commit that carries this entry. Release record: `docs/work/proof/RELEASE-2026-09-19.md`.
+- **State:** on staging, awaiting Rajeev's test there.
+
 ## ▶ PHASE A (2026-09-13): the D-27 meal rebuild, T-195 to T-199
 
 **Source for all five:** `docs/work/NEXT-SESSION.md` "Phase A", `docs/work/DECISIONS.md` D-27 with answers 1–9 (hold lifted 2026-09-13), and the map `docs/work/intake/D-27-rebuild-map.md`. Everything in them is decided by Rajeev and is not reopened.

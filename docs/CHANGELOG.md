@@ -4287,6 +4287,163 @@ converted. The rule carries a dated footnote saying so, which he asked for.
 
 ---
 
+## DESIGN_SYSTEM v1.9 — 2026-09-17
+
+**Nothing is a pill any more** (§4, *Radii*). Every badge, status chip, count chip, segmented
+control, tab list, hand-made button and read-only value box now takes the theme's control corner,
+`--radius-control` — the corner the buttons and inputs already had. Full rounding stays only on true
+circles (initials, step numbers, the "i" hint, calendar dots) and on meter bars.
+
+**Why.** On the planner's meal card the crew count, the status badges and the meal-kind chips were
+round while the buttons beside them were nearly square, so one card spoke two design languages. T-220
+built a side-by-side page of every such element as it was and squared off, with a verdict per row.
+**Approved by Rajeev, 2026-09-17:** *"Approved, make the changes."* T-221 built the thirteen rows
+marked "change".
+
+**What the old line said, and why it was already stale.** v1.0–v1.8 read *"`sm` 8px (inputs,
+badges), `md` 12px (buttons, small cards), `lg` 16px (panels, main cards), `pill` 9999px (status chips
+only)."* Buttons and inputs had in fact already moved to the theme's control corner when theme packs
+arrived, so the line described neither the old app nor the new one.
+
+**Left as they are, on purpose.** T-220 marked two rows for Rajeev to decide separately — notice and
+alert boxes, and card-like containers — and he did not rule on them apart from the whole. They keep
+their fixed 8, 12 and 16px corners, and §4 says so, so nobody reads the silence as a decision.
+
+**`Badge` lost its `shape` prop.** It chose between round and square; with one shape left it meant
+nothing, and its four call sites were removed with it.
+
+**Nothing else in the file changed** — the status line and §4's radii line only. Snapshot in
+`docs/versions/DESIGN_SYSTEM_v1.9.md`.
+
+---
+
+## DESIGN_SYSTEM v1.10 — 2026-09-18
+
+**What each status colour means, as one rule** (§3, *Semantic — status only*). **Rajeev, 2026-09-18,
+in chat:** *"Amber MUST be a warning and RED MUST be something that is serious and needs immediate
+attention. Green is GOOD but that is only reserved for when an action taken by the user yields a
+result they were expecting."* Everything else is information (`info`, blue) or neutral. His rule is
+the sign-off for this amendment.
+
+**What changed in §3.** The lead sentence and the three meaning cells are rewritten to state the rule,
+and two rows are added: `info`, which v1.2 introduced but the table never listed, and neutral, the
+`Badge` default. The old `success` row — *"Paid, received, shift fully staffed"* — named exactly the
+standing states the rule takes green away from. The colour values did not change. A dated footnote
+under the table quotes the old wording.
+
+**The code followed.** T-227 part 1 audited every coloured element (`docs/work/proof/T-227-colour-audit.md`);
+part 2 recoloured the 61 rows marked "change" (`docs/work/proof/T-227.md`). The fasting-day banners
+that triggered it are blue now. Eight rows the audit could not settle went to Rajeev, who decided
+them the same day; §3 now carries seven of those answers: a form-level "fix this" message is red like
+the field error it accompanies; "order today" is amber everywhere and red stays for "won't arrive in
+time"; Meta's formatting refusal is red; withdrawing leave is not styled as a deletion; a setup check
+that is working is neutral, and green only straight after the administrator's own Test passes.
+The eighth, festival days in the accent colour, is not built and not written into §3: on the calendar
+the accent already marks an ordinary fasting day, so the two would share one colour. It is waiting on
+Rajeev.
+
+**The sidebar breakpoint** (§5, *Layout*). v1.0–v1.9 read *"Collapses to a bottom bar or drawer under
+768px."* It now says the sidebar becomes a drawer below 1024px (Tailwind `lg`), on Rajeev's
+instruction the same day that the app be fully responsive with a collapsible menu. The menu was built
+at `lg` so a portrait tablet gets the drawer; the line had not kept up.
+
+**Nothing else in the file changed** — the status line, §3's status table and §5's sidebar line only.
+Snapshot in `docs/versions/DESIGN_SYSTEM_v1.10.md`.
+
+---
+
+## DESIGN_SYSTEM v1.11 — 2026-09-18
+
+**How every table lays out its columns** (§5, new subsection *Tables*). Rajeev approved the rule in
+chat on 2026-09-18, and that approval is the sign-off for this amendment. Every column is flexible
+(names, categories, descriptions, vendors, notes) or fixed (units, flags, status badges, dates,
+quantities, money, counts, buttons). Flexible columns sit left and wrap at a cap — 40% for the
+primary column, 15% for any other — and are never truncated. Fixed columns sit together on the right,
+right-aligned and snug. Spare width goes to the flexible columns up to their caps and then sits
+between the two groups. Both edges of the table get the same padding. Numbers are right-aligned with
+tabular figures, every header is aligned like its column, and the actions column's header is hidden
+from sight but kept for screen readers. Below 1024px each row becomes a two-line card.
+
+**What it replaces.** The rule of 2026-09-01, recorded only in `frontend/components/ds/table.ts`,
+that every column reads left and only the buttons sit right. That rule was never in this document.
+
+**The code followed** (T-228, `docs/work/proof/T-228.md`): new constants in `components/ds/table.ts`,
+the layout in the `.kms-table` block of `app/globals.css`, and 38 tables moved onto them. Tables
+whose columns could not be classified without a decision are left on the old constants and listed in
+the proof for Rajeev.
+
+**Nothing else in the file changed** — the status line and the new *Tables* subsection of §5 only.
+Also in v1.11, the same day: festivals and feasts on the calendar and planner get their own saffron colour (`festival`, `festival-bg`, `festival-text` in every pack), because green now means only success and the accent already marks a fasting day. Rajeev chose saffron in chat on 2026-09-18 (§2).
+
+Snapshot in `docs/versions/DESIGN_SYSTEM_v1.11.md`.
+
+**Clarified the same day, no new version** (T-233): §5 *Tables* now records the two exceptions Rajeev
+accepted when he classified the tables T-228 left for him — a row's reference number that is also its
+link, and a selection tick box, may lead on the left. One paragraph; nothing else in the file changed.
+
+**Clarified 2026-09-18, no new version** (T-234): §5 *Tables*, rule 3, gains one sentence — when a
+table has spare width, a flexible column that would otherwise wrap may go past its cap, and the caps
+apply only when space is short. Rajeev's answer on the Decisions Desk, 2026-09-18, choosing to use
+spare width so text does not wrap. It records what `components/ds/table.ts` already does (T-233);
+nothing else in the file changed.
+
+---
+
+## DESIGN_SYSTEM v1.12 — 2026-09-18
+
+**The table rule, replaced** (§5, *Tables*). Rajeev's instruction on the Decisions Desk, 2026-09-18,
+is the sign-off. It replaces the v1.11 rule and its two clarifications from earlier the same day
+(fixed columns grouped on the right and right-aligned, flexible columns capped at 40% and 15%, spare
+width parked between the groups).
+
+**Why.** His screenshot of the Shopping list under the v1.11 rule: Include, Ingredient and Why on the
+left, which he called perfect and "how I want ALL the tables"; then a large empty block doing nothing;
+then On hand, Suggested and Order by squeezed "like sardines", with the Suggested box showing "2792"
+cut off. On Vendor performance he asked for the number columns to line up the way the Vendor column
+does, on the left.
+
+**The new rule.** Every column left-aligned, numbers included, headers aligned like their cells. Every
+column at least as wide as its content, input boxes included; text wraps only when the table lacks
+room. Spare width shared evenly between the gaps separating the columns, so there is no dead block.
+The 20px edges, the hidden actions header and the card layout below 1024px are kept.
+
+**The code followed** (T-236, `docs/work/proof/T-236.md`): `components/ds/table.ts` now measures each
+column and shares the spare width evenly; the caps and the right-aligned group are gone from
+`app/globals.css`; number boxes in tables grow to fit their figures; per-table right-alignment and
+the fixed column shares on Vendor performance were removed. The staff schedule's week grid keeps
+the equal days Rajeev exempted it for earlier the same day.
+
+**Nothing else in the file changed** — the status line and §5 *Tables* only. Snapshot in
+`docs/versions/DESIGN_SYSTEM_v1.12.md`.
+
+---
+
+## DESIGN_SYSTEM v1.13 — 2026-09-19
+
+**Secondary buttons raised, the press on every button, and one download icon allowed** (§4, §6).
+Rajeev's decisions on the Decisions Desk, 2026-09-19 (questions 8, 9 and 10), are the sign-off.
+
+**Why.** Rajeev found the secondary buttons hard to make out as buttons ("Ask for volunteers" on the
+meal edit screen was his example). The T-238 mock measured both current looks: their edges reached
+only 1.0–1.5:1 against a white card, under the 3:1 a control's outline needs. He chose style E from
+eight candidates. Separately, the press had been built into the `Button` component only, so the
+hand-made buttons never gave under a finger.
+
+**What changed in the document.** §4 gains *Secondary buttons are raised*: one look for both
+secondary materials (`.btn-secondary` and `.btn-quiet`), raised with an ink border, a darker bottom
+edge and a small shadow, with its contrast floors. §4's press paragraph now says the press lives on
+the base `.btn` style, with the disabled and reduced-motion exceptions. §6 allows the recipe page's
+download icon beside the language picker as the one icon-only action outside navigation.
+
+**The code followed** (T-240, `docs/work/proof/T-240.md`): `app/globals.css` gives `.btn-secondary`
+and `.btn-quiet` style E and puts the press on `.btn`; `components/ds/Button.tsx` no longer carries it.
+The mock page `app/dev-buttons/` was deleted.
+
+**Nothing else in the file changed** — the status line, §4 and §6 only. Snapshot in
+`docs/versions/DESIGN_SYSTEM_v1.13.md`.
+
+---
+
 ## Versioning convention
 
 - Version bumps to a **locked** document require the user's explicit approval, per the Ten Commandments (never silently edit an approved decision).

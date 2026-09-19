@@ -1,6 +1,6 @@
 # Design System
 
-**Status:** v1.13 — secondary buttons are raised (style E) so they read as buttons, the press lives on the base button style so every button has it, and the recipe page's download icon is allowed, 2026-09-19 (§4, §6). v1.12 — every table reads left, no column is cut off, and spare width is shared evenly between the columns, replacing v1.11's table rule, 2026-09-18 (§5, *Tables*). v1.11 — how every table lays out its columns, and what a table becomes below 1024px; festivals get their own saffron colour, 2026-09-18 (§2, §5, *Tables*). v1.10 — what each status colour means, restated as one rule, and the sidebar becomes a drawer below 1024px rather than 768px, 2026-09-18 (§3, §5). v1.9 — nothing is a pill: badges, chips and controls take the buttons' corner, 2026-09-17 (§4). v1.8 — which forms get a screen of their own, restated: five fields, and a record from another part of the app opens as a layer, 2026-09-12 (§4). v1.7 — the `danger` row stopped naming a deleted feature, 2026-09-11 (§3). v1.6 — what lifts under the pointer and what only changes tone, 2026-08-30 (§4). v1.5 — colour became the temple's choice, and the focus ring got a token of its own, 2026-08-28 (§2, §4). v1.4 — the accent darkened to clear AA on button text, and the words and the geometry of a form settled, 2026-08-21 (§2, §4, §9). v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
+**Status:** v1.11 — how every table lays out its columns, and what a table becomes below 1024px; festivals get their own saffron colour, 2026-09-18 (§2, §5, *Tables*). v1.10 — what each status colour means, restated as one rule, and the sidebar becomes a drawer below 1024px rather than 768px, 2026-09-18 (§3, §5). v1.9 — nothing is a pill: badges, chips and controls take the buttons' corner, 2026-09-17 (§4). v1.8 — which forms get a screen of their own, restated: five fields, and a record from another part of the app opens as a layer, 2026-09-12 (§4). v1.7 — the `danger` row stopped naming a deleted feature, 2026-09-11 (§3). v1.6 — what lifts under the pointer and what only changes tone, 2026-08-30 (§4). v1.5 — colour became the temple's choice, and the focus ring got a token of its own, 2026-08-28 (§2, §4). v1.4 — the accent darkened to clear AA on button text, and the words and the geometry of a form settled, 2026-08-21 (§2, §4, §9). v1.3 — contrast made a floor and badges set in semibold, 2026-08-20 (§2, §3). v1.2 added the `info` family and moved Ekadasi onto it, 2026-08-19. v1.1 revised the palette to terracotta/charcoal, 2026-08-10 (§2). v1.0 established 2026-08-04, before the first UI story (E1-S6). See CHANGELOG for each.
 **Applies to:** every screen in the application.
 
 Grounded in reference sites Rajeev selected (cocoon.com, stripe.com, docs.stripe.com, apple.com, melaniedaveid.com) and one explicit anti-reference (Google Cloud Console). The v1.1 palette takes its terracotta/charcoal direction from ISKCON's own saffron-orange identity (iskconsv.com); the spacing, type, and restraint are unchanged.
@@ -335,36 +335,6 @@ Rows were tried lifted, on the live site, and the reasons not to are not aesthet
 the one piece of motion on a control that is hit hundreds of times a day, and it earns that by being
 the only confirmation a touch device gives that the tap landed at all.
 
-**The press lives on the base button style, `.btn`, not on the `Button` component.** While held, a
-button scales to the `press` token (0.96) and drops 1px, over the `press` duration (120ms, `ease-out`),
-and springs back on release. A disabled button does not move. With reduced motion asked for, it does
-not move either and keeps only the inset shade a pressed button already had. Any button drawn with
-the `btn` class gets this, whether it comes through `Button`, `ButtonLink` or is written by hand.
-A button that uses neither does not, so a new button is built on `btn`.
-
-*Added 2026-09-19 (v1.13), Rajeev's decision on the Decisions Desk. Until then the press was written
-into the `Button` component alone, and about sixty hand-made buttons across twenty-nine screens never
-pressed.*
-
-### Secondary buttons are raised
-
-Every secondary-level button, the neutral second action (`Button variant="ghost"`, `.btn-secondary`)
-and the quiet one (`Button variant="secondary"`, `.btn-quiet`, as on "Ask for volunteers") alike,
-takes one look: the card colour (`raised`) as its fill, dark `ink` text, a 1px `ink-muted` border with
-a 2px `ink-secondary` bottom edge, and a small shadow, like a key. The same corner
-(`rounded-control`) and the same 44px height as the primary button. Under the pointer the fill steps to
-`sunken` and the shadow grows a little. Keyboard focus shows the focus ring. The primary, danger and
-warning buttons are not affected.
-
-Floors, measured in all 15 packs: text at least 4.5:1 on the fill, at rest and under the pointer;
-the border at least 3:1 against the card and against the grey `sunken` boxes buttons sit beside.
-
-*Added 2026-09-19 (v1.13). Rajeev chose this look, style E, from a mock of eight (T-238), because
-neither secondary look read as something to press: the quiet one was accent text in a pale accent
-hairline with no fill, and the neutral one a white fill in a pale grey hairline, and neither edge
-reached 3:1 against the card. The glossy packs' gradient on the white button and the frosted packs'
-blur are given up for it, as the mock showed.*
-
 Not shipped: `hover:bg-raised/60` on rows, which is what the first eleven palettes made invisible.
 It assumed `raised` was darker than `canvas`, which is true of terracotta and false of most of the
 packs that followed — Terracotta's own `raised` is `#FEFEFF` on a `#FFF7F4` canvas. `sunken` is the
@@ -392,43 +362,42 @@ already happened — and it goes on sitting at the top of a list somebody is now
 
 ### Tables
 
-*v1.12, Rajeev's instruction of 2026-09-18 via the Decisions Desk. It replaces the rule of v1.11,
-approved earlier the same day, which put short columns in a right-aligned group on the right and left
-the spare width between the groups. His screenshot of the Shopping list showed what that produced:
-Include, Ingredient and Why well spaced on the left ("that is how I want ALL the tables"), then a wide
-empty block, then On hand, Suggested and Order by squeezed together so tightly that a quantity box
-showed "2792" cut off.*
+*Added 2026-09-18 (v1.11), approved by Rajeev in chat the same day. It replaces the rule of
+2026-09-01 that every column reads left and only the buttons sit right.*
 
-For every table in the application:
+**Every column is flexible or fixed.** Flexible columns hold content whose length varies: names,
+categories, descriptions, vendor names, notes. Fixed columns hold short, near-constant content: units,
+flags such as Ekadashi, status badges, dates, quantities, money, counts, and the row's buttons.
 
-1. **Everything is left-aligned.** Every column, numbers included, and every header aligned the same
-   as its cells. Quantities, money and counts keep tabular figures.
-2. **Nothing is cut off.** Every column is at least as wide as its widest content: no truncation, no
-   ellipsis, no clipping. That includes input boxes: a box must be wide enough to show its value
-   ("2792" and its unit). Text wraps onto a second line only when the table genuinely lacks room.
-3. **No dead block of empty space.** Width the columns do not need is shared out evenly between the
-   gaps separating the columns, so the columns spread across the table's full width with the same
-   generous space between each pair.
-4. **Even edges.** 20px of padding at the left and right ends of every row, 12px either side of every
-   other cell. The last column takes no share of the spare width, so its content ends 20px from the
-   right edge just as the first column's starts 20px from the left.
-5. **The actions column has no visible header.** The buttons say what they are. The word "Actions" is
+1. **Even edges.** The padding at a table's right edge matches its left edge. The Ingredients table's
+   left edge is the reference: 20px, with 12px either side of every other cell, so every gap between
+   two columns is the same 24px.
+2. **Flexible on the left, left-aligned. Fixed on the right, right-aligned**, grouped and snug, with
+   the same small gap between them at every screen size. Fixed columns do not stretch.
+3. **A flexible column takes the width its longest content needs, up to a cap:** the primary column
+   (usually the name) 40% of the table, any secondary flexible column (a category, a location, a
+   person) 15%. Content longer than its cap wraps to a second line. It is never truncated or cut off
+   with an ellipsis.
+4. **Spare width goes to the flexible columns only**, until they reach their caps. After that it sits
+   between the last flexible column and the fixed group, so both edges of the table stay aligned.
+5. **Numbers** — quantities, money, counts — are right-aligned with tabular figures. Every header is
+   aligned like its column.
+6. **The actions column has no visible header.** The buttons say what they are. The word "Actions" is
    kept for screen readers only.
-6. **Below 1024px** (Tailwind `lg`, where the sidebar becomes a drawer), each row becomes a compact
-   card. Line one is the name, then any other text value (such as the category). Line two is the short
-   values, then the buttons at the far edge. A short value that would be a bare number without its
-   heading carries a small label in front of it ("On hand 12 kg"). The page never scrolls sideways.
+7. **Below 1024px** (Tailwind `lg`, where the sidebar becomes a drawer), each row becomes a compact
+   card. Line one is the primary name, then the secondary flexible value (such as the category). Line
+   two is the fixed values, then the buttons at the far edge. A fixed value that would be a bare number
+   without its heading carries a small label in front of it ("On hand 12 kg"). The page never scrolls
+   sideways.
 
-**In code** the rule lives in `frontend/components/ds/table.ts` and the `.kms-table` block of
-`frontend/app/globals.css`. Each column is still marked as text (`TH_PRIMARY`, `TH_SECOND`), a short
-value (`TH_FIXED`, `TD_FIXED_NUM`), the leading reference or tick box (`TH_LEAD`) or the actions
-(`TH_ACTIONS_FIXED`). The mark no longer decides alignment or position; it decides only whether the
-column may wrap when the table is short of room, and where the value goes on a phone card. CSS cannot
-share width evenly between columns, so `table.ts` measures each column and sets the widths. A number
-box in a table grows to fit its figure.
+**In code** the rule lives in `frontend/components/ds/table.ts` (`RULED_TABLE`, `TH_PRIMARY`/`TD_PRIMARY`,
+`TH_SECOND`/`TD_SECOND`, `TH_FIXED`/`TD_FIXED`/`TD_FIXED_NUM`, `TH_ACTIONS_FIXED`/`TD_ACTIONS_FIXED`),
+and the layout itself in the `.kms-table` block of `frontend/app/globals.css`. A table that has not
+been classified yet still uses the older `TABLE` constants.
 
-**One table keeps its own layout:** the staff schedule's week grid, which Rajeev exempted on
-2026-09-18 as a calendar whose seven days must be equal. Its columns already read left.
+**Where a column cannot be classified** without a decision — a code that is also the row's link, a
+selection tick box, an entry grid of input boxes — the table is left as it was until Rajeev decides.
+`docs/work/proof/T-228.md` lists which.
 
 ---
 
@@ -437,10 +406,6 @@ box in a table grows to fit its figure.
 **Tabler**, outline only, one consistent stroke weight. Around 5,800 icons, MIT licensed.
 
 **Navigation only, and never without text.** Icons appear in the sidebar and in genuinely universal affordances (search). Every action elsewhere — Edit, Delete, Send, Download — is a text label.
-
-**One exception: the recipe page's download.** On a recipe, the small download icon beside the language picker, which saves the recipe as a PDF in the language chosen, may stay an icon. It carries a spoken name and a tooltip ("Download recipe as PDF") and is a full 44px touch target. Nowhere else.
-
-*Added 2026-09-19 (v1.13), Rajeev's decision on the Decisions Desk (question 8). The icon was already built that way; the rule is changed to match it rather than the icon to match the rule.*
 
 The reasoning: people navigate by shape and position before they read, so after a week a kitchen manager reaches for the box icon without processing the word "Inventory". That is real speed for daily users, and it makes a collapsed mobile navigation bar workable where six text labels would be cramped.
 
