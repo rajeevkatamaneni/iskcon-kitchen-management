@@ -142,6 +142,61 @@ describe("adding an ingredient", () => {
   });
 
   /*
+    T-402. Marking an ingredient as one the temple never buys is MANAGE_BUYING_POLICY, the Temple
+    Admin's alone, and the box is ABSENT rather than disabled for everybody else — the same call the
+    Ekadashi box makes, because a greyed box says "this applies to you and you may not answer it",
+    which is not what is meant.
+  */
+  it("offers the not-bought flag to an administrator, and sends it", async () => {
+    render(<NewIngredientPage />);
+    const box = screen.getByLabelText(/not bought/i);
+    expect(box).toBeInTheDocument();
+    // Rajeev's examples and the consequence, word for word, so the create form and the detail page
+    // ask the same question in the same words.
+    expect(box).toHaveAccessibleName("Not bought (water, ice — never on a shopping list)");
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Water" } });
+    fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "Basics" } });
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole("button", { name: /add ingredient/i }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(createMock.mock.calls[0][0]).toMatchObject({ name: "Water", notBought: true });
+  });
+
+  /*
+    The key is always on the payload, ticked or not, and that is the whole reason the client type
+    declares it required. `CreateIngredientRequest.notBought` is a primitive `boolean` on the server,
+    so an absent key deserialises to `false` silently — and `false` is the answer that puts water
+    back on the temple's order. `toMatchObject` cannot make this statement, because a missing
+    property and an explicit `false` read identically to it, so the key is asserted by name.
+  */
+  it("sends notBought: false explicitly when the box is left unticked", async () => {
+    render(<NewIngredientPage />);
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Rice" } });
+    fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "Grains" } });
+    fireEvent.click(screen.getByRole("button", { name: /add ingredient/i }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    const [payload] = createMock.mock.calls[0];
+    expect(Object.keys(payload)).toContain("notBought");
+    expect(payload.notBought).toBe(false);
+  });
+
+  it("keeps the not-bought flag from a kitchen manager, who may still add the ingredient", async () => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_MANAGER", userId: "me" } };
+    render(<NewIngredientPage />);
+    expect(screen.queryByLabelText(/not bought/i)).not.toBeInTheDocument();
+
+    // And the form still works and still states the flag, as false, rather than leaving it off.
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Rice" } });
+    fireEvent.change(screen.getByLabelText(/^category$/i), { target: { value: "Grains" } });
+    fireEvent.click(screen.getByRole("button", { name: /add ingredient/i }));
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(createMock.mock.calls[0][0].notBought).toBe(false);
+  });
+
+  /*
     D-18 removed the second observance flag from the product, and this asserts it twice over
     because the two halves fail differently.
 
@@ -165,9 +220,17 @@ describe("adding an ingredient", () => {
     expect(screen.getByLabelText(/ekadashi-prohibited/i)).toBe(
       screen.getByRole("checkbox", { name: /prohibited/i })
     );
-    // And nothing else on the form is a checkbox at all since T-089 took the supply box off it.
-    // Asserted from the other end than the count above: one checkbox, and it is that one.
-    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    /*
+      The total count moved from 1 to 2 in T-402, deliberately, and it is kept as a count rather
+      than loosened to "at least one": the second box is the not-bought flag, and naming both is
+      what stops a third appearing unnoticed. The supply box is still gone, which is the thing
+      T-089's version of this line was actually holding, so that assertion is unchanged.
+
+      Note the two boxes answer different questions under different permissions —
+      MANAGE_DIETARY_POLICY and MANAGE_BUYING_POLICY — and the count is only 2 for somebody who
+      holds both. The Kitchen Staff case below is where that is asserted.
+    */
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
     expect(screen.queryByRole("checkbox", { name: /supply/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Jaggery" } });

@@ -103,6 +103,20 @@ public enum AuditAction {
 	 */
 	INGREDIENT_EKADASHI_FLAG_CHANGED,
 
+	/**
+	 * An ingredient was marked, or unmarked, as one the temple never buys — water, ice (T-402).
+	 *
+	 * <p>Its own action rather than a field inside an {@code INGREDIENT_UPDATED} snapshot, for the
+	 * reason given on {@code INGREDIENT_EKADASHI_FLAG_CHANGED} above: somebody asking "who said we
+	 * never buy this, and when" should grep for one action name. It matters more here than there,
+	 * because the consequence is an absence — a marked ingredient simply stops appearing on the
+	 * shopping list, and there is no line on the order saying what is missing from it. The audit
+	 * trail is the only place the decision is visible after the fact.
+	 *
+	 * <p>Recorded on both moves, and on the create that arrives already marked.
+	 */
+	INGREDIENT_NOT_BOUGHT_CHANGED,
+
 	/** A recipe category was added (E2-S2). */
 	RECIPE_CATEGORY_ADDED,
 

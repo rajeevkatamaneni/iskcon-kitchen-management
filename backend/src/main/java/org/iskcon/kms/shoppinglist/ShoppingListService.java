@@ -66,6 +66,16 @@ import org.springframework.transaction.annotation.Transactional;
  * path needed and none written, because the list is a function of current state and cancellation
  * changes that state.
  *
+ * <p><strong>And an ingredient the temple never buys is not on this list at all</strong> (T-402,
+ * Rajeev 2026-09-19: <em>"water and the like must never reach a shopping list"</em>). That is a
+ * standing fact stored on the ingredient — {@code ingredients.is_not_bought} — rather than the
+ * per-list untick that was the only way to say it before, and it is applied in the merge loop of
+ * {@link #suggestions}, where every route onto the list passes: shortfall, threshold, a closed
+ * order's undelivered balance, and a line added by hand. Left out entirely rather than shown
+ * unticked, because an unticked line is still a line somebody has to read and decide about again.
+ * Nothing else moves — the ingredient still consumes stock, is still costed and still appears on
+ * "Issued to kitchens".
+ *
  * <p>The threshold stream used to skip any ingredient flagged sattvic-prohibited, on the reasoning
  * that such a thing could only reach the list through a recipe an admin had overridden. D-18 deleted
  * that flag on 2026-09-08, so every ingredient the temple keeps stock of is now topped up on the
@@ -151,6 +161,28 @@ public class ShoppingListService {
 		// verified token by way of RLS, never from anything in this request body.
 		Unit unit = ingredientUnits.canonicalUnit(request.ingredientId());
 
+		/*
+		  T-402. An ingredient the temple never buys cannot be typed onto the list either, and the
+		  refusal is here because a picker is not a guard — the screen leaves a marked ingredient out
+		  of its dropdown, and a raw POST never meets the dropdown.
+
+		  KMS-400188, and the code matters as much as the refusal. This answered RESOURCE_NOT_FOUND
+		  on its first pass, and "we couldn't find it" is not what happened: the ingredient is in the
+		  catalogue and the person picked it from a list. An error describing the wrong thing sends
+		  someone hunting for a spelling mistake, while the one fact they need — somebody marked this
+		  as never bought, and the Ingredients page is where to undo it — is the fact they are never
+		  told.
+
+		  Without this check the insert would go in, the derivation would drop the line, the
+		  `added == null` guard below would throw and the transaction would roll the row back — the
+		  right outcome by accident, wearing the wrong words. This is the same refusal made on
+		  purpose, before any write, and saying what actually happened.
+		*/
+		if (notBought(request.ingredientId())) {
+			throw new ApplicationException(
+					ErrorCode.NOT_BOUGHT_INGREDIENT, Map.of("ingredientId", request.ingredientId()));
+		}
+
 		Map<UUID, Decision> before = decisions();
 		if (findIn(list(suggestions(handAdded(before)), before), request.ingredientId()) != null) {
 			throw new ApplicationException(
@@ -174,9 +206,9 @@ public class ShoppingListService {
 				findIn(list(suggestions(handAdded(after)), after), request.ingredientId());
 		if (added == null) {
 			// Unreachable in practice — a hand-added row is on the list by construction, unless a
-			// live order already covers the ingredient, and that case was refused above. Kept as a
-			// refusal rather than a null so a later change to the derivation cannot hand the screen
-			// a 201 with nothing in it.
+			// live order already covers the ingredient or the temple never buys it (T-402), and
+			// both of those were refused above. Kept as a refusal rather than a null so a later
+			// change to the derivation cannot hand the screen a 201 with nothing in it.
 			throw new ApplicationException(
 					ErrorCode.RESOURCE_NOT_FOUND, Map.of("ingredientId", request.ingredientId()));
 		}
@@ -390,6 +422,51 @@ public class ShoppingListService {
 			if (coveredByLiveOrder.contains(ingredientId)) {
 				continue;
 			}
+			/*
+			  T-402, Rajeev on 2026-09-19: "water and the like must never reach a shopping list."
+
+			  Here, and nowhere else, because this is the one place a line is born. Every route onto
+			  the list passes through this loop: the meal-plan shortfall, the threshold top-up, the
+			  balance a closed order never delivered, and a line somebody typed by hand — the
+			  hand-added ids are seeded into `merged` above precisely so they pick up their vendor and
+			  their on-hand figure from this code, which means they meet this check too. One predicate
+			  covers all four, and a stream added later is covered by it without anybody remembering.
+
+			  OUT of the list entirely, not on it unticked. An untick is already possible — PATCH
+			  /shopping-list/{ingredientId} with included:false — and it is precisely what Rajeev's
+			  instruction rejects: it is a decision about ONE list, it has to be made again on the
+			  next one, and in the meantime it is still a line somebody has to read and think about.
+
+			  What each route means for a marked ingredient, stated rather than left to be discovered:
+
+			    - Shortfall and threshold. The demand is real and is deliberately dropped. A temple
+			      that cooks with water is short of water in exactly the sense the allocator means,
+			      and the answer to that is a tap, not a vendor.
+
+			    - A closed order's undelivered balance. Also dropped, and this one is worth a sentence
+			      because it is the case where money changed hands: the flag can be set AFTER an order
+			      was raised, so a temple that bought bottled water last month and has since decided
+			      it never buys water gets no re-fed line for the balance. The order itself is
+			      untouched — it keeps its lines, its receipts and its history — and the audit trail
+			      says who marked the ingredient and when. Re-feeding it would be asking the temple to
+			      chase a delivery of something it has just said it does not buy.
+
+			    - A hand-added line. Dropped too, which means a decision row can exist in
+			      `shopping_list_lines` for a marked ingredient and render nothing. That is the same
+			      thing a live purchase order already does to a hand-added line (see above), so it is
+			      the behaviour the table was already built for rather than a new state. `addLine`
+			      refuses the hand-add in the first place, so this is the row added BEFORE the flag
+			      was set, and it comes back by itself if the mark is ever cleared.
+
+			  What is emphatically NOT affected: the ingredient is still cooked with, still draws
+			  stock through the FEFO allocator, is still costed by BasketCostingService, and still
+			  appears on "Issued to kitchens". None of those reads this column, and
+			  NotBoughtShoppingListIT asserts each of them against a marked ingredient rather than
+			  trusting that.
+			*/
+			if (ref.notBought()) {
+				continue;
+			}
 			Contribution c = e.getValue();
 			PreferredVendor vendor = vendors.get(ingredientId);
 			List<BuyingAmount.Pack> packs = packsByIngredient.getOrDefault(ingredientId, List.of()).stream()
@@ -442,6 +519,12 @@ public class ShoppingListService {
 					c.shortPurchaseOrders));
 		}
 		return out;
+	}
+
+	/** Whether the temple has said it never buys this (T-402). One row, asked once, before a write. */
+	private boolean notBought(UUID ingredientId) {
+		return Boolean.TRUE.equals(jdbc.queryForObject(
+				"SELECT is_not_bought FROM ingredients WHERE id = ?", Boolean.class, ingredientId));
 	}
 
 	private static ShoppingListLineView findIn(List<ShoppingListLineView> lines, UUID ingredientId) {
@@ -600,11 +683,26 @@ public class ShoppingListService {
 		return map;
 	}
 
+	/**
+	 * Every ingredient in the temple's catalogue, with the two facts this list needs of it and the
+	 * one fact that keeps it off the list altogether (T-402).
+	 *
+	 * <p>{@code is_not_bought} is read here rather than in a query of its own, and that is not only
+	 * tidiness: {@link #suggestions} already runs one statement per thing it needs, this method is
+	 * one of them, and {@code ShoppingListStatementCountIT} exists because a per-line read is exactly
+	 * what crept back in before. A second {@code SELECT} over the same table for one boolean would be
+	 * a statement added to every page load for nothing.
+	 *
+	 * <p>The rows are <strong>not</strong> filtered here. A marked ingredient stays in this map and is
+	 * dropped by name in the merge loop, beside the live-order check, so that {@code refs.get(...) ==
+	 * null} keeps meaning one thing — "there is no such ingredient" — rather than quietly meaning two.
+	 */
 	private Map<UUID, IngredientRef> ingredientRefs() {
 		Map<UUID, IngredientRef> refs = new LinkedHashMap<>();
-		jdbc.query("SELECT id, name, canonical_unit FROM ingredients", rs -> {
+		jdbc.query("SELECT id, name, canonical_unit, is_not_bought FROM ingredients", rs -> {
 			refs.put(rs.getObject("id", UUID.class), new IngredientRef(
-					rs.getString("name"), Unit.valueOf(rs.getString("canonical_unit"))));
+					rs.getString("name"), Unit.valueOf(rs.getString("canonical_unit")),
+					rs.getBoolean("is_not_bought")));
 		});
 		return refs;
 	}
@@ -719,7 +817,11 @@ public class ShoppingListService {
 		}
 	}
 
-	private record IngredientRef(String name, Unit unit) {
+	/**
+	 * What this list needs to know about one ingredient. {@code notBought} is the temple's standing
+	 * decision that it never buys the thing (T-402) — see the merge loop in {@link #suggestions}.
+	 */
+	private record IngredientRef(String name, Unit unit, boolean notBought) {
 	}
 
 	/**

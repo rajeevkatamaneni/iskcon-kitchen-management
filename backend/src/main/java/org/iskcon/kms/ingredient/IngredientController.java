@@ -35,6 +35,13 @@ import org.springframework.web.bind.annotation.RestController;
  * declaring an ingredient prohibited is a religious-compliance decision; saying a thing is a mop is
  * not. So {@code supply} arrives on the create and update bodies with the name and the category, and
  * a Kitchen Manager who can rename an ingredient can also say it is a supply.
+ *
+ * <p>The not-bought flag (T-402) is shaped like the Ekadashi one and not like the supply one: its own
+ * {@code PATCH /{id}/not-bought} behind {@code MANAGE_BUYING_POLICY}, a Temple Admin only. Saying the
+ * temple never buys water is not a religious call, but it is not routine editing either — a wrong
+ * mark stops the temple ordering something and nothing on the order says so, because the line is
+ * simply not there to notice. It is also the one flag that is <em>not</em> on {@code PUT /{id}}; see
+ * the route below for why.
  */
 @RestController
 @RequestMapping("/api/v1/ingredients")
@@ -126,6 +133,32 @@ public class IngredientController {
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
 		ingredientService.setEkadashiFlag(actor, id, request.ekadashiProhibited());
+		return ResponseEntity.noContent().build();
+	}
+
+	/**
+	 * Marks, or unmarks, an ingredient the temple never buys — water, ice (T-402). Temple Admin only,
+	 * always audited.
+	 *
+	 * <p><strong>A route of its own rather than a field on {@code PUT /{id}}, deliberately.</strong>
+	 * The supplies screen has an editing row that sends a whole update payload built from the fields
+	 * it knows about, so a boolean riding on the PUT and missing from that payload would be un-set by
+	 * somebody renaming a mop. The Ekadashi flag survives that only because its field is a boxed
+	 * {@code Boolean} whose null means "leave alone", which took T-121 to get right; this avoids the
+	 * problem instead of surviving it.
+	 */
+	@PatchMapping("/{id}/not-bought")
+	// The authority is a STRING here, as on the Ekadashi route above, so nothing checks it against
+	// Permission — a rename that misses this line compiles, deploys and 403s every Temple Admin.
+	// IngredientIT.onlyAdminMarksNotBought is what keeps the two in step; keep them in step, and
+	// keep that test.
+	@PreAuthorize("hasAuthority('MANAGE_BUYING_POLICY')")
+	public ResponseEntity<Void> setNotBought(
+			@PathVariable UUID id,
+			@Valid @RequestBody SetNotBoughtRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+
+		ingredientService.setNotBought(actor, id, request.notBought());
 		return ResponseEntity.noContent().build();
 	}
 

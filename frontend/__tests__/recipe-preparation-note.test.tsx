@@ -19,8 +19,8 @@ const { catFn, ingFn, recipeRef } = vi.hoisted(() => ({
 
 const CATEGORIES: RecipeCategory[] = [{ id: "c1", name: "Rasam", fastingCompatible: false }];
 const INGREDIENTS: IngredientView[] = [
-  { id: "i1", name: "Green chilli", category: "Vegetables", unit: "GM", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null },
-  { id: "i2", name: "Tamarind", category: "Spices", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null },
+  { id: "i1", name: "Green chilli", category: "Vegetables", unit: "GM", ekadashiProhibited: false, supply: false, notBought: false, libraryDerived: false, aliases: [], createdAt: "", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null },
+  { id: "i2", name: "Tamarind", category: "Spices", unit: "KG", ekadashiProhibited: false, supply: false, notBought: false, libraryDerived: false, aliases: [], createdAt: "", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null },
 ];
 
 vi.mock("next/navigation", () => ({

@@ -1212,6 +1212,17 @@ public enum ErrorCode {
 			"That kitchen isn't cooking anything for this meal.",
 			"Open the meal again to see which kitchens are cooking it."),
 
+	// Hand-adding an ingredient the temple never buys — water, ice — to the shopping list (T-402).
+	//
+	// Minted 2026-09-19 rather than reusing RESOURCE_NOT_FOUND, which is what the refusal answered
+	// on its first pass. "We couldn't find it" is not what happened: the ingredient is right there
+	// in the catalogue, and the person picked it from a list. An error that describes the wrong
+	// thing sends someone looking for a spelling mistake, and the one fact they need — that
+	// somebody marked this as never bought, and where to undo that — is the fact they are not told.
+	NOT_BOUGHT_INGREDIENT(400188, 409,
+			"The temple doesn't buy this, so it can't go on a shopping list.",
+			"Take the Not bought mark off it on the Ingredients page first."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

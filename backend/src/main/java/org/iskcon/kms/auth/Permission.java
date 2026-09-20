@@ -69,6 +69,24 @@ public enum Permission {
 	// the string compiles, deploys, and 403s every Temple Admin.
 	MANAGE_DIETARY_POLICY,
 
+	// Saying that the temple never buys a thing — water, ice (T-402, Rajeev 2026-09-19: "water and
+	// the like must never reach a shopping list"). The flag is `ingredients.is_not_bought`, and a
+	// marked ingredient is left out of the shopping list altogether rather than put on it unticked.
+	//
+	// Held apart from MANAGE_RECIPES, which is what governs the supply flag beside it, and the
+	// difference is what the mistake costs. Calling a mop a supply puts it on the right screen;
+	// calling flour not-bought stops the temple ordering flour, and nothing on the order says so —
+	// the line is simply not there to notice. Same gravity split as MANAGE_DIETARY_POLICY and
+	// MANAGE_EQUIPMENT_SERVICING, and the same reasoning D-4 gave for VOID_DONATION: widening this
+	// to the Kitchen Manager later is one line here, and narrowing it after temples have built a
+	// habit is a conversation with every one of them.
+	//
+	// Guards `PATCH /ingredients/{id}/not-bought` and the create-time check in IngredientService.
+	// The controller carries the name as a STRING inside @PreAuthorize, so a rename that misses it
+	// compiles, deploys and 403s every Temple Admin — the same half-checked rename that caught
+	// MANAGE_DIETARY_POLICY above. IngredientIT.onlyAdminMarksNotBought is what keeps them in step.
+	MANAGE_BUYING_POLICY,
+
 	// Kitchen staff make routine stock adjustments, but a large one (over 20% of what's on hand)
 	// needs a Temple Admin to approve it — a big write-off is a leadership call, and the split
 	// makes an unusual correction visible rather than routine (E3-S7).

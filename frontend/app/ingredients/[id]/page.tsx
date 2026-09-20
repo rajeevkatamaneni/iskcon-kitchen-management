@@ -26,7 +26,10 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
  * Each control inside follows its own endpoint: pack sizes `MANAGE_RECIPES`, the market rate
  * `MANAGE_INVENTORY`, and the vendors section `MANAGE_VENDORS` — which is also what the three reads it
  * needs declare, so the section is not fetched, let alone drawn, for anyone without it. The permission
- * to role translation is in `components/ingredient/access.tsx`, in one place.
+ * to role translation is in `components/ingredient/access.tsx`, in one place. The facts card follows
+ * the same rule and is the one that is not held by all three roles: marking an ingredient as one the
+ * temple never buys is `MANAGE_BUYING_POLICY`, the Temple Admin's alone (T-402), and everybody else
+ * reads the fact without a control beside it.
  *
  * <p><strong>No mock exists for this page</strong>, so it is built from the pieces the mocked detail
  * pages already use — the back link and `PageHeader` of the invoice page, its `card` sections with a
@@ -55,6 +58,8 @@ function IngredientDetailView() {
   const canRecipes = can("MANAGE_RECIPES", role);
   const canInventory = can("MANAGE_INVENTORY", role);
   const canVendors = can("MANAGE_VENDORS", role);
+  // T-402. The Temple Admin alone, which is what `PATCH /ingredients/{id}/not-bought` declares.
+  const canBuyingPolicy = can("MANAGE_BUYING_POLICY", role);
 
   const fetchIngredient = useCallback((token: string | undefined) => api.getIngredient(id, token), [id]);
   const { data: ingredient, error, loading, reload } = useAuthedQuery(fetchIngredient);
@@ -114,7 +119,11 @@ function IngredientDetailView() {
                 subtitle={ingredient.libraryDerived ? <Badge>Added by a Recipe Import</Badge> : undefined}
               />
 
-              <IngredientFacts ingredient={ingredient} />
+              <IngredientFacts
+                ingredient={ingredient}
+                canEdit={canBuyingPolicy}
+                onChanged={reload}
+              />
 
               <PackSizes ingredient={ingredient} canEdit={canRecipes} onChanged={reload} />
 

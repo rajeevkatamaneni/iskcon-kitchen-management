@@ -84,7 +84,7 @@ function ingredient(id: string, name: string, unit: string): IngredientView {
   return {
     id, name, category: "Vegetables", unit,
     packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null,
-    ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z",
+    ekadashiProhibited: false, supply: false, notBought: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z",
   };
 }
 

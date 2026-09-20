@@ -12,6 +12,7 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
 import { SegmentedControl } from "@/components/ds/SegmentedControl";
 import { Badge } from "@/components/ds/Badge";
 import { splitAliases } from "@/components/IngredientForm";
+import { NOT_BOUGHT } from "@/components/ingredient/IngredientFacts";
 import {
   DuplicateIngredientPrompt,
   lookalikeFrom,
@@ -161,6 +162,14 @@ function IngredientsView() {
     `api.listIngredients`, and a supply is still offered by the inventory, ingredient-request,
     purchase-order, in-kind-donation and vendor-supply pickers on purpose. A server-side split
     would have had to be undone in five places to get back to where D-1 already is.
+  */
+  /*
+    T-402. A marked ingredient is NOT filtered out of this screen, and the difference from the
+    supply filter above is worth stating because the two flags look alike from here. `/supplies`
+    exists, so a supply shown on this screen would be on two lists at once; there is no "things the
+    temple never buys" screen and there should not be one — water is an ingredient, it goes in
+    recipes, it draws stock and it is costed. Only the shopping list treats it differently, so only
+    the shopping list leaves it out. Here it is a badge on the row.
   */
   const food = ingredients.filter((i) => !i.supply);
   const addedByImport = food.filter((i) => i.libraryDerived);
@@ -451,9 +460,25 @@ function IngredientsView() {
                           <Link href={`/ingredients/${ing.id}`} className="text-accent-text hover:underline">
                             {ing.name}
                           </Link>
-                          {ing.libraryDerived && (
-                            <span className="mt-1 flex">
-                              <Badge>{ADDED_BY_IMPORT}</Badge>
+                          {/*
+                            Two labels that can both apply, in one wrapping row under the name
+                            (T-402). Under the name for exactly the reason the import label is —
+                            the exception speaks, and nothing is printed on the rows that are
+                            ordinary — and in a `flex-wrap` so a row carrying both does not push the
+                            cell wider than the column.
+
+                            The header stays at five columns: Name, Category, Unit, Ekadashi,
+                            Actions. That contract is what the editing row's cell count is measured
+                            against, and this change deliberately does not touch it.
+
+                            Neutral, like the import badge and unlike the Ekadashi cell. Amber is
+                            for something low, wrong or overdue; a temple that has decided it does
+                            not buy water has nothing wrong with it.
+                          */}
+                          {(ing.libraryDerived || ing.notBought) && (
+                            <span className="mt-1 flex flex-wrap gap-1">
+                              {ing.libraryDerived && <Badge>{ADDED_BY_IMPORT}</Badge>}
+                              {ing.notBought && <Badge>{NOT_BOUGHT}</Badge>}
                             </span>
                           )}
                         </td>

@@ -157,6 +157,27 @@ class AccessControlEnforcementIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a temple admin may say what the temple never buys, and a kitchen manager may not")
+	void onlyTempleAdminSetsBuyingPolicy() {
+		// T-402, over HTTP rather than in the policy. The manager is the interesting refusal: they
+		// hold MANAGE_PURCHASE_ORDERS and build the temple's orders from the shopping list, so this
+		// is the one place where "runs the ordering" and "decides what may never be ordered" come
+		// apart. Asserted as a pair, because a refusal on its own would also pass if the endpoint
+		// refused everybody.
+		signInAs("TEMPLE_ADMIN");
+		assertThat(get("/test/buying-policy").getStatusCode()).isEqualTo(HttpStatus.OK);
+	}
+
+	@Test
+	@DisplayName("a kitchen manager may raise orders but may not say what the temple never buys")
+	void kitchenManagerMayNotSetBuyingPolicy() {
+		signInAs("KITCHEN_MANAGER");
+
+		assertThat(get("/test/orders").getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(get("/test/buying-policy").getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+	}
+
+	@Test
 	@DisplayName("a volunteer sending a body that fails validation is refused, not told how to fix it")
 	void volunteerWithInvalidBodyIsRefusedFirst() {
 		// T-301. @Valid runs while Spring builds the method's arguments, which is before method
@@ -297,6 +318,18 @@ class AccessControlEnforcementIT extends AbstractIntegrationTest {
 		@GetMapping("/equipment-servicing")
 		@PreAuthorize("hasAuthority('MANAGE_EQUIPMENT_SERVICING')")
 		String equipmentServicing() {
+			return "ok";
+		}
+
+		@GetMapping("/buying-policy")
+		@PreAuthorize("hasAuthority('MANAGE_BUYING_POLICY')")
+		String buyingPolicy() {
+			return "ok";
+		}
+
+		@GetMapping("/orders")
+		@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
+		String orders() {
 			return "ok";
 		}
 	}

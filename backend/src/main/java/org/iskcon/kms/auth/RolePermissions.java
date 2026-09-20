@@ -86,6 +86,12 @@ public final class RolePermissions {
 					VOID_DONATION,
 					MANAGE_WISHLIST,
 					MANAGE_DIETARY_POLICY,
+					// The Temple Admin's alone (T-402). Marking an ingredient as one the temple
+					// never buys takes it off every shopping list from then on, and the list says
+					// nothing about what is missing from it — an unticked line at least shows. A
+					// Kitchen Manager who needs water marked asks once; a Kitchen Manager who marks
+					// flour by mistake is found out at the store.
+					MANAGE_BUYING_POLICY,
 					APPROVE_LARGE_STOCK_ADJUSTMENT,
 					// The Temple Admin's alone, and narrower than MANAGE_INVENTORY on purpose
 					// (E3-S10 D10). Everyone who runs the kitchen keeps registering equipment and

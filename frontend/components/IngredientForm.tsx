@@ -2,6 +2,7 @@
 
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Form } from "@/components/ds/Form";
+import { NOT_BOUGHT_LABEL } from "@/components/ingredient/IngredientFacts";
 import { FOOD_UNITS, unitLabel } from "@/lib/format";
 import type { ApiError, CreateIngredientInput } from "@/lib/api";
 
@@ -24,6 +25,7 @@ export function IngredientForm({
   formId,
   kind = "FOOD",
   isAdmin = false,
+  canMarkNotBought = false,
   busy,
   error,
   onSubmit,
@@ -46,6 +48,15 @@ export function IngredientForm({
   kind?: "FOOD" | "SUPPLY";
   /** Only an administrator may declare an ingredient Ekadashi-prohibited. */
   isAdmin?: boolean;
+  /**
+   * Whether this role holds `MANAGE_BUYING_POLICY` and may say the temple never buys the thing
+   * (T-402). A separate prop from `isAdmin` beside it although both resolve to the Temple Admin
+   * today, because they are separate grants in `RolePermissions.java` and either may move: a screen
+   * that read one permission off the other would go on hiding the right control for the wrong
+   * reason. `/ingredients/new` reads it from `components/ingredient/access.tsx`; `/supplies/new`
+   * never passes it, because a supply is always bought.
+   */
+  canMarkNotBought?: boolean;
   busy: boolean;
   error: ApiError | null;
   onSubmit: (input: CreateIngredientInput) => void;
@@ -69,6 +80,11 @@ export function IngredientForm({
       // be offered as an ingredient of a dish (D-1). Read from the prop rather than from a box
       // since T-089 — see `kind` above — and still written out on every submission either way.
       supply,
+      // Same reasoning again, and the failure is the one Rajeev asked this flag to prevent: the
+      // server field is a primitive, so a missing key reads as `false` — the temple buys it — and
+      // water is back on the order with nobody told. Read from the box where there is one, and
+      // stated as `false` where there is not, rather than left off the payload.
+      notBought: f.get("notBought") === "on",
       aliases: splitAliases(String(f.get("aliases") ?? "")),
     });
   }
@@ -161,6 +177,24 @@ export function IngredientForm({
           <label className="col-span-2 flex items-center gap-2 text-sm">
             <input name="ekadashiProhibited" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong accent-accent" />
             <span>Ekadashi-prohibited (rice, wheat, dal, chickpeas…)</span>
+          </label>
+        )}
+
+        {/*
+          T-402. Absent for a supply and absent for anyone without MANAGE_BUYING_POLICY, both times
+          absent rather than disabled — the same call the Ekadashi box above makes, for the same two
+          reasons. A supply is bought by definition (LPG and leaf plates come from a vendor, which is
+          the whole of D-1), so a greyed box would imply the question applies here and this account
+          may not answer it; and a control nobody on this screen can use is a control to leave out.
+
+          Sits under the Ekadashi box because the two are the same kind of thing — a standing fact
+          about the ingredient rather than a word describing it — and because a person adding water
+          reads down the form and meets the buying question last, after they have said what it is.
+        */}
+        {!supply && canMarkNotBought && (
+          <label className="col-span-2 flex items-center gap-2 text-sm">
+            <input name="notBought" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong accent-accent" />
+            <span>{NOT_BOUGHT_LABEL}</span>
           </label>
         )}
       </Form>

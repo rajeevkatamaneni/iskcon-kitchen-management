@@ -837,6 +837,29 @@ export interface IngredientView {
    * clears it in the same statement), which is what keeps the filter a queue that empties.
    */
   libraryDerived: boolean;
+  /**
+   * Whether the temple never buys this — water, ice (T-402, Rajeev 2026-09-19).
+   *
+   * <p>It is cooked with, it draws stock, and it is costed like anything else. What it never does
+   * is reach a shopping list: `ShoppingListService` leaves a marked ingredient out of the list
+   * entirely, rather than putting it there unticked. Before this, the only way to keep water off an
+   * order was `PATCH /api/v1/shopping-list/{ingredientId}` with `included: false`, which is a
+   * decision about **one** list and has to be made again on the next one.
+   *
+   * <p>Not the same question as `supply` beside it. A supply (LPG, leaf plates) is bought, received
+   * and stored exactly as food is; this says the thing is never bought at all.
+   *
+   * <p><strong>Required, not optional, for the reason `supply` and `ekadashiProhibited` above
+   * are.</strong> The Java field is a primitive `boolean`, so an absent JSON key deserialises to
+   * `false` — and here `false` is the answer that puts water back on the temple's order, silently.
+   * Required makes every fixture say which kind of row it is.
+   *
+   * <p>Changing it needs `MANAGE_BUYING_POLICY`, a Temple Admin alone, by the same reasoning D-4
+   * gave for VOID_DONATION: widening later is one line, and narrowing after temples have built a
+   * habit is a conversation with every one of them. A wrong mark here stops the temple buying
+   * something and says nothing on the order that it did.
+   */
+  notBought: boolean;
   aliases: string[];
   createdAt: string;
 }
@@ -871,6 +894,19 @@ export interface CreateIngredientInput {
   ekadashiProhibited: boolean;
   /** See `IngredientView.supply`. Required, and for the same reason. */
   supply: boolean;
+  /**
+   * See `IngredientView.notBought`. Required, and for the same reason: the Java field is a
+   * primitive, so an absent key means "the temple buys this" and nobody is told.
+   *
+   * <p>`true` needs `MANAGE_BUYING_POLICY` and is refused with `KMS-400021 NOT_PERMITTED` without
+   * it, exactly as `ekadashiProhibited` is refused without `MANAGE_DIETARY_POLICY`.
+   *
+   * <p>Deliberately absent from `UpdateIngredientInput` below, which is the *only* reason the
+   * supplies screen's edit row cannot un-set it by accident — that row sends a whole update payload
+   * and has no idea this flag exists. Clearing or setting it afterwards is `setIngredientNotBought`,
+   * a route of its own that is audited on every move.
+   */
+  notBought: boolean;
   aliases: string[];
   /**
    * Save even though the name looks like an ingredient the temple already has (R-DUP-2). Send it only
@@ -5288,6 +5324,26 @@ export const api = {
     request<void>(`/api/v1/ingredients/${id}/ekadashi-flag`, {
       method: "PATCH",
       body: JSON.stringify({ ekadashiProhibited }),
+      token,
+    }),
+
+  /**
+   * Mark, or unmark, an ingredient the temple never buys — water, ice (T-402, Rajeev 2026-09-19).
+   *
+   * <p>`PATCH /api/v1/ingredients/{id}/not-bought`, `MANAGE_BUYING_POLICY`, audited on every move.
+   * A route of its own rather than a field on `updateIngredient`, and the reason is the supplies
+   * screen: its edit row sends a full update payload built from the fields it knows about, so any
+   * flag that rides on `PUT` and is not in that payload gets un-set by somebody renaming a mop. The
+   * Ekadashi flag survives that only because `UpdateIngredientRequest.ekadashiProhibited` is a
+   * boxed `Boolean` whose null means "leave alone" — a subtlety it took T-121 to get right. This
+   * flag does not join `PUT` at all, so there is nothing to get wrong.
+   *
+   * <p>Refused with `KMS-400021 NOT_PERMITTED` for anyone but a Temple Admin.
+   */
+  setIngredientNotBought: (id: string, notBought: boolean, token?: string) =>
+    request<void>(`/api/v1/ingredients/${id}/not-bought`, {
+      method: "PATCH",
+      body: JSON.stringify({ notBought }),
       token,
     }),
 

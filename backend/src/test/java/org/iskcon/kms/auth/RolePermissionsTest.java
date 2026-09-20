@@ -168,6 +168,29 @@ class RolePermissionsTest {
 				// The operator provisions temples and receives nothing at any temple's gate.
 				denied(User.Role.SUPER_ADMIN, Permission.RECEIVE_DELIVERIES),
 
+				// --- Saying the temple never buys a thing is the Temple Admin's alone (T-402) ---
+				// Rajeev on 2026-09-19: "water and the like must never reach a shopping list." Held
+				// apart from MANAGE_RECIPES, which is what governs the supply flag on the same row,
+				// and the difference is what the mistake costs. Calling a mop a supply puts it on
+				// the right screen; calling flour not-bought stops the temple ordering flour, and
+				// nothing on the order says so — the line is simply not there to notice. Same
+				// gravity split as MANAGE_DIETARY_POLICY and MANAGE_EQUIPMENT_SERVICING, and the
+				// same asymmetry D-4 gave for VOID_DONATION: widening this to the Kitchen Manager
+				// later is one line, and narrowing it after temples have built a habit is a
+				// conversation with every one of them.
+				allowed(User.Role.TEMPLE_ADMIN, Permission.MANAGE_BUYING_POLICY),
+				denied(User.Role.KITCHEN_MANAGER, Permission.MANAGE_BUYING_POLICY),
+				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_BUYING_POLICY),
+				denied(User.Role.VOLUNTEER, Permission.MANAGE_BUYING_POLICY),
+				// The operator provisions temples and decides nothing about what any of them buys.
+				denied(User.Role.SUPER_ADMIN, Permission.MANAGE_BUYING_POLICY),
+				// And the split is only worth anything if the wider permission stayed where it was:
+				// a cook may still add, rename and re-categorise an ingredient.
+				allowed(User.Role.KITCHEN_STAFF, Permission.MANAGE_RECIPES),
+				// Nor does it follow the ordering permission. The Kitchen Manager builds the order
+				// from the list; they do not get to decide what the list may never contain.
+				allowed(User.Role.KITCHEN_MANAGER, Permission.MANAGE_PURCHASE_ORDERS),
+
 				// --- Merging duplicate ingredients is the Temple Admin's alone (R-DUP-3) ---
 				// It re-points stock, recipes, vendor prices and order history across the whole
 				// catalogue in one act, so it sits with whoever answers for the whole temple.

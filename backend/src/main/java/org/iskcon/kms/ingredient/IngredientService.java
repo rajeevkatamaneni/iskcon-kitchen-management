@@ -45,6 +45,22 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code MANAGE_RECIPES}, so a Kitchen Manager reaches it, and the check inside {@code update} is
  * the only thing standing between them and the flag.
  *
+ * <p><strong>The not-bought flag (T-402) is governed the same way and by a different
+ * permission.</strong> Saying the temple never buys water is not a religious-compliance decision, so
+ * it is {@code MANAGE_BUYING_POLICY} rather than {@code MANAGE_DIETARY_POLICY} — the Temple Admin in
+ * both cases today, deliberately separate so either can move without dragging the other. There are
+ * only <em>two</em> routes to it, not three: {@link #create} and {@link #setNotBought}. It is
+ * deliberately not on {@link #update}, because the supplies screen's editing row sends a whole
+ * update payload built from the fields it knows about and a flag riding on that PUT would be un-set
+ * by somebody renaming a mop. Both routes check the permission themselves, following the rule
+ * already established above: {@code POST /ingredients} is behind {@code MANAGE_RECIPES}, so a
+ * Kitchen Manager reaches it, and the check inside {@code create} is the only thing between them and
+ * the flag. Every move is audited under {@code INGREDIENT_NOT_BOUGHT_CHANGED}.
+ *
+ * <p>Nothing in this service filters on that flag either, and that is the point of it: a marked
+ * ingredient stays in the catalogue, in every picker but one, and goes on consuming stock and being
+ * costed exactly as before. The single place it is read is {@code ShoppingListService}.
+ *
  * <p>A sattvic-prohibited flag stood beside the Ekadashi one until 2026-09-08, when D-18 deleted it.
  * It only ever marked rows that provisioning inserted so that it could mark them — onion, garlic,
  * mushroom, egg — and with that seed gone there was nothing left for it to guard.
@@ -147,6 +163,16 @@ public class IngredientService {
 			throw new ApplicationException(
 					ErrorCode.NOT_PERMITTED, Map.of("field", "ekadashiProhibited"));
 		}
+		if (request.notBought() && !canManageBuyingPolicy(actor)) {
+			// T-402. Same shape as the check above and a different permission: declaring that the
+			// temple never buys a thing takes it off every shopping list from here on, and the list
+			// says nothing about what is missing from it. Checked here as well as at
+			// setNotBought's endpoint because POST /ingredients is behind MANAGE_RECIPES, so a
+			// Kitchen Manager reaches this method and the annotation above it says nothing about
+			// buying policy. Only `true` is refused: creating an ordinary bought ingredient is
+			// ordinary catalogue work and always was.
+			throw new ApplicationException(ErrorCode.NOT_PERMITTED, Map.of("field", "notBought"));
+		}
 		List<String> aliases = normalizeAliases(request.aliases());
 		UUID id = UUID.randomUUID();
 		String name = request.name().trim();
@@ -159,8 +185,8 @@ public class IngredientService {
 				var ps = connection.prepareStatement("""
 						INSERT INTO ingredients (
 							id, tenant_id, name, category, canonical_unit, is_ekadashi_prohibited,
-							is_supply, aliases)
-						VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?)
+							is_supply, is_not_bought, aliases)
+						VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, ?, ?, ?, ?)
 						""");
 				ps.setObject(1, id);
 				ps.setString(2, request.name().trim());
@@ -168,7 +194,8 @@ public class IngredientService {
 				ps.setString(4, unit.name());
 				ps.setBoolean(5, request.ekadashiProhibited());
 				ps.setBoolean(6, request.supply());
-				ps.setArray(7, connection.createArrayOf("text", aliases.toArray()));
+				ps.setBoolean(7, request.notBought());
+				ps.setArray(8, connection.createArrayOf("text", aliases.toArray()));
 				return ps;
 			});
 		} catch (DuplicateKeyException e) {
@@ -178,10 +205,18 @@ public class IngredientService {
 		syncAliasRows(id, aliases, List.of());
 
 		Map<String, Object> after = snapshot(name, request.category().trim(), unit,
-				request.ekadashiProhibited(), request.supply(), aliases);
+				request.ekadashiProhibited(), request.supply(), request.notBought(), aliases);
 		overridden.ifPresent(match -> after.put("confirmedDifferentFrom", lookalikeSnapshot(match)));
 		auditService.record(actor, AuditAction.INGREDIENT_ADDED, AuditEntityType.INGREDIENT, id,
 				null, after, overridden.map(match -> overrideReason("Added", match)).orElse(null));
+		if (request.notBought()) {
+			// T-402. The same second entry the Ekadashi flag gets when it moves, written here too so
+			// that "who said we never buy this" has one action to grep for whether the decision was
+			// made at creation or afterwards. An ingredient created already marked is the ordinary
+			// case — a recipe import that knows the line is water creates it this way — and it would
+			// otherwise be the one route that left no findable trace.
+			recordNotBoughtChange(actor, id, name, false, true);
+		}
 		return id;
 	}
 
@@ -320,12 +355,16 @@ public class IngredientService {
 		}
 		syncAliasRows(id, aliases, before.aliases());
 
-		Map<String, Object> after =
-				snapshot(name, category, unit, ekadashiProhibited, request.supply(), aliases);
+		// The not-bought flag is not editable here and is not in the UPDATE above, so it is carried
+		// through from the stored row on both sides of the snapshot: the audit entry shows what the
+		// ingredient is rather than leaving a reader to infer that an absent key meant "unchanged".
+		Map<String, Object> after = snapshot(
+				name, category, unit, ekadashiProhibited, request.supply(), before.notBought(), aliases);
 		overridden.ifPresent(match -> after.put("confirmedDifferentFrom", lookalikeSnapshot(match)));
 		auditService.record(actor, AuditAction.INGREDIENT_UPDATED, AuditEntityType.INGREDIENT, id,
 				snapshot(before.name(), before.category(), Unit.valueOf(before.unit()),
-						before.ekadashiProhibited(), before.supply(), before.aliases()),
+						before.ekadashiProhibited(), before.supply(), before.notBought(),
+						before.aliases()),
 				after,
 				overridden.map(match -> overrideReason("Renamed", match)).orElse(null));
 
@@ -378,6 +417,38 @@ public class IngredientService {
 				null);
 	}
 
+	/**
+	 * Marks, or unmarks, an ingredient the temple never buys — water, ice (T-402). Temple Admin only
+	 * under {@code MANAGE_BUYING_POLICY}, checked at the endpoint and asserted here by the test that
+	 * drives it.
+	 *
+	 * <p>A route of its own rather than a field on {@link #update}, and that is the deliberate part.
+	 * The supplies screen's editing row sends a whole update payload built from the fields it knows
+	 * about, so any flag that rides on {@code PUT} and is missing from that payload gets un-set by
+	 * somebody renaming a mop. The Ekadashi flag survives that only because
+	 * {@code UpdateIngredientRequest.ekadashiProhibited} is a boxed {@code Boolean} whose null means
+	 * "leave alone", a subtlety it took T-121 to get right. This one does not join the PUT at all.
+	 *
+	 * <p>Like {@link #setEkadashiFlag}, it never clears {@code library_derived}: setting a flag is
+	 * not reviewing a row, because it happens without showing anybody the category and unit an import
+	 * guessed, which is the thing the mark is asking to have looked at.
+	 *
+	 * <p>Setting it to the value it already holds writes nothing and audits nothing, so a screen that
+	 * re-sends what it is showing does not fill the trail with moves nobody made.
+	 */
+	@Transactional
+	public void setNotBought(AuthenticatedUser actor, UUID id, boolean notBought) {
+		IngredientView before = findById(id).orElseThrow(() -> notFound(id));
+		if (before.notBought() == notBought) {
+			return;
+		}
+
+		jdbc.update("UPDATE ingredients SET is_not_bought = ?, updated_at = now() WHERE id = ?",
+				notBought, id);
+
+		recordNotBoughtChange(actor, id, before.name(), before.notBought(), notBought);
+	}
+
 	@Transactional
 	public void delete(AuthenticatedUser actor, UUID id) {
 		IngredientView existing = findById(id).orElseThrow(() -> notFound(id));
@@ -394,8 +465,19 @@ public class IngredientService {
 		}
 		auditService.record(actor, AuditAction.INGREDIENT_DELETED, AuditEntityType.INGREDIENT, id,
 				snapshot(existing.name(), existing.category(), Unit.valueOf(existing.unit()),
-						existing.ekadashiProhibited(), existing.supply(), existing.aliases()),
+						existing.ekadashiProhibited(), existing.supply(), existing.notBought(),
+						existing.aliases()),
 				null, null);
+	}
+
+	/** The one place {@code INGREDIENT_NOT_BOUGHT_CHANGED} is written, from create and from the flag. */
+	private void recordNotBoughtChange(
+			AuthenticatedUser actor, UUID id, String name, boolean was, boolean now) {
+		auditService.record(actor, AuditAction.INGREDIENT_NOT_BOUGHT_CHANGED,
+				AuditEntityType.INGREDIENT, id,
+				Map.of("name", name, "notBought", was),
+				Map.of("name", name, "notBought", now),
+				null);
 	}
 
 	// ---------------------------------------------------------------------
@@ -646,6 +728,10 @@ public class IngredientService {
 		return RolePermissions.forRole(actor.getRole()).contains(Permission.MANAGE_DIETARY_POLICY);
 	}
 
+	private boolean canManageBuyingPolicy(AuthenticatedUser actor) {
+		return RolePermissions.forRole(actor.getRole()).contains(Permission.MANAGE_BUYING_POLICY);
+	}
+
 	private Unit parseUnit(String unit) {
 		try {
 			return Unit.valueOf(unit);
@@ -676,13 +762,14 @@ public class IngredientService {
 
 	private Map<String, Object> snapshot(
 			String name, String category, Unit unit, boolean ekadashiProhibited, boolean supply,
-			List<String> aliases) {
+			boolean notBought, List<String> aliases) {
 		Map<String, Object> snapshot = new LinkedHashMap<>();
 		snapshot.put("name", name);
 		snapshot.put("category", category);
 		snapshot.put("unit", unit.name());
 		snapshot.put("ekadashiProhibited", ekadashiProhibited);
 		snapshot.put("supply", supply);
+		snapshot.put("notBought", notBought);
 		snapshot.put("aliases", aliases);
 		return snapshot;
 	}
@@ -704,7 +791,7 @@ public class IngredientService {
 	}
 
 	private static final String VIEW_COLUMNS = """
-			id, name, category, canonical_unit, is_ekadashi_prohibited, is_supply,
+			id, name, category, canonical_unit, is_ekadashi_prohibited, is_supply, is_not_bought,
 					library_derived, aliases, created_at, market_rate, market_rate_on, market_rate_source
 			""";
 
@@ -719,6 +806,7 @@ public class IngredientService {
 					rs.getString("canonical_unit"),
 					rs.getBoolean("is_ekadashi_prohibited"),
 					rs.getBoolean("is_supply"),
+					rs.getBoolean("is_not_bought"),
 					rs.getBoolean("library_derived"),
 					readAliases(rs),
 					rs.getObject("created_at", OffsetDateTime.class).toInstant(),

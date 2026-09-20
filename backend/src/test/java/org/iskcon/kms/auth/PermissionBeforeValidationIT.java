@@ -179,10 +179,17 @@ class PermissionBeforeValidationIT extends AbstractIntegrationTest {
 				new Probe(post, "/api/v1/vendors/{id}/supplies/bulk", Permission.MANAGE_VENDORS, Body.EMPTY_OBJECT, bad),
 				new Probe(delete, "/api/v1/vendors/{id}/supplies/{ingredientId}", Permission.MANAGE_VENDORS, Body.NONE_BAD_ID, missing),
 
-				// Ingredients: the record, its pack sizes, market rate, and merging duplicates
+				// Ingredients: the record, its two standing flags, its pack sizes, market rate, and
+				// merging duplicates
 				new Probe(post, "/api/v1/ingredients", Permission.MANAGE_RECIPES, Body.EMPTY_OBJECT, bad),
 				new Probe(put, "/api/v1/ingredients/{id}", Permission.MANAGE_RECIPES, Body.EMPTY_OBJECT, bad),
 				new Probe(patch, "/api/v1/ingredients/{id}/ekadashi-flag", Permission.MANAGE_DIETARY_POLICY, Body.UNREADABLE_JSON, bad),
+				// T-402. Unreadable JSON rather than {} for the same reason the Ekadashi row above
+				// uses it: SetNotBoughtRequest carries one primitive and no constraint, so an empty
+				// object is a perfectly valid request that would answer 204 and prove nothing about
+				// the order the permission is asked in. Half-finished JSON cannot be read at all, so
+				// the 400 it earns is the answer the Volunteer must NOT be given.
+				new Probe(patch, "/api/v1/ingredients/{id}/not-bought", Permission.MANAGE_BUYING_POLICY, Body.UNREADABLE_JSON, bad),
 				new Probe(delete, "/api/v1/ingredients/{id}", Permission.MANAGE_RECIPES, Body.NONE_BAD_ID, missing),
 				new Probe(post, "/api/v1/ingredients/{id}/pack-sizes", Permission.MANAGE_RECIPES, Body.EMPTY_OBJECT, bad),
 				new Probe(delete, "/api/v1/ingredients/{id}/pack-sizes/{packSizeId}", Permission.MANAGE_RECIPES, Body.NONE_BAD_ID, missing),

@@ -30,7 +30,7 @@ const { catFn, ingFn, authRef, recipeRef, updateMock, pushMock } = vi.hoisted(()
 
 const CATEGORIES: RecipeCategory[] = [{ id: "c1", name: "Rice", fastingCompatible: false }];
 const INGREDIENTS: IngredientView[] = [
-  { id: "i1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null },
+  { id: "i1", name: "Rice", category: "Grains", unit: "KG", ekadashiProhibited: false, supply: false, notBought: false, libraryDerived: false, aliases: [], createdAt: "", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null },
 ];
 
 vi.mock("next/navigation", () => ({

@@ -1021,6 +1021,14 @@ function OrderByCell({ line }: { line: ShoppingListLineView }) {
  * the catalogue hands them over with everything else and they add exactly the way food does. The
  * one picker in the application that excludes them is the recipe's, because a mop is not an
  * ingredient of anything.
+ *
+ * <p><strong>An ingredient the temple never buys IS excluded, and that is a different rule from the
+ * one above rather than an exception to it</strong> (T-402, Rajeev 2026-09-19: "water and the like
+ * must never reach a shopping list"). A supply is bought — that is the whole of why it stays in this
+ * picker — and a marked ingredient is not bought at all, so offering it here would offer an action
+ * whose only possible end is a line the server refuses and the derivation drops. `ShoppingListService`
+ * leaves a marked ingredient out of the computed list, and `addLine` refuses the hand-add for
+ * anybody who posts past this picker, because a picker is not a guard.
  */
 function AddLine({
   busy, ingredients, alreadyOnList, onAdd,
@@ -1037,7 +1045,7 @@ function AddLine({
   // for it (KMS-400131) — and it now checks the derived list rather than a table, so an ingredient
   // the shortfall stream suggested is caught as well. Leaving it in the picker would be offering an
   // action that cannot succeed.
-  const available = ingredients.filter((i) => !alreadyOnList.includes(i.id));
+  const available = ingredients.filter((i) => !alreadyOnList.includes(i.id) && !i.notBought);
   const ingredient = available.find((i) => i.id === chosen);
 
   // A quantity of zero is refused by the server and by the column's own CHECK. The button is
@@ -1061,7 +1069,7 @@ function AddLine({
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <HintedField
           label="Item"
-          hint="For anything the list didn’t work out for itself — gas, leaf plates, flowers for a festival. A line you add by hand stays on the list until it goes onto a purchase order."
+          hint="For anything the list didn’t work out for itself — gas, leaf plates, flowers for a festival. A line you add by hand stays on the list until it goes onto a purchase order. Anything marked “not bought” isn’t here."
         >
           {(fieldId) => (
             <select

@@ -47,6 +47,7 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
     marketRateSource: null,
     ekadashiProhibited: false,
     supply: false,
+    notBought: false,
     libraryDerived: false,
     aliases: [],
     createdAt: "2026-08-01T00:00:00Z",
@@ -83,6 +84,13 @@ function line(o: Partial<ShoppingListLineView>): ShoppingListLineView {
 const GAS = ingredient({ id: "i2", name: "Cooking gas cylinder", category: "Supplies", unit: "PIECES", supply: true });
 
 /**
+ * Water: an ingredient the temple never buys (T-402, Rajeev 2026-09-19). Deliberately ordinary in
+ * every other way — food, not a supply, in the same catalogue the picker reads — so the only reason
+ * it is absent below is the flag.
+ */
+const WATER = ingredient({ id: "i3", name: "Water", category: "Basics", unit: "L", notBought: true });
+
+/**
  * Adding a line to the shopping list by hand (T-027) — the control that did not exist on this
  * screen at all until now, so a cook who could see the list was missing something had no way to
  * say so.
@@ -91,7 +99,7 @@ describe("adding a shopping-list line by hand", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
     queryRef.current = { data: [], error: null, loading: false };
-    catalogueRef.current = [ingredient({}), GAS];
+    catalogueRef.current = [ingredient({}), GAS, WATER];
     reloadMock.mockReset();
     addMock.mockReset();
     addMock.mockResolvedValue(undefined);
@@ -130,6 +138,30 @@ describe("adding a shopping-list line by hand", () => {
     await waitFor(() =>
       expect(addMock).toHaveBeenCalledWith({ ingredientId: "i2", suggestedQty: 2 }, "test-token")
     );
+  });
+
+  /*
+    T-402, and the contrast with the test above it is the point. A supply IS bought — that is the
+    whole of why D-1 kept it in this catalogue and in this picker — and an ingredient the temple
+    never buys is not, so this is a different rule rather than an exception to that one.
+
+    Asserted as a pair against the same render: the gas cylinder is offered and the water is not, so
+    a picker that had simply stopped offering everything would fail the first half.
+  */
+  it("does not offer an ingredient the temple never buys, though it still offers a supply", () => {
+    render(<ShoppingListPage />);
+    expect(screen.getByRole("option", { name: "Cooking gas cylinder" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Water" })).not.toBeInTheDocument();
+  });
+
+  it("says in the hint that a marked ingredient is not in the picker", () => {
+    // The absence is otherwise unexplained on the screen — nothing on the list says what is missing
+    // from it — so the field that would have offered water says why it does not. The sentence lives
+    // in the field's "i" (Rajeev, 2026-09-04: sub-text moved into a focusable icon), so it is opened
+    // the way a person opens it rather than asserted against a hidden node.
+    render(<ShoppingListPage />);
+    fireEvent.focus(screen.getByRole("button", { name: /more about item/i }));
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/anything marked .not bought. isn.t here/i);
   });
 
   it("names the unit the line will be written in once an item is chosen", () => {

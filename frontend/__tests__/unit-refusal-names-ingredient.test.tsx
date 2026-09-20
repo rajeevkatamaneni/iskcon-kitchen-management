@@ -119,6 +119,7 @@ function ingredient(overrides: Partial<IngredientView> = {}): IngredientView {
     marketRateSource: null,
     ekadashiProhibited: false,
     supply: false,
+    notBought: false,
     libraryDerived: false,
     aliases: [],
     createdAt: "2026-08-01T00:00:00Z",

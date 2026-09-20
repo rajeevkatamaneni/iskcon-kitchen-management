@@ -21,6 +21,23 @@ public record IngredientView(
 		 */
 		boolean supply,
 		/**
+		 * True where the temple never buys this — water, ice (T-402, Rajeev 2026-09-19: "water and
+		 * the like must never reach a shopping list").
+		 *
+		 * <p>It is cooked with, it draws stock, and it is costed like anything else. The single thing
+		 * it never does is reach a shopping list: {@code ShoppingListService} leaves a marked
+		 * ingredient out of the list entirely rather than putting it there unticked.
+		 *
+		 * <p>Not the same question as {@code supply} above. A supply — LPG, leaf plates — is bought,
+		 * received and stored exactly as food is (D-1); this says the thing is never bought at all,
+		 * so a row may hold either flag, both, or neither.
+		 *
+		 * <p>Sent on every ingredient for the same reason {@code supply} is: the shopping list's
+		 * add-a-line picker on the client decides what to offer from this field alone, and an absent
+		 * key would deserialise to the permissive answer there exactly as it does here.
+		 */
+		boolean notBought,
+		/**
 		 * True where a recipe import created this row rather than a person typing it (T-119).
 		 *
 		 * <p>Importing a library recipe creates every ingredient the temple does not already have,

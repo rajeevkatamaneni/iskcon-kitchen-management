@@ -63,6 +63,7 @@ function ingredient(o: Partial<IngredientView>): IngredientView {
     marketRateSource: null,
     ekadashiProhibited: false,
     supply: false,
+    notBought: false,
     libraryDerived: false,
     aliases: [],
     createdAt: "2026-08-01T00:00:00Z",
@@ -435,6 +436,46 @@ describe("ingredient management", () => {
       expect(screen.queryByText("Added by a Recipe Import")).not.toBeInTheDocument();
       // Not a column either: no header appears and no row prints the negative of the fact.
       expect(screen.queryByText(/added by/i)).not.toBeInTheDocument();
+    });
+
+    /*
+      T-402. A second badge under the name, in the same place and the same neutral style, and the
+      header contract is deliberately unchanged: Name, Category, Unit, Ekadashi, Actions. The
+      cell-count test above is what holds that, and it is untouched by this.
+    */
+    it("labels a row the temple never buys, in the same two words every screen uses", () => {
+      queryRef.current = { data: [ingredient({ notBought: true })], error: null, loading: false };
+      render(<IngredientsPage />);
+      expect(screen.getByText("Not bought")).toBeInTheDocument();
+      // Still five columns. A sixth would have been the easy way to show this and the wrong one:
+      // it would print something on every row, including the negative of the fact.
+      expect(screen.getAllByRole("columnheader")).toHaveLength(5);
+    });
+
+    it("says nothing on a row the temple does buy", () => {
+      render(<IngredientsPage />);
+      expect(screen.queryByText("Not bought")).not.toBeInTheDocument();
+      expect(screen.queryByText(/bought/i)).not.toBeInTheDocument();
+    });
+
+    it("shows both labels on a row that carries both, without widening the row", () => {
+      queryRef.current = {
+        data: [ingredient({ libraryDerived: true, notBought: true })],
+        error: null,
+        loading: false,
+      };
+      render(<IngredientsPage />);
+      expect(screen.getByText("Added by a Recipe Import")).toBeInTheDocument();
+      expect(screen.getByText("Not bought")).toBeInTheDocument();
+      expect(screen.getAllByRole("columnheader")).toHaveLength(5);
+    });
+
+    it("keeps the not-bought label out of the semantic colours", () => {
+      // Amber is low, wrong or overdue; red is act now; green is the success of the reader's own
+      // action. A temple that has decided it does not buy water has nothing wrong with it.
+      queryRef.current = { data: [ingredient({ notBought: true })], error: null, loading: false };
+      render(<IngredientsPage />);
+      expect(screen.getByText("Not bought").className).not.toMatch(/warning|danger|success/);
     });
 
     it("keeps the label out of the semantic colours", () => {

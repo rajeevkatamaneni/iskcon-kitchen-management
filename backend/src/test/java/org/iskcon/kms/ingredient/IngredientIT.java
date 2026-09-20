@@ -47,6 +47,9 @@ class IngredientIT extends AbstractIntegrationTest {
 		templeB = insertTenant("radha-krishna", "Sri Sri Radha Krishna Temple");
 		insertUser(templeA, "uid-admin-a", "admin-a@example.com", "TEMPLE_ADMIN");
 		insertUser(templeA, "uid-staff-a", "staff-a@example.com", "KITCHEN_STAFF");
+		// T-402's contrast role: the closest anybody gets to holding MANAGE_BUYING_POLICY without
+		// holding it.
+		insertUser(templeA, "uid-manager-a", "manager-a@example.com", "KITCHEN_MANAGER");
 		signIn("uid-admin-a");
 	}
 
@@ -152,6 +155,40 @@ class IngredientIT extends AbstractIntegrationTest {
 		assertThat(admin.queryForObject(
 				"SELECT is_ekadashi_prohibited FROM ingredients WHERE id = ?", Boolean.class, rice)).isTrue();
 		assertThat(auditCount("INGREDIENT_EKADASHI_FLAG_CHANGED")).isEqualTo(1);
+	}
+
+	/**
+	 * T-402. The name of this test is written into {@code Permission.MANAGE_BUYING_POLICY}'s own
+	 * comment, because the authority in {@code @PreAuthorize} is a STRING and nothing checks it
+	 * against the enum: a rename that misses the annotation compiles, deploys, and 403s every Temple
+	 * Admin because it names a permission nobody holds. This is what keeps the two in step, exactly
+	 * as {@link #onlyAdminChangesEkadashiFlag} above does for MANAGE_DIETARY_POLICY.
+	 *
+	 * <p>A Kitchen Manager rather than Kitchen Staff, on purpose: the manager is the role closest to
+	 * holding this — they run the kitchen and they hold MANAGE_PURCHASE_ORDERS, so they are the
+	 * person who would most plausibly expect to be allowed — and D-4's reasoning is that widening the
+	 * grant to them later is one line, while narrowing it after temples have built a habit is a
+	 * conversation with every one of them.
+	 */
+	@Test
+	@DisplayName("only a Temple Admin can mark an ingredient as one the temple never buys, and it is audited")
+	void onlyAdminMarksNotBought() throws Exception {
+		UUID water = createIngredientAsAdmin("Water", "Basics", "L");
+
+		signIn("uid-manager-a");
+		mvc.perform(notBoughtRequest(water, true))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("KMS-400021"));
+		assertThat(admin.queryForObject(
+				"SELECT is_not_bought FROM ingredients WHERE id = ?", Boolean.class, water))
+				.as("a refused request changes nothing")
+				.isFalse();
+
+		signIn("uid-admin-a");
+		mvc.perform(notBoughtRequest(water, true)).andExpect(status().isNoContent());
+		assertThat(admin.queryForObject(
+				"SELECT is_not_bought FROM ingredients WHERE id = ?", Boolean.class, water)).isTrue();
+		assertThat(auditCount("INGREDIENT_NOT_BOUGHT_CHANGED")).isEqualTo(1);
 	}
 
 	@Test
@@ -553,6 +590,12 @@ class IngredientIT extends AbstractIntegrationTest {
 
 	private MockHttpServletRequestBuilder createRequest(String json) {
 		return authed(post("/api/v1/ingredients")).contentType(MediaType.APPLICATION_JSON).content(json);
+	}
+
+	private MockHttpServletRequestBuilder notBoughtRequest(UUID id, boolean notBought) {
+		return authed(patch("/api/v1/ingredients/{id}/not-bought", id))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"notBought\":" + notBought + "}");
 	}
 
 	private MockHttpServletRequestBuilder ekadashiRequest(UUID id, boolean prohibited) {

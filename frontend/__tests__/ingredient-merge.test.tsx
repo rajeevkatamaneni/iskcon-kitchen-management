@@ -58,7 +58,7 @@ const CASHEW: MergeProposalView = {
 function catalogueItem(id: string, name: string): IngredientView {
   return {
     id, name, category: "Dairy", unit: "KG", packSizes: [], marketRate: null, marketRateOn: null,
-    marketRateSource: null, ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [],
+    marketRateSource: null, ekadashiProhibited: false, supply: false, notBought: false, libraryDerived: false, aliases: [],
     createdAt: "2026-08-01T00:00:00Z",
   };
 }

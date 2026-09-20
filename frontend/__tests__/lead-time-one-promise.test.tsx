@@ -103,7 +103,7 @@ const LINES = [
 ];
 const RECEIPTS: GoodsReceiptView[] = [];
 const INGREDIENTS: IngredientView[] = [
-  { id: "ing1", name: "Curd", category: "Dairy", unit: "KG", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null, ekadashiProhibited: false, supply: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
+  { id: "ing1", name: "Curd", category: "Dairy", unit: "KG", packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null, ekadashiProhibited: false, supply: false, notBought: false, libraryDerived: false, aliases: [], createdAt: "2026-01-01T00:00:00Z" },
 ];
 
 function detail(o: Partial<PurchaseOrderView> = {}): PurchaseOrderDetailView {

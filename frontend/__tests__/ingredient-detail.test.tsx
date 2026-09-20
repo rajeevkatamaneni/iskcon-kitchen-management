@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   addPackSize: vi.fn(),
   removePackSize: vi.fn(),
   setMarketRate: vi.fn(),
+  setIngredientNotBought: vi.fn(),
   setVendorSupply: vi.fn(),
   addVendorSupplies: vi.fn(),
 }));
@@ -74,6 +75,7 @@ function rice(o: Partial<IngredientView> = {}): IngredientView {
     marketRateSource: "MANUAL",
     ekadashiProhibited: true,
     supply: false,
+    notBought: false,
     libraryDerived: true,
     aliases: ["Sona masuri", "Ponni rice"],
     createdAt: "2026-08-20T09:00:00Z",
@@ -150,6 +152,7 @@ beforeEach(() => {
   mocks.addPackSize.mockReset().mockResolvedValue({ id: "new" });
   mocks.removePackSize.mockReset().mockResolvedValue(undefined);
   mocks.setMarketRate.mockReset().mockResolvedValue(undefined);
+  mocks.setIngredientNotBought.mockReset().mockResolvedValue(undefined);
   mocks.setVendorSupply.mockReset().mockResolvedValue(undefined);
   mocks.addVendorSupplies.mockReset().mockResolvedValue(undefined);
 });
@@ -186,6 +189,43 @@ describe("the page", () => {
   it("does not print the food/supply type (Rajeev, 2026-09-10)", async () => {
     await renderPage();
     expect(screen.queryByText(/^(Supply|Food)$/)).not.toBeInTheDocument();
+  });
+
+  /*
+    T-402. Printed, unlike the food/supply type above, and the difference is not a reversal of that
+    ruling: which half of the catalogue a row belongs to shows itself in the menu item it lives
+    under, so printing it repeats what the screen already says. Whether the temple buys the thing
+    shows itself nowhere — the consequence is a shopping-list line that is simply absent — so this
+    page is the only place a person can find out.
+  */
+  it("prints that the temple buys it, when it does", async () => {
+    await renderPage();
+    expect(within(section("About this ingredient")).getByText("Bought when needed")).toBeInTheDocument();
+  });
+
+  it("prints the mark when the temple never buys it, in the two words every screen uses", async () => {
+    mocks.getIngredient.mockResolvedValue(rice({ notBought: true }));
+    await renderPage();
+    expect(within(section("About this ingredient")).getByText("Not bought")).toBeInTheDocument();
+  });
+
+  it("lets a Temple Admin set the mark, through the route of its own", async () => {
+    await renderPage();
+    fireEvent.click(within(section("About this ingredient")).getByLabelText(/not bought/i));
+    await waitFor(() =>
+      expect(mocks.setIngredientNotBought).toHaveBeenCalledWith("rice", true, "test-token")
+    );
+  });
+
+  it("offers a Kitchen Manager no control, and still tells them the answer", async () => {
+    // MANAGE_BUYING_POLICY is the Temple Admin's alone, and it is the only key in the page's
+    // permission map that is not held by all three roles that can open the page.
+    setRole("KITCHEN_MANAGER");
+    mocks.getIngredient.mockResolvedValue(rice({ notBought: true }));
+    await renderPage();
+    const facts = section("About this ingredient");
+    expect(within(facts).getByText("Not bought")).toBeInTheDocument();
+    expect(within(facts).queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
   it("draws no price history: the chart is after UAT", async () => {
@@ -320,6 +360,14 @@ describe("market rate (R-ING-3)", () => {
     expect(can("MANAGE_INVENTORY", "VOLUNTEER")).toBe(false);
     expect(can("MANAGE_INVENTORY", undefined)).toBe(false);
     expect(holdersOf("MANAGE_RECIPES")).toEqual(["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]);
+    // T-402: the first one-role entry in the map, so the two helpers are exercised on it —
+    // `holdersOf` hands `RequireRole` a one-element array and `can` is still a plain includes.
+    expect(holdersOf("MANAGE_BUYING_POLICY")).toEqual(["TEMPLE_ADMIN"]);
+    expect(can("MANAGE_BUYING_POLICY", "TEMPLE_ADMIN")).toBe(true);
+    expect(can("MANAGE_BUYING_POLICY", "KITCHEN_MANAGER")).toBe(false);
+    expect(can("MANAGE_BUYING_POLICY", "KITCHEN_STAFF")).toBe(false);
+    expect(can("MANAGE_BUYING_POLICY", null)).toBe(false);
+    expect(can("MANAGE_BUYING_POLICY", undefined)).toBe(false);
   });
 
   it("a volunteer is refused the page and nothing is fetched", async () => {

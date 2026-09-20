@@ -7,6 +7,7 @@ import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { IngredientForm } from "@/components/IngredientForm";
+import { can } from "@/components/ingredient/access";
 import {
   DuplicateIngredientPrompt,
   lookalikeFrom,
@@ -87,6 +88,9 @@ function NewIngredientView() {
       <IngredientForm
         formId={FORM}
         isAdmin={appUser?.role === "TEMPLE_ADMIN"}
+        // T-402, read through the permission map rather than off the role, so the day
+        // MANAGE_BUYING_POLICY moves there is one line to change and it is in access.tsx.
+        canMarkNotBought={can("MANAGE_BUYING_POLICY", appUser?.role)}
         busy={busy}
         error={error}
         onSubmit={add}
