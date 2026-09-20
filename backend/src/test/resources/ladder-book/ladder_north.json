@@ -1,0 +1,29 @@
+{
+  "slug": "ladder_north",
+  "state": "Ladder North",
+  "language": "English",
+  "title": "Ladder fixture, first book read",
+  "tagline": "Not a state and never loaded by the application. Read first, so the recipe it shares with the second book is the one a streaming 'suffix it if I have seen this name' would let through bare.",
+  "categories": [
+    { "key": "khichadi", "name": "Khichadi", "n": 1 }
+  ],
+  "recipes": [
+    {
+      "slug": "bisi-bele-bath",
+      "name": "Bisi Bele Bath",
+      "cat": "khichadi",
+      "badge": "Everyday",
+      "sub": "Rice, dal and vegetables in one pot",
+      "yield": "35 L",
+      "per": "350 ml",
+      "why": "Shares its name with the second book's, and is read first.",
+      "ing": [
+        { "name": "Rice", "qty": "8 Kg" },
+        { "name": "Toor dal", "qty": "4 Kg" }
+      ],
+      "method": [
+        { "en": "Cook the rice and the dal together." }
+      ]
+    }
+  ]
+}

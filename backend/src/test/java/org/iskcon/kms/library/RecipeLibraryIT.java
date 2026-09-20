@@ -30,15 +30,61 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 /**
  * The shared recipe library, end to end (E2-S9, E2-S10, E2-S12, E2-S15).
  *
- * <p>Loaded from the <em>real</em> vendored books rather than a fixture. A fixture would prove the
- * loader can read a file somebody wrote to make the test pass; the risk being carried here is the
- * 5,376 recipes a person wrote to be printed, and those are the ones that have to go in.
+ * <p>Loaded from the <em>real</em> books in {@code src/main/resources/recipe-library} rather than a
+ * fixture. A fixture would prove the loader can read a file somebody wrote to make the test pass;
+ * the risk being carried here is the recipes a person wrote to be cooked, and those are the ones
+ * that have to go in.
+ *
+ * <h2>What changed on 2026-09-19, and why almost every number in this class moved</h2>
+ *
+ * <p>Until that day the directory held 32 state books vendored from {@code kranthimj23/ikms} —
+ * 5,376 recipes, 168 per book, none of them vetted. Rajeev stopped that: <em>"It was a BAD idea to
+ * mass import that many recipes without vetting each first."</em> What is there now is his curated
+ * catalogue: <strong>44 recipes he approved by hand</strong>, generated from
+ * {@code docs/work/reference/curated-recipes/} by {@code tools/seed/02b-build-catalogue.mjs} into
+ * two books — Karnataka (42) and Andhra Pradesh (2).
+ *
+ * <p>So the assertions here are no longer "a big import arrived intact". They are "the 44 dishes the
+ * temple actually cooks are all present, all parsed, and all carry the two things his curation adds
+ * that no vendored book ever had — the preparation of a line, and the mark on a line the temple
+ * never buys". Every figure below was counted out of the JSON, not estimated.
+ *
+ * <p>Two consequences worth stating, because they read as missing coverage otherwise. His 44 names
+ * are all distinct, so the disambiguation ladder has nothing to disambiguate and rungs 1 and 2 are
+ * unreachable from the real files — {@link #ladderSuffixesOnlyWhenNamesCollide()} drives them from a
+ * fixture instead. And none of his recipes carries a {@code tags} array, so the old "a tag is
+ * searchable" case is gone; the category name standing in for it is asserted in {@link #search()}.
  */
 @AutoConfigureMockMvc
 class RecipeLibraryIT extends AbstractIntegrationTest {
 
-	/** 32 books, 21 categories of 8 dishes each. */
-	private static final int EXPECTED_RECIPES = 5376;
+	/** Rajeev's curated catalogue: 42 Karnataka + 2 Andhra Pradesh, counted from the two JSON files. */
+	private static final int EXPECTED_RECIPES = 44;
+
+	/** Two books, down from 32: every other state book was deleted unvetted on 2026-09-19. */
+	private static final int EXPECTED_BOOKS = 2;
+
+	/** Ingredient lines across all 44 recipes. */
+	private static final int EXPECTED_INGREDIENT_LINES = 454;
+
+	/** Lines carrying a preparation of their own. 26 distinct ones, "Grated" 31 times of the 83. */
+	private static final int EXPECTED_PREPARATIONS = 83;
+
+	/** Lines marked as something the temple never buys. Every one of them is water. */
+	private static final int EXPECTED_NOT_BOUGHT = 15;
+
+	/**
+	 * The recipe the import tests are driven through, and why this one.
+	 *
+	 * <p>It was Majjige until the curation, which does not include it. Chitranna is the nearest
+	 * equivalent: an everyday dish, filed under a category every temple is seeded with, yielding in
+	 * litres with a stated portion, and with a long enough ingredient list that a line lost on the
+	 * way in would show up in a count.
+	 */
+	private static final String IMPORTED = "Chitranna";
+
+	/** Chitranna's ingredient lines, all 14 of them distinct names. */
+	private static final int IMPORTED_LINES = 14;
 
 	@Autowired
 	private MockMvc mvc;
@@ -92,26 +138,31 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 	// ------------------------------------------------------------------ E2-S9
 
 	@Test
-	@DisplayName("every book loads, and loading twice leaves the same 5,376 rows")
+	@DisplayName("both books load, and loading twice leaves the same 44 rows")
 	void loadsAndReloads() {
 		LibraryLoader.Result first = loader.load();
 
-		assertThat(first.books()).isEqualTo(32);
+		assertThat(first.books()).isEqualTo(EXPECTED_BOOKS);
 		assertThat(first.recipes()).isEqualTo(EXPECTED_RECIPES);
 		assertThat(count("master_recipes")).isEqualTo(EXPECTED_RECIPES);
 
-		// Every book holds 168 — 21 categories of 8 — and a book that lost recipes on the way in
-		// would show up here rather than as a gap somebody notices next year.
-		List<Integer> perBook = admin.queryForList(
-				"SELECT count(*) FROM master_recipes GROUP BY state_slug", Integer.class);
-		assertThat(perBook).hasSize(32).allMatch(n -> n == 168);
+		// Per book, so a book that lost recipes on the way in shows up here rather than as a gap
+		// somebody notices next year. The books are no longer a uniform size — Karnataka holds 42 of
+		// the 44 because that is what the temple cooks — so this names each one.
+		List<Map<String, Object>> perBook = admin.queryForList("""
+				SELECT state_slug, count(*) AS n FROM master_recipes
+				GROUP BY state_slug ORDER BY state_slug
+				""");
+		assertThat(perBook).containsExactly(
+				Map.of("state_slug", "andhra_pradesh", "n", 2L),
+				Map.of("state_slug", "karnataka", "n", 42L));
 
 		loader.load();
 		assertThat(count("master_recipes")).isEqualTo(EXPECTED_RECIPES);
 	}
 
 	@Test
-	@DisplayName("the disambiguation ladder gives 5,376 distinct names, and does not depend on file order")
+	@DisplayName("the 44 curated names are already distinct, so nothing is suffixed")
 	void ladder() {
 		LibraryLoader.Result result = loader.load();
 
@@ -119,35 +170,57 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 				"SELECT count(DISTINCT lower(display_name)) FROM master_recipes", Integer.class);
 		assertThat(distinct).isEqualTo(EXPECTED_RECIPES);
 
-		assertThat(result.bare()).isEqualTo(3504);
-		assertThat(result.withState()).isEqualTo(1870);
-		assertThat(result.withStateAndCategory()).isEqualTo(2);
+		// Every row on rung 0. Rajeev named each recipe once when he curated them, so the collisions
+		// the ladder was built for — seventeen books with a Sabudana Khichdi, three of them different
+		// dishes — do not exist in this catalogue at all. The ladder itself is still exercised, on a
+		// fixture, by ladderSuffixesOnlyWhenNamesCollide below.
+		assertThat(result.bare()).isEqualTo(EXPECTED_RECIPES);
+		assertThat(result.withState()).isZero();
+		assertThat(result.withStateAndCategory()).isZero();
 
-		// The hole the two-pass count exists to close: the *first* Sabudana Khichdi has never been
-		// seen before, so a streaming "suffix it if I have seen this" would let one of the seventeen
-		// through bare — and which one depends on the order the files were read in.
-		List<String> sabudana = admin.queryForList("""
-				SELECT display_name FROM master_recipes
-				WHERE lower(name) = 'sabudana khichdi' ORDER BY display_name
-				""", String.class);
-		assertThat(sabudana).hasSize(17).allMatch(n -> n.contains(" ("));
+		// And the consequence a reader cares about: no display name carries a parenthetical, so the
+		// library screen shows "Chitranna" rather than "Chitranna (Karnataka)".
+		List<String> suffixed = admin.queryForList(
+				"SELECT display_name FROM master_recipes WHERE display_name LIKE '% (%'", String.class);
+		assertThat(suffixed).isEmpty();
 	}
 
+	/**
+	 * The ladder's second and third rungs, which the curated catalogue no longer reaches.
+	 *
+	 * <p>This used to be asserted on the real files: seventeen Sabudana Khichdis across seventeen
+	 * state books for rung 1, and Karnataka's two Alugadde Palyas — one under Ekadashi with rock salt
+	 * and no mustard, one under Sabji's Dry with a full tempering — for rung 2. Both went with the
+	 * unvetted books. The code is still live and a temple may still meet it the day a second curated
+	 * book repeats a name, so the cases are kept and driven from a two-book fixture instead.
+	 *
+	 * <p>The fixture also keeps the hole the two-pass count exists to close: the <em>first</em> Bisi
+	 * Bele Bath has never been seen before, so a streaming "suffix it if I have seen this name" would
+	 * let one of the two through bare, and which one depends on the order the files were read in.
+	 */
 	@Test
-	@DisplayName("two dishes of one name in one state are separated by their category, not left to collide")
-	void thirdRung() {
-		loader.load();
+	@DisplayName("a name held by two books is suffixed with the state, and within one book with the category")
+	void ladderSuffixesOnlyWhenNamesCollide() {
+		LibraryLoader.Result result = loader.load("classpath:ladder-book/*.json");
 
-		// Alugadde Palya is in the Karnataka book twice: under Ekadashi with rock salt and no
-		// mustard, and under Sabji's Dry with a full tempering. A cook given the wrong one on a fast
-		// day has broken the fast.
-		List<String> palya = admin.queryForList("""
-				SELECT display_name FROM master_recipes
-				WHERE lower(name) = 'alugadde palya' ORDER BY display_name
-				""", String.class);
-		assertThat(palya).containsExactlyInAnyOrder(
-				"Alugadde Palya (Karnataka, Ekadashi)",
-				"Alugadde Palya (Karnataka, Sabji's, Dry)");
+		assertThat(result.books()).isEqualTo(2);
+		assertThat(result.recipes()).isEqualTo(5);
+
+		// Rung 0: a name only one recipe holds is left alone.
+		assertThat(displayNamesOf("neer dose")).containsExactly("Neer Dose");
+
+		// Rung 1: two books, one name, neither left bare — including the one read first.
+		assertThat(displayNamesOf("bisi bele bath")).containsExactlyInAnyOrder(
+				"Bisi Bele Bath (Ladder North)", "Bisi Bele Bath (Ladder South)");
+
+		// Rung 2: one book, one name, two categories — the state alone does not separate them.
+		assertThat(displayNamesOf("alugadde palya")).containsExactlyInAnyOrder(
+				"Alugadde Palya (Ladder South, Ekadashi)",
+				"Alugadde Palya (Ladder South, Sabji's, Dry)");
+
+		assertThat(result.bare()).isEqualTo(1);
+		assertThat(result.withState()).isEqualTo(2);
+		assertThat(result.withStateAndCategory()).isEqualTo(2);
 	}
 
 	@Test
@@ -159,16 +232,85 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 				"SELECT count(*) FROM master_recipes WHERE yield_qty IS NULL OR yield_qty <= 0",
 				Integer.class)).isZero();
 
-		// The three yield units the books actually use, in the proportions they use them.
-		assertThat(unitCount("L")).isEqualTo(2918);
-		assertThat(unitCount("KG")).isEqualTo(1619);
-		assertThat(unitCount("PIECES")).isEqualTo(839);
+		// The three yield units the catalogue uses, in the proportions it uses them. Counted from the
+		// two JSON files: 30 dishes made by the litre, 10 by the piece, 4 by the kilogram.
+		assertThat(unitCount("L")).isEqualTo(30);
+		assertThat(unitCount("PIECES")).isEqualTo(10);
+		assertThat(unitCount("KG")).isEqualTo(4);
+		assertThat(unitCount("L") + unitCount("PIECES") + unitCount("KG")).isEqualTo(EXPECTED_RECIPES);
 
-		// 5,032 books state a portion; 5,031 are kept. The one dropped is Delhi's Papdi, which is
-		// made by the kilo and served by the piece — see BookParserTest.mismatchedFamily.
+		// 41 of the 44 state a portion a person can be served. The three that do not are the two
+		// pickles, which nobody serves by the head, and Mysore Pak, which is made by the kilo and
+		// portioned "140 gm per devotee" inside its yield string — a mass against a mass, but written
+		// in a form the parenthetical rule does not read, so no number is invented from it.
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM master_recipes WHERE per_head_qty IS NOT NULL", Integer.class))
-				.isEqualTo(5031);
+				.isEqualTo(41);
+		assertThat(admin.queryForList("""
+				SELECT name FROM master_recipes WHERE per_head_qty IS NULL ORDER BY name
+				""", String.class)).containsExactly(
+						"Limbe Uppinakayi", "Mavinakayi Uppinakayi", "Mysore Pak");
+	}
+
+	/**
+	 * The two things Rajeev's curation adds that no vendored book ever carried (T-401, T-403).
+	 *
+	 * <p>{@code LibraryPreparationIT} and {@code RecipeImportNotBoughtIT} prove the reader and the
+	 * import handle these keys, but both drive a fixture, because when they were written there was no
+	 * real book that held either key. There is now, and this is the assertion that the real files
+	 * still reach the table — the one that fails if a future run of
+	 * {@code tools/seed/02b-build-catalogue.mjs} drops a field, or if the loader stops writing one.
+	 */
+	@Test
+	@DisplayName("the preparations and the never-bought marks in the curated files reach master_recipes")
+	void preparationsAndNeverBoughtMarksSurviveTheLoad() {
+		loader.load();
+
+		assertThat(admin.queryForObject("""
+				SELECT count(*) FROM master_recipes m, jsonb_array_elements(m.ingredients) AS line
+				""", Integer.class))
+				.as("every ingredient line in both books")
+				.isEqualTo(EXPECTED_INGREDIENT_LINES);
+
+		assertThat(admin.queryForObject("""
+				SELECT count(*) FROM master_recipes m, jsonb_array_elements(m.ingredients) AS line
+				WHERE line->>'prep' IS NOT NULL
+				""", Integer.class))
+				.as("lines stating their own preparation")
+				.isEqualTo(EXPECTED_PREPARATIONS);
+
+		assertThat(admin.queryForObject("""
+				SELECT count(*) FROM master_recipes m, jsonb_array_elements(m.ingredients) AS line
+				WHERE (line->>'not_bought')::boolean
+				""", Integer.class))
+				.as("lines the temple never buys")
+				.isEqualTo(EXPECTED_NOT_BOUGHT);
+
+		// Both keys are written on every line, present or not, so a reader can tell "the book did not
+		// say" from "the book said no" — and so an old row and a new one never read alike.
+		//
+		// jsonb_exists rather than the `?` operator: a literal question mark in a JDBC statement is a
+		// bind placeholder, and PostgreSQL never sees it as jsonb's containment test.
+		assertThat(admin.queryForObject("""
+				SELECT count(*) FROM master_recipes m, jsonb_array_elements(m.ingredients) AS line
+				WHERE NOT jsonb_exists(line, 'prep') OR NOT jsonb_exists(line, 'not_bought')
+				""", Integer.class))
+				.as("no line may be missing either key")
+				.isZero();
+
+		// Every never-bought line is water, which is the whole of what the mark is for so far.
+		assertThat(admin.queryForList("""
+				SELECT DISTINCT line->>'name' FROM master_recipes m,
+				     jsonb_array_elements(m.ingredients) AS line
+				WHERE (line->>'not_bought')::boolean
+				""", String.class)).containsExactly("Water");
+
+		// And a spot check that a preparation is the word itself rather than an empty string left by
+		// a field that was read but not carried.
+		assertThat(admin.queryForObject("""
+				SELECT line->>'prep' FROM master_recipes m, jsonb_array_elements(m.ingredients) AS line
+				WHERE m.name = 'Akki Rotti' AND line->>'name' = 'Water'
+				""", String.class)).isEqualTo("Hot");
 	}
 
 	// ------------------------------------------------------------------ isolation
@@ -226,7 +368,7 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 		loader.load();
 		signIn("uid-admin-a");
 
-		mvc.perform(authed(get("/api/v1/recipes/search").param("q", "majjige")))
+		mvc.perform(authed(get("/api/v1/recipes/search").param("q", "chitranna")))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[?(@.origin=='LIBRARY')]").exists());
 
@@ -235,11 +377,20 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].origin").value("LIBRARY"));
 
-		// A tag is searchable; prose is not. "Jain-safe" is a fact about a dish, and a method step
-		// is a paragraph nearly every recipe shares.
-		mvc.perform(authed(get("/api/v1/recipes/search").param("q", "jain")))
+		// The category name is searchable; prose is not. This used to be asserted on a tag —
+		// "Jain-safe" is a fact about a dish — but the curated recipes carry no tags at all, so the
+		// category stands in for the same weight in the document. Typing "ekadashi" has to find the
+		// eight fasting dishes, because that is how a cook looks for them on a fast day.
+		mvc.perform(authed(get("/api/v1/recipes/search").param("q", "ekadashi")))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[0]").exists());
+				.andExpect(jsonPath("$.length()").value(8));
+
+		// And the other half of the rule: a method step is not indexed. "Knead" appears in six
+		// recipes' methods and in no name, subtitle, ingredient or category, so it finds nothing —
+		// which is the point, since nearly every recipe boils, stirs and tempers something.
+		mvc.perform(authed(get("/api/v1/recipes/search").param("q", "knead")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(0));
 	}
 
 	@Test
@@ -260,34 +411,34 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 	void importCreatesCopy() throws Exception {
 		loader.load();
 		signIn("uid-admin-a");
-		UUID majjige = libraryId("Majjige");
+		UUID imported = libraryId(IMPORTED);
 
-		mvc.perform(authed(post("/api/v1/recipes/import/{id}", majjige)))
+		mvc.perform(authed(post("/api/v1/recipes/import/{id}", imported)))
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.name").value("Majjige"));
+				.andExpect(jsonPath("$.name").value(IMPORTED));
 
 		Map<String, Object> copy = admin.queryForMap("""
 				SELECT r.name, r.base_yield_unit, r.per_head_qty, r.master_recipe_id, r.tenant_id,
 				       c.name AS category
 				FROM recipes r JOIN recipe_categories c ON c.id = r.category_id
-				WHERE r.name = 'Majjige'
-				""");
+				WHERE r.name = ?
+				""", IMPORTED);
 		assertThat(copy.get("tenant_id")).isEqualTo(templeA);
 		assertThat(copy.get("base_yield_unit")).isEqualTo("L");
-		assertThat(copy.get("master_recipe_id")).isEqualTo(majjige);
-		assertThat(copy.get("category")).isEqualTo("Beverages");
+		assertThat(copy.get("master_recipe_id")).isEqualTo(imported);
+		assertThat(copy.get("category")).isEqualTo("Rice");
 		assertThat(copy.get("per_head_qty")).isNotNull();
 
 		// The lines came across in the book's order, against ingredients created for the purpose.
 		Integer lines = admin.queryForObject(
 				"SELECT count(*) FROM recipe_ingredients WHERE tenant_id = ?", Integer.class, templeA);
-		assertThat(lines).isEqualTo(8);
+		assertThat(lines).isEqualTo(IMPORTED_LINES);
 
 		// Every created ingredient got a unit and a category — the column is NOT NULL, and the books
 		// carry no category at all.
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM ingredients WHERE tenant_id = ? AND library_derived", Integer.class, templeA))
-				.isEqualTo(8);
+				.isEqualTo(IMPORTED_LINES);
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM ingredients WHERE tenant_id = ? AND (category IS NULL OR canonical_unit IS NULL)",
 				Integer.class, templeA)).isZero();
@@ -307,17 +458,17 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 		loader.load();
 		signIn("uid-admin-a");
 
-		mvc.perform(authed(post("/api/v1/recipes/import/{id}", libraryId("Majjige"))))
+		mvc.perform(authed(post("/api/v1/recipes/import/{id}", libraryId(IMPORTED))))
 				.andExpect(status().isCreated());
 
 		String catalogue = mvc.perform(authed(get("/api/v1/ingredients")))
 				.andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();
 		List<Boolean> marks = JsonPath.read(catalogue, "$[*].libraryDerived");
-		assertThat(marks).hasSize(8).containsOnly(true);
+		assertThat(marks).hasSize(IMPORTED_LINES).containsOnly(true);
 
 		mvc.perform(authed(get("/api/v1/ingredients/library-derived-count")))
-				.andExpect(jsonPath("$.count").value(8));
+				.andExpect(jsonPath("$.count").value(IMPORTED_LINES));
 
 		/*
 		 * One of them reviewed: opened, CHANGED, and saved.
@@ -348,7 +499,7 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 				UUID.fromString(id)))
 				.isFalse();
 		mvc.perform(authed(get("/api/v1/ingredients/library-derived-count")))
-				.andExpect(jsonPath("$.count").value(7));
+				.andExpect(jsonPath("$.count").value(IMPORTED_LINES - 1));
 	}
 
 	@Test
@@ -356,18 +507,18 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 	void refusesDuplicates() throws Exception {
 		loader.load();
 		signIn("uid-admin-a");
-		UUID majjige = libraryId("Majjige");
+		UUID imported = libraryId(IMPORTED);
 
-		mvc.perform(authed(post("/api/v1/recipes/import/{id}", majjige))).andExpect(status().isCreated());
+		mvc.perform(authed(post("/api/v1/recipes/import/{id}", imported))).andExpect(status().isCreated());
 
-		mvc.perform(authed(post("/api/v1/recipes/import/{id}", majjige)))
+		mvc.perform(authed(post("/api/v1/recipes/import/{id}", imported)))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400103"));
 
 		// And the name rule, which is what a temple that typed the dish in by hand last year meets.
 		admin.update("DELETE FROM recipe_ingredients");
 		admin.update("UPDATE recipes SET master_recipe_id = NULL WHERE tenant_id = ?", templeA);
-		mvc.perform(authed(post("/api/v1/recipes/import/{id}", majjige)))
+		mvc.perform(authed(post("/api/v1/recipes/import/{id}", imported)))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400036"));
 	}
@@ -375,23 +526,27 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("an import naming an ingredient the temple already holds no longer has a refusal to make")
 	void noLongerRefusesProhibited() throws Exception {
-		// This test asserted the opposite until 2026-09-08: with 'Curd, fresh' flagged
-		// sattvic-prohibited, importing Majjige was refused with KMS-400104 and left nothing behind.
+		// This test asserted the opposite until 2026-09-08: with an ingredient flagged
+		// sattvic-prohibited, the import was refused with KMS-400104 and left nothing behind.
 		// D-18 deleted the flag and retired the code, so the refusal has no input and cannot fire.
 		// D-18 names this refusal specifically as a live guard given up on purpose, on the reasoning
 		// that the library is the temple's own and does not carry such ingredients — so the inverse
 		// is asserted here rather than the test simply being deleted, because "the import completes"
 		// is now the product's behaviour and somebody should be told when it stops being true.
+		//
+		// The pre-existing row was 'Curd, fresh', which Majjige named; the curated catalogue has no
+		// Majjige, so it is one of Chitranna's own lines instead. The case being made is the same:
+		// an ingredient the temple already holds is matched, not duplicated.
 		loader.load();
 		signIn("uid-admin-a");
-		UUID majjige = libraryId("Majjige");
+		UUID imported = libraryId(IMPORTED);
 
 		admin.update("""
 				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
-				VALUES (?, 'Curd, fresh', 'Dairy', 'L')
+				VALUES (?, 'Turmeric', 'Spices', 'GM')
 				""", templeA);
 
-		mvc.perform(authed(post("/api/v1/recipes/import/{id}", majjige)))
+		mvc.perform(authed(post("/api/v1/recipes/import/{id}", imported)))
 				.andExpect(status().isCreated());
 
 		assertThat(admin.queryForObject(
@@ -399,12 +554,12 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 		// The pre-existing row was matched on lower(name) rather than duplicated, and the rest of the
 		// recipe's ingredients were created around it.
 		assertThat(admin.queryForObject("""
-				SELECT count(*) FROM ingredients WHERE tenant_id = ? AND lower(name) = 'curd, fresh'
+				SELECT count(*) FROM ingredients WHERE tenant_id = ? AND lower(name) = 'turmeric'
 				""", Integer.class, templeA)).isEqualTo(1);
 		assertThat(admin.queryForObject(
 				"SELECT count(*) FROM ingredients WHERE tenant_id = ?", Integer.class, templeA))
-				.as("the import created the rest of Majjige's lines")
-				.isGreaterThan(1);
+				.as("the import created the rest of " + IMPORTED + "'s lines")
+				.isEqualTo(IMPORTED_LINES);
 
 		// And nothing it created carries a dietary flag — the gap the Recipes page now warns about.
 		assertThat(admin.queryForObject("""
@@ -413,22 +568,25 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("a recipe whose ingredient name contains \"onion\" or \"garlic\" imports")
-	void substringIsNotTheRule() throws Exception {
+	@DisplayName("no curated recipe names onion or garlic at all, in any line")
+	void nothingProhibitedIsInTheCatalogue() {
 		loader.load();
-		signIn("uid-admin-a");
 
-		// "Onion-free chaat masala" and "Garlic-free panch phoron" are the only two ingredient names
-		// in the whole library carrying either word, and both are describing their ABSENCE. The rule
-		// this guarded against — a substring check refusing precisely the two recipes most careful
-		// about the point — went with the block D-18 deleted, but the case is kept: it is still the
-		// sharpest evidence that nothing anywhere reads dietary meaning out of the letters in a name.
-		UUID bhuja = admin.queryForObject("""
-				SELECT id FROM master_recipes
-				WHERE state_slug = 'jharkhand' AND lower(name) = 'bhuja' LIMIT 1
-				""", UUID.class);
-		mvc.perform(authed(post("/api/v1/recipes/import/{id}", bhuja)))
-				.andExpect(status().isCreated());
+		// This case used to import Jharkhand's Bhuja, whose lines named "Onion-free chaat masala" and
+		// "Garlic-free panch phoron" — the only two ingredient names in the vendored library carrying
+		// either word, both describing their ABSENCE — to show that nothing reads dietary meaning out
+		// of the letters in a name. Jharkhand's book went with the unvetted import.
+		//
+		// What replaces it is the stronger statement Rajeev's curation makes: the two words appear
+		// nowhere in the catalogue, because he approved every line by hand. This is the test that
+		// fails if a future curated recipe brings one in, which is worth being told about loudly.
+		List<String> offending = admin.queryForList("""
+				SELECT DISTINCT m.name || ' — ' || (line->>'name')
+				FROM master_recipes m, jsonb_array_elements(m.ingredients) AS line
+				WHERE lower(line->>'name') LIKE '%onion%' OR lower(line->>'name') LIKE '%garlic%'
+				ORDER BY 1
+				""", String.class);
+		assertThat(offending).isEmpty();
 	}
 
 	@Test
@@ -436,18 +594,20 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 	void copyIsIndependent() throws Exception {
 		loader.load();
 		signIn("uid-admin-a");
-		UUID majjige = libraryId("Majjige");
-		mvc.perform(authed(post("/api/v1/recipes/import/{id}", majjige))).andExpect(status().isCreated());
+		UUID imported = libraryId(IMPORTED);
+		mvc.perform(authed(post("/api/v1/recipes/import/{id}", imported))).andExpect(status().isCreated());
 
 		admin.update("UPDATE recipes SET per_head_qty = 0.5 WHERE tenant_id = ?", templeA);
 
+		// Chitranna is 30 L serving 300 ml a head, so the library's own figure is 0.3 and the edit
+		// above did not reach it.
 		assertThat(admin.queryForObject(
-				"SELECT per_head_qty FROM master_recipes WHERE id = ?", java.math.BigDecimal.class, majjige))
-				.isEqualByComparingTo("0.2");
+				"SELECT per_head_qty FROM master_recipes WHERE id = ?", java.math.BigDecimal.class, imported))
+				.isEqualByComparingTo("0.3");
 
 		// And temple B sees none of it.
 		signIn("uid-admin-b");
-		mvc.perform(authed(get("/api/v1/recipes/search").param("q", "majjige")))
+		mvc.perform(authed(get("/api/v1/recipes/search").param("q", "chitranna")))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[?(@.origin=='MINE')]").doesNotExist());
 	}
@@ -468,10 +628,11 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 		loader.load();
 		signIn("uid-admin-a");
 
-		// No filter at all — what the screen asks for the moment it opens.
+		// No filter at all — what the screen asks for the moment it opens. The whole catalogue now
+		// fits inside one page of 100, so this is all 44 rather than a truncated first page.
 		mvc.perform(authed(get("/api/v1/library/recipes").param("limit", "100")))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.length()").value(100));
+				.andExpect(jsonPath("$.length()").value(EXPECTED_RECIPES));
 
 		// A state alone, which is the first thing anybody clicks.
 		mvc.perform(authed(get("/api/v1/library/recipes")
@@ -507,13 +668,22 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 		assertThat(namesWithin(browsed, "Andhra Pradesh"))
 				.isSortedAccordingTo(String.CASE_INSENSITIVE_ORDER);
 
-		// And a search, which used to come back ranked.
+		// And a search, which used to come back ranked. "salt" is the term chosen because it reaches
+		// both books — 35 Karnataka rows and 2 Andhra Pradesh ones — so the state ordering is
+		// actually being asserted rather than trivially satisfied by a single-state result.
 		String searched = mvc.perform(authed(get("/api/v1/library/recipes")
-						.param("q", "rice").param("limit", "300")))
+						.param("q", "salt").param("limit", "300")))
 				.andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();
 		List<String> states = JsonPath.parse(searched).read("$[*].state");
 		assertThat(states).isSortedAccordingTo(String.CASE_INSENSITIVE_ORDER);
+	}
+
+	/** Every display name the ladder gave one underlying recipe name, alphabetically. */
+	private List<String> displayNamesOf(String lowerName) {
+		return admin.queryForList(
+				"SELECT display_name FROM master_recipes WHERE lower(name) = ? ORDER BY display_name",
+				String.class, lowerName);
 	}
 
 	/** The display names belonging to one state, in the order the server returned them. */

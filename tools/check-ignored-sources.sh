@@ -19,9 +19,10 @@ cd "$(dirname "$0")/.."
 # are not source, so they are not looked at.
 #
 # `.json` is on the list because data a build depends on fails exactly the way source does. The
-# recipe library under backend/src/main/resources/recipe-library is 32 committed JSON files, and one
-# of them swallowed by an ignore rule would load 5,208 recipes instead of 5,376 — quietly, and only
-# on a fresh checkout.
+# recipe library under backend/src/main/resources/recipe-library is two committed JSON files since
+# the curated catalogue replaced the 32 vendored books on 2026-09-19, and the karnataka one swallowed
+# by an ignore rule would load 2 recipes instead of 44 — quietly, and only on a fresh checkout. The
+# smaller the directory, the worse that is: one missing file is now most of the library.
 readonly TREES=(
   "backend/src"
   "frontend/app"

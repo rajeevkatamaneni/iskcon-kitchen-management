@@ -46,8 +46,11 @@ class BookParserTest {
 		@Test
 		@DisplayName("anything that is not a mass or a volume is a count, whatever it is called")
 		void countNouns() {
-			// 137 distinct nouns appear across the books. None of them is in a dictionary here, and
-			// that is the point: a new book bringing a new sweet must not need a code change.
+			// 137 distinct nouns appeared across the 32 vendored books; the curated catalogue that
+			// replaced them on 2026-09-19 uses rottis, chapatis, chiroti, idlis, doses, unde,
+			// obbattu and pooris. None of them is in a dictionary here, and that is the point: a new
+			// book bringing a new sweet must not need a code change. The examples below are kept as
+			// they were, because the rule is what is under test and it has not changed.
 			for (String text : new String[] {
 					"300 idlis (3 per devotee)", "200 mudde (2 per devotee)", "150 pakore",
 					"~250 pieces", "400 bobbatlu", "36 laddu (2 per devotee)"}) {
@@ -110,9 +113,11 @@ class BookParserTest {
 		@Test
 		@DisplayName("a portion in a different family from the yield is discarded, not converted")
 		void mismatchedFamily() {
-			// Delhi's Papdi, the only one in the library: 5 Kg made, 6 pieces served. There is no
-			// arithmetic from a head count to kilograms here, and inventing one would plan 600 Kg
-			// of papdi for a hundred people.
+			// Delhi's Papdi, which was the only one in the vendored library: 5 Kg made, 6 pieces
+			// served. There is no arithmetic from a head count to kilograms here, and inventing one
+			// would plan 600 Kg of papdi for a hundred people. Delhi's book went with the unvetted
+			// import on 2026-09-19 and the curated catalogue has no such recipe, so this string is
+			// now the rule's only witness — which is reason to keep it, not to delete it.
 			assertThat(BookParser.perHead("6 pcs", "5 Kg", "KG")).isEmpty();
 		}
 

@@ -1,0 +1,83 @@
+{
+  "slug": "ladder_south",
+  "state": "Ladder South",
+  "language": "English",
+  "title": "Ladder fixture, second book read",
+  "tagline": "Not a state and never loaded by the application. Holds one name the first book also holds, one name twice under two categories, and one name nothing else holds — the three rungs of the disambiguation ladder, one recipe each.",
+  "categories": [
+    { "key": "khichadi", "name": "Khichadi", "n": 1 },
+    { "key": "ekadashi", "name": "Ekadashi", "n": 1 },
+    { "key": "sabji-s-dry", "name": "Sabji's, Dry", "n": 1 },
+    { "key": "breakfast-items", "name": "Breakfast Items", "n": 1 }
+  ],
+  "recipes": [
+    {
+      "slug": "bisi-bele-bath",
+      "name": "Bisi Bele Bath",
+      "cat": "khichadi",
+      "badge": "Everyday",
+      "sub": "A hotter one, with more tamarind",
+      "yield": "30 L",
+      "per": "300 ml",
+      "why": "Rung 1: the state separates it from the first book's dish of the same name.",
+      "ing": [
+        { "name": "Rice", "qty": "7 Kg" },
+        { "name": "Tamarind", "qty": "500 gm" }
+      ],
+      "method": [
+        { "en": "Cook the rice and the dal together, with more tamarind." }
+      ]
+    },
+    {
+      "slug": "alugadde-palya-ekadashi",
+      "name": "Alugadde Palya",
+      "cat": "ekadashi",
+      "badge": "Everyday",
+      "sub": "Rock salt, no mustard",
+      "yield": "10 L",
+      "per": "100 ml",
+      "why": "Rung 2: a fast-day dish sharing its name with an everyday one in the same book. A cook given the wrong one on a fast day has broken the fast, so the state alone must not be allowed to settle it.",
+      "ing": [
+        { "name": "Potato", "qty": "10 Kg" },
+        { "name": "Rock salt", "qty": "200 gm" }
+      ],
+      "method": [
+        { "en": "Boil, peel and temper with cumin in ghee. No mustard." }
+      ]
+    },
+    {
+      "slug": "alugadde-palya-sabji",
+      "name": "Alugadde Palya",
+      "cat": "sabji-s-dry",
+      "badge": "Everyday",
+      "sub": "Full tempering",
+      "yield": "10 L",
+      "per": "100 ml",
+      "why": "Rung 2, the other half: same name, same book, a different dish.",
+      "ing": [
+        { "name": "Potato", "qty": "10 Kg" },
+        { "name": "Mustard seeds", "qty": "80 gm" }
+      ],
+      "method": [
+        { "en": "Boil, peel and temper with mustard, curry leaves and asafoetida." }
+      ]
+    },
+    {
+      "slug": "neer-dose",
+      "name": "Neer Dose",
+      "cat": "breakfast-items",
+      "badge": "Everyday",
+      "sub": "Thin rice crepe",
+      "yield": "400 doses (4 per devotee)",
+      "per": null,
+      "why": "Rung 0: nothing else is called this, so it is left exactly as the book names it.",
+      "ing": [
+        { "name": "Rice", "qty": "10 Kg" },
+        { "name": "Coconut", "qty": "12 Pieces" }
+      ],
+      "method": [
+        { "en": "Grind, thin the batter and pour on a hot tawa." }
+      ]
+    }
+  ]
+}

@@ -199,9 +199,10 @@ class RecipeImportNotBoughtIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a row written before T-403 has no key at all and reads as bought, not as unknown")
 	void anOlderRowReadsAsBought() throws Exception {
-		// Every one of the 5,376 vendored rows is this shape. Written with no not_bought key, which
-		// is what `legacyLine` leaves out, so the reader is exercised against a real old row rather
-		// than against a false somebody wrote for the test.
+		// Every one of the 5,376 vendored rows was this shape, and any row still in a temple's
+		// database from before the curated catalogue replaced them on 2026-09-19 still is. Written
+		// with no not_bought key, which is what `legacyLine` leaves out, so the reader is exercised
+		// against a real old row rather than against a false somebody wrote for the test.
 		UUID master = insertLibraryRecipe("Plain Rice", legacyLine("Rice flour", "12 Kg", "12", "KG"));
 
 		assertThat(storedMarks(master)).containsExactly((String) null);
@@ -443,7 +444,7 @@ class RecipeImportNotBoughtIT extends AbstractIntegrationTest {
 		return new Line(name, qty, qtyValue, qtyUnit, prep, notBought);
 	}
 
-	/** A line in the pre-T-403 shape: no {@code not_bought} key at all, as all 5,376 vendored rows are. */
+	/** A line in the pre-T-403 shape: no {@code not_bought} key at all, as all 5,376 vendored rows were. */
 	private static Line legacyLine(String name, String qty, String qtyValue, String qtyUnit) {
 		return new Line(name, qty, qtyValue, qtyUnit, null, null);
 	}

@@ -40,12 +40,20 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * splitting the name — while a book that still says it inside the name keeps working exactly as
  * before.
  *
- * <p><strong>Why a fixture book.</strong> {@link RecipeLibraryIT} loads the real 32 on purpose, and
- * says why: a fixture proves only that the loader can read a file somebody wrote to make the test
- * pass. That reasoning holds for everything a real book says — and no real book says {@code prep}
- * yet, so there is nothing real to read. The fixture at {@code src/test/resources/prep-book} is one
- * recipe, shaped like a page of the curated set, loaded through the package-private
- * {@code LibraryLoader.load(String)} so the 5,376 are untouched.
+ * <p><strong>Why a fixture book.</strong> {@link RecipeLibraryIT} loads the real catalogue on
+ * purpose, and says why: a fixture proves only that the loader can read a file somebody wrote to
+ * make the test pass. When this was written there was no real book that said {@code prep} at all,
+ * so there was nothing real to read. There is now — the curated catalogue replaced the 32 vendored
+ * books on 2026-09-19 — and
+ * {@code RecipeLibraryIT.preparationsAndNeverBoughtMarksSurviveTheLoad} asserts the real files reach
+ * the table, 83 preparations and 15 marks of them.
+ *
+ * <p>This class is kept on its fixture regardless, and should stay there. It covers the shapes a
+ * curated book does <em>not</em> contain — a line that still writes its preparation inside the name
+ * after a comma, a line with no preparation at all beside one that has one — and it must keep
+ * working when the catalogue is regenerated and every count in it moves. The fixture at
+ * {@code src/test/resources/prep-book} is one recipe, loaded through the package-private
+ * {@code LibraryLoader.load(String)} so the real catalogue is untouched.
  */
 @AutoConfigureMockMvc
 class LibraryPreparationIT extends AbstractIntegrationTest {
