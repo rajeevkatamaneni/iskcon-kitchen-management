@@ -1,0 +1,8 @@
+# The run ledger: which rows this toolkit made, per API base and temple. Machine-specific and
+# environment-specific, so it never belongs in the repository — but it must survive between runs
+# on one machine, which is why it lives here rather than in a temp directory.
+.state/
+
+# Python's bytecode cache.
+__pycache__/
+*.pyc

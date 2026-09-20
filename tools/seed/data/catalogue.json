@@ -1,0 +1,1359 @@
+{
+  "_": [
+    "The temple's catalogue: what it buys, what it keeps on the shelf, and what it pays.",
+    "",
+    "Every food name here is a name Rajeev's curated recipes actually use, so that when phase 02",
+    "imports those recipes the ingredient already exists and is reused instead of created again.",
+    "Where the recipes name one thing two ways, the second way is an alias rather than a second",
+    "ingredient - the application matches on aliases as well as names, so 'Sabudana' finds Sago.",
+    "",
+    "Prices are rupees per ONE CANONICAL UNIT (the 'unit' field), Bengaluru wholesale, and are what",
+    "a temple buying in bulk would pay. 'opening' is what is on the shelf on the first morning.",
+    "",
+    "ekadashi: true marks what a Vaishnava does not eat on Ekadashi - grains and pulses. Note what",
+    "is deliberately NOT marked: sago, potato, sweet potato, groundnut, milk, ghee, fruit and rock",
+    "salt are all eaten on Ekadashi, which is exactly why the temple's Ekadashi dishes are made of",
+    "them.",
+    "",
+    "supply: true is a thing that is bought but never cooked. The application refuses to put one on",
+    "a recipe line (KMS-400127), so the two lists are kept apart here too."
+  ],
+  "ingredients": [
+    {
+      "name": "Rice",
+      "unit": "KG",
+      "category": "Grains",
+      "aliases": [
+        "Raw rice",
+        "Sona masoori rice"
+      ],
+      "ekadashi": true,
+      "price": 58,
+      "opening": 1900.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 25,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Idli Rava",
+      "unit": "KG",
+      "category": "Grains",
+      "ekadashi": true,
+      "price": 58,
+      "opening": 40,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 10,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Semolina",
+      "unit": "KG",
+      "category": "Grains",
+      "aliases": [
+        "Upma Rava",
+        "Upma Ravva",
+        "Rava",
+        "Sooji",
+        "Fine rava",
+        "Rava (coarse)",
+        "Rava (fine)"
+      ],
+      "ekadashi": true,
+      "price": 52,
+      "opening": 360.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 25,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Wheat flour",
+      "unit": "KG",
+      "category": "Grains",
+      "aliases": [
+        "Whole wheat flour",
+        "Atta",
+        "Wheat flour (atta)"
+      ],
+      "ekadashi": true,
+      "price": 48,
+      "opening": 850.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 25,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Maida",
+      "unit": "KG",
+      "category": "Grains",
+      "ekadashi": true,
+      "price": 46,
+      "opening": 185.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 25,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Rice flour",
+      "unit": "KG",
+      "category": "Grains",
+      "ekadashi": true,
+      "price": 55,
+      "opening": 370.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 10,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Bajra flour",
+      "unit": "KG",
+      "category": "Grains",
+      "ekadashi": true,
+      "price": 60,
+      "opening": 345.0
+    },
+    {
+      "name": "Gram flour",
+      "unit": "KG",
+      "category": "Pulses",
+      "aliases": [
+        "Besan"
+      ],
+      "ekadashi": true,
+      "price": 105,
+      "opening": 30,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 10,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Puffed rice",
+      "unit": "KG",
+      "category": "Grains",
+      "aliases": [
+        "Mandakki",
+        "Puri"
+      ],
+      "ekadashi": true,
+      "price": 75,
+      "opening": 95.0
+    },
+    {
+      "name": "Sago",
+      "unit": "KG",
+      "category": "Grains",
+      "aliases": [
+        "Sabudana",
+        "Sabakki",
+        "Sabudana (sago)"
+      ],
+      "ekadashi": false,
+      "price": 95,
+      "opening": 25,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 10,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Toor dal",
+      "unit": "KG",
+      "category": "Pulses",
+      "aliases": [
+        "Togari bele",
+        "Arhar dal"
+      ],
+      "ekadashi": true,
+      "price": 165,
+      "opening": 385.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 25,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Moong dal",
+      "unit": "KG",
+      "category": "Pulses",
+      "aliases": [
+        "Hesaru bele"
+      ],
+      "ekadashi": true,
+      "price": 135,
+      "opening": 245.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 25,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Chana dal",
+      "unit": "KG",
+      "category": "Pulses",
+      "aliases": [
+        "Kadale bele"
+      ],
+      "ekadashi": true,
+      "price": 95,
+      "opening": 125.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 25,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Urad dal",
+      "unit": "KG",
+      "category": "Pulses",
+      "aliases": [
+        "Uddina bele"
+      ],
+      "ekadashi": true,
+      "price": 145,
+      "opening": 50.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 25,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Sugar",
+      "unit": "KG",
+      "category": "Sweeteners",
+      "price": 48,
+      "opening": 100,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 50,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Powdered sugar",
+      "unit": "KG",
+      "category": "Sweeteners",
+      "price": 62,
+      "opening": 55.0
+    },
+    {
+      "name": "Jaggery",
+      "unit": "KG",
+      "category": "Sweeteners",
+      "aliases": [
+        "Bella"
+      ],
+      "price": 70,
+      "opening": 185.0,
+      "packs": [
+        {
+          "name": "Block",
+          "quantity": 5,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Ghee",
+      "unit": "KG",
+      "category": "Oils & fats",
+      "aliases": [
+        "Tuppa",
+        "Clarified butter"
+      ],
+      "price": 650,
+      "opening": 45,
+      "packs": [
+        {
+          "name": "Tin",
+          "quantity": 15,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Groundnut oil",
+      "unit": "L",
+      "category": "Oils & fats",
+      "aliases": [
+        "Oil",
+        "Peanut oil",
+        "Kadalekai enne",
+        "Oil for frying"
+      ],
+      "price": 190,
+      "opening": 700.0,
+      "packs": [
+        {
+          "name": "Tin",
+          "quantity": 15,
+          "unit": "L"
+        }
+      ]
+    },
+    {
+      "name": "Sunflower Oil",
+      "unit": "L",
+      "category": "Oils & fats",
+      "price": 150,
+      "opening": 60,
+      "packs": [
+        {
+          "name": "Tin",
+          "quantity": 15,
+          "unit": "L"
+        }
+      ]
+    },
+    {
+      "name": "Sesame oil",
+      "unit": "L",
+      "category": "Oils & fats",
+      "aliases": [
+        "Gingelly oil",
+        "Til oil"
+      ],
+      "price": 280,
+      "opening": 95.0,
+      "packs": [
+        {
+          "name": "Can",
+          "quantity": 5,
+          "unit": "L"
+        }
+      ]
+    },
+    {
+      "name": "Coconut oil",
+      "unit": "L",
+      "category": "Oils & fats",
+      "price": 260,
+      "opening": 55.0,
+      "packs": [
+        {
+          "name": "Can",
+          "quantity": 5,
+          "unit": "L"
+        }
+      ]
+    },
+    {
+      "name": "Milk",
+      "unit": "L",
+      "category": "Dairy",
+      "price": 58,
+      "opening": 245.0,
+      "packs": [
+        {
+          "name": "Crate",
+          "quantity": 24,
+          "unit": "L"
+        }
+      ]
+    },
+    {
+      "name": "Curd",
+      "unit": "L",
+      "category": "Dairy",
+      "aliases": [
+        "Yoghurt",
+        "Mosaru"
+      ],
+      "price": 75,
+      "opening": 80.0
+    },
+    {
+      "name": "Coconut",
+      "unit": "PIECES",
+      "category": "Fruit",
+      "aliases": [
+        "Tengina kayi",
+        "Fresh coconut"
+      ],
+      "price": 45,
+      "opening": 250,
+      "packs": [
+        {
+          "name": "Sack",
+          "quantity": 50,
+          "unit": "PIECES"
+        }
+      ]
+    },
+    {
+      "name": "Dry coconut",
+      "unit": "KG",
+      "category": "Nuts & seeds",
+      "aliases": [
+        "Copra",
+        "Kobbari"
+      ],
+      "price": 320,
+      "opening": 12
+    },
+    {
+      "name": "Cashew",
+      "unit": "KG",
+      "category": "Nuts & seeds",
+      "aliases": [
+        "Cashew nuts",
+        "Godambi"
+      ],
+      "price": 950,
+      "opening": 65.0,
+      "packs": [
+        {
+          "name": "Box",
+          "quantity": 5,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Almond",
+      "unit": "KG",
+      "category": "Nuts & seeds",
+      "aliases": [
+        "Badam"
+      ],
+      "price": 850,
+      "opening": 4
+    },
+    {
+      "name": "Raisin",
+      "unit": "KG",
+      "category": "Fruit",
+      "aliases": [
+        "Raisins",
+        "Kishmish",
+        "Ona drakshi"
+      ],
+      "price": 320,
+      "opening": 8
+    },
+    {
+      "name": "Dates",
+      "unit": "KG",
+      "category": "Fruit",
+      "aliases": [
+        "Kharjura"
+      ],
+      "price": 220,
+      "opening": 17.0
+    },
+    {
+      "name": "Groundnut",
+      "unit": "KG",
+      "category": "Nuts & seeds",
+      "aliases": [
+        "Peanut",
+        "Kadalekai"
+      ],
+      "ekadashi": false,
+      "price": 140,
+      "opening": 140.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 25,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Sesame seeds",
+      "unit": "KG",
+      "category": "Nuts & seeds",
+      "aliases": [
+        "Sesame",
+        "Ellu",
+        "Til"
+      ],
+      "price": 220,
+      "opening": 31.0
+    },
+    {
+      "name": "Salt",
+      "unit": "KG",
+      "category": "Spices",
+      "price": 22,
+      "opening": 305.0,
+      "packs": [
+        {
+          "name": "Bag",
+          "quantity": 25,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Rock salt",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Sendha namak",
+        "Kalluppu",
+        "Rock salt (sendha namak)"
+      ],
+      "ekadashi": false,
+      "price": 45,
+      "opening": 12
+    },
+    {
+      "name": "Turmeric",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Arishina",
+        "Haldi",
+        "Turmeric powder"
+      ],
+      "price": 280,
+      "opening": 29.0
+    },
+    {
+      "name": "Chilli powder",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Menasina pudi",
+        "Red chilli powder",
+        "Dry red chilli powder"
+      ],
+      "price": 380,
+      "opening": 12
+    },
+    {
+      "name": "Coriander seeds",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Coriander seed",
+        "Coriander",
+        "Dhania",
+        "Kottambari beeja"
+      ],
+      "price": 220,
+      "opening": 60.0
+    },
+    {
+      "name": "Cumin seeds",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Cumin",
+        "Jeera",
+        "Jeerige"
+      ],
+      "price": 480,
+      "opening": 27.0
+    },
+    {
+      "name": "Mustard seeds",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Mustard",
+        "Sasive",
+        "Rai"
+      ],
+      "price": 160,
+      "opening": 49.0
+    },
+    {
+      "name": "Fenugreek",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Fenugreek seeds",
+        "Methi",
+        "Menthya"
+      ],
+      "price": 140,
+      "opening": 4
+    },
+    {
+      "name": "Black pepper",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Kali mirch",
+        "Menasu"
+      ],
+      "price": 850,
+      "opening": 6.0
+    },
+    {
+      "name": "Green cardamom",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Cardamom",
+        "Elakki",
+        "Elaichi"
+      ],
+      "price": 3200,
+      "opening": 2.5
+    },
+    {
+      "name": "Cardamom powder",
+      "unit": "KG",
+      "category": "Spices",
+      "price": 3600,
+      "opening": 1.7
+    },
+    {
+      "name": "Cloves",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Lavanga"
+      ],
+      "price": 1100,
+      "opening": 1.7
+    },
+    {
+      "name": "Cinnamon",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Dalchini",
+        "Chakke"
+      ],
+      "price": 650,
+      "opening": 2.5
+    },
+    {
+      "name": "Nutmeg powder",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Jaikai"
+      ],
+      "price": 1400,
+      "opening": 1
+    },
+    {
+      "name": "Saffron",
+      "unit": "GM",
+      "category": "Spices",
+      "aliases": [
+        "Kesari",
+        "Kesar",
+        "Saffron or kesari colour"
+      ],
+      "price": 420,
+      "opening": 130.0
+    },
+    {
+      "name": "Saffron Colour",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Kesari colour",
+        "Food colour"
+      ],
+      "price": 600,
+      "opening": 1
+    },
+    {
+      "name": "Asafoetida",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Hing",
+        "Ingu"
+      ],
+      "price": 1800,
+      "opening": 14.0
+    },
+    {
+      "name": "Dry red chilli",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Byadgi chilli",
+        "Ona menasinakayi"
+      ],
+      "price": 320,
+      "opening": 55.0
+    },
+    {
+      "name": "Tamarind",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Hunase",
+        "Imli"
+      ],
+      "price": 180,
+      "opening": 135.0
+    },
+    {
+      "name": "Eno",
+      "unit": "KG",
+      "category": "Other",
+      "aliases": [
+        "Fruit salt",
+        "Eno / soda"
+      ],
+      "price": 900,
+      "opening": 2.5
+    },
+    {
+      "name": "Sambar powder",
+      "unit": "KG",
+      "category": "Spices",
+      "price": 420,
+      "opening": 10
+    },
+    {
+      "name": "Huli pudi",
+      "unit": "KG",
+      "category": "Spices",
+      "aliases": [
+        "Sambar pudi",
+        "Huli pudi (see Masalas)"
+      ],
+      "price": 400,
+      "opening": 22.0
+    },
+    {
+      "name": "Bisi bele bath pudi",
+      "unit": "KG",
+      "category": "Spices",
+      "price": 480,
+      "opening": 38.0,
+      "aliases": [
+        "Bisi bele bath pudi (see Masalas)"
+      ]
+    },
+    {
+      "name": "Vangi bath pudi",
+      "unit": "KG",
+      "category": "Spices",
+      "price": 480,
+      "opening": 21.0
+    },
+    {
+      "name": "Chutney pudi",
+      "unit": "KG",
+      "category": "Spices",
+      "price": 450,
+      "opening": 12.0
+    },
+    {
+      "name": "Potato",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Alugadde",
+        "Aloo"
+      ],
+      "ekadashi": false,
+      "price": 35,
+      "opening": 120,
+      "packs": [
+        {
+          "name": "Sack",
+          "quantity": 50,
+          "unit": "KG"
+        }
+      ]
+    },
+    {
+      "name": "Sweet potato",
+      "unit": "KG",
+      "category": "Vegetables",
+      "ekadashi": false,
+      "price": 45,
+      "opening": 25
+    },
+    {
+      "name": "Carrot",
+      "unit": "KG",
+      "category": "Vegetables",
+      "price": 45,
+      "opening": 40
+    },
+    {
+      "name": "Beans",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "French beans"
+      ],
+      "price": 60,
+      "opening": 35
+    },
+    {
+      "name": "Cluster beans",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Gorikayi",
+        "Guvar"
+      ],
+      "price": 70,
+      "opening": 230.0
+    },
+    {
+      "name": "Field beans",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Avarekalu",
+        "Hyacinth beans"
+      ],
+      "price": 90,
+      "opening": 215.0
+    },
+    {
+      "name": "Brinjal",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Badanekayi",
+        "Aubergine"
+      ],
+      "price": 40,
+      "opening": 365.0
+    },
+    {
+      "name": "Okra",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Bendekayi",
+        "Ladies finger"
+      ],
+      "price": 55,
+      "opening": 210.0
+    },
+    {
+      "name": "Ridge gourd",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Hirekayi",
+        "Turai"
+      ],
+      "price": 45,
+      "opening": 225.0
+    },
+    {
+      "name": "Snake gourd",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Padavalakayi"
+      ],
+      "price": 40,
+      "opening": 140.0
+    },
+    {
+      "name": "Ivy gourd",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Thondekayi",
+        "Tindora"
+      ],
+      "price": 50,
+      "opening": 320.0
+    },
+    {
+      "name": "Red pumpkin",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Sihi kumbalakayi",
+        "Kaddu"
+      ],
+      "price": 30,
+      "opening": 250.0
+    },
+    {
+      "name": "Drumstick",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Nuggekayi",
+        "Moringa"
+      ],
+      "price": 80,
+      "opening": 145.0
+    },
+    {
+      "name": "Elephant foot yam",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Suvarnagadde",
+        "Suran"
+      ],
+      "price": 70,
+      "opening": 29.0
+    },
+    {
+      "name": "Raw banana",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Balekayi",
+        "Plantain"
+      ],
+      "price": 35,
+      "opening": 180.0
+    },
+    {
+      "name": "Amaranth greens",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Dantina soppu",
+        "Harive soppu"
+      ],
+      "price": 40,
+      "opening": 85.0
+    },
+    {
+      "name": "Mixed vegetables",
+      "unit": "KG",
+      "category": "Vegetables",
+      "price": 45,
+      "opening": 480.0
+    },
+    {
+      "name": "Ginger",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Shunthi",
+        "Adrak"
+      ],
+      "price": 120,
+      "opening": 38.0
+    },
+    {
+      "name": "Green chilli",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Hasi menasinakayi",
+        "Hari mirch"
+      ],
+      "price": 60,
+      "opening": 70.0
+    },
+    {
+      "name": "Curry leaves",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Karibevu",
+        "Kadi patta"
+      ],
+      "price": 120,
+      "opening": 80.0
+    },
+    {
+      "name": "Coriander leaves",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Kottambari soppu",
+        "Cilantro",
+        "Dhania patta"
+      ],
+      "price": 80,
+      "opening": 60.0
+    },
+    {
+      "name": "Mint leaves",
+      "unit": "KG",
+      "category": "Vegetables",
+      "aliases": [
+        "Pudina"
+      ],
+      "price": 120,
+      "opening": 7.0
+    },
+    {
+      "name": "Lemon",
+      "unit": "PIECES",
+      "category": "Fruit",
+      "aliases": [
+        "Lemons",
+        "Lemo",
+        "Nimbe"
+      ],
+      "price": 6,
+      "opening": 1900.0
+    },
+    {
+      "name": "Banana",
+      "unit": "PIECES",
+      "category": "Fruit",
+      "aliases": [
+        "Bale hannu"
+      ],
+      "price": 8,
+      "opening": 355.0
+    },
+    {
+      "name": "Pineapple",
+      "unit": "KG",
+      "category": "Fruit",
+      "price": 50,
+      "opening": 15
+    },
+    {
+      "name": "Raw mango",
+      "unit": "KG",
+      "category": "Fruit",
+      "aliases": [
+        "Mavinakayi"
+      ],
+      "price": 60,
+      "opening": 20.0
+    },
+    {
+      "name": "Water",
+      "unit": "L",
+      "category": "Other",
+      "price": 0.1,
+      "opening": 0,
+      "not_bought": true,
+      "aliases": [
+        "Hot water"
+      ]
+    }
+  ],
+  "supplies": [
+    {
+      "name": "LPG cylinder",
+      "unit": "PIECES",
+      "category": "Fuel",
+      "aliases": [
+        "Gas cylinder",
+        "Commercial cylinder"
+      ],
+      "price": 1850,
+      "opening": 8
+    },
+    {
+      "name": "Dishwash liquid",
+      "unit": "L",
+      "category": "Cleaning",
+      "price": 120,
+      "opening": 40,
+      "packs": [
+        {
+          "name": "Can",
+          "quantity": 5,
+          "unit": "L"
+        }
+      ]
+    },
+    {
+      "name": "Floor cleaner",
+      "unit": "L",
+      "category": "Cleaning",
+      "aliases": [
+        "Phenyl"
+      ],
+      "price": 95,
+      "opening": 30,
+      "packs": [
+        {
+          "name": "Can",
+          "quantity": 5,
+          "unit": "L"
+        }
+      ]
+    },
+    {
+      "name": "Detergent powder",
+      "unit": "KG",
+      "category": "Cleaning",
+      "price": 90,
+      "opening": 25
+    },
+    {
+      "name": "Bleaching powder",
+      "unit": "KG",
+      "category": "Cleaning",
+      "price": 60,
+      "opening": 10
+    },
+    {
+      "name": "Hand wash",
+      "unit": "L",
+      "category": "Cleaning",
+      "price": 140,
+      "opening": 15
+    },
+    {
+      "name": "Scrubbing pad",
+      "unit": "PIECES",
+      "category": "Cleaning",
+      "price": 15,
+      "opening": 60
+    },
+    {
+      "name": "Broom",
+      "unit": "PIECES",
+      "category": "Cleaning",
+      "aliases": [
+        "Pakki broom"
+      ],
+      "price": 120,
+      "opening": 12
+    },
+    {
+      "name": "Mop",
+      "unit": "PIECES",
+      "category": "Cleaning",
+      "price": 250,
+      "opening": 6
+    },
+    {
+      "name": "Garbage bag",
+      "unit": "PIECES",
+      "category": "Cleaning",
+      "price": 4,
+      "opening": 500,
+      "packs": [
+        {
+          "name": "Roll",
+          "quantity": 30,
+          "unit": "PIECES"
+        }
+      ]
+    },
+    {
+      "name": "Kitchen duster",
+      "unit": "PIECES",
+      "category": "Cleaning",
+      "price": 60,
+      "opening": 40
+    },
+    {
+      "name": "Leaf plate",
+      "unit": "PIECES",
+      "category": "Serving",
+      "aliases": [
+        "Patravali",
+        "Donne",
+        "Areca plate"
+      ],
+      "price": 4.5,
+      "opening": 4000,
+      "packs": [
+        {
+          "name": "Bundle",
+          "quantity": 100,
+          "unit": "PIECES"
+        }
+      ]
+    },
+    {
+      "name": "Paper cup",
+      "unit": "PIECES",
+      "category": "Serving",
+      "price": 1.2,
+      "opening": 3000,
+      "packs": [
+        {
+          "name": "Sleeve",
+          "quantity": 100,
+          "unit": "PIECES"
+        }
+      ]
+    },
+    {
+      "name": "Disposable spoon",
+      "unit": "PIECES",
+      "category": "Serving",
+      "price": 0.6,
+      "opening": 3000,
+      "packs": [
+        {
+          "name": "Pack",
+          "quantity": 100,
+          "unit": "PIECES"
+        }
+      ]
+    },
+    {
+      "name": "Butter paper",
+      "unit": "PIECES",
+      "category": "Serving",
+      "aliases": [
+        "Parchment roll"
+      ],
+      "price": 90,
+      "opening": 10
+    },
+    {
+      "name": "Aluminium foil",
+      "unit": "PIECES",
+      "category": "Serving",
+      "aliases": [
+        "Foil roll"
+      ],
+      "price": 280,
+      "opening": 8
+    },
+    {
+      "name": "Cling film",
+      "unit": "PIECES",
+      "category": "Serving",
+      "price": 180,
+      "opening": 6
+    },
+    {
+      "name": "Tissue roll",
+      "unit": "PIECES",
+      "category": "Serving",
+      "price": 45,
+      "opening": 40
+    },
+    {
+      "name": "LED bulb",
+      "unit": "PIECES",
+      "category": "Maintenance",
+      "aliases": [
+        "Light bulb",
+        "Bulb"
+      ],
+      "price": 110,
+      "opening": 25
+    },
+    {
+      "name": "Tube light",
+      "unit": "PIECES",
+      "category": "Maintenance",
+      "price": 250,
+      "opening": 10
+    },
+    {
+      "name": "Stool",
+      "unit": "PIECES",
+      "category": "Maintenance",
+      "aliases": [
+        "Kitchen stool"
+      ],
+      "price": 450,
+      "opening": 8
+    },
+    {
+      "name": "Hand gloves",
+      "unit": "PIECES",
+      "category": "Maintenance",
+      "aliases": [
+        "Gloves"
+      ],
+      "price": 12,
+      "opening": 200
+    },
+    {
+      "name": "Apron",
+      "unit": "PIECES",
+      "category": "Maintenance",
+      "price": 180,
+      "opening": 20
+    },
+    {
+      "name": "Head cap",
+      "unit": "PIECES",
+      "category": "Maintenance",
+      "aliases": [
+        "Hair cap"
+      ],
+      "price": 3,
+      "opening": 500
+    },
+    {
+      "name": "Camphor",
+      "unit": "KG",
+      "category": "Puja",
+      "aliases": [
+        "Karpura"
+      ],
+      "price": 850,
+      "opening": 3
+    },
+    {
+      "name": "Cotton wick",
+      "unit": "KG",
+      "category": "Puja",
+      "aliases": [
+        "Batti"
+      ],
+      "price": 180,
+      "opening": 4
+    },
+    {
+      "name": "Agarbatti",
+      "unit": "PIECES",
+      "category": "Puja",
+      "aliases": [
+        "Incense pack"
+      ],
+      "price": 120,
+      "opening": 30
+    },
+    {
+      "name": "Matchbox",
+      "unit": "PIECES",
+      "category": "Puja",
+      "price": 2,
+      "opening": 100
+    }
+  ]
+}
