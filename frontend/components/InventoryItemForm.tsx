@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Form } from "@/components/ds/Form";
+import { countedBox } from "@/components/ds/formMessages";
 import { HintedField } from "@/components/ds/InfoHint";
 import { stepForUnit, unitLabel, unitLabelFor } from "@/lib/format";
 import type { ApiError, IngredientView, StockItemView } from "@/lib/api";
@@ -25,6 +26,29 @@ const ENTRY_UNITS: Record<string, { code: string; per: number }[]> = {
 
 const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
+/**
+ * A number box with no up/down arrows on it.
+ *
+ * <p>Rajeev, 2026-09-20, of the inventory screens: plain text boxes, and *"ONLY use Boxes for
+ * numbers with up and down arrows IF needed"*. Nothing on these screens needs them. A shelf count is
+ * read off scales, a price is looked up and a reorder level is decided — none of those is a value
+ * anybody arrives at by pressing a triangle twenty times, and the spinner's own step is wrong for
+ * most of them anyway: on a box holding grams or rupees the browser nudges by exactly 1, which is
+ * a milligram's worth of a sack of rice.
+ *
+ * <p><strong>Considered and still dropped:</strong> writing off two broken aprons genuinely is
+ * "press down twice". The same box also takes −2.5 Kg of rice, so the arrows would appear and
+ * disappear according to which ingredient was chosen, and a control that comes and goes is harder to
+ * learn than one that is never there.
+ *
+ * <p>The box stays `type="number"`, because that is what gives the browser `stepMismatch` — which is
+ * what `ds/Form.tsx` and `formMessages` turn into "Agarbatti is counted in whole pieces". Taking the
+ * type off to lose the arrows would take the whole-number refusal with it. Only the spinner goes:
+ * WebKit and Blink through the two pseudo-elements, Gecko through `-moz-appearance`.
+ */
+export const PLAIN_NUMBER =
+  "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0";
+
 /** What the screen needs in order to open an item and its first lot. */
 export interface NewInventoryItem {
   ingredientId: string;
@@ -33,6 +57,12 @@ export interface NewInventoryItem {
   openingQuantity: number | null;
   storageLocation: string | null;
   reorderThreshold: number | null;
+  /**
+   * The unit the level was typed in — its own picker's, never the opening count's. The server
+   * converts it into the unit the ingredient is kept in and refuses a fraction of a counted thing
+   * (T-432); see `CreateInventoryItemInput.reorderThresholdUnit`.
+   */
+  reorderThresholdUnit: string | null;
   notes: string | null;
   /**
    * "What it would cost to buy today", ₹ per the ingredient's own stock unit (R-ING-3), or null when
@@ -82,6 +112,20 @@ export function InventoryItemForm({
   loadStockValue: LoadStockValue;
 }) {
   const [ingredientId, setIngredientId] = useState("");
+  const [countUnit, setCountUnit] = useState<string | null>(null);
+  /*
+   * The level's unit, held apart from the count's — and the separation is the bug fix (T-432).
+   *
+   * <p>The level's box had no picker of its own and its value was multiplied by `typedIn.per`, the
+   * factor belonging to the unit picker beside the *opening count* two fields above it. So "tell me
+   * when ghee drops below 500", typed with the count in grams, stored 0.5, and with the count in
+   * litres stored 500 — the same keystrokes, a thousandfold apart, decided by a box about something
+   * else. Nothing went wrong in practice only because the one ingredient anybody tested it on was
+   * counted in pieces, where the factor is 1.
+   *
+   * <p>Now each box owns its unit and neither does any arithmetic: both units are sent, and the
+   * server converts against the canonical unit it reads from the ingredient row itself.
+   */
   const [levelUnit, setLevelUnit] = useState<string | null>(null);
   /** The count as typed, read as it changes because it decides whether the value box is required. */
   const [count, setCount] = useState("");
@@ -90,10 +134,28 @@ export function InventoryItemForm({
   const available = ingredients.filter((i) => !alreadyIn.has(i.id));
   const chosen = available.find((i) => i.id === ingredientId);
 
+  /*
+   * Both halves of the catalogue, named (T-432).
+   *
+   * <p>Rajeev's first note on this screen was that the picker "shows ingredients and supplies merged
+   * into one list". They always were, and deliberately — D-1 keeps a leaf plate in the same
+   * catalogue as a coconut because the two have the same life, and only the recipe picker leaves
+   * supplies out. What was wrong was that nothing said so: the field was labelled "Ingredient", the
+   * placeholder said "Choose an ingredient…", and a storekeeper looking for leaf plates among 114
+   * rows had no reason to think they were in there at all.
+   *
+   * <p>So the list is grouped under the two words the product already uses for them — the menu has an
+   * Ingredients screen and a Supplies screen — and the field is named for both. Nothing about which
+   * rows are offered has changed.
+   */
+  const food = available.filter((i) => !i.supply);
+  const supplies = available.filter((i) => i.supply);
+
   // The unit belongs to the ingredient, so until one is chosen there is no unit to show. It used to
   // default to kilograms, which asserted a unit for an ingredient nobody had named yet.
   const units = chosen ? (ENTRY_UNITS[chosen.unit] ?? [{ code: chosen.unit, per: 1 }]) : [];
-  const typedIn = units.find((u) => u.code === levelUnit) ?? units[0] ?? null;
+  const typedIn = units.find((u) => u.code === countUnit) ?? units[0] ?? null;
+  const levelIn = units.find((u) => u.code === levelUnit) ?? units[0] ?? null;
 
   const [stockValue, setStockValue] = usePrefilledStockValue(chosen?.id ?? null, loadStockValue);
   // Required only when the count adds stock (the conductor's ruling on R-ING-3, 2026-09-19): the
@@ -116,8 +178,10 @@ export function InventoryItemForm({
       unit: typedIn.code,
       openingQuantity: opening === "" ? null : Number(opening),
       storageLocation: emptyToNull(String(f.get("storageLocation") ?? "")),
-      // Stored in the ingredient's own unit, whichever one it was typed in.
-      reorderThreshold: level === "" ? null : Number(level) * typedIn.per,
+      // As typed, with the unit it was typed in beside it. The browser does no conversion: the
+      // ingredient's canonical unit lives on the server and that is where the arithmetic belongs.
+      reorderThreshold: level === "" ? null : Number(level),
+      reorderThresholdUnit: level === "" ? null : (levelIn?.code ?? null),
       notes: emptyToNull(String(f.get("notes") ?? "")),
       pricePerUnit: addsStock ? Number(stockValue) : null,
     });
@@ -128,7 +192,9 @@ export function InventoryItemForm({
       {error && <ErrorNotice error={error} />}
 
       {available.length === 0 && ingredients.length > 0 && (
-        <p className="text-sm text-ink-secondary">Every ingredient is already in your inventory.</p>
+        <p className="text-sm text-ink-secondary">
+          Everything in your catalogue is already in your inventory.
+        </p>
       )}
 
       {/* Two columns from `md` (768) up, one below it (VERIFY-A defect 4). At 390 wide two columns
@@ -154,7 +220,7 @@ export function InventoryItemForm({
         onSubmit={submit}
       >
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Ingredient</span>
+          <span className="pl-field-inset font-medium text-ink">Ingredient or supply</span>
           <select
             name="ingredientId"
             required
@@ -162,15 +228,26 @@ export function InventoryItemForm({
             value={ingredientId}
             onChange={(e) => {
               setIngredientId(e.target.value);
+              setCountUnit(null);
               setLevelUnit(null);
             }}
           >
-            <option value="">Choose an ingredient…</option>
-            {available.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.name} — kept in {unitLabel(i.unit)}
-              </option>
-            ))}
+            <option value="">Choose an ingredient or supply…</option>
+            {/* Two groups rather than one long list, and only where there is something in both:
+                a temple with no supplies yet should not be shown an empty heading. A browser's own
+                type-ahead works inside the open list, and `/inventory` itself has a search box. */}
+            {supplies.length === 0 || food.length === 0 ? (
+              available.map((i) => <IngredientOption key={i.id} ingredient={i} />)
+            ) : (
+              <>
+                <optgroup label="Ingredients">
+                  {food.map((i) => <IngredientOption key={i.id} ingredient={i} />)}
+                </optgroup>
+                <optgroup label="Supplies">
+                  {supplies.map((i) => <IngredientOption key={i.id} ingredient={i} />)}
+                </optgroup>
+              </>
+            )}
           </select>
         </label>
 
@@ -190,13 +267,21 @@ export function InventoryItemForm({
                 onChange={(e) => setCount(e.target.value)}
                 min="0"
                 // The unit picker sits in this same row, so the box follows whatever it is set
-                // to rather than the ingredient's stock unit (T-424).
-                step={stepForUnit(levelUnit)}
-                placeholder={chosen ? "e.g. 40" : "Choose an ingredient first"}
+                // to rather than the ingredient's stock unit (T-424) — and it follows what the
+                // picker is *showing*, not what somebody has moved it to. `countUnit` is null until
+                // it is touched, and a family with one unit has a label rather than a picker and so
+                // can never be touched at all: found by adding a leaf plate on the running app,
+                // where the count box carried step="any" and would have taken 2.5 of them (T-432).
+                step={stepForUnit(typedIn?.code)}
+                // The label is a question — "How much is on the shelf now" — and reads badly with
+                // a rule after it. Named from the chosen ingredient and the unit picked beside the
+                // box, so the sentence follows the picker the step follows (T-431).
+                {...countedBox(chosen?.name, typedIn?.code)}
+                placeholder={chosen ? "e.g. 40" : "Choose an ingredient or supply first"}
                 disabled={!chosen}
-                className={`${FIELD} min-w-0 flex-1 disabled:opacity-60`}
+                className={`${FIELD} ${PLAIN_NUMBER} min-w-0 flex-1 disabled:opacity-60`}
               />
-              <UnitControl units={units} typedIn={typedIn} onChange={setLevelUnit} />
+              <UnitControl label="Unit the count is in" units={units} typedIn={typedIn} onChange={setCountUnit} />
             </div>
           )}
         </HintedField>
@@ -212,29 +297,38 @@ export function InventoryItemForm({
         />
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Where it lives</span>
+          <span className="pl-field-inset font-medium text-ink">Where is it stored</span>
           <input name="storageLocation" placeholder="Main store, cold room…" className={FIELD} />
         </label>
 
+        {/* The level says what unit its number is in, and on a mass or a volume it lets you say
+            which (T-432). Rajeev: this field "takes units, not a bare number". Before this the box
+            had no unit anywhere on it — not in the label, not beside it, not in the hint — while the
+            inventory row that edits the same field has shown one since T-424. */}
         <HintedField
           label="Tell me when stock drops below"
           hint="Leave it blank if you’d rather not be warned. You can change it later."
         >
           {(id) => (
-            <input
-              id={id}
-              name="reorderThreshold"
-              type="number"
-              min="0"
-              // A threshold is compared against a stock level, so it is counted whenever the
-              // level is: "tell me when aprons drop below 3.6" can never be true or false in a
-              // way anybody could act on (T-424). Always the ingredient's stock unit — this box
-              // has no picker of its own and the hint names no unit.
-              step={stepForUnit(chosen?.unit)}
-              placeholder={chosen ? "e.g. 5" : ""}
-              disabled={!chosen}
-              className={`${FIELD} disabled:opacity-60`}
-            />
+            <div className="flex gap-2">
+              <input
+                id={id}
+                name="reorderThreshold"
+                type="number"
+                min="0"
+                // A threshold is compared against a stock level, so it is counted whenever the
+                // level is: "tell me when aprons drop below 3.6" can never be true or false in a
+                // way anybody could act on (T-424). It follows this box's own picker, beside it.
+                step={stepForUnit(levelIn?.code)}
+                // The same sentence the Inventory row says for the same field, so setting a level on
+                // the add form and changing it on the row cannot word one rule two ways (T-431).
+                {...countedBox(chosen?.name, levelIn?.code)}
+                placeholder={chosen ? "e.g. 5" : ""}
+                disabled={!chosen}
+                className={`${FIELD} ${PLAIN_NUMBER} min-w-0 flex-1 disabled:opacity-60`}
+              />
+              <UnitControl label="Unit the level is in" units={units} typedIn={levelIn} onChange={setLevelUnit} />
+            </div>
           )}
         </HintedField>
 
@@ -298,8 +392,8 @@ export function StockValueField({
           disabled={disabled}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={disabled ? "Choose an ingredient first" : "e.g. 60"}
-          className={`${FIELD} disabled:opacity-60`}
+          placeholder={disabled ? "Choose an ingredient or supply first" : "e.g. 60"}
+          className={`${FIELD} ${PLAIN_NUMBER} disabled:opacity-60`}
         />
       )}
     </HintedField>
@@ -341,12 +435,21 @@ export function usePrefilledStockValue(ingredientId: string | null, load: LoadSt
   return [value, setValue] as const;
 }
 
-/** The unit a level is typed in: a choice where the family has two, a plain label where it has one. */
+/**
+ * The unit a figure is typed in: a choice where the family has two, a plain label where it has one.
+ *
+ * <p>Two boxes on this form each have one of these and they are independent (T-432). So each needs
+ * an accessible name of its own — two controls both called "Unit" is a form a screen reader cannot
+ * describe, and it was one box's picker silently governing the other's arithmetic that this whole
+ * field was rebuilt to fix.
+ */
 function UnitControl({
+  label,
   units,
   typedIn,
   onChange,
 }: {
+  label: string;
   units: { code: string; per: number }[];
   typedIn: { code: string; per: number } | null;
   onChange: (code: string) => void;
@@ -367,7 +470,7 @@ function UnitControl({
     );
   }
   return (
-    <select aria-label="Unit" className={FIELD} value={typedIn.code} onChange={(e) => onChange(e.target.value)}>
+    <select aria-label={label} className={FIELD} value={typedIn.code} onChange={(e) => onChange(e.target.value)}>
       {units.map((u) => (
         <option key={u.code} value={u.code}>
           {unitLabel(u.code)}
@@ -375,6 +478,16 @@ function UnitControl({
       ))}
     </select>
   );
+}
+
+/**
+ * One row of the picker: the name, and the unit it is kept in.
+ *
+ * <p>The unit is here because the two boxes below it are typed in it, and because it is the one
+ * thing about a consumable that cannot be changed afterwards once stock exists.
+ */
+function IngredientOption({ ingredient }: { ingredient: IngredientView }) {
+  return <option value={ingredient.id}>{ingredient.name} — kept in {unitLabel(ingredient.unit)}</option>;
 }
 
 function emptyToNull(value: string): string | null {

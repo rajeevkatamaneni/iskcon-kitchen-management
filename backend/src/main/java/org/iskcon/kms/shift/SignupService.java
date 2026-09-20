@@ -611,6 +611,93 @@ public class SignupService {
 	}
 
 	/**
+	 * How many past shifts {@link #myPastShifts} will return, newest first.
+	 *
+	 * <p><strong>A row cap rather than a months-back window, deliberately.</strong> Both bound the
+	 * query; they fail differently at the edges, and only one of them fails safely. A window — "the
+	 * last twelve months" — is bounded by the calendar and not by the data, so a devotee who serves
+	 * at every festival and nothing between sees three rows and a devotee who serves twice a week
+	 * sees a hundred: the bound does nothing for the person it was written for and hides history
+	 * from the person it was not. A row cap is the same size for everybody, always shows a volunteer
+	 * something, and is the number the response size is actually made of.
+	 *
+	 * <p>Fifty is past any plausible reading in one sitting and still a list the browser renders
+	 * without thought. The screen says when it has been reached — {@code HISTORY_CAP} in
+	 * {@code frontend/app/my-shifts/page.tsx}, which must stay this number — because a volunteer of
+	 * three years shown her fifty most recent with no word about it has been told something false by
+	 * omission.
+	 */
+	static final int PAST_SHIFTS_LIMIT = 50;
+
+	/**
+	 * The shifts this volunteer has already served (T-429): the "Past shifts" half of
+	 * <em>My shifts</em>, with whether she was recorded as having turned up.
+	 *
+	 * <p><strong>Why it exists.</strong> {@link #myShifts} lists only what is still to come, so a
+	 * volunteer with six past services opened her own page and found it empty while the coordinator
+	 * could see the same six on the roster. Rajeev's words on 2026-09-20: <em>"a volunteer cannot
+	 * see anything she has already done"</em>. The fact was there the whole time —
+	 * {@code shift_signups.attended} has been written since V107 — and {@link RosterView}, behind
+	 * {@code MANAGE_VOLUNTEER_SHIFTS}, was the only read of it. The person the fact is <em>about</em>
+	 * had no endpoint that would return it.
+	 *
+	 * <p><strong>The three predicates are {@link #myShifts}'s, with the date turned round.</strong>
+	 * A shift that has already happened ({@code shift_date < CURRENT_DATE}), that she was still on
+	 * ({@code released_at IS NULL}), that was not called off ({@code status = 'OPEN'}). Because the
+	 * date test is the exact negation of the one above it, and both are the database's
+	 * {@code CURRENT_DATE} rather than an application clock, the two lists partition her signups: no
+	 * shift can appear on both and none can fall between them however the server's timezone is set.
+	 * Keep them negations of each other if either is ever changed.
+	 *
+	 * <p><strong>What is not folded in here, and why.</strong> Shifts she was taken off, and shifts
+	 * cancelled with her on them, are {@link #myReleasedShifts}'s answer already. Adding them here
+	 * would give one fact two homes and two chances to disagree, and it would quietly turn a list of
+	 * service into a list of things that did not happen. The screen names each list for what it is.
+	 *
+	 * <p><strong>{@code attended} is read with {@code getObject}, never {@code getBoolean}.</strong>
+	 * {@code ResultSet.getBoolean} returns {@code false} for SQL NULL, which would turn every shift
+	 * nobody has marked into a shift she is recorded as having missed — the exact harm V107 made the
+	 * column nullable to prevent, delivered to the one person it costs something. The null survives
+	 * to the wire: the record component is {@link Boolean}, and {@code MyPastShiftsIT} asserts the
+	 * JSON carries {@code "attended": null} rather than {@code false}.
+	 *
+	 * <p><strong>Bounded at {@link #PAST_SHIFTS_LIMIT} rows</strong>, newest first, so that a
+	 * volunteer of three years cannot make this a scan of her whole history on every page load. The
+	 * ordering is {@code (shift_date DESC, start_time DESC)} — which day, then which of that day's
+	 * meals — so "newest first" reads the way a person means it at a temple that serves three times
+	 * a day.
+	 *
+	 * <p>Tenant isolation is RLS on both tables, as on every read here; {@code volunteer_user_id}
+	 * comes from the verified caller and scopes it to their own rows within the temple. It takes no
+	 * "whose" parameter, for the reason {@code myReleasedShifts} gives: the caller's id is the whole
+	 * of its scoping. V159 adds the {@code (tenant_id, volunteer_user_id)} index this is the first
+	 * query to need.
+	 */
+	@Transactional(readOnly = true)
+	public List<MyPastShiftView> myPastShifts(UUID volunteerUserId) {
+		return jdbc.query("""
+				SELECT ss.id AS signup_id, ss.source, ss.signed_up_at, ss.attended,
+					   ss.attendance_recorded_at, s.id AS shift_id, s.title,
+					   s.shift_date, s.start_time, s.end_time, s.location
+				FROM shift_signups ss JOIN shifts s ON s.id = ss.shift_id
+				WHERE ss.volunteer_user_id = ? AND ss.released_at IS NULL
+				  AND s.status = 'OPEN' AND s.shift_date < CURRENT_DATE
+				ORDER BY s.shift_date DESC, s.start_time DESC
+				LIMIT %d
+				""".formatted(PAST_SHIFTS_LIMIT), (rs, n) -> new MyPastShiftView(
+				rs.getObject("signup_id", UUID.class), rs.getObject("shift_id", UUID.class),
+				rs.getString("title"), rs.getObject("shift_date", LocalDate.class),
+				rs.getObject("start_time", LocalTime.class), rs.getObject("end_time", LocalTime.class),
+				rs.getString("location"), rs.getString("source"),
+				toInstant(rs.getObject("signed_up_at", OffsetDateTime.class)),
+				// getObject, not getBoolean: getBoolean reads SQL NULL as false and would record
+				// every unmarked shift as an absence. See this method's note.
+				rs.getObject("attended", Boolean.class),
+				toInstant(rs.getObject("attendance_recorded_at", OffsetDateTime.class))),
+				volunteerUserId);
+	}
+
+	/**
 	 * The shifts this volunteer came off in the last seven days without choosing to (T-149).
 	 *
 	 * <p><strong>Why this exists.</strong> {@link #myShifts} lists what a volunteer is still on, so

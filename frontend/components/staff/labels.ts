@@ -1,4 +1,12 @@
-import type { EmploymentStatus, EmploymentType, JobTitleGroup, StaffProfileView, SystemAccess } from "@/lib/api";
+import type {
+  EmploymentStatus,
+  EmploymentType,
+  JobTitleGroup,
+  PreviousEmploymentView,
+  StaffDocumentKind,
+  StaffProfileView,
+  SystemAccess,
+} from "@/lib/api";
 
 /**
  * The words the staff screens use for the things the API sends back as enum names.
@@ -63,6 +71,44 @@ export function dayMonthYear(iso: string): string {
  * there to tell them apart, and terminating or paying the wrong person is not a mistake this app can
  * undo.
  */
+/**
+ * A stored PAN with only its last four characters showing: `••••••1234`.
+ *
+ * <p>Here rather than written out where it is needed. It was an inline template literal in two
+ * places — the form and the record — with nothing keeping the two the same length, and "how much of
+ * a tax number we show" is not a decision to have two of.
+ */
+export function maskedPan(last4: string): string {
+  return `••••••${last4}`;
+}
+
+/** What the screens call each kind of file on a record. The same words the server's enum carries. */
+export const DOCUMENT_LABELS: Record<StaffDocumentKind, string> = {
+  PHOTO: "Photo",
+  PAN_SCAN: "PAN card",
+  AADHAAR_SCAN: "Aadhaar card",
+};
+
+/**
+ * "March 2019 – July 2023" for a past job, and what to say when a date is missing.
+ *
+ * <p>Month and year, not the day: nobody remembers the day they started at a caterer six years ago,
+ * and printing one the record does not hold would be a precision it has not got. A job with no end
+ * date is one they were still in, so it reads "until they came here" rather than trailing off.
+ */
+export function jobSpan(job: PreviousEmploymentView): string | null {
+  const from = job.fromDate ? monthAndYear(job.fromDate) : null;
+  const to = job.toDate ? monthAndYear(job.toDate) : null;
+  if (from && to) return `${from} – ${to}`;
+  if (from) return `${from} – until they came here`;
+  if (to) return `Until ${to}`;
+  return null;
+}
+
+function monthAndYear(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+}
+
 export function whoLine(staff: StaffProfileView): string {
   const when =
     staff.employmentStatus === "ACTIVE"

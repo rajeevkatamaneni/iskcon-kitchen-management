@@ -50,6 +50,17 @@ export interface AttachmentThumbProps {
    * upload box itself, which the mock draws as a picture and not a button.
    */
   openable?: boolean;
+  /**
+   * Whether a photo is fetched as soon as the thumbnail appears, to draw the picture. True by
+   * default, which is what a bill and a payment's proof want.
+   *
+   * <p>**False where fetching the file is itself an event.** A staff member's PAN or Aadhaar scan is
+   * read only through an endpoint that writes an audit row for the read (T-428), so drawing forty
+   * little pictures of identity documents would record forty reads nobody asked for — the same
+   * mistake as fetching a PAN on page load and hiding it behind CSS. With this off the thumbnail is
+   * the file-type icon until somebody opens it, and opening it is the read.
+   */
+  preview?: boolean;
 }
 
 export function AttachmentThumb({
@@ -59,6 +70,7 @@ export function AttachmentThumb({
   load,
   small = false,
   openable = true,
+  preview = true,
 }: AttachmentThumbProps) {
   const isPdf = contentType === "application/pdf";
   const isImage = contentType.startsWith("image/");
@@ -113,8 +125,8 @@ export function AttachmentThumb({
   }, [fileId]);
 
   useEffect(() => {
-    if (isImage) fetchFile().catch(() => undefined);
-  }, [isImage, fetchFile]);
+    if (isImage && preview) fetchFile().catch(() => undefined);
+  }, [isImage, preview, fetchFile]);
 
   function openFile() {
     setError(null);

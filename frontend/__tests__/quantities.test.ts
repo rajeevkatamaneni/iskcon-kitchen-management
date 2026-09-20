@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { cooksQuantity, quantity, unitLabel, unitLabelFor } from "@/lib/format";
+import {
+  cooksQuantity,
+  lastCountedPhrase,
+  oneUnitFor,
+  quantity,
+  stockCoverPhrase,
+  stockRunsOutSoon,
+  unitLabel,
+  unitLabelFor,
+} from "@/lib/format";
 
 /**
  * The vector table for the one display rule (E11-S3).
@@ -161,5 +170,133 @@ describe("the label beside a number, and the label on its own", () => {
     expect(unitLabel("PIECES")).toBe("pieces");
     expect(unitLabel("KG")).toBe("Kg");
     expect(unitLabel(null)).toBe("");
+  });
+});
+
+/**
+ * One row, one unit (T-432).
+ *
+ * <p>The row Rajeev found on staging: **2.06 Kg on hand, 2.04 Kg committed, 20 gm available**. Every
+ * figure was right by the table above — `quantity()` promotes from 1,000 up and is asked one figure
+ * at a time — and the row was unreadable, because the subtraction the three columns exist to show
+ * changed scale in the middle of itself.
+ *
+ * <p>The first test in this block is therefore the one that matters most: the table above must go on
+ * saying exactly what it says. `quantity()` has about forty callers and a figure standing on its own
+ * should still be said the way a person says it. This is a second entry point, not a new rule for
+ * the old one.
+ */
+describe("several figures about one thing, said in one unit", () => {
+  it("leaves quantity() alone — a figure on its own is still promoted and demoted as before", () => {
+    expect(quantity(0.02, "KG")).toBe("20 gm");
+    expect(quantity(2.06, "KG")).toBe("2.06 Kg");
+  });
+
+  it("says the row Rajeev found in one unit, and the available figure no longer switches to grams", () => {
+    const say = oneUnitFor("KG", [2.06, 2.04, 0.02]);
+    expect(say(2.06)).toBe("2.06 Kg");
+    expect(say(2.04)).toBe("2.04 Kg");
+    expect(say(0.02)).toBe("0.02 Kg");
+  });
+
+  it("takes its unit from the biggest figure, so a small row stays in the small unit", () => {
+    // Nothing here is a kilogram's worth, so kilograms would print three leading zeroes on every
+    // figure. The largest figure is what says how big the quantities in this row are.
+    const say = oneUnitFor("KG", [0.85, 0.35, 0.02]);
+    expect(say(0.85)).toBe("850 gm");
+    expect(say(0.02)).toBe("20 gm");
+  });
+
+  it("promotes the whole row as soon as one figure is a kilogram", () => {
+    const say = oneUnitFor("KG", [1.2, 0.85, 0.35]);
+    expect(say(1.2)).toBe("1.2 Kg");
+    expect(say(0.85)).toBe("0.85 Kg");
+  });
+
+  it("keeps the stored unit when every figure is nothing, as a lone zero already does", () => {
+    expect(oneUnitFor("L", [0, 0, 0])(0)).toBe("0 L");
+    expect(quantity(0, "L")).toBe("0 L");
+  });
+
+  it("never prints a figure that exists as a zero, however small it is beside the others", () => {
+    // 0.4 gm forced into kilograms is 0.0004, which does not fit the three decimals a ledger figure
+    // is given — and "0 Kg" would say the shelf is empty when it is not.
+    const say = oneUnitFor("KG", [500, 0.0004]);
+    expect(say(0.0004)).toBe("0.0004 Kg");
+    expect(say(500)).toBe("500 Kg");
+  });
+
+  it("rounds nothing away — this is the ledger form and the figures have to add up", () => {
+    // Found by measuring the real item screen: a draw of 418.2 gm beside a lot of 4.664 Kg. Three
+    // decimals is a gram of a kilo, so it would have printed 0.418 Kg and lost two hundred
+    // milligrams out of a figure somebody reconciles against.
+    const say = oneUnitFor("GM", [4664, 418.2]);
+    expect(say(418.2)).toBe("0.4182 Kg");
+    expect(say(4664)).toBe("4.664 Kg");
+  });
+
+  it("carries a negative through on the row's scale — available may be less than nothing", () => {
+    const say = oneUnitFor("KG", [1.96, 2.04, -0.08]);
+    expect(say(-0.08)).toBe("-0.08 Kg");
+  });
+
+  it("has nothing to convert for a count, and hands back what quantity() would say", () => {
+    const say = oneUnitFor("PIECES", [1200, 1]);
+    expect(say(1200)).toBe("1,200 pieces");
+    expect(say(1)).toBe("1 piece");
+  });
+
+  it("says a figure nobody has with a dash, as quantity() does", () => {
+    expect(oneUnitFor("KG", [5])(null)).toBe("\u2014");
+  });
+
+  it("is not thrown by a row where every figure is missing", () => {
+    expect(oneUnitFor("KG", [null, undefined])(2)).toBe("2 Kg");
+  });
+});
+
+/**
+ * How long it lasts, and the honesty it is required to keep (Rajeev, 2026-09-20).
+ *
+ * <p>He asked for an approximate figure and stipulated the word "Approximately", and that where
+ * there is not enough history to judge it must say so rather than guess.
+ */
+describe("what the screen will claim about running out", () => {
+  const cover = (days: number, beyondWindow = false) => ({ days, beyondWindow });
+
+  it("uses his word on every figure it gives", () => {
+    expect(stockCoverPhrase(cover(12), 50)).toBe("Approximately 12 days");
+    expect(stockCoverPhrase(cover(1), 4)).toBe("Approximately 1 day");
+  });
+
+  it("says there is not enough history rather than guessing, and never leaves the cell blank", () => {
+    expect(stockCoverPhrase(null, 50)).toBe("Not enough history");
+    expect(stockCoverPhrase(undefined, 50)).toBe("Not enough history");
+  });
+
+  it("says the shelf is empty rather than 'approximately 0 days'", () => {
+    expect(stockCoverPhrase(cover(0), 0)).toBe("None left");
+    expect(stockCoverPhrase(cover(0), -3)).toBe("None left");
+  });
+
+  it("says less than a day where there is stock and today will finish it", () => {
+    expect(stockCoverPhrase(cover(0), 2)).toBe("Less than a day");
+  });
+
+  it("will not forecast past the evidence it was made from", () => {
+    expect(stockCoverPhrase(cover(90, true), 4000)).toBe("More than 3 months");
+  });
+
+  it("warns in amber only inside a week, and never about an absence of judgement", () => {
+    expect(stockRunsOutSoon(cover(3), 12)).toBe(true);
+    expect(stockRunsOutSoon(cover(7), 28)).toBe(true);
+    expect(stockRunsOutSoon(cover(8), 32)).toBe(false);
+    expect(stockRunsOutSoon(cover(90, true), 4000)).toBe(false);
+    expect(stockRunsOutSoon(null, 50)).toBe(false);
+  });
+
+  it("says nobody has counted it rather than printing a dash that reads as a failed load", () => {
+    expect(lastCountedPhrase(null)).toBe("Never counted");
+    expect(lastCountedPhrase("2026-09-14")).toBe("14 Sept 2026");
   });
 });

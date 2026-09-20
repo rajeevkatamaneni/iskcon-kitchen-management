@@ -136,7 +136,7 @@ describe("recording a delivery — the sentence this screen says for itself", ()
     const { save } = panel([BOXED]);
     fireEvent.change(box(/Apron received now/), { target: { value: "2.8" } });
     await save();
-    expect(screen.getByText("Apron received now must be a whole number")).toHaveClass("text-danger");
+    expect(screen.getByText("Apron is counted in whole pieces")).toHaveClass("text-danger");
     expect(api.recordDelivery).not.toHaveBeenCalled();
   });
 
@@ -146,7 +146,7 @@ describe("recording a delivery — the sentence this screen says for itself", ()
     const { save } = panel([BOXED]);
     fireEvent.change(box(/Apron received now/), { target: { value: "3" } });
     await save();
-    expect(screen.queryByText(/must be a whole number/)).toBeNull();
+    expect(screen.queryByText(/whole/)).toBeNull();
     expect(api.recordDelivery).toHaveBeenCalledTimes(1);
   });
 
@@ -154,7 +154,7 @@ describe("recording a delivery — the sentence this screen says for itself", ()
     const { onSaved, save } = panel([APRONS]);
     fireEvent.change(box(/Apron received now/), { target: { value: "1.5" } });
     await save();
-    expect(screen.getByText("Apron received now must be a whole number")).toHaveClass("text-danger");
+    expect(screen.getByText("Apron is counted in whole pieces")).toHaveClass("text-danger");
     expect(box(/Apron received now/)).toHaveAttribute("aria-invalid", "true");
     expect(api.recordDelivery).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe("recording a delivery — the sentence this screen says for itself", ()
     fireEvent.change(box(/Apron received now/), { target: { value: "10" } });
     fireEvent.change(box(/Apron rejected on delivery/), { target: { value: "0.5" } });
     await save();
-    expect(screen.getByText("Apron rejected on delivery must be a whole number")).toHaveClass("text-danger");
+    expect(screen.getByText("Apron is counted in whole pieces")).toHaveClass("text-danger");
     expect(api.recordDelivery).not.toHaveBeenCalled();
   });
 
@@ -178,7 +178,7 @@ describe("recording a delivery — the sentence this screen says for itself", ()
     const { save } = panel([DAL]);
     fireEvent.change(box(/Toor dal received now/), { target: { value: "1.5" } });
     await save();
-    expect(screen.queryByText(/must be a whole number/)).toBeNull();
+    expect(screen.queryByText(/whole/)).toBeNull();
     expect(api.recordDelivery).toHaveBeenCalledTimes(1);
   });
 
@@ -260,7 +260,7 @@ describe("planning a dish — the sentence Form says from stepMismatch", () => {
     render(<Band dishes={[dish({ unit: "PIECES", name: "Ladoo", target: null })]} />);
     fireEvent.change(box(/Amount of Ladoo/), { target: { value: "1.5" } });
     saveBand();
-    expect(screen.getByText("Amount of Ladoo must be a whole number")).toHaveClass("text-danger");
+    expect(screen.getByText("Ladoo is counted in whole pieces")).toHaveClass("text-danger");
     expect(box(/Amount of Ladoo/)).toHaveAttribute("aria-invalid", "true");
   });
 
@@ -273,7 +273,7 @@ describe("planning a dish — the sentence Form says from stepMismatch", () => {
     render(<Band dishes={[dish({ target: null })]} />);
     fireEvent.change(box(/Amount of Kheer/), { target: { value: "1.5" } });
     saveBand();
-    expect(screen.queryByText(/must be a whole number/)).toBeNull();
+    expect(screen.queryByText(/whole/)).toBeNull();
     expect(box(/Amount of Kheer/)).toHaveValue(1.5);
   });
 
@@ -291,6 +291,37 @@ describe("planning a dish — the sentence Form says from stepMismatch", () => {
   it("still shows a planned amount that is already a fraction of a counted dish", () => {
     render(<Band dishes={[dish({ unit: "PIECES", name: "Ladoo", target: 88.5 })]} />);
     expect(box(/Amount of Ladoo/)).toHaveValue(88.5);
+  });
+});
+
+/* ------------------------------------------- one rule, one sentence, on both halves of the app */
+
+/**
+ * The two halves of the vocabulary, made to say the same thing about the same thing (T-431).
+ *
+ * <p>These are the only two screens in the suite that sit on opposite sides of the divide — the
+ * delivery panel draws its own red sentence, the planner's band lets `Form` draw one from
+ * `stepMismatch` — and their labels could hardly be less alike: "Apron received now, in pieces"
+ * against "Amount of Apron". Before this the person read two sentences for one rule. Asserted on
+ * the rendered text rather than on the functions behind it, because a string equal in a unit test
+ * and different on the page is exactly the failure the one-vocabulary rule is about.
+ */
+describe("one rule, one sentence, inside a Form and outside one", () => {
+  beforeEach(() => api.recordDelivery.mockClear());
+
+  it("says the same words about an apron on both screens", async () => {
+    // Both mounted at once, so the two sentences are read off one document and compared as the
+    // person would meet them — rather than compared as two strings from two functions.
+    render(<Band dishes={[dish({ unit: "PIECES", name: "Apron", target: null })]} />);
+    fireEvent.change(box(/Amount of Apron/), { target: { value: "1.5" } });
+    saveBand();
+
+    const { save } = panel([APRONS]);
+    fireEvent.change(box(/Apron received now/), { target: { value: "1.5" } });
+    await save();
+
+    const said = screen.getAllByText(/whole/).map((el) => el.textContent);
+    expect(said).toEqual(["Apron is counted in whole pieces", "Apron is counted in whole pieces"]);
   });
 });
 

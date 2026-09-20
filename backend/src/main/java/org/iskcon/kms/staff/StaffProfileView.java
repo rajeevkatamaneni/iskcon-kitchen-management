@@ -60,7 +60,6 @@ public record StaffProfileView(
 		EmploymentStatus employmentStatus,
 		LocalDate lastWorkingDay,
 		String endReason,
-		String notes,
 
 		Instant createdAt) {
 

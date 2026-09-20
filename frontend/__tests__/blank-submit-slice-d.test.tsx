@@ -43,6 +43,8 @@ const { authRef, paramsRef, refs, reloadMock, mocks } = vi.hoisted(() => {
     paramsRef: { current: { id: "s1" } },
     refs: {
       register: empty(),
+      // One person's whole record (T-428): what the record, edit, pay and terminate screens read.
+      staffRecord: empty(),
       pay: empty(),
       titles: empty(),
       devotees: empty(),
@@ -89,6 +91,8 @@ vi.mock("@/lib/use-authed-query", () => ({
     if (asks.includes("listKitchens")) return { data: [kitchen()], error: null, loading: false, reload: reloadMock };
     const ref = asks.includes("staffConductNotes")
       ? refs.conduct
+      : asks.includes("staffMember")
+        ? refs.staffRecord
       : asks.includes("staffRegister")
         ? refs.register
         : asks.includes("staffPay")
@@ -178,6 +182,9 @@ beforeEach(() => {
     current: [member()],
     former: [former({ id: "s2", fullName: "Madhava Das", employmentStatus: "TERMINATED", lastWorkingDay: "2026-08-15" })],
   });
+  // The person the screens about one person are opened on. The ban section below swaps it for the
+  // former employee it is written about, because a record and a termination are different people.
+  set(refs.staffRecord, { profile: member(), banned: false, documents: [], previousEmployment: [] });
   set(refs.pay, pay());
   set(refs.titles, TITLES);
   set(refs.devotees, []);
@@ -302,6 +309,21 @@ describe("ending an employment (TerminateForm, with the ban fieldset inside it)"
 describe("a ban record, corrected or taken back (Ban.tsx), beside the conduct notes", () => {
   beforeEach(() => {
     paramsRef.current = { id: "s2" };
+    refs.staffRecord.current = {
+      data: {
+        profile: former({
+          id: "s2",
+          fullName: "Madhava Das",
+          employmentStatus: "TERMINATED",
+          lastWorkingDay: "2026-08-15",
+        }).profile,
+        banned: false,
+        documents: [],
+        previousEmployment: [],
+      },
+      error: null,
+      loading: false,
+    };
     refs.bans.current = { data: [ban()], error: null, loading: false };
   });
 

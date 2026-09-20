@@ -15,7 +15,13 @@ import {
 import { createPortal } from "react-dom";
 
 import { FIELD_ERROR } from "@/components/Field";
-import { messageFor, UNNAMED_FIELD, type ControlFacts } from "@/components/ds/formMessages";
+import {
+  COUNTED_SUBJECT_ATTRIBUTE,
+  COUNTED_UNIT_ATTRIBUTE,
+  messageFor,
+  UNNAMED_FIELD,
+  type ControlFacts,
+} from "@/components/ds/formMessages";
 
 /**
  * A `<form>` that says what is wrong with each box in words, under the box, in red (T-160).
@@ -243,6 +249,12 @@ function nameOf(control: Control): string {
 }
 
 function factsOf(control: Control): ControlFacts {
+  // What the box counts, where it says so (T-431), so that a refused fraction can name the thing
+  // and its unit rather than repeating the field's label at the person. Both or neither: a subject
+  // with no unit has no sentence to go in, and a unit with no subject has nothing to be true of.
+  const subject = control.getAttribute(COUNTED_SUBJECT_ATTRIBUTE)?.trim();
+  const unit = control.getAttribute(COUNTED_UNIT_ATTRIBUTE)?.trim();
+
   return {
     type: control.type,
     validity: verdictOf(control),
@@ -251,6 +263,7 @@ function factsOf(control: Control): ControlFacts {
     step: control.getAttribute("step") ?? "",
     maxLength: "maxLength" in control ? control.maxLength : -1,
     moreThan: control.getAttribute(MORE_THAN_ATTRIBUTE)?.trim() ?? "",
+    counted: subject && unit ? { subject, unit } : undefined,
   };
 }
 

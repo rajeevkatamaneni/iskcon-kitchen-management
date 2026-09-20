@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type {
+import {
   ApiError,
-  BanCategoryOption,
-  EmploymentBanView,
-  StaffConductNoteView,
-  StaffPayView,
-  StaffRegisterView,
+  type BanCategoryOption,
+  type EmploymentBanView,
+  type StaffConductNoteView,
+  type StaffPayView,
+  type StaffRecordView,
 } from "@/lib/api";
-import { CATEGORIES, ban, former, member, pay, payment } from "./staff-fixtures";
+import { CATEGORIES, ban, former, member, pay, payment, record } from "./staff-fixtures";
 
 /**
  * A former employee's whole record (E6-S8, B9), read.
@@ -25,7 +25,7 @@ import { CATEGORIES, ban, former, member, pay, payment } from "./staff-fixtures"
 const {
   authRef,
   paramsRef,
-  registerRef,
+  recordRef,
   payRef,
   bansRef,
   categoriesRef,
@@ -41,8 +41,8 @@ const {
     },
   },
   paramsRef: { current: { id: "s2" } },
-  registerRef: {
-    current: { data: null as StaffRegisterView | null, error: null as ApiError | null, loading: false },
+  recordRef: {
+    current: { data: null as StaffRecordView | null, error: null as ApiError | null, loading: false },
   },
   payRef: { current: { data: null as StaffPayView | null, error: null as ApiError | null, loading: false } },
   bansRef: { current: { data: [] as EmploymentBanView[], error: null, loading: false } },
@@ -67,8 +67,8 @@ vi.mock("@/lib/use-authed-query", () => ({
     const source = fn.toString();
     const ref = source.includes("staffConductNotes")
       ? conductRef
-      : source.includes("staffRegister")
-      ? registerRef
+      : source.includes("staffMember")
+      ? recordRef
       : source.includes("staffPay")
         ? payRef
         : source.includes("templeBans")
@@ -107,8 +107,8 @@ describe("a former employee's record", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     paramsRef.current = { id: "s2" };
-    registerRef.current = {
-      data: { current: [member()], former: [formerWithEverything()] },
+    recordRef.current = {
+      data: record(formerWithEverything().profile, { banned: formerWithEverything().banned }),
       error: null,
       loading: false,
     };
@@ -128,12 +128,21 @@ describe("a former employee's record", () => {
     retractMock.mockReset().mockResolvedValue(undefined);
   });
 
-  it("is closed, not cancelled — there is nothing here to cancel", () => {
+  it("is headed by the person, not by the task (T-428)", () => {
     render(<StaffRecordPage />);
-    expect(screen.getByRole("heading", { name: "Staff record" })).toBeInTheDocument();
-    expect(screen.getByText(/Madhava Das · Kitchen assistant · left/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute("href", "/staff");
-    expect(screen.queryByRole("link", { name: "Cancel" })).not.toBeInTheDocument();
+    // Rajeev, 2026-09-20: "their name is prominent". It used to be "Staff record", with the person
+    // on a quiet line under it, because FocusScreen makes the task the heading. This is not one.
+    expect(screen.getByRole("heading", { level: 1, name: "Madhava Das" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Staff record" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Kitchen assistant · Main kitchen · left/)).toBeInTheDocument();
+    // A back-link rather than a Close, which is what not being a focus screen earns.
+    expect(screen.getByRole("link", { name: "← Staff" })).toHaveAttribute("href", "/staff");
+    expect(screen.queryByRole("link", { name: "Close" })).not.toBeInTheDocument();
+  });
+
+  it("offers no Edit on somebody who has left, because the server refuses the save", () => {
+    render(<StaffRecordPage />);
+    expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
   });
 
   it("carries the whole record, including how the employment ended and why", () => {
@@ -148,13 +157,21 @@ describe("a former employee's record", () => {
     expect(screen.getByText(/9,000 on .*20/)).toBeInTheDocument();
   });
 
-  it("keeps the PAN behind a reveal, because reading one is recorded", async () => {
+  it("keeps the PAN behind the eye, because reading one is recorded", async () => {
     render(<StaffRecordPage />);
     expect(screen.getByText("••••••234F")).toBeInTheDocument();
+    // Nothing is fetched by opening the record. The whole point of the eye.
+    expect(revealMock).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: /reveal/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Show the PAN" }));
     await waitFor(() => expect(screen.getByText("ABCDE1234F")).toBeInTheDocument());
     expect(revealMock).toHaveBeenCalledWith("s2", "test-token");
+
+    // Hiding throws the value away, so showing it again is a second read — and a second audit row.
+    fireEvent.click(screen.getByRole("button", { name: "Hide the PAN" }));
+    expect(screen.getByText("••••••234F")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show the PAN" }));
+    await waitFor(() => expect(revealMock).toHaveBeenCalledTimes(2));
   });
 
   it("shows the record this temple raised, whole", () => {
@@ -222,14 +239,27 @@ describe("a former employee's record", () => {
 
   it("opens for a current member of staff too, without the ending", () => {
     paramsRef.current = { id: "s1" };
+    recordRef.current = { data: record(), error: null, loading: false };
     render(<StaffRecordPage />);
-    const record = screen.getByRole("region", { name: /employment/i });
-    expect(within(record).getByText("Head Cook")).toBeInTheDocument();
-    expect(within(record).queryByText(/how it ended/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute("href", "/staff/s1/edit");
+    // Exact: "Previous employment" is a region on this screen too since T-428.
+    const employment = screen.getByRole("region", { name: "Employment" });
+    expect(within(employment).getByText("Head Cook")).toBeInTheDocument();
+    expect(within(employment).queryByText(/how it ended/i)).not.toBeInTheDocument();
   });
 
-  it("says so plainly when the address belongs to nobody on the register", () => {
+  it("says so plainly when the address belongs to nobody at this temple", () => {
     paramsRef.current = { id: "gone" };
+    recordRef.current = {
+      data: null,
+      error: new ApiError({
+        code: "KMS-400030",
+        message: "We couldn’t find that.",
+        action: "Go back and try again.",
+        fieldErrors: [],
+      }),
+      loading: false,
+    };
     render(<StaffRecordPage />);
     expect(screen.getByText(/can’t find that person/i)).toBeInTheDocument();
   });

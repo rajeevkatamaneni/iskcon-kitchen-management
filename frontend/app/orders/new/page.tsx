@@ -9,6 +9,7 @@ import { ItemCombobox, type ComboChoice, type ComboItem } from "@/components/Ite
 import { revealNotice } from "@/components/PurchaseOrderEditor";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
+import { countedBox, PACKS } from "@/components/ds/formMessages";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import {
@@ -598,10 +599,14 @@ function CreatePurchaseOrderView() {
                         min="0"
                         data-more-than="0"
                         // A vendor sells whole bags: a pack line's box counts packs, and `Form`
-                        // names a part of one beside the box ("… must be a whole number").
-                        // And a line in a counted unit counts the things themselves, pack or
-                        // no pack — an order for 3.6 brooms is the T-424 defect.
+                        // says so beside the box. And a line in a counted unit counts the things
+                        // themselves, pack or no pack — an order for 3.6 brooms is the T-424 defect.
                         step={l.packId ? "1" : stepForUnit(l.unit)}
+                        // The two reasons are different and the sentence says which one applies
+                        // (T-431): "Rice is ordered in whole packs" for a pack line, "Broom is
+                        // counted in whole pieces" for a line in the thing's own unit. Claiming
+                        // pieces on a pack of rice would simply be false.
+                        {...countedBox(l.name, l.packId ? PACKS : l.unit)}
                         aria-label={`Quantity of ${l.name}`}
                         value={l.quantity}
                         onChange={(e) => update(l.key, { quantity: e.target.value })}

@@ -7,7 +7,7 @@ import { Button, BUTTON_CLASSES } from "@/components/ds/Button";
 import { required as requiredMessage } from "@/components/ds/formMessages";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { FIELD_ERROR, FIELD_LABEL } from "@/components/Field";
-import { toApiError, type ApiError, type AttachmentView } from "@/lib/api";
+import { toApiError, type ApiError } from "@/lib/api";
 
 /**
  * A required upload: the copy of a bill on an invoice (R-INV-2), and the proof on a payment (R-PAY-2).
@@ -36,6 +36,14 @@ import { toApiError, type ApiError, type AttachmentView } from "@/lib/api";
  *
  * <h3>Required, in the form's own words</h3>
  *
+ * <h3>What it takes as a value</h3>
+ *
+ * <p>Three fields and not a named type: an id to fetch it by, a name to print, and what the server
+ * found the file to be. `AttachmentView` (a bill, a payment's proof) and `StaffDocumentView` (a
+ * photograph, a PAN or Aadhaar scan, T-428) both satisfy it, which is the point — the two live in
+ * different tables for V144's reason, and a person who has attached a bill should not have to learn
+ * a second box to attach a scan of their cook's PAN card.
+ *
  * <p>Nothing about a file input can say "an upload has finished", so this cannot lean on the
  * browser's `required` the way `Form` does for a text box. Instead it listens for its form's submit,
  * and if nothing has been uploaded by then it shows `formMessages.required(label)` — "Copy of the bill
@@ -43,7 +51,14 @@ import { toApiError, type ApiError, type AttachmentView } from "@/lib/api";
  * save without a value, as every form here keeps its own check as the twin guard; `invalid` lets it
  * show the message itself too, when it has decided the form is incomplete some other way.
  */
-export interface AttachmentUploadProps {
+/** The least a value has to be for this box to draw it. See "What it takes as a value" above. */
+export interface UploadedFile {
+  id: string;
+  contentType: string;
+  originalName: string | null;
+}
+
+export interface AttachmentUploadProps<V extends UploadedFile = UploadedFile> {
   /** The field's name, shown above the box: "Copy of the bill", "Proof of payment". */
   label: string;
   /**
@@ -54,10 +69,10 @@ export interface AttachmentUploadProps {
   /** Marks the field "(required)" and shows the required message on an empty submit. */
   required?: boolean;
   /** The finished upload, or null. */
-  value: AttachmentView | null;
-  onChange: (value: AttachmentView | null) => void;
+  value: V | null;
+  onChange: (value: V | null) => void;
   /** Sends the file to the server: `(f) => api.uploadBill(f, token)`. */
-  upload: (file: File) => Promise<AttachmentView>;
+  upload: (file: File) => Promise<V>;
   /** Show the required message now, whatever the form has done. */
   invalid?: boolean;
   /**
@@ -82,7 +97,20 @@ export interface AttachmentUploadProps {
    * Fetches the stored file, for a value that did not come from this device — an invoice being
    * corrected, say. Without it such a value shows an icon for its type rather than a picture.
    */
-  loadStored?: (value: AttachmentView) => Promise<Blob>;
+  loadStored?: (value: V) => Promise<Blob>;
+  /**
+   * Whether the thumbnail of a *stored* value opens the file when pressed. Off by default: on an
+   * invoice form the file being attached is the one in front of you.
+   *
+   * <p>On where the box is also how a stored file is read back — a staff record's photograph and
+   * identity scans (T-428), which have nowhere else to be opened from.
+   */
+  openable?: boolean;
+  /**
+   * Whether a stored photo is fetched to draw its picture. True by default. Pass false where the
+   * fetch is itself an audited read, so the thumbnail stays an icon until it is opened.
+   */
+  preview?: boolean;
 }
 
 /** What was chosen on this device, kept so the picture can be drawn without asking the server. */
@@ -93,7 +121,7 @@ interface Chosen {
 
 let chosenSeq = 0;
 
-export function AttachmentUpload({
+export function AttachmentUpload<V extends UploadedFile = UploadedFile>({
   label,
   hint,
   required = false,
@@ -102,8 +130,10 @@ export function AttachmentUpload({
   upload,
   invalid = false,
   loadStored,
+  openable = false,
+  preview = true,
   onUploadingChange,
-}: AttachmentUploadProps) {
+}: AttachmentUploadProps<V>) {
   const ids = useId();
   const labelId = `${ids}-label`;
   const hintId = `${ids}-hint`;
@@ -228,7 +258,8 @@ export function AttachmentUpload({
               name={name}
               contentType={type}
               load={() => loadStored(value)}
-              openable={false}
+              openable={openable}
+              preview={preview}
             />
           ) : (
             <AttachmentThumb

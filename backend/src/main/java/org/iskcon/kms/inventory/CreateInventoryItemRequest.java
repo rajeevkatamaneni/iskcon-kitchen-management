@@ -24,12 +24,20 @@ import java.util.UUID;
  *
  * @param openingCount what is on the shelf now, or null for none (the item then starts at zero, as it
  *                     always could)
+ * @param reorderThresholdUnit the unit {@code reorderThreshold} was typed in, or null to say it is
+ *                     already in the ingredient's own unit. It has its own picker on the Add form
+ *                     and is deliberately not the opening count's: the level's value used to be
+ *                     multiplied by the count's unit factor, two fields away, so the same keystrokes
+ *                     stored a thousandfold difference depending on a box that has nothing to do
+ *                     with it (T-432). The conversion is the server's now. See
+ *                     {@code InventoryItemService.canonicalThreshold}.
  */
 public record CreateInventoryItemRequest(
 		@NotNull(message = "Choose an ingredient.") UUID ingredientId,
 		@Size(max = 120, message = "That location is too long.") String storageLocation,
 		@PositiveOrZero(message = "A reorder level cannot be less than nothing.")
 		BigDecimal reorderThreshold,
+		@Size(max = 8, message = "That is not a unit.") String reorderThresholdUnit,
 		@Size(max = 1000, message = "That note is too long.") String notes,
 		@Valid OpeningCount openingCount) {
 

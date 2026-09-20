@@ -4,7 +4,10 @@ import type {
   FormerStaffView,
   JobTitleOption,
   Kitchen,
+  PreviousEmploymentView,
+  StaffDocumentView,
   StaffKitchenCheckView,
+  StaffRecordView,
   StaffAdvanceView,
   StaffPaymentView,
   StaffPayView,
@@ -42,11 +45,52 @@ export function member(o: Partial<StaffProfileView> = {}): StaffProfileView {
     employmentStatus: "ACTIVE",
     lastWorkingDay: null,
     endReason: null,
-    notes: null,
     kitchenId: "k1",
     kitchenName: "Main kitchen",
     kitchenNeedsCheck: false,
     createdAt: "2026-02-01T00:00:00Z",
+    ...o,
+  };
+}
+
+/**
+ * One person's whole record, as `GET /api/v1/staff/members/{id}` answers it (T-428).
+ *
+ * <p>What the four screens about one person read since the register stopped being fetched whole and
+ * filtered in the browser. Defaults to Gopal Das with no documents and no past jobs, which is every
+ * record a temple has on the day this ships.
+ */
+export function record(
+  profile: StaffProfileView = member(),
+  o: Partial<Omit<StaffRecordView, "profile">> = {},
+): StaffRecordView {
+  return { profile, banned: false, documents: [], previousEmployment: [], ...o };
+}
+
+/** A file on a record: a photograph by default, because that is the one that has a place to show. */
+export function document(o: Partial<StaffDocumentView> = {}): StaffDocumentView {
+  return {
+    id: "d1",
+    kind: "PHOTO",
+    contentType: "image/jpeg",
+    sizeBytes: 48_000,
+    originalName: "gopal.jpg",
+    uploadedAt: "2026-09-20T09:00:00Z",
+    ...o,
+  };
+}
+
+/** One job somebody held before this temple. Everything filled in; most real rows will not be. */
+export function previousJob(o: Partial<PreviousEmploymentView> = {}): PreviousEmploymentView {
+  return {
+    id: "pe1",
+    employer: "Adyar Ananda Bhavan",
+    theirTitle: "Tandoor Assistant",
+    managerName: "Suresh Kumar",
+    managerPhone: "+919845012345",
+    fromDate: "2019-03-01",
+    toDate: "2023-07-31",
+    reasonForLeaving: "The branch closed.",
     ...o,
   };
 }

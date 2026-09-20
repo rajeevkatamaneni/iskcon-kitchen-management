@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
+import { countedBox, PACKS } from "@/components/ds/formMessages";
 import { HintedField } from "@/components/ds/InfoHint";
 import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { FOOD_UNITS, leadTimeWarning, quantity, stepForUnit, unitLabel } from "@/lib/format";
@@ -415,6 +416,12 @@ export function PurchaseOrderEditor({
                     // Whole either way it can be whole: a pack line counts bags, and a plain
                     // line in a counted unit counts the things themselves (T-424).
                     step={l.pack ? "1" : stepForUnit(l.unit)}
+                    // The worst sentence the old wording produced was this box's: the accessible
+                    // name of a pack line ends ", in Box (12 pieces)", and "must be a whole number"
+                    // after a comma clause is not a sentence at all. Now the reason stands on its
+                    // own and matches the step's two cases — "Rice is ordered in whole packs" for a
+                    // pack line, "Broom is counted in whole pieces" otherwise (T-431).
+                    {...countedBox(subjectOf(l), l.pack ? PACKS : l.unit)}
                     value={l.quantity}
                     // A pack line's box holds a count, and there can be two lines for one ingredient
                     // when sizes are mixed, so its name says which pack it counts.

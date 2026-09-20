@@ -64,6 +64,9 @@ function NewInventoryItemView() {
           ingredientId: input.ingredientId,
           storageLocation: input.storageLocation,
           reorderThreshold: input.reorderThreshold,
+          // The level's own unit, not the count's. The server converts it against the ingredient's
+          // canonical unit and refuses a fraction of a counted thing (T-432).
+          reorderThresholdUnit: input.reorderThresholdUnit,
           notes: input.notes,
           openingCount: addsStock
             ? {

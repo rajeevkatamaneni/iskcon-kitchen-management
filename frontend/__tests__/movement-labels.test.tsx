@@ -162,6 +162,9 @@ function item(): StockItemView {
     expiringSoon: false,
     soonestExpiry: null,
     notes: null,
+    lastCounted: null,
+    onOrder: null,
+    lastsFor: null,
   };
 }
 

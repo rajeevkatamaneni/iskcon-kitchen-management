@@ -150,12 +150,15 @@ class StaffReinstatementIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON).content(withKitchen("""
 						{"fullName":"Gopal Das","jobTitle":"HEAD_COOK","employmentType":"FULL_TIME",
 						 "dateOfJoining":"2026-02-01","systemAccess":"KITCHEN_MANAGER",
-						 "phone":"+919876500071","email":"gopal@example.com","notes":"Back on the roster"}
+						 "phone":"+919876500080","email":"gopal@example.com"}
 						""")))
 				.andExpect(status().isNoContent());
+		// A changed phone number is what proves the edit landed. It used to be a changed `notes`;
+		// that column was retired on 2026-09-20 (T-428, V155) and nothing writes it any more, so the
+		// assertion moved to a field the form still carries rather than being dropped.
 		assertThat(admin.queryForObject(
-				"SELECT notes FROM staff_profiles WHERE id = ?::uuid", String.class, id))
-				.isEqualTo("Back on the roster");
+				"SELECT phone FROM staff_profiles WHERE id = ?::uuid", String.class, id))
+				.isEqualTo("+919876500080");
 	}
 
 	/**

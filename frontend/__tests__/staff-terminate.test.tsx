@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ApiError, BanCategoryOption, StaffPayView, StaffRegisterView } from "@/lib/api";
-import { CATEGORIES, member, pay } from "./staff-fixtures";
+import { ApiError, type BanCategoryOption, type StaffPayView, type StaffRecordView } from "@/lib/api";
+import { CATEGORIES, member, pay, record } from "./staff-fixtures";
 
 /**
  * Ending somebody's employment (E6-S8), on the screen the whole focus-screen pattern was measured
@@ -21,7 +21,7 @@ import { CATEGORIES, member, pay } from "./staff-fixtures";
 const {
   authRef,
   paramsRef,
-  registerRef,
+  recordRef,
   payRef,
   categoriesRef,
   pushMock,
@@ -35,8 +35,8 @@ const {
     },
   },
   paramsRef: { current: { id: "s1" } },
-  registerRef: {
-    current: { data: null as StaffRegisterView | null, error: null as ApiError | null, loading: false },
+  recordRef: {
+    current: { data: null as StaffRecordView | null, error: null as ApiError | null, loading: false },
   },
   payRef: { current: { data: null as StaffPayView | null, error: null as ApiError | null, loading: false } },
   categoriesRef: { current: { data: [] as BanCategoryOption[], error: null, loading: false } },
@@ -55,8 +55,8 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
     const source = fn.toString();
-    const ref = source.includes("staffRegister")
-      ? registerRef
+    const ref = source.includes("staffMember")
+      ? recordRef
       : source.includes("staffPay")
         ? payRef
         : categoriesRef;
@@ -77,7 +77,7 @@ describe("terminating an employment", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     paramsRef.current = { id: "s1" };
-    registerRef.current = { data: { current: [member()], former: [] }, error: null, loading: false };
+    recordRef.current = { data: record(), error: null, loading: false };
     payRef.current = { data: pay(), error: null, loading: false };
     categoriesRef.current = { data: CATEGORIES, error: null, loading: false };
     pushMock.mockReset();
@@ -189,11 +189,8 @@ describe("terminating an employment", () => {
   });
 
   it("refuses to offer a second termination of an employment that already ended", () => {
-    registerRef.current = {
-      data: {
-        current: [],
-        former: [{ profile: member({ employmentStatus: "RESIGNED", lastWorkingDay: "2026-06-30" }), banned: false }],
-      },
+    recordRef.current = {
+      data: record(member({ employmentStatus: "RESIGNED", lastWorkingDay: "2026-06-30" })),
       error: null,
       loading: false,
     };
@@ -204,8 +201,18 @@ describe("terminating an employment", () => {
     expect(screen.getByRole("link", { name: /see their record/i })).toHaveAttribute("href", "/staff/s1");
   });
 
-  it("says so plainly when the address belongs to nobody on the register", () => {
+  it("says so plainly when the address belongs to nobody at this temple", () => {
     paramsRef.current = { id: "gone" };
+    recordRef.current = {
+      data: null,
+      error: new ApiError({
+        code: "KMS-400030",
+        message: "We couldn’t find that.",
+        action: "Go back and try again.",
+        fieldErrors: [],
+      }),
+      loading: false,
+    };
     render(<TerminateStaffPage />);
     expect(screen.getByText(/can’t find that person/i)).toBeInTheDocument();
   });

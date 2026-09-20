@@ -56,6 +56,22 @@ public class StaffScheduleController {
 		return employment.register();
 	}
 
+	/**
+	 * One person's whole record (T-428): the profile, whether a record stands against them, their
+	 * documents and where they worked before.
+	 *
+	 * <p>{@code MANAGE_STAFF}, like the register it is reached from, and deliberately not the
+	 * {@code MANAGE_STAFF_SCHEDULE} that {@code GET /profiles/{id}} below carries — see
+	 * {@link StaffRecordView} for why those two must stay apart. Nothing new was added to the
+	 * permission vocabulary for any of this: Rajeev asked for a staff record's papers to be reached
+	 * "through the same permission as the rest of a staff record", and they are.
+	 */
+	@GetMapping("/members/{id}")
+	@PreAuthorize("hasAuthority('MANAGE_STAFF')")
+	public StaffRecordView member(@PathVariable UUID id) {
+		return employment.record(id);
+	}
+
 	/** The job-title picklist and the access each one suggests — served, never retyped in TypeScript. */
 	@GetMapping("/job-titles")
 	@PreAuthorize("hasAuthority('MANAGE_STAFF')")

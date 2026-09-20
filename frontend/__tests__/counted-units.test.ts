@@ -11,7 +11,13 @@ import {
   stepForUnit,
   unitFamily,
 } from "@/lib/format";
-import { wholeNumber, wholeNumberProblem } from "@/components/ds/formMessages";
+import {
+  countedBox,
+  messageFor,
+  PACKS,
+  wholeNumber,
+  wholeNumberProblem,
+} from "@/components/ds/formMessages";
 
 /**
  * A counted thing cannot be had in halves (T-424).
@@ -136,6 +142,111 @@ describe("the sentence for a box outside the shared Form", () => {
 
   it("refuses a negative fraction as readily as a positive one", () => {
     expect(wholeNumberProblem("Change", "1", "-2.4")).toBe("Change must be a whole number");
+  });
+});
+
+/**
+ * Why the refusal says, and the one vocabulary it says it in (T-431).
+ *
+ * <p>What shipped with T-424 was the field's own label with a rule stuck on the end: "Tell me when
+ * Agarbatti drops below must be a whole number". It reads like a machine and it never says why — a
+ * piece of incense cannot be split. The server has said it properly all along, in
+ * `backend/.../ingredient/IngredientUnits.java`: *"Apron is counted in whole pieces. Enter 88 or
+ * 89."* The browser takes those words rather than inventing a second wording for one rule, and
+ * stops at the first clause, because DESIGN_SYSTEM §9 allows one clause and twelve words under a
+ * field and the two numbers either side would be a second sentence on 26 boxes.
+ */
+describe("the whole-number refusal says why", () => {
+  const AGARBATTI = { subject: "Agarbatti", unit: "PIECES" };
+
+  it("names the thing and its unit instead of reading the label back", () => {
+    expect(wholeNumber("Tell me when Agarbatti drops below", AGARBATTI)).toBe(
+      "Agarbatti is counted in whole pieces"
+    );
+  });
+
+  /*
+   * The whole point of the file: a box inside `<Form>` and one outside it cannot word one rule two
+   * ways. `messageFor` is what `Form` calls; `wholeNumberProblem` is what the five screens outside
+   * one call. Given the same two facts they are the same string, whatever their labels are.
+   */
+  it("is the same words whether Form says it or a screen says it for itself", () => {
+    const fromForm = messageFor("Quantity of Agarbatti, in Box (12 pieces)", {
+      type: "number",
+      validity: {
+        valueMissing: false,
+        typeMismatch: false,
+        badInput: false,
+        rangeUnderflow: false,
+        rangeOverflow: false,
+        stepMismatch: true,
+        tooLong: false,
+      },
+      min: "0",
+      max: "",
+      step: "1",
+      maxLength: -1,
+      counted: AGARBATTI,
+    });
+    const fromScreen = wholeNumberProblem("Tell me when Agarbatti drops below", "1", "7.5", AGARBATTI);
+    expect(fromForm).toBe("Agarbatti is counted in whole pieces");
+    expect(fromScreen).toBe(fromForm);
+  });
+
+  /*
+   * A purchase-order line bought by the pack counts bags, and the ingredient in the bag may be
+   * measured in kilograms. "Rice is counted in whole Kg" would be flatly false; what is true is that
+   * a vendor does not sell a third of a bag.
+   */
+  it("says packs, not pieces, where the box counts packs", () => {
+    expect(wholeNumber("Quantity of Rice, in Bag (25 Kg)", { subject: "Rice", unit: PACKS })).toBe(
+      "Rice is ordered in whole packs"
+    );
+    expect(wholeNumber("Quantity of Agarbatti", { subject: "Agarbatti", unit: PACKS })).not.toMatch(/pieces/);
+  });
+
+  /*
+   * Nothing regresses where the screen has nothing true to say. A form where no ingredient has been
+   * chosen, or a recipe nobody has named, keeps the sentence it said before rather than being given
+   * an invented subject.
+   */
+  it("falls back to exactly the old sentence when a fact is missing", () => {
+    for (const counted of [
+      undefined,
+      null,
+      { subject: "", unit: "PIECES" },
+      { subject: "   ", unit: "PIECES" },
+      { subject: "Agarbatti", unit: "" },
+    ]) {
+      expect([counted, wholeNumber("One person eats", counted)]).toEqual([
+        counted,
+        "One person eats must be a whole number",
+      ]);
+    }
+  });
+
+  /*
+   * The guard against a `step="1"` written by hand on a box whose unit is a weight. The sentence
+   * asks the same `isCountedUnit` the step came from rather than trusting the attribute.
+   */
+  it("will not claim a weight or a volume is counted", () => {
+    for (const unit of ["KG", "GM", "L", "ML", "SERVINGS", "nonsense"]) {
+      expect([unit, wholeNumber("Quantity", { subject: "Rice", unit })]).toEqual([
+        unit,
+        "Quantity must be a whole number",
+      ]);
+    }
+  });
+
+  /** The attributes a box carries so `Form` can read the two facts off it. */
+  it("writes both attributes or neither", () => {
+    expect(countedBox("Agarbatti", "PIECES")).toEqual({
+      "data-counted-subject": "Agarbatti",
+      "data-counted-unit": "PIECES",
+    });
+    expect(countedBox(null, "PIECES")).toEqual({});
+    expect(countedBox("Agarbatti", undefined)).toEqual({});
+    expect(countedBox("  ", "PIECES")).toEqual({});
   });
 });
 

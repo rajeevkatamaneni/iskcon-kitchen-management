@@ -292,7 +292,7 @@ describe("R-SL-3: ordering in the vendor's pack", () => {
     expect(create).not.toHaveBeenCalled();
     // The box's own step refuses it first, beside the box (the shared Form); the editor's own
     // "Order whole packs" is the second guard, for a browser that lets it through.
-    expect(within(panel).getAllByText(/whole number/).length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText("Rice is ordered in whole packs").length).toBeGreaterThan(0);
   });
 
   it("makes a mixed suggestion one order line per pack size", async () => {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
+import { countedBox } from "@/components/ds/formMessages";
 import { HintedField } from "@/components/ds/InfoHint";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, type ApiError, type RecipeDetail, type RecipeInput } from "@/lib/api";
@@ -273,6 +274,9 @@ export function RecipeForm({
               <input id={id} aria-label="How much this recipe makes" type="number" min="0"
                 // A recipe measured in pieces makes whole ladoos (T-424). Follows "Measured in".
                 step={stepForUnit(baseYieldUnit)}
+                // Named from the recipe's own name box above, which is where the reader would look
+                // for it; an unnamed draft keeps the sentence this box said before (T-431).
+                {...countedBox(name, baseYieldUnit)}
                 value={baseYieldQty} onChange={(e) => setBaseYieldQty(e.target.value)} required
                 className="min-h-touch rounded-control border border-hairline px-3 text-base text-ink" />
             )}
@@ -292,8 +296,12 @@ export function RecipeForm({
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">One person eats</span>
             {/* A portion of a counted recipe is a whole thing: one person eats 2 ladoos, not 2.4.
-                Follows "Portion unit" beside it, which may differ from the yield's (T-424). */}
+                Follows "Portion unit" beside it, which may differ from the yield's (T-424).
+                And "One person eats must be a whole number" was the label read back at somebody:
+                the recipe's name and the portion unit make it "Ladoo is counted in whole pieces",
+                which is the reason one person cannot eat 2.4 of them (T-431). */}
             <input type="number" min="0" step={stepForUnit(perHeadUnit)} value={perHeadQty}
+              {...countedBox(name, perHeadUnit)}
               onChange={(e) => setPerHeadQty(e.target.value)} placeholder="0.2"
               className="min-h-touch rounded-control border border-hairline px-3 text-base text-ink" />
           </label>
@@ -367,7 +375,10 @@ export function RecipeForm({
             <input aria-label={`Preparation ${i + 1}`} value={line.preparationNote} maxLength={200}
               onChange={(e) => setLine(i, { preparationNote: e.target.value })} placeholder="Preparation, e.g. slit"
               className="col-span-3 min-h-touch min-w-0 rounded-control border border-hairline px-3 text-base text-ink sm:col-span-2 xl:col-span-1" />
+            {/* Named from the ingredient chosen in this row, so a refusal says which of the rows
+                it is about as well as why (T-431). */}
             <input aria-label={`Quantity ${i + 1}`} type="number" min="0" step={stepForUnit(line.unit)} value={line.quantity}
+              {...countedBox(ingredientOptions.find((ing) => ing.id === line.ingredientId)?.name, line.unit)}
               onChange={(e) => setLine(i, { quantity: e.target.value })} placeholder="Qty"
               className="min-h-touch rounded-control border border-hairline px-3 text-base text-ink" />
             <select aria-label={`Unit ${i + 1}`} value={line.unit} onChange={(e) => setLine(i, { unit: e.target.value })}

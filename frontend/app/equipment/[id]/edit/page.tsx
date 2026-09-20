@@ -182,7 +182,7 @@ function EditForm({
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-          <span className="pl-field-inset font-medium text-ink">Where it lives</span>
+          <span className="pl-field-inset font-medium text-ink">Where is it stored</span>
           <input
             name="storageLocation"
             maxLength={120}

@@ -75,25 +75,36 @@ describe("the staff register", () => {
     expect(within(current).queryByRole("columnheader", { name: /pan/i })).not.toBeInTheDocument();
   });
 
-  it("reads Pay, Update, Terminate — in that order, with Terminate last", () => {
+  it("opens the record from the person's own name (T-428)", () => {
+    render(<StaffPage />);
+    const current = screen.getByRole("region", { name: /current staff/i });
+    expect(within(current).getByRole("link", { name: "Gopal Das" })).toHaveAttribute(
+      "href",
+      "/staff/s1"
+    );
+  });
+
+  it("reads Pay, Terminate — in that order, with Terminate last", () => {
     render(<StaffPage />);
     const current = screen.getByRole("region", { name: /current staff/i });
     const actions = within(current)
       .getAllByRole("link")
       .map((a) => a.textContent);
-    expect(actions).toEqual(["Pay", "Update", "Terminate"]);
+    // The name is the first link in the row now; the buttons follow it.
+    expect(actions).toEqual(["Gopal Das", "Pay", "Terminate"]);
 
     expect(within(current).getByRole("link", { name: "Pay" })).toHaveAttribute("href", "/staff/s1/pay");
-    expect(within(current).getByRole("link", { name: "Update" })).toHaveAttribute("href", "/staff/s1/edit");
     expect(within(current).getByRole("link", { name: "Terminate" })).toHaveAttribute(
       "href",
       "/staff/s1/terminate"
     );
   });
 
-  it("gives current staff no View, because Update is already the whole record", () => {
+  it("gives no row button into the record, because the name is already that door (T-428)", () => {
     render(<StaffPage />);
     const current = screen.getByRole("region", { name: /current staff/i });
+    // Update in place went on 2026-09-20: the name opens the record and Edit is on it.
+    expect(within(current).queryByRole("link", { name: "Update" })).not.toBeInTheDocument();
     expect(within(current).queryByRole("link", { name: "View" })).not.toBeInTheDocument();
     // The schedule is a screen of its own; a link per row was noise on the register (A10).
     expect(within(current).queryByRole("link", { name: /schedule/i })).not.toBeInTheDocument();
@@ -114,7 +125,11 @@ describe("the staff register", () => {
     render(<StaffPage />);
     const table = screen.getByRole("region", { name: /former staff/i });
 
-    expect(within(table).getByText("Yamuna Devi Dasi")).toBeInTheDocument();
+    // Their name opens their record, exactly as a current member of staff's does.
+    expect(within(table).getByRole("link", { name: "Yamuna Devi Dasi" })).toHaveAttribute(
+      "href",
+      "/staff/s2"
+    );
     // Left is the date and nothing else, written out rather than left as the stored ISO string.
     // The reason moved onto the record, which View opens.
     expect(within(table).getByText(dateWithYear("2026-06-30"))).toBeInTheDocument();
@@ -122,9 +137,10 @@ describe("the staff register", () => {
     expect(within(table).queryByText(/Moved to Mayapur/)).not.toBeInTheDocument();
     expect(within(table).queryByText(/Resigned/)).not.toBeInTheDocument();
 
-    expect(within(table).getByRole("link", { name: "View" })).toHaveAttribute("href", "/staff/s2");
     expect(within(table).getByRole("link", { name: "Pay" })).toHaveAttribute("href", "/staff/s2/pay");
-    // A past employment is not edited and cannot be ended twice.
+    // A past employment is not edited and cannot be ended twice. View went with Update (T-428):
+    // both tables now carry exactly the same buttons, which is what "the same buttons" meant.
+    expect(within(table).queryByRole("link", { name: "View" })).not.toBeInTheDocument();
     expect(within(table).queryByRole("link", { name: "Update" })).not.toBeInTheDocument();
     expect(within(table).queryByRole("link", { name: /terminate/i })).not.toBeInTheDocument();
   });

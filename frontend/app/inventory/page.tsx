@@ -11,12 +11,21 @@ import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, toApiError, type ApiError, type StockItemView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { expiryWord, quantity, stepForUnit, unitLabel } from "@/lib/format";
+import {
+  expiryWord,
+  lastCountedPhrase,
+  oneUnitFor,
+  stepForUnit,
+  stockCoverPhrase,
+  stockRunsOutSoon,
+  unitLabel,
+} from "@/lib/format";
 import { wholeNumberProblem } from "@/components/ds/formMessages";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
+import { PLAIN_NUMBER } from "@/components/InventoryItemForm";
 
 export default function InventoryPage() {
   return (
@@ -42,6 +51,7 @@ function InventoryView() {
   const { data, error, loading } = useAuthedQuery(fetchInventory);
   const items = data ?? [];
 
+  const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -90,11 +100,29 @@ function InventoryView() {
     [items]
   );
 
+  /*
+   * Finding one consumable among a hundred and fourteen.
+   *
+   * <p>The seeded temple holds 114 and a real one will hold more, and until now the only way to
+   * reach one of them was to scroll. The category is searched as well as the name, so "puja" finds
+   * the camphor and the agarbatti together — a storekeeper thinks in shelves as often as in names.
+   * A plain "contains", case-insensitive, exactly as ItemCombobox matches: two search boxes in one
+   * application that match differently is a small betrayal every time somebody uses the second one.
+   */
+  const query = search.trim().toLowerCase();
   const visible = items.filter(
-    (i) => (!locationFilter || i.storageLocation === locationFilter) && (!onlyLow || i.belowThreshold)
+    (i) =>
+      (!query ||
+        i.ingredientName.toLowerCase().includes(query) ||
+        (i.category ?? "").toLowerCase().includes(query)) &&
+      (!locationFilter || i.storageLocation === locationFilter) &&
+      (!onlyLow || i.belowThreshold)
   );
   const lowCount = items.filter((i) => i.belowThreshold).length;
   const expiringCount = items.filter((i) => i.expiringSoon).length;
+  const filtered = Boolean(query) || Boolean(locationFilter) || onlyLow;
+
+  const FILTER_BOX = "min-h-touch rounded-control border border-hairline px-3";
 
   return (
     <div className="flex min-h-screen">
@@ -120,25 +148,6 @@ function InventoryView() {
 
           {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
-          {(lowCount > 0 || expiringCount > 0) && (
-            <div className="mb-6 flex flex-wrap gap-3">
-              {lowCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setOnlyLow((s) => !s)}
-                  className={`rounded-control px-4 py-2 text-sm ${onlyLow ? "bg-warning text-ink-inverse" : "bg-warning-bg text-warning"}`}
-                >
-                  {lowCount} below reorder level{onlyLow ? ", showing only these" : ""}
-                </button>
-              )}
-              {expiringCount > 0 && (
-                <span className="rounded-control bg-warning-bg px-4 py-2 text-sm text-warning">
-                  {expiringCount} with stock expiring soon
-                </span>
-              )}
-            </div>
-          )}
-
           {flash && (
             <div className="mb-6">
               <InlineNotice tone="success" autoDismiss title={`${flash} is now in your inventory.`}>
@@ -147,15 +156,51 @@ function InventoryView() {
             </div>
           )}
 
-          {locations.length > 0 && (
-            <div className="mb-4">
-              <label className="text-sm text-ink-secondary">
-                <span className="font-medium text-ink">Location</span>
-                <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="ml-2 min-h-touch rounded-control border border-hairline px-3">
-                  <option value="">All</option>
+          {/*
+            Finding and warning on one line.
+
+            The search box, the shelf filter and the two attention chips used to be two stacked
+            blocks with a blank half-row beside each: the chips had the width to themselves and the
+            filter sat alone underneath with a `<select>` two inches wide and nothing to its right.
+            They all fit beside each other, so they go beside each other, and the search box takes
+            the slack rather than leaving it empty.
+          */}
+          {items.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <input
+                type="search"
+                aria-label="Search inventory"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or category…"
+                className={`${FILTER_BOX} min-w-0 grow basis-56`}
+              />
+              {locations.length > 0 && (
+                <select
+                  aria-label="Where is it stored"
+                  value={locationFilter}
+                  onChange={(e) => setLocationFilter(e.target.value)}
+                  className={FILTER_BOX}
+                >
+                  <option value="">Everywhere</option>
                   {locations.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
-              </label>
+              )}
+              {lowCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOnlyLow((s) => !s)}
+                  aria-pressed={onlyLow}
+                  className={`min-h-touch rounded-control px-4 text-sm ${onlyLow ? "bg-warning text-ink-inverse" : "bg-warning-bg text-warning"}`}
+                >
+                  {lowCount} below reorder level{onlyLow ? ", showing only these" : ""}
+                </button>
+              )}
+              {expiringCount > 0 && (
+                <span className="flex min-h-touch items-center rounded-control bg-warning-bg px-4 text-sm text-warning">
+                  {expiringCount} with stock expiring soon
+                </span>
+              )}
             </div>
           )}
 
@@ -171,93 +216,168 @@ function InventoryView() {
               Start with one consumable and what is on the shelf today. Everything after that —
               deliveries, donations, meals cooked — moves on its own.
             </EmptyState>
+          ) : visible.length === 0 ? (
+            /* Filtered down to nothing. Not the empty state above: the temple has an inventory,
+               this search does not match any of it, and offering "Add to inventory" here would
+               invite somebody to add a second Toor dal because they mistyped the first. */
+            <p className="card px-6 py-8 text-center text-ink-secondary">
+              Nothing here matches what you are looking for. Try a shorter word, or clear the
+              filters.
+            </p>
           ) : (
-            <div className="table-wrap overflow-x-auto">
-              <table className={RULED_TABLE}>
-                <thead className={THEAD}>
-                  <tr>
-                    <th className={TH_PRIMARY}>Item</th>
-                    <th className={TH_SECOND}>Location</th>
-                    {/*
-                      Three figures where there was one, and the columns are how the screen shows
-                      its working: on hand is a physical fact, committed is what the saved plan
-                      intends to draw, and available is the subtraction — which is the number Status
-                      judges. `Reorder at` came off in the same change: it is a setting rather than a
-                      state, it is set once per temple, and it now lives on the item's own page
-                      beside the figures that explain why something reads Low.
-                    */}
-                    <th className={TH_FIXED}>On hand</th>
-                    <th className={TH_FIXED}>Committed</th>
-                    <th className={TH_FIXED}>Available</th>
-                    <th className={TH_FIXED}>Status</th>
-                    <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.map((i) =>
-                    editing === i.itemId ? (
-                      <EditRow
-                        key={i.itemId}
-                        item={i}
-                        busy={busy}
-                        onCancel={() => setEditing(null)}
-                        onSave={async (input) => {
-                          const ok = await run(
-                            (t) => api.updateInventoryItem(i.itemId, input, t),
-                            "We couldn’t save that change."
-                          );
-                          if (ok) setEditing(null);
-                        }}
-                      />
-                    ) : (
-                      <tr key={i.itemId} className={TR}>
-                        <td className={TD_PRIMARY}>
-                          <Link href={`/inventory/${i.itemId}`} className="font-medium text-accent-text hover:underline">
-                            {i.ingredientName}
-                          </Link>
-                          <span className="ml-2 text-xs text-ink-muted">{i.category}</span>
-                        </td>
-                        <td className={`${TD_SECOND} text-ink-secondary`}>{i.storageLocation ?? "—"}</td>
-                        <td className={TD_FIXED_NUM} data-label="On hand">{quantity(i.onHand, i.unit)}</td>
-                        {/* A dash rather than "0 Kg" where nothing has claimed it: the column is
-                            scanned down, and a column of zeroes hides the one row that is not. */}
-                        <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="Committed">
-                          {i.committed === 0 ? "—" : quantity(i.committed, i.unit)}
-                        </td>
-                        <td className={TD_FIXED_NUM} data-label="Available">{quantity(i.available, i.unit)}</td>
-                        <td className={TD_FIXED}>
-                          {/* A row, never a stack. The chips are short and the column takes its
-                              natural width, so both fit on the one line the row already has. */}
-                          <div className="flex items-center gap-1.5">
-                            {i.belowThreshold && <span className="rounded-control bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">Low</span>}
-                            {/* Expired is red: the food cannot be served and needs dealing with now.
-                                Expiring soon stays amber, act before it goes (Rajeev, 2026-09-18, T-227). */}
-                            {i.expiringSoon && (
-                              <span className={`rounded-control px-2 py-1 text-xs font-semibold ${expiryWord(i.soonestExpiry) === "expired" ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning"}`}>
-                                {expiryWord(i.soonestExpiry) === "expired" ? "Expired" : "Expiring soon"}
-                              </span>
-                            )}
-                            {!i.belowThreshold && !i.expiringSoon && <span className="text-xs text-ink-muted">Fine</span>}
-                          </div>
-                        </td>
-                        {/* Changing your mind about a level is a one-click job on the row you are
-                            looking at. It used to be impossible anywhere in the application: the
-                            endpoint existed and no screen called it. */}
-                        <td className={TD_ACTIONS_FIXED}>
-                          <Button variant="ghost" size="sm" onClick={() => setEditing(i.itemId)}>
-                            Edit
-                          </Button>
-                        </td>
-                      </tr>
-                    )
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {filtered && (
+                <p className="mb-3 text-sm text-ink-secondary">
+                  Showing {visible.length} of {items.length}.
+                </p>
+              )}
+              <div className="table-wrap overflow-x-auto">
+                <table className={RULED_TABLE}>
+                  <thead className={THEAD}>
+                    <tr>
+                      {/*
+                        The columns read as one sentence, left to right: what it is, what you have,
+                        what is coming, how long it lasts, when anybody last checked.
+
+                        Three columns went in T-432 and each was carrying its weight badly.
+                        `Location` became a line under the name, which is where the item's own page
+                        has always shown it — one fact in one place, and a row that no longer spends
+                        a whole column on "Main store". `Status` went because its commonest value was
+                        the word "Fine", printed a hundred times down a column that a reader is
+                        scanning for the exceptions; the badges it held now sit beside the name they
+                        are about, which is also where they end up in the card layout below 1024.
+
+                        `Committed` went last, and it is a deliberate departure from T-086, which
+                        put it here on purpose so the three figures would add up in front of the
+                        reader. It was measured rather than argued: at 1280 with the menu open this
+                        table has 1000px, eight columns needed about 1060 for every cell on one line,
+                        and what gave way was "Approximately 20 days" and "Not enough history"
+                        breaking across two lines in a 103px column. Something had to go, and
+                        committed is the one of the three that is never itself an action — it is the
+                        gap between the other two, which the row still shows (1.96 on hand, −0.08
+                        available), and the only place the number can be answered is the item's own
+                        page, where it is listed meal by meal. What T-086 established is untouched:
+                        Low still judges available, not on hand.
+
+                        What is left reads left to right as one sentence, and every quantity in it is
+                        said in ONE unit, because `oneUnitFor` picks the unit for the row rather than
+                        each figure picking its own.
+                      */}
+                      <th className={TH_PRIMARY}>Item</th>
+                      <th className={TH_FIXED}>On hand</th>
+                      <th className={TH_FIXED}>Available</th>
+                      <th className={TH_FIXED}>On order</th>
+                      <th className={TH_FIXED}>Lasts</th>
+                      <th className={TH_FIXED}>Last counted</th>
+                      <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visible.map((i) =>
+                      editing === i.itemId ? (
+                        <EditRow
+                          key={i.itemId}
+                          item={i}
+                          busy={busy}
+                          onCancel={() => setEditing(null)}
+                          onSave={async (input) => {
+                            const ok = await run(
+                              (t) => api.updateInventoryItem(i.itemId, input, t),
+                              "We couldn’t save that change."
+                            );
+                            if (ok) setEditing(null);
+                          }}
+                        />
+                      ) : (
+                        <ItemRow key={i.itemId} item={i} onEdit={() => setEditing(i.itemId)} />
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </main>
     </div>
+  );
+}
+
+/** One consumable, read left to right. */
+function ItemRow({ item: i, onEdit }: { item: StockItemView; onEdit: () => void }) {
+  /*
+   * One row, one unit (T-432).
+   *
+   * <p>Rajeev found a row on staging reading 2.06 Kg on hand, 2.04 Kg committed and 20 gm
+   * available. Each figure was right and the row was unreadable: the subtraction that the three
+   * columns exist to show had a thousandfold change of scale in the middle of it. Every quantity in
+   * this row now goes through one renderer, so they are said on one scale — and `onOrder` is in the
+   * set, because it is a quantity of the same thing and would otherwise reintroduce the defect in a
+   * new column.
+   *
+   * <p>Only what is *printed* is in the set. Committed is no longer a column here (see the
+   * headings), and a figure nobody can see must not decide the unit of the ones they can.
+   */
+  const say = oneUnitFor(i.unit, [i.onHand, i.available, i.onOrder]);
+  const expired = i.expiringSoon && expiryWord(i.soonestExpiry) === "expired";
+
+  return (
+    <tr className={TR}>
+      <td className={TD_PRIMARY}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Link href={`/inventory/${i.itemId}`} className="font-medium text-accent-text hover:underline">
+            {i.ingredientName}
+          </Link>
+          {i.belowThreshold && (
+            <span className="rounded-control bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning">Low</span>
+          )}
+          {/* Expired is red: the food cannot be served and needs dealing with now. Expiring soon
+              stays amber, act before it goes (Rajeev, 2026-09-18, T-227). */}
+          {i.expiringSoon && (
+            <span className={`rounded-control px-2 py-0.5 text-xs font-semibold ${expired ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning"}`}>
+              {expired ? "Expired" : "Expiring soon"}
+            </span>
+          )}
+        </div>
+        <span className="mt-0.5 block text-xs text-ink-muted">
+          {i.category}
+          {i.storageLocation ? ` · ${i.storageLocation}` : ""}
+        </span>
+      </td>
+      <td className={TD_FIXED_NUM} data-label="On hand">{say(i.onHand)}</td>
+      <td className={TD_FIXED_NUM} data-label="Available">{say(i.available)}</td>
+      {/* Null, not zero, when nothing is coming — the server says so — and a dash rather than
+          "0 Kg", because the column is scanned down and a column of zeroes hides the one row that
+          is not. A draft order is not on order. */}
+      <td className={`${TD_FIXED_NUM} text-ink-secondary`} data-label="On order">
+        {i.onOrder == null ? "—" : say(i.onOrder)}
+      </td>
+      <td className={TD_FIXED} data-label="Lasts">
+        {/* Amber only where it runs out inside a week. "Not enough history" is never coloured: it
+            is the absence of a judgement, and amber has to go on meaning "act on this". */}
+        <span
+          className={
+            stockRunsOutSoon(i.lastsFor, i.onHand)
+              ? "font-semibold text-warning"
+              : i.lastsFor
+                ? "text-ink-secondary"
+                : "text-ink-muted"
+          }
+        >
+          {stockCoverPhrase(i.lastsFor, i.onHand)}
+        </span>
+      </td>
+      <td className={`${TD_FIXED} text-ink-secondary`} data-label="Last counted">
+        {lastCountedPhrase(i.lastCounted)}
+      </td>
+      {/* Changing your mind about a level is a one-click job on the row you are looking at. It used
+          to be impossible anywhere in the application: the endpoint existed and no screen called it. */}
+      <td className={TD_ACTIONS_FIXED}>
+        <Button variant="ghost" size="sm" onClick={onEdit}>
+          Edit
+        </Button>
+      </td>
+    </tr>
   );
 }
 
@@ -282,49 +402,63 @@ function EditRow({
   /*
    * A level is compared against a stock figure, so it is whole whenever the stock figure is
    * (T-424): "tell me when aprons drop below 3.6" is a rule that can never be read off a shelf.
-   * A level already on file holding a fraction still shows it, and is refused on Save.
+   * A level already on file holding a fraction still shows it, and is refused on Save — here and,
+   * since T-432, at the server as well, which used to accept it (KMS-400191).
    */
   const step = stepForUnit(item.unit);
-  const wholeProblem = wholeNumberProblem(`Tell me when ${item.ingredientName} drops below`, step, threshold);
+  // The name and the unit as well as the step, so the refusal says why rather than reading the
+  // label back — "Agarbatti is counted in whole pieces" (T-431).
+  const wholeProblem = wholeNumberProblem(
+    `Tell me when ${item.ingredientName} drops below`,
+    step,
+    threshold,
+    { subject: item.ingredientName, unit: item.unit }
+  );
 
   return (
     <tr className="border-t border-hairline bg-sunken align-top">
       <td className={TD_PRIMARY}>
         <span className="font-medium">{item.ingredientName}</span>
-        <span className="ml-2 text-xs text-ink-muted">{item.category}</span>
+        <span className="mt-0.5 block text-xs text-ink-muted">{item.category}</span>
       </td>
-      <td className={TD_SECOND}>
-        <input aria-label="Where it lives" value={location} onChange={(e) => setLocation(e.target.value)} className={FIELD} />
-      </td>
-      <td className={`${TD_FIXED_NUM} text-ink-secondary`}>{quantity(item.onHand, item.unit)}</td>
       {/*
-        The reorder level lost its column and kept its field. Taking `Reorder at` off the table was
-        about what the table is for — figures that change on their own — and not about making a
-        level harder to set; this is still the one-click job on the row you are looking at that it
-        became. It spans the three columns the row itself has nothing to edit, because committed,
-        available and status are all computed and none of them is a thing to type into.
+        The three things this row can change, across the five columns it has nothing to edit. On
+        hand, available, on order, how long it lasts and when it was last counted are all computed or
+        remembered, and none of them is a thing to type into.
       */}
-      <td className={TD_FIXED} colSpan={3}>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-xs text-ink-secondary">
+      <td className={TD_FIXED} colSpan={5}>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex min-w-0 grow basis-40 flex-col gap-1 text-xs text-ink-secondary">
+            <span>Where is it stored</span>
+            <input value={location} onChange={(e) => setLocation(e.target.value)} className={FIELD} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-ink-secondary">
             <span>Tell me below</span>
-            <input
-              aria-label={`Tell me when ${item.ingredientName} drops below`}
-              type="number"
-              inputMode={step === "1" ? "numeric" : "decimal"}
-              min="0"
-              step={step}
-              value={threshold}
-              onChange={(e) => setThreshold(e.target.value)}
-              aria-invalid={tried && wholeProblem ? true : undefined}
-              className={`${FIELD} w-24 ${tried && wholeProblem ? "border-danger" : ""}`}
-            />
-            <span>{unitLabel(item.unit)}</span>
+            <div className="flex items-center gap-2">
+              <input
+                aria-label={`Tell me when ${item.ingredientName} drops below`}
+                type="number"
+                inputMode={step === "1" ? "numeric" : "decimal"}
+                min="0"
+                step={step}
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
+                aria-invalid={tried && wholeProblem ? true : undefined}
+                className={`${FIELD} ${PLAIN_NUMBER} w-24 ${tried && wholeProblem ? "border-danger" : ""}`}
+              />
+              {/* The unit as fixed text, not a picker. Settled on 2026-09-08 (build-list item I1):
+                  changing an ingredient's unit once stock exists is a conversion problem, so this
+                  row says which unit the number is in and the Add form is where one is chosen. */}
+              <span>{unitLabel(item.unit)}</span>
+            </div>
+          </label>
+          <label className="flex min-w-0 grow basis-40 flex-col gap-1 text-xs text-ink-secondary">
+            <span>Notes</span>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} className={FIELD} />
           </label>
           {tried && wholeProblem && (
             <span className="basis-full text-xs text-danger">{wholeProblem}</span>
           )}
-          <input aria-label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" className={`${FIELD} min-w-0 flex-1`} />
         </div>
       </td>
       <td className={TD_ACTIONS_FIXED}>
@@ -337,6 +471,8 @@ function EditRow({
               if (wholeProblem) return;
               onSave({
                 storageLocation: emptyToNull(location),
+                // No unit travels with it: this box cannot change the unit, so the figure is
+                // already in the ingredient's own one and the server is told nothing to convert.
                 reorderThreshold: threshold.trim() === "" ? null : Number(threshold),
                 notes: emptyToNull(notes),
               });

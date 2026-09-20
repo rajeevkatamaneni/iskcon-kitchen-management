@@ -79,6 +79,9 @@ function itemView(overrides: Partial<StockItemView> = {}): StockItemView {
     expiringSoon: false,
     soonestExpiry: null,
     notes: null,
+    lastCounted: null,
+    onOrder: null,
+    lastsFor: null,
     ...overrides,
   };
 }

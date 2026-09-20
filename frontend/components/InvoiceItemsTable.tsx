@@ -5,6 +5,7 @@ import { Fragment, useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { ItemCombobox, type ComboChoice, type ComboItem } from "@/components/ItemCombobox";
 import { Button } from "@/components/ds/Button";
+import { countedBox } from "@/components/ds/formMessages";
 import { TABLE, ENTRY_GRID, THEAD, TR, TH_TEXT, TH_NUM, TD_TEXT, TD_NUM, WRAP } from "@/components/ds/table";
 import { api, toApiError, type ApiError, type InvoiceLineInput, type IngredientView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -580,6 +581,10 @@ function PackSizeRow({
               inputMode={inputModeForUnit(unit)}
               min="0"
               step={stepForUnit(unit)}
+              // What is inside the pack is what cannot be split, so the sentence names the
+              // ingredient and not the pack: "Agarbatti is counted in whole pieces" (T-431). The
+              // bare label "Size" took "must be a whole number" after it and said nothing at all.
+              {...countedBox(ingredient.name, unit)}
               value={size}
               onChange={(e) => setSize(e.target.value)}
               aria-invalid={blank || undefined}

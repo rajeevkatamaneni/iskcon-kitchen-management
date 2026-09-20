@@ -43,6 +43,19 @@ public class LowStockAlertService {
 	 */
 	@Transactional
 	public boolean sendDailyDigest() {
+		// An ingredient the temple never buys is not in here at all (T-430): the mark is applied in
+		// the low-stock judgement itself, not at the surfaces that read it, so this line needs no
+		// filter of its own and gains none. Two consequences worth stating, because both are
+		// behaviour a reader of this method would otherwise have to work out:
+		//
+		//   - `count` and `items` below never mention it, so the digest stops opening with a demand
+		//     for 1,358 litres of water — which is what the seeded temple actually produced, and the
+		//     surest way to teach a cook to delete the message unread.
+		//
+		//   - A temple whose ONLY low item was water now gets no digest at all, through the
+		//     suppressed-when-empty rule immediately below rather than through anything new. That is
+		//     the right silence: the story's rule is that silence means there is nothing to go and
+		//     buy, and there is nothing to go and buy.
 		List<StockItemView> low = inventoryItemService.lowStock();
 		if (low.isEmpty()) {
 			return false;

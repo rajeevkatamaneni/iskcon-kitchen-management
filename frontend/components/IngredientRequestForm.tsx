@@ -8,6 +8,7 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
 import { HintedField } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Form } from "@/components/ds/Form";
+import { countedBox } from "@/components/ds/formMessages";
 import { BusyPot } from "@/components/Loading";
 import {
   api,
@@ -343,6 +344,9 @@ export function IngredientRequestForm({
                 // Follows the unit picker beside it: switch a line to pieces and the box stops
                 // taking a fraction from that keystroke on (T-424).
                 step={stepForUnit(line.unit)}
+                // Named from the ingredient chosen in this row, so "Quantity 2 must be a whole
+                // number" becomes "Agarbatti is counted in whole pieces" (T-431).
+                {...countedBox(ingredientOptions.find((ing) => ing.id === line.ingredientId)?.name, line.unit)}
                 value={line.quantity}
                 onChange={(e) => setLine(i, { quantity: e.target.value })}
                 placeholder="Qty"
@@ -401,6 +405,10 @@ export function IngredientRequestForm({
                 type="number"
                 min="0"
                 step={stepForUnit(dish.unit)}
+                // The dish's name is typed into the box beside this one, so it is there whenever
+                // the person has named the dish, and the sentence falls back to the old one until
+                // they have — there is nothing true to put in front of "is counted in" (T-431).
+                {...countedBox(dish.dishName, dish.unit)}
                 value={dish.quantity}
                 onChange={(e) => setDish(i, { quantity: e.target.value })}
                 placeholder="Qty"

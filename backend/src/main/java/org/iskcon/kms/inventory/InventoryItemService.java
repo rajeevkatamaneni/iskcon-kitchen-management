@@ -81,12 +81,15 @@ public class InventoryItemService {
 	private final CommittedStockService committedStockService;
 	private final IngredientUnits ingredientUnits;
 	private final MarketRateService marketRateService;
+	private final StockFactsService stockFactsService;
 
 	public InventoryItemService(
 			JdbcTemplate jdbc, AuditService auditService, StockMovementService stockMovementService,
 			TenantSettingsService tenantSettings, CommittedStockService committedStockService,
-			TempleClock clock, IngredientUnits ingredientUnits, MarketRateService marketRateService) {
+			TempleClock clock, IngredientUnits ingredientUnits, MarketRateService marketRateService,
+			StockFactsService stockFactsService) {
 		this.ingredientUnits = ingredientUnits;
+		this.stockFactsService = stockFactsService;
 		this.marketRateService = marketRateService;
 		this.clock = clock;
 		this.jdbc = jdbc;
@@ -121,16 +124,54 @@ public class InventoryItemService {
 		// over the saved plans however many consumables are on the screen, and asking per row would
 		// re-scale every recipe in the horizon for each of them.
 		Map<UUID, BigDecimal> committedByIngredient = committedStockService.committedBaseByIngredient();
+		// And the same discipline for the three facts T-432 added: three statements for the whole
+		// screen, not three per row. 114 consumables would otherwise be 342 extra statements, which
+		// is the shape of defect ShoppingListStatementCountIT exists to catch.
+		Facts facts = facts(null);
+
+		// The temple's today, read once for the whole screen. TempleClock.zone() is a SELECT against
+		// `tenants`, so asking it inside toItemView sent one statement per consumable: measured on the
+		// seeded temple, 114 of the 145 statements behind one page load were this one line. Found by
+		// logging every statement the real 114-item temple sends rather than by assuming the
+		// aggregate queries above were the whole story.
+		LocalDate today = LocalDate.now(clock.zone());
 
 		return items.stream()
 				.map(item -> toItemView(item, batchesByIngredient.getOrDefault(item.ingredientId(), List.of()),
-						committedByIngredient.getOrDefault(item.ingredientId(), BigDecimal.ZERO), horizon))
+						committedByIngredient.getOrDefault(item.ingredientId(), BigDecimal.ZERO), horizon,
+						facts, today))
 				.toList();
+	}
+
+	/**
+	 * The three facts from {@link StockFactsService}, read together, for one ingredient or for all.
+	 *
+	 * <p>Three statements either way. It is a record rather than three loose maps so that a caller
+	 * cannot read two of them and forget the third, which is how a screen ends up with one column
+	 * permanently empty and nobody able to say since when.
+	 */
+	private Facts facts(UUID ingredientId) {
+		return new Facts(
+				stockFactsService.lastCountedByIngredient(ingredientId),
+				stockFactsService.onOrderBaseByIngredient(ingredientId),
+				stockFactsService.dailyUseBaseByIngredient(ingredientId));
+	}
+
+	/** See {@link #facts}. Keyed by ingredient; an absent key means the fact is not known. */
+	private record Facts(
+			Map<UUID, LocalDate> lastCounted,
+			Map<UUID, BigDecimal> onOrderBase,
+			Map<UUID, BigDecimal> dailyUseBase) {
 	}
 
 	/**
 	 * The consumables currently below their reorder threshold. The single source of "what's low",
 	 * shared by the dashboard count, the nightly digest (E3-S3), and reorder suggestions (E5-S2).
+	 *
+	 * <p>It filters on {@link StockItemView#belowThreshold()} rather than restating the rule, which is
+	 * also why an ingredient the temple never buys is absent from it (T-430): the flag is applied once,
+	 * in {@link #isBelowThreshold}, so this method, the dashboard's own count and the browser's own
+	 * count of the same field cannot come to three different answers.
 	 */
 	@Transactional(readOnly = true)
 	public List<StockItemView> lowStock() {
@@ -179,7 +220,7 @@ public class InventoryItemService {
 			// Subtracted in base units and converted once, exactly as toItemView does it, so the two
 			// routes cannot round to different answers on either side of the threshold.
 			BigDecimal available = toCanonical(onHandBase.subtract(committedBase), unit);
-			if (isBelowThreshold(available, item.reorderThreshold())) {
+			if (isBelowThreshold(available, item.reorderThreshold(), item.notBought())) {
 				low.add(new LowStockLine(
 						item.ingredientId(), toCanonical(onHandBase, unit), item.reorderThreshold()));
 			}
@@ -231,7 +272,10 @@ public class InventoryItemService {
 						isExpiringSoon(a, horizon)))
 				.toList();
 
-		return new StockDetailView(toItemView(item, aggs, committedBase, horizon), batches, committed);
+		return new StockDetailView(
+				toItemView(item, aggs, committedBase, horizon, facts(item.ingredientId()),
+						LocalDate.now(clock.zone())),
+				batches, committed);
 	}
 
 	// ---- Item management -------------------------------------------------
@@ -246,9 +290,16 @@ public class InventoryItemService {
 		// RLS-scoped existence check: the ingredient must be this tenant's. A foreign key alone would
 		// not close this — FK validation runs as the table owner and does not see RLS — so a stray
 		// ingredient_id from another temple could otherwise be referenced.
-		String ingredientName = findIngredientName(request.ingredientId())
+		IngredientRef ingredient = findIngredient(request.ingredientId())
 				.orElseThrow(() -> new ApplicationException(
 						ErrorCode.RESOURCE_NOT_FOUND, Map.of("ingredientId", request.ingredientId())));
+		String ingredientName = ingredient.name();
+
+		// The level, in the unit it was typed in, turned into the unit it is stored in — and refused
+		// if it is a fraction of something the temple counts one by one. See canonicalThreshold.
+		BigDecimal threshold = canonicalThreshold(
+				request.ingredientId(), ingredient.name(), ingredient.canonicalUnit(),
+				request.reorderThreshold(), request.reorderThresholdUnit());
 
 		UUID id = UUID.randomUUID();
 		try {
@@ -261,7 +312,7 @@ public class InventoryItemService {
 				ps.setObject(1, id);
 				ps.setObject(2, request.ingredientId());
 				ps.setString(3, trimToNull(request.storageLocation()));
-				ps.setBigDecimal(4, request.reorderThreshold());
+				ps.setBigDecimal(4, threshold);
 				ps.setString(5, trimToNull(request.notes()));
 				return ps;
 			});
@@ -271,7 +322,7 @@ public class InventoryItemService {
 		}
 
 		auditService.record(actor, AuditAction.INVENTORY_ITEM_ADDED, AuditEntityType.INVENTORY_ITEM, id,
-				null, itemSnapshot(ingredientName, request.storageLocation(), request.reorderThreshold()), null);
+				null, itemSnapshot(ingredientName, request.storageLocation(), threshold), null);
 
 		// The opening count, in this same transaction (T-294, VERIFY-A defect 5). It goes through
 		// the adjustment's own code rather than a copy of it, so every rule a count on the item page
@@ -327,17 +378,24 @@ public class InventoryItemService {
 		ItemRow before = jdbc.query(ITEM_SELECT + " WHERE ii.id = ?", ITEM_MAPPER, itemId)
 				.stream().findFirst().orElseThrow(() -> notFound(itemId));
 
+		// Exactly the rule create() applies, asked through the same method so the two doors cannot
+		// come to disagree about what a level may be. It was open here: a PUT carrying 3.25 against
+		// agarbatti, which the temple counts in whole pieces, was answered 204 and read back 3.25.
+		BigDecimal threshold = canonicalThreshold(
+				before.ingredientId(), before.ingredientName(), Unit.valueOf(before.canonicalUnit()),
+				request.reorderThreshold(), request.reorderThresholdUnit());
+
 		jdbc.update("""
 				UPDATE inventory_items
 				SET storage_location = ?, reorder_threshold = ?, notes = ?, updated_at = now()
 				WHERE id = ?
 				""",
-				trimToNull(request.storageLocation()), request.reorderThreshold(),
+				trimToNull(request.storageLocation()), threshold,
 				trimToNull(request.notes()), itemId);
 
 		auditService.record(actor, AuditAction.INVENTORY_ITEM_UPDATED, AuditEntityType.INVENTORY_ITEM, itemId,
 				itemSnapshot(before.ingredientName(), before.storageLocation(), before.reorderThreshold()),
-				itemSnapshot(before.ingredientName(), request.storageLocation(), request.reorderThreshold()),
+				itemSnapshot(before.ingredientName(), request.storageLocation(), threshold),
 				null);
 	}
 
@@ -612,7 +670,8 @@ public class InventoryItemService {
 	}
 
 	private StockItemView toItemView(
-			ItemRow item, List<BatchAgg> aggs, BigDecimal committedBase, LocalDate horizon) {
+			ItemRow item, List<BatchAgg> aggs, BigDecimal committedBase, LocalDate horizon,
+			Facts facts, LocalDate today) {
 		Unit unit = Unit.valueOf(item.canonicalUnit());
 
 		BigDecimal onHandBase = aggs.stream()
@@ -634,12 +693,27 @@ public class InventoryItemService {
 
 		boolean expiringSoon = aggs.stream().anyMatch(a -> isExpiringSoon(a, horizon));
 
-		boolean belowThreshold = isBelowThreshold(available, item.reorderThreshold());
+		boolean belowThreshold =
+				isBelowThreshold(available, item.reorderThreshold(), item.notBought());
+
+		// On order is null rather than zero where nothing is coming, exactly as the record says: a
+		// quantity nobody has is not a zero, and a column of "0 Kg" hides the one row that is not.
+		BigDecimal onOrderBase = facts.onOrderBase().get(item.ingredientId());
+		BigDecimal onOrder = onOrderBase == null ? null : toCanonical(onOrderBase, unit);
+
+		// Judged against ON HAND, not against available, and the difference is deliberate. The rate
+		// below is measured from what the kitchen has already drawn, and the meals that make up
+		// `committed` are the very next part of that same stream of cooking — subtracting them and
+		// then dividing by a rate that includes their predecessors would charge the same food twice
+		// and halve every answer. On hand is the shelf; the rate is how fast the shelf empties.
+		StockCover lastsFor = StockFactsService.coverFor(
+				onHandBase, facts.dailyUseBase().get(item.ingredientId()), unit, today);
 
 		return new StockItemView(
 				item.itemId(), item.ingredientId(), item.ingredientName(), item.category(),
 				item.storageLocation(), item.canonicalUnit(), onHand, committed, available,
-				item.reorderThreshold(), belowThreshold, expiringSoon, soonestExpiry, item.notes());
+				item.reorderThreshold(), belowThreshold, expiringSoon, soonestExpiry, item.notes(),
+				facts.lastCounted().get(item.ingredientId()), onOrder, lastsFor);
 	}
 
 	/**
@@ -655,8 +729,45 @@ public class InventoryItemService {
 	 * been set. There is no reading of "we have promised more of this than we hold" that is fine, and
 	 * an item with a null threshold is the commonest case in a temple that has just started tracking —
 	 * exactly the one that must not read Fine while over-promised.
+	 *
+	 * <h3>Except for what the temple never buys (T-430)</h3>
+	 *
+	 * <p><strong>Low is an instruction to act, and the action is to buy. A temple cannot buy water.</strong>
+	 * The seeded temple made the case by itself: water came out at minus 1,358 litres — on the stock
+	 * screen, in the dashboard's count and in the nightly digest — because every dish is cooked with it
+	 * and nobody has ever booked a delivery of it in. That figure is not a shortage. It is a ledger
+	 * artefact of cooking with something nobody stocks, and it will grow for as long as the temple keeps
+	 * cooking, so it never clears and never stops shouting.
+	 *
+	 * <p>A badge that says act-now when there is nothing to do is the colour rule broken: amber warns,
+	 * red means act now, and neither is a true thing to say about a tap. Worse, it is a real shortage
+	 * hidden behind a false one — the digest that leads with water is the digest a cook stops reading.
+	 *
+	 * <p><strong>The flag is applied here and not at any of the four surfaces</strong>, for the reason
+	 * {@code ShoppingListService} gives for dropping it in its merge loop and nowhere else: this is the
+	 * one place the judgement is made. The low-stock endpoint, the nightly digest, the dashboard's
+	 * count and the inventory screen's own count all read {@link StockItemView#belowThreshold()}, so
+	 * one predicate settles all four and a fifth reader added later is covered without anybody
+	 * remembering. Both call sites in this class pass it, which keeps the promise
+	 * {@link #lowStock(Map)} makes in its own words — that the badge on the screen and the line on the
+	 * shopping list cannot come to disagree about what low means.
+	 *
+	 * <p><strong>The check is on the whole rule, not on the threshold clause.</strong> Water has no
+	 * reorder level at all; it is Low through the negative-available disjunct above. Guarding only the
+	 * threshold comparison would have changed nothing about the case this was built for.
+	 *
+	 * <p>And it is only the <em>judgement</em> that changes. The consumable is still listed, still has
+	 * a stock detail page, still draws down through the allocator and is still costed — V153 promised
+	 * exactly that, and {@code NotBoughtShoppingListIT.stockAndCostingAreUntouched} holds it to it.
+	 * Nothing here filters a row out of {@link #list}.
+	 *
+	 * @param notBought whether the temple has marked the ingredient as one it never buys (V153)
 	 */
-	private static boolean isBelowThreshold(BigDecimal available, BigDecimal reorderThreshold) {
+	private static boolean isBelowThreshold(
+			BigDecimal available, BigDecimal reorderThreshold, boolean notBought) {
+		if (notBought) {
+			return false;
+		}
 		return available.signum() < 0
 				|| (reorderThreshold != null && available.compareTo(reorderThreshold) < 0);
 	}
@@ -687,9 +798,84 @@ public class InventoryItemService {
 		return LocalDate.now(clock.zone()).plusDays(window);
 	}
 
-	private Optional<String> findIngredientName(UUID ingredientId) {
-		return jdbc.query("SELECT name FROM ingredients WHERE id = ?",
-				(rs, n) -> rs.getString("name"), ingredientId).stream().findFirst();
+	private Optional<IngredientRef> findIngredient(UUID ingredientId) {
+		return jdbc.query("SELECT name, canonical_unit FROM ingredients WHERE id = ?",
+				(rs, n) -> new IngredientRef(rs.getString("name"),
+						Unit.valueOf(rs.getString("canonical_unit"))),
+				ingredientId).stream().findFirst();
+	}
+
+	/**
+	 * The two things about an ingredient that {@link #create} needs before it writes anything: what
+	 * to call it in a refusal, and what unit its level will be stored in. Read together because the
+	 * row is being fetched anyway — the name alone used to be read here, and the level's unit was
+	 * then taken on trust from the browser.
+	 */
+	private record IngredientRef(String name, Unit canonicalUnit) {
+	}
+
+	/**
+	 * A reorder level as somebody typed it, in the unit the item is kept in — and refused outright
+	 * where it cannot be a level for this ingredient at all.
+	 *
+	 * <h3>Why the unit travels at all (T-432)</h3>
+	 *
+	 * <p>The column is documented in V15 as being in the ingredient's canonical unit, and it is; what
+	 * was missing is any way for a person to say which unit they meant. On the Add form the level's
+	 * box had no unit of its own and its value was multiplied by <em>the opening count's</em> unit
+	 * factor, two fields away — so "tell me when ghee drops below 500", typed beside a count in
+	 * grams, stored 0.5 and beside a count in litres stored 500. Both were the same keystrokes. That
+	 * arithmetic has moved here, where the canonical unit is known for certain rather than inferred
+	 * from another box.
+	 *
+	 * <p>{@code null} or blank means "already in the ingredient's own unit", which is what every
+	 * caller written before this sent and what the inventory list's inline editor still sends: that
+	 * row shows the unit as fixed text and cannot change it, which was settled as deliberate on
+	 * 2026-09-08 (build-list item I1 — changing an ingredient's unit once stock exists is a
+	 * conversion problem).
+	 *
+	 * <h3>The two refusals</h3>
+	 *
+	 * <p><strong>A unit from the wrong family is KMS-400013</strong>, through
+	 * {@code IngredientUnits.requireSameFamily}, so "tell me when rice drops below 3 litres" is
+	 * answered in the ingredient's own words. Asked only when the families already disagree, so the
+	 * ordinary case costs no extra statement.
+	 *
+	 * <p><strong>A fraction of a counted thing is KMS-400191</strong>, through
+	 * {@code IngredientUnits.requireWhole}, and closing that is the point. A level is compared
+	 * against a stock figure, so it is whole exactly when the stock figure is: "tell me when
+	 * agarbatti drops below 3.25" is a rule nobody can read off a shelf. The refusal already reads
+	 * "Agarbatti is counted in whole pieces. Enter 3 or 4." — the same sentence the adjustment door
+	 * one along has given since T-423, which is why no new code was needed and none was taken.
+	 *
+	 * <p>Judged on the stored figure rather than on what was typed, because the stored figure is what
+	 * the comparison will use. Today the two can only differ for a mass or a volume, neither of which
+	 * is counted, so nothing turns on it — but it is the figure that matters, and saying so now is
+	 * cheaper than discovering it the day a crate holds twelve pieces.
+	 *
+	 * <p><strong>Nothing already stored is touched.</strong> This refuses a level being written, in
+	 * the same way {@code IngredientUnits} refuses a quantity being recorded and for the same reason:
+	 * a screen that throws while reading is worse than one showing the bad figure somebody needs in
+	 * order to correct it. The seeded temple holds agarbatti at 7.5 today and goes on rendering it;
+	 * the next save of that item is what has to fix it.
+	 */
+	private BigDecimal canonicalThreshold(
+			UUID ingredientId, String ingredientName, Unit canonical, BigDecimal typed, String typedUnit) {
+		if (typed == null) {
+			return null;
+		}
+		BigDecimal stored = typed;
+		if (typedUnit != null && !typedUnit.isBlank()) {
+			Unit given = IngredientUnits.parse(typedUnit);
+			if (given.family() != canonical.family()) {
+				// Delegated rather than thrown here, so the sentence a person reads is the one the
+				// rest of the application has always given for this mistake.
+				ingredientUnits.requireSameFamily(ingredientId, given);
+			}
+			stored = InventoryUnits.fromBase(InventoryUnits.toBase(typed, given), canonical);
+		}
+		IngredientUnits.requireWhole(ingredientName, stored, canonical);
+		return stored;
 	}
 
 	private Map<String, Object> itemSnapshot(String ingredientName, String location, BigDecimal threshold) {
@@ -717,16 +903,25 @@ public class InventoryItemService {
 			.comparing(BatchAgg::expiryDate, Comparator.nullsLast(Comparator.naturalOrder()))
 			.thenComparing(BatchAgg::receivedDate, Comparator.nullsLast(Comparator.naturalOrder()));
 
+	/**
+	 * <p>{@code is_not_bought} rides along on the join this query already makes rather than being
+	 * fetched per row (T-430). {@code ingredients} is joined here for the name, the category and the
+	 * canonical unit, so the flag costs no extra statement — which is the point:
+	 * {@code ShoppingListStatementCountIT} counts statements per page load precisely because a
+	 * per-row read crept back in once before, and this select is on that page's path.
+	 */
 	private static final String ITEM_SELECT = """
 			SELECT ii.id AS item_id, ii.ingredient_id, i.name AS ingredient_name, i.category,
-				   ii.storage_location, i.canonical_unit, ii.reorder_threshold, ii.notes
+				   ii.storage_location, i.canonical_unit, ii.reorder_threshold, ii.notes,
+				   i.is_not_bought
 			FROM inventory_items ii
 			JOIN ingredients i ON i.id = ii.ingredient_id
 			""";
 
 	private record ItemRow(
 			UUID itemId, UUID ingredientId, String ingredientName, String category,
-			String storageLocation, String canonicalUnit, BigDecimal reorderThreshold, String notes) {
+			String storageLocation, String canonicalUnit, BigDecimal reorderThreshold, String notes,
+			boolean notBought) {
 	}
 
 	private record BatchAgg(
@@ -741,7 +936,8 @@ public class InventoryItemService {
 			rs.getString("storage_location"),
 			rs.getString("canonical_unit"),
 			rs.getBigDecimal("reorder_threshold"),
-			rs.getString("notes"));
+			rs.getString("notes"),
+			rs.getBoolean("is_not_bought"));
 
 	private static final RowMapper<BatchAgg> BATCH_MAPPER = (rs, n) -> new BatchAgg(
 			rs.getObject("ingredient_id", UUID.class),

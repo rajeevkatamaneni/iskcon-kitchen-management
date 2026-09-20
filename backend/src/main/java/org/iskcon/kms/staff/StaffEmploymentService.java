@@ -49,13 +49,20 @@ public class StaffEmploymentService {
 	private final PanCipher panCipher;
 	/** Only for the ban a dismissal may raise (B9); the check at a hire is run before this service. */
 	private final org.iskcon.kms.ban.EmploymentBanService bans;
+	/** The papers on a record (T-428). Read for {@link #record}; written on its own endpoints. */
+	private final StaffDocumentService documents;
+	/** Past jobs (T-428). Written inside this service's update transaction, so one Save is one edit. */
+	private final StaffPreviousEmploymentService previousEmployment;
 
 	public StaffEmploymentService(JdbcTemplate jdbc, AuditService auditService, PanCipher panCipher,
-			org.iskcon.kms.ban.EmploymentBanService bans) {
+			org.iskcon.kms.ban.EmploymentBanService bans, StaffDocumentService documents,
+			StaffPreviousEmploymentService previousEmployment) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.panCipher = panCipher;
 		this.bans = bans;
+		this.documents = documents;
+		this.previousEmployment = previousEmployment;
 	}
 
 	// ---- Reading --------------------------------------------------------
@@ -92,6 +99,23 @@ public class StaffEmploymentService {
 	@Transactional(readOnly = true)
 	public StaffProfileView get(UUID id) {
 		return find(id).orElseThrow(() -> notFound(id));
+	}
+
+	/**
+	 * One person's whole record in one request (T-428) — see {@link StaffRecordView} for why this
+	 * exists rather than the screens filtering the register, and why it is not
+	 * {@code GET /staff/profiles/{id}}.
+	 *
+	 * <p>Three reads and not one join: the profile, then their documents, then their past jobs. Two
+	 * of the three are lists, and a join would multiply the rows of one by the rows of the other for
+	 * no gain worth the reassembly on a page that is opened one person at a time.
+	 */
+	@Transactional(readOnly = true)
+	public StaffRecordView record(UUID id) {
+		StaffProfileView profile = find(id).orElseThrow(() -> notFound(id));
+		// Only ever true of somebody who has left: a standing record is raised at a dismissal.
+		boolean banned = profile.isFormer() && bans.staffProfilesWithARecord().contains(id);
+		return new StaffRecordView(profile, banned, documents.documentsFor(id), previousEmployment.listFor(id));
 	}
 
 	/** The picklist, served rather than retyped in the browser where it would drift. */
@@ -146,10 +170,10 @@ public class StaffEmploymentService {
 					id, tenant_id, user_id, full_name, phone, email, job_title, job_title_other,
 					employment_type, date_of_joining, date_of_birth, address,
 					emergency_contact_name, emergency_contact_relationship, emergency_contact_phone,
-					pan_ciphertext, pan_last4, employment_status, monthly_salary, notes,
+					pan_ciphertext, pan_last4, employment_status, monthly_salary,
 					kitchen_id, kitchen_needs_check)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-					?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, false)
+					?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, false)
 				""",
 				id, userId, fullName, phone, email,
 				request.jobTitle().name(), trimToNull(request.jobTitleOther()),
@@ -161,7 +185,7 @@ public class StaffEmploymentService {
 				// as pay of nothing, and the termination screen has to be able to tell them apart.
 				// The admin chose this kitchen on the form, so it is not a guess and is not flagged for
 				// checking — unlike the kitchens V150 filled in for everybody already employed.
-				request.monthlySalary(), trimToNull(request.notes()), request.kitchenId());
+				request.monthlySalary(), request.kitchenId());
 
 		seedWeekOfDaysOff(id);
 
@@ -234,7 +258,6 @@ public class StaffEmploymentService {
 					pan_ciphertext = CASE WHEN ? THEN ? ELSE pan_ciphertext END,
 					pan_last4      = CASE WHEN ? THEN ? ELSE pan_last4 END,
 					monthly_salary = ?,
-					notes = ?,
 					kitchen_id = ?, kitchen_needs_check = false,
 					updated_at = now()
 				WHERE id = ?
@@ -250,7 +273,12 @@ public class StaffEmploymentService {
 				request.monthlySalary(),
 				// Saving the record is the admin looking at it, kitchen included — the form shows the
 				// kitchen and they sent it — so it comes off the check list whether or not it moved.
-				trimToNull(request.notes()), request.kitchenId(), id);
+				request.kitchenId(), id);
+
+		// Inside this transaction on purpose: one Save is one edit, so a past job with its dates the
+		// wrong way round takes the whole save down rather than leaving the phone number changed and
+		// the work history not. Null there leaves the stored list alone — see the field's own note.
+		previousEmployment.replace(id, request.previousEmployment());
 
 		StaffProfileView after = find(id).orElseThrow(() -> notFound(id));
 		auditService.record(actor, AuditAction.STAFF_UPDATED, AuditEntityType.STAFF_MEMBER, id,
@@ -923,7 +951,7 @@ public class StaffEmploymentService {
 			SELECT sp.id, sp.user_id, sp.full_name, sp.phone, sp.email, sp.job_title, sp.job_title_other,
 			       sp.employment_type, sp.date_of_joining, sp.date_of_birth, sp.address,
 			       sp.emergency_contact_name, sp.emergency_contact_relationship, sp.emergency_contact_phone,
-			       sp.pan_last4, sp.employment_status, sp.last_working_day, sp.end_reason, sp.notes,
+			       sp.pan_last4, sp.employment_status, sp.last_working_day, sp.end_reason,
 			       sp.created_at, u.role AS user_role,
 			       sp.kitchen_id, k.name AS kitchen_name, sp.kitchen_needs_check
 			FROM staff_profiles sp LEFT JOIN users u ON u.id = sp.user_id
@@ -958,7 +986,6 @@ public class StaffEmploymentService {
 				EmploymentStatus.valueOf(rs.getString("employment_status")),
 				rs.getObject("last_working_day", LocalDate.class),
 				rs.getString("end_reason"),
-				rs.getString("notes"),
 				toInstant(rs.getObject("created_at", OffsetDateTime.class)));
 	};
 

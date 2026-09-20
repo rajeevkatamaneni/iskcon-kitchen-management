@@ -634,6 +634,155 @@ export function quantity(value: number | null | undefined, unit: string): string
 }
 
 /**
+ * Several figures about the same thing, all said in **one** unit — the row's unit rather than each
+ * figure's own (T-432).
+ *
+ * <p>Rajeev, reviewing the inventory screen on staging, found a single row reading **2.06 Kg on
+ * hand, 2.04 Kg committed, 20 gm available**. Nothing in it is wrong: {@link quantity} promotes from
+ * 1,000 up, it is asked separately for each figure, and 0.02 Kg genuinely is 20 gm. That is exactly
+ * the defect — the decision is made per call, on one number, knowing nothing about the numbers
+ * beside it, so a row meant to be read as a subtraction switches units in the middle of it and stops
+ * visibly adding up.
+ *
+ * <p><strong>This does not change {@link quantity}, deliberately.</strong> That function has about
+ * forty callers and its behaviour is pinned by `__tests__/quantities.test.ts`; a figure standing on
+ * its own should still be said the way a person would say it. What was missing is a way to say a
+ * *set* of them together, so this is a second entry point rather than a new rule for the old one —
+ * the same shape as {@link entryQuantity} and {@link fromEntry}, which are a pair for the same
+ * reason.
+ *
+ * <p><strong>Which unit wins: the biggest figure's.</strong> Reading 1.96, 2.04 and −0.08 Kg is
+ * reading one scale; reading 1,960, 2,040 and −80 gm is the same numbers with three noughts on each.
+ * The largest figure is the one that says how big the quantities in this row are, so it is the one
+ * that chooses. A row whose figures are all zero keeps the unit the ingredient is held in, as
+ * {@link quantity} already does for a lone zero.
+ *
+ * <p><strong>Nothing is rounded away.</strong> This is the ledger form, where the figures have to go
+ * on adding up: three decimals is a gram of a kilo, and 418.2 gm restated in kilograms is 0.4182,
+ * which three would quietly turn into 0.418. So the decimals are however many the set needs to say
+ * every figure in it exactly, up to six. It fixes the other end of the same problem at the same
+ * time — 0.4 gm in kilograms is 0.0004, and "0 Kg" would say the shelf is empty when it is not.
+ *
+ * <p>Six, because a ledger quantity is stored to three decimal places in its own unit, and the
+ * furthest a conversion can push that is three more.
+ *
+ * <p>Pieces, and any unit this file does not know, have nothing to convert into: the renderer
+ * returned is {@link quantity} itself.
+ *
+ * @param unit the unit every figure is stored in — one ingredient's canonical unit
+ * @param figures every figure that will be printed in the row, nulls included: what is *shown*
+ *        decides the unit, so leaving one out can change the answer
+ * @returns a renderer for one figure, to be used for every figure in that row
+ */
+export function oneUnitFor(
+  unit: string,
+  figures: ReadonlyArray<number | null | undefined>,
+): (value: number | null | undefined) => string {
+  const code = (unit ?? "").toUpperCase();
+  const family = FAMILY[code];
+  if (!family) return (value) => quantity(value, code);
+
+  const factor = BASE_FACTOR[code];
+  const bases = figures
+    .filter((v): v is number => v != null && Number.isFinite(v))
+    .map((v) => Math.abs(v) * factor);
+  const biggest = bases.length === 0 ? 0 : Math.max(...bases);
+  const display = biggest === 0 ? code : biggest >= 1000 ? family.large : family.small;
+  const displayFactor = BASE_FACTOR[display];
+
+  // Three decimals is a ledger figure's own precision in its own unit; a conversion can need up to
+  // three more. The loop asks each figure how many places it takes to say it exactly and keeps the
+  // largest, so no figure in the set is rounded and none disappears into a row of noughts. The
+  // epsilon is float dust, not tolerance: 0.1 * 1000 is not exactly 100 in binary.
+  let decimals = 3;
+  for (const base of bases) {
+    if (base === 0) continue;
+    const shown = base / displayFactor;
+    let needed = 0;
+    while (needed < 6 && Math.abs(shown * 10 ** needed - Math.round(shown * 10 ** needed)) > 1e-9) {
+      needed += 1;
+    }
+    decimals = Math.max(decimals, needed);
+  }
+
+  return (value) => {
+    if (value == null || !Number.isFinite(value)) return "\u2014";
+    return say((value * factor) / displayFactor, display, decimals);
+  };
+}
+
+/**
+ * The most this application will claim to know about when a consumable runs out.
+ *
+ * <p>Rajeev asked for an approximate "how long it lasts" on 2026-09-20 and stipulated the word
+ * **"Approximately"**, and that where there is not enough history to judge it must say so honestly
+ * rather than guess. Both halves are here rather than at the call sites, so the inventory list and
+ * the item's own screen cannot end up wording the same estimate two ways.
+ *
+ * <p>The server decides *whether* there is an answer — six separate days of use spread over at least
+ * a fortnight, and it sends nothing at all otherwise — and this decides only the words, the way
+ * {@link contractWarning} and an expiring batch already split the same job.
+ *
+ * <p>Four things it will say and one it will not:
+ * <ul>
+ *   <li>**"Not enough history"** — no rate to divide by. Never a number, never a hedge like "about
+ *       a month?", and never a blank, which would read as a screen that failed to load.</li>
+ *   <li>**"None left"** — nothing on the shelf. "Approximately 0 days" is arithmetic answering a
+ *       question nobody asked; the shelf is empty and that is the whole answer.</li>
+ *   <li>**"Less than a day"** — there is stock, and today's cooking will finish it.</li>
+ *   <li>**"More than 3 months"** — past the evidence the estimate was made from. A four-year figure
+ *       from ninety days of history is a division, not a forecast.</li>
+ *   <li>**"Approximately 12 days"** otherwise, with his word on every one of them.</li>
+ * </ul>
+ *
+ * @param lastsFor what the server sent, or null where it declined to judge
+ * @param onHand what is on the shelf now, in any unit — only its sign is read
+ */
+export function stockCoverPhrase(
+  lastsFor: { days: number; beyondWindow: boolean } | null | undefined,
+  onHand: number | null | undefined,
+): string {
+  if (!lastsFor) return "Not enough history";
+  if (onHand == null || onHand <= 0) return "None left";
+  if (lastsFor.beyondWindow) return "More than 3 months";
+  if (lastsFor.days <= 0) return "Less than a day";
+  return `Approximately ${lastsFor.days} ${lastsFor.days === 1 ? "day" : "days"}`;
+}
+
+/**
+ * Whether a run-out estimate is close enough to be a warning rather than a fact.
+ *
+ * <p>Amber warns and red means act now (Rajeev, 2026-09-18), so an estimate has to earn its colour.
+ * A week is the bar because a week is the ordinary shopping cycle, and it is the same seven days the
+ * temple's expiry warning defaults to — a thing that will be gone before the next shop is worth
+ * saying loudly, and a thing that lasts a month is not.
+ *
+ * <p>**"Not enough history" is never coloured.** It is the absence of a judgement, and colouring an
+ * absence teaches people that amber means "the computer is unsure", which is the opposite of what
+ * every other amber in this application means.
+ */
+export function stockRunsOutSoon(
+  lastsFor: { days: number; beyondWindow: boolean } | null | undefined,
+  onHand: number | null | undefined,
+): boolean {
+  if (!lastsFor || lastsFor.beyondWindow) return false;
+  if (onHand == null || onHand <= 0) return true;
+  return lastsFor.days <= 7;
+}
+
+/**
+ * When somebody last counted the shelf — "18 Sep 2026", or the honest absence.
+ *
+ * <p>"Never counted" rather than a dash: a dash in this column would be read as "we did not fetch
+ * it", and the fact that nobody has ever counted a consumable is exactly the fact a storekeeper
+ * needs. It is also actionable, which no dash is — the item's own screen offers "Record what's on
+ * the shelf" a click away.
+ */
+export function lastCountedPhrase(lastCounted: string | null | undefined): string {
+  return lastCounted ? dateWithYear(lastCounted) : "Never counted";
+}
+
+/**
  * The same quantity, rounded the way a cook would round it — see {@link roundAsAPersonWould}.
  *
  * <p>The **cook's** form. Use it wherever the number is something a person acts on with their

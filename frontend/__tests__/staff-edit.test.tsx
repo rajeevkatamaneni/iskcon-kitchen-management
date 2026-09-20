@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type {
+import {
   ApiError,
-  JobTitleOption,
-  StaffConductNoteView,
-  StaffPayView,
-  StaffRegisterView,
+  type JobTitleOption,
+  type StaffConductNoteView,
+  type StaffPayView,
+  type StaffRecordView,
 } from "@/lib/api";
-import { TITLES, member, pay } from "./staff-fixtures";
+import { TITLES, member, pay, record } from "./staff-fixtures";
 
 /**
  * Updating one person's record (E6-S8), on the screen it moved to on 2026-08-21.
@@ -21,7 +21,7 @@ import { TITLES, member, pay } from "./staff-fixtures";
 const {
   authRef,
   paramsRef,
-  registerRef,
+  recordRef,
   titlesRef,
   payRef,
   conductRef,
@@ -37,8 +37,8 @@ const {
       },
     },
     paramsRef: { current: { id: "s1" } },
-    registerRef: {
-      current: { data: null as StaffRegisterView | null, error: null as ApiError | null, loading: false },
+    recordRef: {
+      current: { data: null as StaffRecordView | null, error: null as ApiError | null, loading: false },
     },
     titlesRef: { current: { data: [] as JobTitleOption[], error: null, loading: false } },
     payRef: { current: { data: null as StaffPayView | null, error: null as ApiError | null, loading: false } },
@@ -61,8 +61,8 @@ vi.mock("@/lib/use-authed-query", () => ({
     const source = fn.toString();
     const ref = source.includes("staffConductNotes")
       ? conductRef
-      : source.includes("staffRegister")
-      ? registerRef
+      : source.includes("staffMember")
+      ? recordRef
       : source.includes("staffPay")
         ? payRef
         : titlesRef;
@@ -83,7 +83,7 @@ describe("updating a staff record", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     paramsRef.current = { id: "s1" };
-    registerRef.current = { data: { current: [member()], former: [] }, error: null, loading: false };
+    recordRef.current = { data: record(), error: null, loading: false };
     titlesRef.current = { data: TITLES, error: null, loading: false };
     payRef.current = { data: pay(), error: null, loading: false };
     conductRef.current = { data: [], error: null, loading: false };
@@ -125,8 +125,8 @@ describe("updating a staff record", () => {
   });
 
   it("reads a PAN only when asked, because reading one is recorded", async () => {
-    registerRef.current = {
-      data: { current: [member({ panLast4: "234F" })], former: [] },
+    recordRef.current = {
+      data: record(member({ panLast4: "234F" })),
       error: null,
       loading: false,
     };
@@ -134,13 +134,25 @@ describe("updating a staff record", () => {
     expect(screen.getByText("••••••234F")).toBeInTheDocument();
     expect(screen.queryByText("ABCDE1234F")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /reveal/i }));
+    // The eye makes the audited request when it is pressed (T-428). Nothing is fetched on load.
+    expect(revealMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Show the PAN" }));
     await waitFor(() => expect(screen.getByText("ABCDE1234F")).toBeInTheDocument());
     expect(revealMock).toHaveBeenCalledWith("s1", "test-token");
   });
 
-  it("says so plainly when the address belongs to nobody on the register", () => {
+  it("says so plainly when the address belongs to nobody at this temple", () => {
     paramsRef.current = { id: "gone" };
+    recordRef.current = {
+      data: null,
+      error: new ApiError({
+        code: "KMS-400030",
+        message: "We couldn’t find that.",
+        action: "Go back and try again.",
+        fieldErrors: [],
+      }),
+      loading: false,
+    };
     render(<EditStaffPage />);
     expect(screen.getByText(/can’t find that person/i)).toBeInTheDocument();
     expect(screen.queryByRole("form", { name: /edit a staff member/i })).not.toBeInTheDocument();

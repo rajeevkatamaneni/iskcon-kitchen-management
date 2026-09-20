@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Form } from "@/components/ds/Form";
+import { countedBox } from "@/components/ds/formMessages";
 import { RequireRole } from "@/components/RequireRole";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
@@ -325,6 +326,10 @@ function NewDonationView() {
                   min="0"
                   // Nobody donates 2.4 blankets (T-424). The two money boxes above are untouched.
                   step={stepForUnit(line.unit)}
+                  // "Quantity 2 must be a whole number" named the row and nothing else. Named from
+                  // the ingredient picked in the row, so the refusal says which thing and why
+                  // (T-431); before one is picked the line carries no unit to refuse by either.
+                  {...countedBox(ingredients.find((i) => i.id === line.ingredientId)?.name, line.unit)}
                   placeholder="Qty"
                   value={line.quantity}
                   onChange={(e) =>

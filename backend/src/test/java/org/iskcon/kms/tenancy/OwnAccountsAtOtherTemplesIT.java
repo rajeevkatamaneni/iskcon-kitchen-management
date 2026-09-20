@@ -416,7 +416,8 @@ class OwnAccountsAtOtherTemplesIT extends AbstractIntegrationTest {
 		return new HireStaffRequest(
 				userId, "Hired Person", null, null, JobTitle.COOK, null, EmploymentType.FULL_TIME,
 				LocalDate.of(2026, 9, 1), null, null, null, null, null, null, null, null, null, null,
-				kitchenId, null);
+				// The trailing `notes` went with the column's retirement (T-428, V155).
+				kitchenId);
 	}
 
 	/**

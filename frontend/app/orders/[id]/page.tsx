@@ -22,6 +22,7 @@ import { DeliveryHistory } from "@/components/DeliveryHistory";
 import { PurchaseOrderEditor, subjectOf, type PurchaseOrderDraft } from "@/components/PurchaseOrderEditor";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
+import { countedBox } from "@/components/ds/formMessages";
 import { Badge } from "@/components/ds/Badge";
 import { HintedField } from "@/components/ds/InfoHint";
 
@@ -1305,6 +1306,10 @@ function PurchaseOrderDetailView() {
                             max={returnChoice.line.receivedQty - returnChoice.line.returnedQty}
                             // 1.5 aprons cannot go back on the van (T-424).
                             step={stepForUnit(returnChoice.line.unit)}
+                            // "Quantity of Apron to return must be a whole number" was the box's
+                            // own name with the rule stuck on it. The item and its unit make it
+                            // "Apron is counted in whole pieces", which is why (T-431).
+                            {...countedBox(returning.subject, returnChoice.line.unit)}
                             aria-label={`Quantity of ${returning.subject} to return`}
                             className="w-32 min-h-touch rounded-control border border-hairline px-2 tabular-nums"
                           />

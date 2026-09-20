@@ -433,6 +433,35 @@ public enum AuditAction {
 	STAFF_PAN_VIEWED,
 
 	/**
+	 * A photograph, or the scan of a PAN or Aadhaar card, was attached to somebody's record (T-428).
+	 *
+	 * <p>The entry names the kind, what the file was found to be and how big it was. It carries
+	 * nothing from inside the file and never the storage key — the key is where the bytes live, which
+	 * is ours to know, and the audit log has a wider readership than MANAGE_STAFF does.
+	 */
+	STAFF_DOCUMENT_ADDED,
+
+	/**
+	 * Somebody opened one of those files (T-428).
+	 *
+	 * <p>The same decision as {@link #STAFF_PAN_VIEWED}, for the same reason and in the same shape:
+	 * a null before, and an after that says which kind of document was opened and nothing else.
+	 * Access to PII is always recorded, and an Aadhaar scan is the most sensitive thing this
+	 * application stores — so reading one is an event, not a page load. It is written at the moment
+	 * the bytes are asked for, which is why the screen never fetches a document to hide it behind CSS.
+	 */
+	STAFF_DOCUMENT_VIEWED,
+
+	/**
+	 * One of those files was taken off a record, or replaced by a newer one (T-428).
+	 *
+	 * <p>Its own action rather than a {@link #STAFF_UPDATED}: somebody removing the only copy of an
+	 * identity document is a different question from somebody correcting a phone number, and it
+	 * should not have to be found by reading every edit.
+	 */
+	STAFF_DOCUMENT_REMOVED,
+
+	/**
 	 * A conduct note was added to somebody's employment record (E6-S16). The entry records that one
 	 * was written and by whom; it deliberately does not carry the words. The note itself is behind
 	 * MANAGE_STAFF_CONDUCT_NOTES, and copying its text into a log read behind VIEW_AUDIT_LOG would

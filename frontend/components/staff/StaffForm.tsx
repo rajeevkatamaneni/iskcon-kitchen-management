@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { Form } from "@/components/ds/Form";
 import { HintedField, InfoHint } from "@/components/ds/InfoHint";
-import { GROUP_LABELS, EMPLOYMENT_TYPES } from "./labels";
+import { GROUP_LABELS, EMPLOYMENT_TYPES, maskedPan } from "./labels";
+import { PreviousEmploymentFields, readPreviousEmployment } from "./PreviousEmploymentFields";
+import { RevealBox } from "./RevealBox";
 import { normalizePhone } from "@/lib/phone";
 import type {
   HireStaffInput,
@@ -11,6 +13,7 @@ import type {
   JobTitleGroup,
   JobTitleOption,
   Kitchen,
+  PreviousEmploymentView,
   StaffPayView,
   StaffProfileView,
   SystemAccess,
@@ -55,8 +58,10 @@ export function StaffForm({
   options,
   kitchens,
   devotees,
+  previousEmployment = [],
   revealedPan,
   onRevealPan,
+  onHidePan,
   onSubmit,
 }: {
   /** The record being changed, or null while hiring. */
@@ -67,9 +72,13 @@ export function StaffForm({
   /** The temple's kitchens as `listKitchens(false)` returns them. Archived ones are never offered. */
   kitchens: Kitchen[];
   devotees: UserSummary[];
+  /** Where they worked before (T-428). Empty while hiring — it is asked for on the record's own edit. */
+  previousEmployment?: PreviousEmploymentView[];
   /** The PAN in clear, once somebody has asked for it. Null until then, and never fetched eagerly. */
   revealedPan?: string | null;
   onRevealPan?: (staff: StaffProfileView) => void;
+  /** Throws the revealed PAN away, so showing it again is a second recorded read. */
+  onHidePan?: () => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
 }) {
   // Held in state only so the two dependent fields react: "Other" reveals its text box, and a title
@@ -338,41 +347,44 @@ export function StaffForm({
         </label>
       </fieldset>
 
-      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">PAN</span>
-        <input name="pan" placeholder="ABCDE1234F" className={FIELD} />
-        {/* One of the four texts exempt from the twelve-word rule: why a tax number is asked for and
-            what becomes of it. Tightened only where tightening was free — the semicolon became a
-            full stop, and nothing else moved. */}
-        <span className="pl-field-inset text-xs text-ink-muted">
-          {staff?.panLast4
-            ? "Stored and hidden. Leave blank to keep it as it is."
-            : "Encrypted before it is stored. Reading it later is recorded."}
-        </span>
-        {/* Reading the stored PAN moved here from the register on 2026-08-20. It belongs on one
-            person’s own screen rather than in a column beside everybody’s: the same audited act,
-            asked for on purpose instead of sitting an inch from every row. */}
-        {staff?.panLast4 && (
-          <span className="mt-1 flex items-center gap-2 text-sm">
-            <span className="tabular-nums text-ink">{revealedPan ?? `••••••${staff.panLast4}`}</span>
-            {!revealedPan && onRevealPan && (
-              <button
-                type="button"
-                onClick={() => onRevealPan(staff)}
-                className="text-accent-text hover:underline"
-                title="Reading a PAN is recorded on the audit log"
-              >
-                Reveal
-              </button>
-            )}
+      {/* A stored PAN is read in its own box, with the eye inside it (T-428). What replaced the
+          masked line that used to float under the input with a text link called Reveal beside it:
+          Rajeev, 2026-09-20, asked for the PAN "in the same text box with an ‘Eye’ Icon". The eye
+          makes the audited request when it is pressed — see {@link RevealBox}, which is emphatic
+          about why it must not be fetched on load and hidden with CSS. */}
+      {staff?.panLast4 ? (
+        <div className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">PAN</span>
+          <RevealBox
+            masked={maskedPan(staff.panLast4)}
+            revealed={revealedPan ?? null}
+            onReveal={() => onRevealPan?.(staff)}
+            onHide={() => onHidePan?.()}
+            what="PAN"
+            note="Reading it is recorded."
+          />
+          <label className="mt-1 flex flex-col gap-1">
+            <span className="pl-field-inset text-xs text-ink-muted">
+              Leave this blank to keep the stored one.
+            </span>
+            <input name="pan" placeholder="ABCDE1234F" aria-label="Replace the PAN" className={FIELD} />
+          </label>
+        </div>
+      ) : (
+        <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+          <span className="pl-field-inset font-medium text-ink">PAN</span>
+          <input name="pan" placeholder="ABCDE1234F" className={FIELD} />
+          {/* One of the four texts exempt from the twelve-word rule: why a tax number is asked for
+              and what becomes of it. */}
+          <span className="pl-field-inset text-xs text-ink-muted">
+            Encrypted before it is stored. Reading it later is recorded.
           </span>
-        )}
-      </label>
+        </label>
+      )}
 
-      <label className="col-span-full flex flex-col gap-1 text-sm text-ink-secondary">
-        <span className="pl-field-inset font-medium text-ink">Notes</span>
-        <input name="notes" defaultValue={staff?.notes ?? ""} className={FIELD} />
-      </label>
+      {/* Where they worked before (T-428). Only on an edit: hiring somebody is already ten fields,
+          and Rajeev asked for this on "the record’s own Edit screen". */}
+      {staff && <PreviousEmploymentFields jobs={previousEmployment} />}
     </Form>
   );
 }
@@ -405,7 +417,6 @@ export function readStaffForm(f: FormData): HireStaffInput {
     // A blank box is null and not 0. The two mean different things all the way down: no salary
     // recorded is what the termination screen has to be able to say.
     monthlySalary: salary === "" ? null : Number(salary),
-    notes: emptyToNull(String(f.get("notes") ?? "")),
     // Sent on a hire and on every edit alike (Epic 12). The form refuses a blank one before it gets
     // here; the server's KMS-400184 is the twin guard.
     kitchenId: String(f.get("kitchenId") ?? ""),

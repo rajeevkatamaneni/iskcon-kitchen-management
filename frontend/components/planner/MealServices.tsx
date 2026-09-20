@@ -36,7 +36,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { generateAndDownload } from "@/lib/document-download";
 import { cooksQuantity, dateWithYear, hhmm, shortDate, stepForUnit, templeDay, todayIso, unitLabelFor } from "@/lib/format";
-import { wholeNumberProblem } from "@/components/ds/formMessages";
+import { countedBox, wholeNumberProblem } from "@/components/ds/formMessages";
 import { ALL_LANGUAGES } from "@/lib/languages";
 
 /**
@@ -776,9 +776,13 @@ function RecordMeal({
   function wholeProblems(entry: (typeof entries)[number]): { cooked?: string; consumed?: string } {
     if (entry.notMade) return {};
     const step = stepForUnit(unit(entry.dishId));
+    // Both boxes say why, in the dish's own words: "Ladoo is counted in whole pieces" rather than
+    // "Ladoo cooked must be a whole number" (T-431). The same two facts the cards below carry as
+    // attributes for `Form`, so the two halves of this screen cannot word one rule two ways.
+    const counted = { subject: entry.recipeName, unit: unit(entry.dishId) };
     return {
-      cooked: wholeNumberProblem(`${entry.recipeName} cooked`, step, entry.cooked) ?? undefined,
-      consumed: wholeNumberProblem(`${entry.recipeName} served`, step, entry.consumed) ?? undefined,
+      cooked: wholeNumberProblem(`${entry.recipeName} cooked`, step, entry.cooked, counted) ?? undefined,
+      consumed: wholeNumberProblem(`${entry.recipeName} served`, step, entry.consumed, counted) ?? undefined,
     };
   }
   /** Nothing is said under a box until Save actuals has been pressed. */
@@ -909,10 +913,16 @@ function RecordMeal({
           </label>
 
           {/* The sentence takes a line of its own under the row rather than becoming a fifth item
-              on it — the same shape the planner's band uses for `Form`'s error slot. */}
+              on it — the same shape the planner's band uses for `Form`'s error slot.
+
+              Said once, however many boxes on the row are wrong (T-431). The two used to differ
+              because each named its own box — "Ladoo cooked must be a whole number · Ladoo served
+              must be a whole number" — and now both give the same reason, which is about the dish
+              and not about either box. "Ladoo is counted in whole pieces" twice with a dot between
+              them says nothing the first half had not, and on a phone it is two wrapped lines of it. */}
           {(whole.cooked || whole.consumed) && (
             <span className="basis-full text-xs text-danger">
-              {[whole.cooked, whole.consumed].filter(Boolean).join(" · ")}
+              {Array.from(new Set([whole.cooked, whole.consumed].filter(Boolean))).join(" · ")}
             </span>
           )}
         </div>
@@ -1102,9 +1112,12 @@ function CorrectMeal({
             <input
               type="number"
               min={0}
-              // Inside `<Form>`, so the sentence comes from `stepMismatch` with no help from here.
+              // Inside `<Form>`, so the sentence comes from `stepMismatch`; these two attributes
+              // are the only thing said from here, and they are what let it read "Ladoo is counted
+              // in whole pieces" — word for word what the recording form above says (T-431).
               step={stepForUnit(unit(entry.dishId))}
               inputMode={stepForUnit(unit(entry.dishId)) === "1" ? "numeric" : "decimal"}
+              {...countedBox(entry.recipeName, unit(entry.dishId))}
               aria-label={`${entry.recipeName} cooked`}
               value={entry.notMade ? "" : entry.cooked}
               disabled={entry.notMade}
@@ -1130,6 +1143,7 @@ function CorrectMeal({
               max={entry.cooked}
               step={stepForUnit(unit(entry.dishId))}
               inputMode={stepForUnit(unit(entry.dishId)) === "1" ? "numeric" : "decimal"}
+              {...countedBox(entry.recipeName, unit(entry.dishId))}
               aria-label={`${entry.recipeName} served`}
               value={entry.notMade || entry.consumed == null ? "" : entry.consumed}
               disabled={entry.notMade}

@@ -393,16 +393,28 @@ describe("splitting the screens did not split the pickers", () => {
     // ever goes red because "supplies are filtered out of pickers", the flag has become the
     // parallel catalogue D-1 rejected — and T-089 giving them a menu item of their own is exactly
     // the change most likely to be mistaken for permission to do that.
-    const picker = within(screen.getByLabelText(/^ingredient$/i));
+    //
+    // The field is "Ingredient or supply" since T-432, and the list is grouped under Ingredients
+    // and Supplies. Rajeev's note on that screen was that the picker "shows ingredients and
+    // supplies merged into one list" — which it always did, and on purpose; what was missing was
+    // anything on the screen saying so. **Which rows are offered did not change**, and that is what
+    // this test guards. The group is asserted as well as the option, because the naming is now the
+    // only thing telling a storekeeper the leaf plates are in there at all.
+    const picker = within(screen.getByLabelText(/ingredient or supply/i));
     expect(picker.getByRole("option", { name: /leaf plates/i })).toBeInTheDocument();
     expect(picker.getByRole("option", { name: /rice/i })).toBeInTheDocument();
+    expect(within(picker.getByRole("group", { name: "Supplies" }))
+        .getByRole("option", { name: /leaf plates/i })).toBeInTheDocument();
   });
 
   it("puts a supply into inventory through the same call food goes through", async () => {
     ingRef.current = { data: [LEAF_PLATES], error: null, loading: false };
     render(<NewInventoryItemPage />);
 
-    fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "i-plates" } });
+    // "Ingredient or supply" since T-432 — the field was renamed, not narrowed. A catalogue holding
+    // only supplies is offered as one flat list rather than under a heading with nothing beside it,
+    // so there is no group to reach through here.
+    fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "i-plates" } });
     fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
 
     await waitFor(() =>

@@ -1,6 +1,7 @@
 package org.iskcon.kms.staff;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -11,6 +12,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.iskcon.kms.config.PhoneNumberDeserializer;
 
@@ -93,5 +95,14 @@ public record UpdateStaffRequest(
 		 */
 		UUID kitchenId,
 
-		@Size(max = 2000, message = "That note is too long.") String notes) {
+		/**
+		 * Where they worked before this temple (T-428), the whole list at once — the edit screen shows
+		 * every past job together, so it sends them together and the service replaces what is stored.
+		 *
+		 * <p>Null is not an empty list. Null leaves the stored jobs exactly as they are, the way a null
+		 * {@code pan} leaves the stored PAN alone, so that something updating a phone number without
+		 * knowing this field exists cannot erase somebody's work history on the way past. An empty list
+		 * is the admin having deleted the last row, and it is obeyed.
+		 */
+		List<@Valid PreviousEmploymentInput> previousEmployment) {
 }

@@ -113,7 +113,7 @@ describe("editing an equipment record", () => {
     expect(screen.getByRole("heading", { name: "Edit equipment" })).toBeInTheDocument();
     expect(screen.getByLabelText(/^name$/i)).toHaveValue("Wet Grinder 10L");
     expect(screen.getByLabelText(/serial number/i)).toHaveValue("WG-4471");
-    expect(screen.getByLabelText(/where it lives/i)).toHaveValue("Main kitchen");
+    expect(screen.getByLabelText(/where is it stored/i)).toHaveValue("Main kitchen");
     expect(screen.getByLabelText(/warranty runs to/i)).toHaveValue("2027-01-10");
     expect(screen.getByLabelText(/^notes$/i)).toHaveValue("Belt replaced in 2025.");
   });

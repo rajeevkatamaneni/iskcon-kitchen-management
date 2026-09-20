@@ -55,7 +55,7 @@ describe("registering equipment", () => {
     fireEvent.change(screen.getByLabelText(/^name$/i), {
       target: { value: "Idli Steamer 6-tray" },
     });
-    fireEvent.change(screen.getByLabelText(/where it lives/i), {
+    fireEvent.change(screen.getByLabelText(/where is it stored/i), {
       target: { value: "Prasadam kitchen" },
     });
     // The "i" beside a hinted label is a button whose accessible name names the field, so a

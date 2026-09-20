@@ -9,6 +9,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
+import { countedBox } from "@/components/ds/formMessages";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { HintedField, InfoHint } from "@/components/ds/InfoHint";
 import { PriceTrend } from "@/components/PriceTrend";
@@ -853,6 +854,10 @@ function PackSizeRow({
               inputMode={inputModeForUnit(unit)}
               min="0"
               step={stepForUnit(unit)}
+              // "Size must be a whole number" said the rule and not the reason. What a pack holds
+              // is counted in the ingredient's own unit, so the refusal is "Agarbatti is counted in
+              // whole pieces" — the thing inside the pack, not the pack (T-431).
+              {...countedBox(ingredient.name, unit)}
               value={size}
               onChange={(e) => { setSize(e.target.value); edited(); }}
               aria-invalid={blank || undefined}

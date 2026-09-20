@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
+import { countedBox } from "@/components/ds/formMessages";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { api, toApiError, type ApiError, type IngredientView } from "@/lib/api";
@@ -162,12 +163,16 @@ export function PackSizes({
               <input
                 type="number"
                 // A pack holds a whole number of a counted thing (T-424). `data-more-than` stays
-                // the floor; this only adds "Size must be a whole number" above it, from the
-                // same `Form` and the same sentence.
+                // the floor; this only adds the whole-number refusal above it, from the same
+                // `Form` and the same sentence.
                 inputMode={inputModeForUnit(unit)}
                 required
                 data-more-than="0"
                 step={stepForUnit(unit)}
+                // Which is now "Agarbatti is counted in whole pieces" rather than "Size must be a
+                // whole number" — the thing in the pack is what cannot be split, and "Size" on its
+                // own named neither the thing nor the reason (T-431).
+                {...countedBox(ingredient.name, unit)}
                 value={size}
                 onChange={(e) => { setSize(e.target.value); edited(); }}
                 className={`${BOX} w-28 tabular-nums`}

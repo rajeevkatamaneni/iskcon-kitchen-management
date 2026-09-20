@@ -9,6 +9,7 @@ import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { STAFF_FORM_ID, StaffForm, readStaffForm, stripHireOnly } from "@/components/staff/StaffForm";
+import { readPreviousEmployment } from "@/components/staff/PreviousEmploymentFields";
 import { ConductNotes } from "@/components/staff/ConductNotes";
 import { StaffNotFound } from "@/components/staff/StaffNotFound";
 import { whoLine } from "@/components/staff/labels";
@@ -40,7 +41,7 @@ function EditStaffScreen() {
   const router = useRouter();
   const { getToken } = useAuth();
 
-  const { staff, pay, loading, error } = useStaffRecord(id);
+  const { staff, pay, previousEmployment, loading, error } = useStaffRecord(id);
   const titles = useAuthedQuery(useCallback((t: string | undefined) => api.jobTitles(t), []));
   // Active kitchens only, in the order Settings lists them: the form offers them as they come.
   const kitchens = useAuthedQuery(useCallback((t: string | undefined) => api.listKitchens(false, t), []));
@@ -52,7 +53,13 @@ function EditStaffScreen() {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!staff) return;
-    const input = stripHireOnly(readStaffForm(new FormData(event.currentTarget)));
+    const form = new FormData(event.currentTarget);
+    // The whole list every time, so the server can replace what it holds and a job deleted on the
+    // screen is a job deleted on the record (T-428).
+    const input = {
+      ...stripHireOnly(readStaffForm(form)),
+      previousEmployment: readPreviousEmployment(form),
+    };
     setBusy(true);
     setActionError(null);
     try {
@@ -110,8 +117,12 @@ function EditStaffScreen() {
             options={titles.data ?? []}
             kitchens={kitchens.data ?? []}
             devotees={[]}
+            previousEmployment={previousEmployment}
             revealedPan={revealedPan}
             onRevealPan={revealPan}
+            // Thrown away rather than merely hidden, so pressing the eye again is a second read and
+            // is recorded as one.
+            onHidePan={() => setRevealedPan(null)}
             onSubmit={submit}
           />
           {/* Outside the form above, not inside it: a note is written and saved on its own, and a

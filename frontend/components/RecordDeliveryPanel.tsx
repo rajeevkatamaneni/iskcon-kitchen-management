@@ -338,11 +338,21 @@ export function RecordDeliveryPanel({
      * unit the two figures are the same number, so this is one rule and not two.
      *
      * Named from the box's own accessible name up to its comma. The full name ends ", in Kg",
-     * which cannot take "must be a whole number" after it and still be a sentence.
+     * which cannot take "must be a whole number" after it and still be a sentence. Since T-431 the
+     * name is only the fallback: with the item and its unit the sentence is "Apron is counted in
+     * whole pieces", which needs no name at all and is the same words on every other screen. The
+     * unit is the ITEM's, never the pack's — 2.8 bags is refused because 33.6 aprons is not a
+     * number of aprons, and `PACKS` would say a bag cannot be split, which here it can.
      */
     const step = stockStepOf(l);
-    const wholeReceived = wholeNumberProblem(`${l.itemName} received now`, step, toStock(l, received));
-    const wholeRejected = wholeNumberProblem(`${l.itemName} rejected on delivery`, step, toStock(l, rejected));
+    const counted = { subject: l.itemName, unit: l.unit };
+    const wholeReceived = wholeNumberProblem(`${l.itemName} received now`, step, toStock(l, received), counted);
+    const wholeRejected = wholeNumberProblem(
+      `${l.itemName} rejected on delivery`,
+      step,
+      toStock(l, rejected),
+      counted
+    );
     if (wholeRejected) out.rejected = wholeRejected;
     if (wholeReceived || wholeRejected) {
       if (wholeReceived) out.received = wholeReceived;

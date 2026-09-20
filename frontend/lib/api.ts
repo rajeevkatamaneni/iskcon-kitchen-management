@@ -1092,6 +1092,45 @@ export interface StockItemView {
   expiringSoon: boolean;
   soonestExpiry: string | null;
   notes: string | null;
+  /**
+   * The day somebody last counted this shelf, or null where nobody ever has (T-432). Only a
+   * stock-take counts — spoilage and waste are things that happened to the stock, not counts of it —
+   * and the automatic reversal of a mistaken movement is excluded, since nobody counted anything.
+   * The opening count taken when the item was added is included: somebody stood there with scales.
+   */
+  lastCounted: string | null;
+  /**
+   * What a vendor has been asked for and not yet delivered, in this item's own unit, or **null where
+   * nothing is on order** (T-432). Null rather than 0, for the reason a dash rather than "0 Kg" is
+   * shown in the committed column: a quantity nobody has is not a zero.
+   *
+   * <p>A **draft** order does not count. It has not been sent to anybody, so nothing is coming.
+   */
+  onOrder: number | null;
+  /**
+   * Roughly how long what is on hand lasts, or **null where there is not enough history to judge**
+   * (T-432). The null is the answer, not a gap: the screen must say so in words rather than print a
+   * figure. Render it with `stockCoverPhrase` so every screen says it the same way.
+   */
+  lastsFor: StockCover | null;
+}
+
+/**
+ * Roughly how long a consumable lasts, at the rate the temple has been getting through it (T-432).
+ *
+ * <p>Every figure here is an approximation and the screen is required to say the word. The server
+ * will not produce one at all unless the ingredient has been drawn on at least six separate days
+ * spread over at least a fortnight — see `StockFactsService` for why those two numbers.
+ */
+export interface StockCover {
+  /** Days the on-hand figure lasts, rounded down, and capped at 90 — see `beyondWindow`. */
+  days: number;
+  /** True when it lasts past the evidence; `days` is then the cap and the phrase says "more than". */
+  beyondWindow: boolean;
+  /** The day it is expected to run out, or null when `beyondWindow`. */
+  runsOutOn: string | null;
+  /** How much leaves the store on an average day, in the item's own unit — the working behind it. */
+  perDay: number;
 }
 
 /** One meal's claim on one ingredient's stock (T-086), for the item detail screen's list. */
@@ -1148,6 +1187,17 @@ export interface CreateInventoryItemInput {
   ingredientId: string;
   storageLocation?: string | null;
   reorderThreshold?: number | null;
+  /**
+   * The unit `reorderThreshold` was typed in, or omitted to say it is already in the ingredient's
+   * own unit — which is what the inventory list's inline editor sends, since that row shows the unit
+   * as fixed text (build-list item I1, 2026-09-08). The Add form has its own picker and sends it.
+   *
+   * <p>The server converts and refuses: a unit outside the ingredient's family is KMS-400013, and a
+   * fraction of something counted one by one is KMS-400191 ("Agarbatti is counted in whole pieces.
+   * Enter 3 or 4."). The conversion is the server's on purpose — the browser used to do it with the
+   * *opening count's* unit factor, two fields away (T-432).
+   */
+  reorderThresholdUnit?: string | null;
   notes?: string | null;
   /**
    * What is on the shelf when the item is added, saved in the SAME transaction as the item, so a
@@ -3544,9 +3594,71 @@ export interface StaffProfileView {
   employmentStatus: EmploymentStatus;
   lastWorkingDay: string | null;
   endReason: string | null;
-  notes: string | null;
 
   createdAt: string;
+}
+
+/** What a file on a staff record is (T-428). One of each per person. */
+export type StaffDocumentKind = "PHOTO" | "PAN_SCAN" | "AADHAAR_SCAN";
+
+/**
+ * A photograph, or the scan of a PAN or Aadhaar card, on somebody's record (T-428).
+ *
+ * <p>The same five facts `AttachmentView` carries, so the upload box and the thumbnail are the same
+ * two components a bill uses. There is no URL on it and there is not going to be one: the bytes come
+ * back only through `api.staffDocument`, which sends the sign-in token, and every such read is
+ * written to the audit log.
+ */
+export interface StaffDocumentView {
+  id: string;
+  kind: StaffDocumentKind;
+  contentType: string;
+  sizeBytes: number;
+  originalName: string | null;
+  uploadedAt: string;
+}
+
+/**
+ * One job somebody held before this temple (T-428). Only the employer is always there — the rest is
+ * what they could remember at their interview, and none of it is verified.
+ */
+export interface PreviousEmploymentView {
+  id: string;
+  employer: string;
+  /** What that employer called the job, in their words — not one of this temple's job titles. */
+  theirTitle: string | null;
+  managerName: string | null;
+  managerPhone: string | null;
+  fromDate: string | null;
+  toDate: string | null;
+  reasonForLeaving: string | null;
+}
+
+/** One row of the previous-employment list as the edit screen sends it. No id: the list replaces. */
+export interface PreviousEmploymentInput {
+  employer: string;
+  theirTitle?: string | null;
+  managerName?: string | null;
+  managerPhone?: string | null;
+  fromDate?: string | null;
+  toDate?: string | null;
+  reasonForLeaving?: string | null;
+}
+
+/**
+ * One person's whole record in one request (T-428), behind MANAGE_STAFF.
+ *
+ * <p>What the four screens about one person read, instead of fetching the whole register and
+ * filtering it in the browser. `getStaffProfile` is not this: that one is behind
+ * MANAGE_STAFF_SCHEDULE, and the split exists so a kitchen manager can be given the roster without
+ * being given everybody's date of birth.
+ */
+export interface StaffRecordView {
+  profile: StaffProfileView;
+  /** Whether this temple has a standing record against them (B9). Only ever true of former staff. */
+  banned: boolean;
+  documents: StaffDocumentView[];
+  previousEmployment: PreviousEmploymentView[];
 }
 
 /**
@@ -3618,7 +3730,6 @@ export interface HireStaffInput {
    * block. It is an answer, and it is recorded as one.
    */
   acknowledgedBanCheckId?: string | null;
-  notes?: string | null;
   /** The one kitchen this person works in (Epic 12). Required on hiring and on every edit (`KMS-400184`). */
   kitchenId: string;
 }
@@ -3639,7 +3750,17 @@ export interface StaffKitchenCheckView {
  * Editing a record. `pan` omitted leaves the stored value alone and `""` clears it — the form never
  * shows the stored PAN, so sending an empty string by default would erase it on every other edit.
  */
-export type UpdateStaffInput = Omit<HireStaffInput, "existingUserId">;
+export type UpdateStaffInput = Omit<HireStaffInput, "existingUserId"> & {
+  /**
+   * Where they worked before (T-428), the whole list at once: the edit screen shows every past job
+   * together, so it sends them together and the server replaces what is stored.
+   *
+   * <p>Omitted is not the same as `[]`. Omitted leaves the stored jobs exactly as they are — the
+   * `pan` rule again — so nothing that saves a record without knowing this field exists can erase
+   * somebody's work history on the way past. `[]` is the admin having deleted the last row.
+   */
+  previousEmployment?: PreviousEmploymentInput[];
+};
 
 export interface EndEmploymentInput {
   status: Exclude<EmploymentStatus, "ACTIVE">;
@@ -4216,6 +4337,34 @@ export interface MyReleasedShiftView {
   releasedAt: string;
   /** The reason the coordinator picked. A shift cancelled whole arrives as `SHIFT_CANCELLED`. */
   reason: "SHIFT_CANCELLED" | "NO_LONGER_NEEDED" | "ROTA_CHANGED" | "OTHER";
+}
+
+/**
+ * A shift the volunteer has already served, for *Past shifts* on *My shifts* (T-429): one that has
+ * already happened and that she was still on. Shifts she was taken off, and shifts cancelled with
+ * her on them, are `MyReleasedShiftView` above and are not repeated here.
+ *
+ * Newest first, and capped — see `HISTORY_CAP` in `app/my-shifts/page.tsx`.
+ */
+export interface MyPastShiftView {
+  signupId: string;
+  shiftId: string;
+  title: string;
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  location: string | null;
+  source: string;
+  signedUpAt: string;
+  /**
+   * True they came, false they did not, null nobody has said. Required-and-nullable rather than
+   * optional, as on `RosterSignup`, so a reader cannot forget the third case — and never collapse
+   * the null into false. A shift the coordinator never got round to marking is not a shift she
+   * missed, and this is the page of the person it would be an accusation about.
+   */
+  attended: boolean | null;
+  /** When the mark was made; null exactly when `attended` is null. */
+  attendanceRecordedAt: string | null;
 }
 
 export interface MyWaitlistView {
@@ -6817,6 +6966,36 @@ export const api = {
     request<StaffRegisterView>("/api/v1/staff/register", { method: "GET", token }),
 
   /**
+   * One person's whole record (T-428) — the profile, whether a record stands against them, their
+   * documents and where they worked before.
+   *
+   * <p>What the four screens about one person read. Not `getStaffProfile`, which is behind
+   * MANAGE_STAFF_SCHEDULE; see `StaffRecordView`.
+   */
+  staffMember: (id: string, token?: string) =>
+    request<StaffRecordView>(`/api/v1/staff/members/${id}`, { method: "GET", token }),
+
+  /**
+   * Attaches a photograph or an identity-card scan to a record, replacing whatever was there of the
+   * same kind (T-428). Refused with KMS-400165 for a file that is not a photo or a PDF, and
+   * KMS-400166 over 10 MB — the same two refusals a bill gets, because it is the same check.
+   */
+  uploadStaffDocument: (id: string, kind: StaffDocumentKind, file: File, token?: string) =>
+    upload<StaffDocumentView>(`/api/v1/staff/members/${id}/documents?kind=${kind}`, file, token),
+
+  /**
+   * One document's bytes, with the sign-in token in a header — never a plain link.
+   *
+   * <p>Every call writes an audit row saying who opened whose document of which kind. Which is why
+   * nothing calls this on page load: a record opened is not a document read.
+   */
+  staffDocument: (id: string, documentId: string, token?: string) =>
+    attachmentBlob(`/api/v1/staff/members/${id}/documents/${documentId}`, token),
+
+  removeStaffDocument: (id: string, documentId: string, token?: string) =>
+    request<void>(`/api/v1/staff/members/${id}/documents/${documentId}`, { method: "DELETE", token }),
+
+  /**
    * Epic 12: the Temple Admin's "Check these kitchen assignments" list — current staff whose kitchen
    * was filled in by the migration and has not been looked at since. Empty once all are checked.
    */
@@ -7221,6 +7400,10 @@ export const api = {
   /** Shifts I was taken off, or that were cancelled, in the last seven days (T-149). */
   myReleasedShifts: (token?: string) =>
     request<MyReleasedShiftView[]>("/api/v1/my-shifts/released", { method: "GET", token }),
+
+  /** Shifts I have already served, newest first, capped by the server (T-429). */
+  myPastShifts: (token?: string) =>
+    request<MyPastShiftView[]>("/api/v1/my-shifts/past", { method: "GET", token }),
 
   myWaitlist: (token?: string) =>
     request<MyWaitlistView[]>("/api/v1/my-waitlist", { method: "GET", token }),

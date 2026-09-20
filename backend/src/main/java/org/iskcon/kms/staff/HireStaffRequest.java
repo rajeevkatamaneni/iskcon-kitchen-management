@@ -119,7 +119,5 @@ public record HireStaffRequest(
 		 * archived will do, including one that does not plan its meals here: people work in the store
 		 * kitchen too, they just do not get the planner.
 		 */
-		UUID kitchenId,
-
-		@Size(max = 2000, message = "That note is too long.") String notes) {
+		UUID kitchenId) {
 }

@@ -330,7 +330,9 @@ describe("packs (D-3, D-8)", () => {
     fireEvent.change(screen.getByLabelText("Quantity of VERIFY-B Rice"), { target: { value: "2.5" } });
     await create();
     expect(createPurchaseOrder).not.toHaveBeenCalled();
-    expect(screen.getAllByText(/whole number/).length).toBeGreaterThan(0);
+    // A pack line is whole because a vendor does not sell a third of a bag, not because of the
+    // unit — the rice inside is weighed. So the refusal says packs (T-431).
+    expect(screen.getAllByText("VERIFY-B Rice is ordered in whole packs").length).toBeGreaterThan(0);
   });
 
   it("offers an ingredient the vendor does not sell in its own packs, starting plain with no price", async () => {

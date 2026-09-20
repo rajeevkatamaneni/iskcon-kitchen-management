@@ -56,6 +56,28 @@ public class VolunteerShiftController {
 	}
 
 	/**
+	 * The shifts I have already served (T-429), newest first, and whether I was recorded as having
+	 * turned up. The other half of {@code /my-shifts}, which shows only what is still to come — a
+	 * volunteer with six past services used to open her own page and find it empty while the
+	 * coordinator could see every one of them on the roster.
+	 *
+	 * <p>The same permission as {@code /my-shifts}, for the same reason the released list shares it:
+	 * it is the same thing read differently, a person's own roster. It takes no "whose" parameter —
+	 * the caller's id is the whole of its scoping — which matters more here than on the other two,
+	 * because {@code attended} is a statement about a person that until now only a coordinator could
+	 * read. This gives it to the person it is about and to nobody else.
+	 *
+	 * <p>Bounded; {@link SignupService#PAST_SHIFTS_LIMIT} carries the number and why it is a row cap
+	 * and not a window. A caller with no history gets an empty list, not a refusal — a staff member
+	 * holds {@code VIEW_OWN_SHIFTS} too and has never signed up for seva.
+	 */
+	@GetMapping("/api/v1/my-shifts/past")
+	@PreAuthorize("hasAuthority('VIEW_OWN_SHIFTS')")
+	public List<MyPastShiftView> myPastShifts(@AuthenticationPrincipal AuthenticatedUser actor) {
+		return signupService.myPastShifts(actor.getUserId());
+	}
+
+	/**
 	 * The shifts I came off in the last week without choosing to (T-149): a coordinator took me off,
 	 * or the shift was cancelled with me on it. The other half of My Shifts, where those simply
 	 * disappear — see {@link SignupService#myReleasedShifts} for the rules.

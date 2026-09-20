@@ -494,7 +494,7 @@ describe("recording a dish measured in pieces", () => {
     fireEvent.change(screen.getByLabelText("Ladoo cooked"), { target: { value: "1.5" } });
     fireEvent.click(screen.getByRole("button", { name: /save actuals/i }));
 
-    expect(screen.getByText(/Ladoo cooked must be a whole number/)).toBeInTheDocument();
+    expect(screen.getByText("Ladoo is counted in whole pieces")).toBeInTheDocument();
     expect(recordMeal).not.toHaveBeenCalled();
   });
 
@@ -502,7 +502,7 @@ describe("recording a dish measured in pieces", () => {
     await openLadoo();
     fireEvent.change(screen.getByLabelText("Ladoo cooked"), { target: { value: "240" } });
     fireEvent.click(screen.getByRole("button", { name: /save actuals/i }));
-    expect(screen.queryByText(/must be a whole number/)).toBeNull();
+    expect(screen.queryByText(/whole/)).toBeNull();
     await waitFor(() => expect(recordMeal).toHaveBeenCalled());
   });
 
@@ -512,6 +512,6 @@ describe("recording a dish measured in pieces", () => {
     expect(screen.getByLabelText("Bisi Bele Bath cooked")).toHaveAttribute("step", "any");
     fireEvent.change(screen.getByLabelText("Bisi Bele Bath cooked"), { target: { value: "1.5" } });
     fireEvent.click(screen.getByRole("button", { name: /save actuals/i }));
-    expect(screen.queryByText(/must be a whole number/)).toBeNull();
+    expect(screen.queryByText(/whole/)).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -263,6 +264,68 @@ class PartOfACountedThingIT extends AbstractIntegrationTest {
 				"Apron", "Apron is counted in whole pieces. Enter 0 or 1.");
 
 		assertThat(movementCount()).as("neither was written").isEqualTo(2);
+	}
+
+	// ---- The reorder level -----------------------------------------------
+	//
+	// The door this file's own preamble promised — "at every door a person or the API can enter one"
+	// — and did not have a case for until T-432. It was open: a PUT carrying 3.25 against agarbatti
+	// was answered 204 and read back 3.25, one door along from an adjustment of 1.5 pieces that has
+	// been refused since T-423. A level is compared against a stock figure, so it is whole exactly
+	// when the stock figure is: "tell me when aprons drop below 3.6" is a rule nobody can read off a
+	// shelf, and nothing would ever have told the temple why it never fired cleanly.
+
+	@Test
+	@DisplayName("setting the aprons' reorder level to 3.25 is KMS-400191, and the level on file is unchanged")
+	void reorderLevelRefusesPartOfACountedThing() throws Exception {
+		admin.update("UPDATE inventory_items SET reorder_threshold = 4 WHERE id = ?", apronItem);
+
+		refusedNaming(mvc.perform(setLevel(apronItem, "3.25", null)),
+				"Apron", "Apron is counted in whole pieces. Enter 3 or 4.");
+
+		assertThat(levelOn(apronItem)).as("the refused level was not written over the old one")
+				.isEqualByComparingTo("4");
+	}
+
+	@Test
+	@DisplayName("setting the aprons' reorder level to a whole 3 is accepted")
+	void reorderLevelAcceptsAWholeNumber() throws Exception {
+		mvc.perform(setLevel(apronItem, "3", null)).andExpect(status().isNoContent());
+
+		assertThat(levelOn(apronItem)).isEqualByComparingTo("3");
+	}
+
+	@Test
+	@DisplayName("half a kilo is a perfectly good reorder level for rice — the rule must not leak out of COUNT")
+	void reorderLevelStillAcceptsAFraction() throws Exception {
+		mvc.perform(setLevel(riceItem, "0.5", null)).andExpect(status().isNoContent());
+
+		assertThat(levelOn(riceItem)).isEqualByComparingTo("0.5");
+	}
+
+	@Test
+	@DisplayName("adding a counted consumable with a level of 2.5 is KMS-400191, and no item is written")
+	void addingAnItemRefusesAFractionalLevel() throws Exception {
+		UUID broom = insertIngredient("Broom", "PIECES", "Supplies");
+
+		refusedNaming(mvc.perform(trackWithLevel(broom, "2.5")),
+				"Broom", "Broom is counted in whole pieces. Enter 2 or 3.");
+
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM inventory_items WHERE ingredient_id = ?", Integer.class, broom))
+				.as("the item is not left behind with no level").isZero();
+	}
+
+	@Test
+	@DisplayName("a level typed in grams is stored in the ingredient's own unit, and judged there")
+	void reorderLevelIsConvertedBeforeItIsJudged() throws Exception {
+		// The unit the level was typed in now travels with it (T-432). It used to be multiplied by
+		// the factor belonging to the *opening count's* unit picker, two fields away on the form, so
+		// the same keystrokes stored a thousandfold difference depending on a box about something
+		// else. The conversion is the server's, against the canonical unit it reads for itself.
+		mvc.perform(setLevel(riceItem, "500", "GM")).andExpect(status().isNoContent());
+
+		assertThat(levelOn(riceItem)).as("500 gm of a rice kept in kilos").isEqualByComparingTo("0.5");
 	}
 
 	// ---- Ordering --------------------------------------------------------
@@ -607,6 +670,26 @@ class PartOfACountedThingIT extends AbstractIntegrationTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(("{\"batchId\":\"%s\",\"quantity\":%s,\"unit\":\"%s\",\"reason\":\"COUNT_CORRECTION\","
 						+ "\"pricePerUnit\":40}").formatted(batchId, quantity, unit));
+	}
+
+	/** Setting a tracked consumable's reorder level, with or without a unit for it. */
+	private MockHttpServletRequestBuilder setLevel(UUID itemId, String level, String unit) {
+		return authed(put("/api/v1/inventory/items/{id}", itemId), ADMIN_TOKEN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"storageLocation\":\"Main store\",\"reorderThreshold\":%s%s}".formatted(
+						level, unit == null ? "" : ",\"reorderThresholdUnit\":\"%s\"".formatted(unit)));
+	}
+
+	/** Starting to track a consumable, with a level and no opening count. */
+	private MockHttpServletRequestBuilder trackWithLevel(UUID ingredientId, String level) {
+		return authed(post("/api/v1/inventory/items"), ADMIN_TOKEN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"ingredientId\":\"%s\",\"reorderThreshold\":%s}".formatted(ingredientId, level));
+	}
+
+	private BigDecimal levelOn(UUID itemId) {
+		return admin.queryForObject(
+				"SELECT reorder_threshold FROM inventory_items WHERE id = ?", BigDecimal.class, itemId);
 	}
 
 	private MockHttpServletRequestBuilder createOrder(String lines) {

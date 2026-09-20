@@ -118,7 +118,6 @@ const PROFILE: StaffProfileView = {
   employmentStatus: "ACTIVE",
   lastWorkingDay: null,
   endReason: null,
-  notes: null,
   kitchenId: "k1",
   kitchenName: "Main kitchen",
   kitchenNeedsCheck: false,

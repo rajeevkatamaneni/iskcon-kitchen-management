@@ -1,4 +1,4 @@
-import { dateWithYear } from "@/lib/format";
+import { dateWithYear, isCountedUnit, unitLabel } from "@/lib/format";
 
 /**
  * Every sentence a form says when the browser's own checks refuse a box (T-160).
@@ -50,6 +50,63 @@ export interface ControlFacts {
    * that a facts object written before it existed still describes a box correctly.
    */
   moreThan?: string;
+  /**
+   * What the box counts, where the screen was able to say (T-431). Absent on every box that was
+   * not given the two attributes in {@link countedBox}, and on every box that counts nothing.
+   */
+  counted?: CountedBox;
+}
+
+/**
+ * The two facts a whole-number refusal needs before it can say **why** (T-431).
+ *
+ * <p>"Tell me when Agarbatti drops below must be a whole number" is the field's own label with a
+ * rule glued onto it. It never says that a piece of incense cannot be split, which is the only
+ * thing the person needs to know. The server has said it properly since the rule shipped —
+ * `IngredientUnits.java`, *"Apron is counted in whole pieces. Enter 88 or 89."* — so the browser
+ * takes the server's words rather than inventing a second wording for one rule.
+ */
+export interface CountedBox {
+  /** The thing being counted, in the words the screen already shows it in: "Agarbatti". */
+  subject: string;
+  /** The unit code it is counted in — "PIECES" — or {@link PACKS} where the box counts packs. */
+  unit: string;
+}
+
+/**
+ * The `unit` of a box that counts **packs** rather than the things inside them.
+ *
+ * <p>Two boxes are whole for a reason that has nothing to do with the unit: a purchase-order line
+ * bought by the pack counts bags, and a third of a bag is not something a vendor sells. The
+ * ingredient may be measured in kilograms, so "Rice is counted in whole Kg" would be flatly false
+ * there. Marked rather than inferred, because only the call site knows which of its two shapes a
+ * line is in — the same reason those call sites already write `step="1"` outright instead of
+ * asking `stepForUnit`.
+ */
+export const PACKS = "PACK";
+
+/** Where a box carries {@link CountedBox}. Read by `Form`'s facts builder, written by {@link countedBox}. */
+export const COUNTED_SUBJECT_ATTRIBUTE = "data-counted-subject";
+export const COUNTED_UNIT_ATTRIBUTE = "data-counted-unit";
+
+/**
+ * The attributes a counted box carries so that `Form` can say why it refused a fraction.
+ *
+ * <p>Spread onto the `<input>`: `{...countedBox(item.ingredientName, item.unit)}`. Data attributes
+ * rather than props for the reason `data-more-than` is one (T-203) — every other fact `Form` reads
+ * off a box is an attribute, and the 18 boxes inside a `<Form>` are hand-rolled inputs with no
+ * props to give. Either fact missing means the attribute is left off altogether and the refusal
+ * falls back to the sentence it said before, which is the right answer for a box on a form where
+ * no ingredient has been chosen yet and there is nothing true to name.
+ */
+export function countedBox(
+  subject: string | null | undefined,
+  unit: string | null | undefined
+): { "data-counted-subject"?: string; "data-counted-unit"?: string } {
+  const named = subject?.trim();
+  const code = unit?.trim();
+  if (!named || !code) return {};
+  return { "data-counted-subject": named, "data-counted-unit": code };
 }
 
 /** A box left empty. */
@@ -75,8 +132,33 @@ export const onOrBefore = (name: string, max: string) => `${name} must be on or 
 /** A time before `min` or after `max`. "HH:mm" is already how the application writes a time. */
 export const orLater = (name: string, min: string) => `${name} must be ${min} or later`;
 export const orEarlier = (name: string, max: string) => `${name} must be ${max} or earlier`;
-/** `step="1"`, or a number box with no step at all, whose default step is 1. */
-export const wholeNumber = (name: string) => `${name} must be a whole number`;
+/**
+ * `step="1"`, or a number box with no step at all, whose default step is 1.
+ *
+ * <p>**It says why where the box said what it counts** (T-431). "Agarbatti is counted in whole
+ * pieces" is the server's own sentence for the same refusal, minus the "Enter 7 or 8" the server
+ * adds after it: DESIGN_SYSTEM §9 allows one clause and twelve words under a field, and the two
+ * whole numbers either side of what was typed are a second clause on 26 boxes, several of them in
+ * a table cell 154px wide on a phone. The reason is the half that was missing; the fix follows
+ * from it.
+ *
+ * <p>**A box counting packs says packs.** A part of a bag is not something a vendor sells, and the
+ * ingredient in the bag may be measured in kilograms, so the unit's reason would be untrue there.
+ * "whole packs" is the product's own phrase for it, from the pack sizes hint on an ingredient.
+ *
+ * <p>**Without both facts it says exactly what it said before.** A form where no ingredient has
+ * been chosen, or a recipe nobody has named yet, has no true subject to put in front of "is counted
+ * in", and an invented one ("This is counted in whole pieces") would be worse than the label.
+ */
+export const wholeNumber = (name: string, counted?: CountedBox | null): string => {
+  const subject = counted?.subject.trim();
+  const unit = counted?.unit.trim();
+  if (subject && unit === PACKS) return `${subject} is ordered in whole packs`;
+  // Guarded by the same function the `step` came from, so a box marked with a unit that is not a
+  // count cannot produce "Rice is counted in whole Kg" from a step somebody wrote by hand.
+  if (subject && isCountedUnit(unit)) return `${subject} is counted in whole ${unitLabel(unit)}`;
+  return `${name} must be a whole number`;
+};
 
 /**
  * The same refusal, for a box that is **not** inside a `<Form>` — or null when there is nothing
@@ -99,6 +181,14 @@ export const wholeNumber = (name: string) => `${name} must be a whole number`;
  * from the unit separately. A `step` of anything but `"1"` is nothing to do with this rule and
  * returns null.
  *
+ * <p>**`counted` is a separate argument and not a replacement for `step`** (T-431). The step still
+ * decides *whether* the box refuses; the unit inside `counted` only decides what the sentence calls
+ * the thing. Folding the two together would put the rule back where it could disagree with the
+ * attribute — a pack box carries `step="1"` and a `counted.unit` of {@link PACKS}, and the whole
+ * point is that those are two different facts. It is optional so that a caller with nothing true to
+ * name gets the sentence this file said before, and so the eight boxes here word the refusal from
+ * the same {@link wholeNumber} as the eighteen inside a `<Form>`.
+ *
  * <p>**A blank or half-typed box is not this rule's business** and comes back null, matching the
  * order `messageFor` checks things in: "must be a whole number" is no help to somebody whose box
  * holds nothing, or "1e". Those screens already say their own thing about an empty box.
@@ -110,14 +200,15 @@ export const wholeNumber = (name: string) => `${name} must be a whole number`;
 export function wholeNumberProblem(
   name: string,
   step: string,
-  value: string | number | null | undefined
+  value: string | number | null | undefined,
+  counted?: CountedBox | null
 ): string | null {
   if (step.trim() !== "1") return null;
   if (value === null || value === undefined) return null;
   if (typeof value === "string" && value.trim() === "") return null;
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
-  return Number.isInteger(n) ? null : wholeNumber(name);
+  return Number.isInteger(n) ? null : wholeNumber(name, counted);
 }
 /** `step="0.01"` and its kin. "2 decimal places" rather than "steps of 0.01", which is how people say it. */
 export const decimalPlaces = (name: string, places: number) =>
@@ -187,7 +278,7 @@ export function messageFor(name: string, facts: ControlFacts): string {
     // A number box with no step attribute steps by 1 (HTML's default step for number), so it
     // refuses "1.5" exactly as step="1" does and gets the same sentence.
     const step = facts.step.trim() || "1";
-    if (step === "1") return wholeNumber(name);
+    if (step === "1") return wholeNumber(name, facts.counted);
     const places = placesOf(step);
     return places === null ? inStepsOf(name, step) : decimalPlaces(name, places);
   }

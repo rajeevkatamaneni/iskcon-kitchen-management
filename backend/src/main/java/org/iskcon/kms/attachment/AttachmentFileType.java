@@ -31,8 +31,15 @@ import java.util.Set;
  *       phone or a scanner makes puts any there, and accepting a header anywhere in the first
  *       kilobyte would let a file that is something else first through.</li>
  * </ul>
+ *
+ * <p><strong>Public since T-428</strong>, and only that. A staff record now carries a photograph and
+ * the scans of a PAN and an Aadhaar card, in a table of their own (V155) — the storage service is
+ * shared, the table is not, which is V144's own rule. What must not be duplicated along with the
+ * table is <em>this</em>: a second place deciding what a file is would be a second place that can get
+ * it wrong, and the whole point of reading the bytes is that there is one answer. So the staff
+ * service calls this class rather than keeping a copy of the signatures.
  */
-final class AttachmentFileType {
+public final class AttachmentFileType {
 
 	private static final byte[] JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
 	private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
@@ -50,7 +57,7 @@ final class AttachmentFileType {
 	}
 
 	/** The content type these bytes are, or empty when they are none of the five. */
-	static Optional<String> of(byte[] bytes) {
+	public static Optional<String> of(byte[] bytes) {
 		if (startsWith(bytes, 0, JPEG)) {
 			return Optional.of("image/jpeg");
 		}
@@ -77,7 +84,7 @@ final class AttachmentFileType {
 	}
 
 	/** The extension a download is named with when the device sent no name of its own. */
-	static String extensionFor(String contentType) {
+	public static String extensionFor(String contentType) {
 		return switch (contentType) {
 			case "image/jpeg" -> ".jpg";
 			case "image/png" -> ".png";

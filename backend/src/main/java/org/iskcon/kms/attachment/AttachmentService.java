@@ -296,8 +296,11 @@ public class AttachmentService {
 	 * The name as the device sent it, made safe to display and to put in a download header: only the
 	 * last path segment (some browsers have sent the whole path), no control characters, trimmed, and
 	 * no longer than a name needs to be. Null when nothing is left.
+	 *
+	 * <p>Public since T-428, so the staff-document service cleans a device's filename in exactly the
+	 * same way. Its table is its own (V155); this rule is not something to have two of.
 	 */
-	static String cleanName(String sent) {
+	public static String cleanName(String sent) {
 		if (sent == null) {
 			return null;
 		}

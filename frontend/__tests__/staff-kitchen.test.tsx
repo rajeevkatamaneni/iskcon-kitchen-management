@@ -5,9 +5,10 @@ import {
   type Kitchen,
   type StaffKitchenCheckView,
   type StaffPayView,
+  type StaffRecordView,
   type StaffRegisterView,
 } from "@/lib/api";
-import { TITLES, kitchen, kitchenCheck, member } from "./staff-fixtures";
+import { TITLES, kitchen, kitchenCheck, member, record } from "./staff-fixtures";
 
 /**
  * Epic 12, wave E12-1 (T-353): every staff member belongs to exactly one kitchen, the Temple Admin
@@ -37,6 +38,8 @@ const { authRef, paramsRef, refs, mocks, reloadMock } = vi.hoisted(() => ({
     kitchens: { current: null as unknown as Query<Kitchen[]> },
     checks: { current: null as unknown as Query<StaffKitchenCheckView[]> },
     register: { current: null as unknown as Query<StaffRegisterView> },
+    // The four screens about one person read a single record now (T-428), not the register.
+    record: { current: null as unknown as Query<StaffRecordView> },
     pay: { current: null as unknown as Query<StaffPayView | null> },
     titles: { current: null as unknown as Query<unknown[]> },
     other: { current: null as unknown as Query<unknown[]> },
@@ -68,6 +71,8 @@ vi.mock("@/lib/use-authed-query", () => ({
         ? refs.checks
         : asks.includes("staffRegister")
           ? refs.register
+          : asks.includes("staffMember")
+          ? refs.record
           : asks.includes("staffPay")
             ? refs.pay
             : asks.includes("jobTitles")
@@ -98,6 +103,7 @@ beforeEach(() => {
   refs.kitchens.current = q([MAIN, FFL]);
   refs.checks.current = q([]);
   refs.register.current = q({ current: [member()], former: [] });
+  refs.record.current = q(record());
   refs.pay.current = q(null);
   refs.titles.current = q(TITLES);
   refs.other.current = q([]);
@@ -175,7 +181,7 @@ describe("the Kitchen field on hiring", () => {
 
 describe("the Kitchen field on updating a record", () => {
   it("starts on the saved kitchen and sends the one chosen", async () => {
-    refs.register.current = q({ current: [member({ kitchenId: "k2", kitchenName: "Food for Life" })], former: [] });
+    refs.record.current = q(record(member({ kitchenId: "k2", kitchenName: "Food for Life" })));
     render(<EditStaffPage />);
     const form = screen.getByRole("form", { name: /edit a staff member/i });
     expect(kitchenSelect(form)).toHaveValue("k2");
@@ -190,7 +196,7 @@ describe("the Kitchen field on updating a record", () => {
   });
 
   it("refuses to save a record with no kitchen", async () => {
-    refs.register.current = q({ current: [member({ kitchenId: "", kitchenName: "" })], former: [] });
+    refs.record.current = q(record(member({ kitchenId: "", kitchenName: "" })));
     render(<EditStaffPage />);
     const form = screen.getByRole("form", { name: /edit a staff member/i });
     expect(kitchenSelect(form)).toHaveValue("");

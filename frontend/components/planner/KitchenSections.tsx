@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ds/Button";
+import { countedBox } from "@/components/ds/formMessages";
 import { FieldRow } from "@/components/ds/FieldRow";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { FIELD_LABEL } from "@/components/Field";
@@ -201,6 +202,10 @@ export function KitchenBand({
                 // as whole pieces (T-424). Rendered inside MealComposer's `<Form>`, so the
                 // refusal lands in the error slot this row already styles.
                 step={stepForUnit(d.unit)}
+                // "Amount of Ladoo must be a whole number" becomes "Ladoo is counted in whole
+                // pieces" (T-431). The row is already tight at 390, and the sentence takes a line
+                // of its own in the error slot the wrapper above styles, so it has the width.
+                {...countedBox(d.name, d.unit)}
                 aria-label={`Amount of ${d.name}`}
                 value={d.target ?? ""}
                 onChange={(e) => onAmount(d.recipeId, e.target.value)}

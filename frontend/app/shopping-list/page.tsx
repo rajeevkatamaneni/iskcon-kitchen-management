@@ -714,10 +714,13 @@ function SuggestedCell({
         onBlur={(e) => {
           const n = Number(e.target.value);
           if (e.target.value.trim() === "" || !Number.isFinite(n)) return;
+          // The unit the box is shown in, which is the one the step came from, so the sentence
+          // and the attribute cannot name different units (T-431).
           const whole = wholeNumberProblem(
             `Quantity for ${line.ingredientName}`,
             stepForUnit(shown.unit),
             e.target.value,
+            { subject: line.ingredientName, unit: shown.unit },
           );
           setProblem(whole);
           if (whole) return;
@@ -1072,7 +1075,13 @@ function AddLine({
   // A counted ingredient is added as whole things (T-424). Said out loud under the box rather
   // than only greying the button, which leaves somebody pressing a dead control and guessing.
   const step = stepForUnit(ingredient?.unit);
-  const wholeProblem = wholeNumberProblem("Quantity to add", step, qty);
+  // "Quantity to add must be a whole number" named the box and not the reason. With the chosen
+  // ingredient and its unit it says "Agarbatti is counted in whole pieces" (T-431); before an
+  // ingredient is chosen there is no unit either, so the box cannot refuse anything yet.
+  const wholeProblem = wholeNumberProblem("Quantity to add", step, qty, {
+    subject: ingredient?.name ?? "",
+    unit: ingredient?.unit ?? "",
+  });
   const ready =
     ingredient !== undefined && qty.trim() !== "" && Number.isFinite(quantity) && quantity > 0 && !wholeProblem;
 

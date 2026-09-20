@@ -6,15 +6,16 @@ import { useCallback, useMemo, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Form } from "@/components/ds/Form";
+import { countedBox } from "@/components/ds/formMessages";
 import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type BatchStock, type CommittedMeal, type StockMovement } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { FOOD_UNITS, dateWithYear, expiryWord, moment, quantity, stepForUnit, unitLabel } from "@/lib/format";
+import { FOOD_UNITS, dateWithYear, expiryWord, lastCountedPhrase, moment, oneUnitFor, quantity, stepForUnit, stockCoverPhrase, stockRunsOutSoon, unitLabel } from "@/lib/format";
 import { Loading } from "@/components/Loading";
 import { RULED_TABLE, RULED_TABLE_EVEN, THEAD, TR, ACTIONS_ROW, TH_LEAD, TD_LEAD, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
-import { StockValueField, usePrefilledStockValue } from "@/components/InventoryItemForm";
+import { PLAIN_NUMBER, StockValueField, usePrefilledStockValue } from "@/components/InventoryItemForm";
 
 const REASONS = ["SPOILAGE", "DAMAGE", "COUNT_CORRECTION", "WASTE", "OTHER"];
 const REASON_LABEL: Record<string, string> = {
@@ -109,6 +110,42 @@ function ItemView() {
   const batches = data?.batches ?? [];
   const committed = data?.committed ?? [];
 
+  /*
+   * One item, one unit (T-432).
+   *
+   * <p>Everything on this screen is a quantity of the same thing, and until now each figure chose
+   * its own unit: `quantity()` promotes from 1,000 up and is asked one figure at a time, so a card
+   * could read 2.06 Kg on hand, 2.04 Kg committed and 20 gm available — three scales in one
+   * sentence that is meant to be a subtraction. The header figure, the six boxes under it, the lots
+   * that have to add up to the header figure and the meals that have to add up to `committed` all
+   * go through one renderer, so they are on one scale and visibly add up.
+   *
+   * <p>The lots and the meals are in the set as well as the totals, deliberately: a lot list in
+   * grams under a header in kilograms is the same defect one heading further down.
+   *
+   * <p><strong>Not the movement history.</strong> That column is a ledger of separate events, not a
+   * set that sums to anything on this page — a 200 Kg delivery and a 5 gm correction of cardamom
+   * are both there — and forcing the second onto the first's scale ("0.005 Kg") would cost more
+   * than the alignment is worth. It keeps `quantity()`.
+   */
+  const say = useMemo(
+    () =>
+      oneUnitFor(item?.unit ?? "", [
+        item?.onHand,
+        item?.committed,
+        item?.available,
+        item?.reorderThreshold,
+        item?.onOrder,
+        // The rate behind the estimate is in the set too. It is a quantity of the same thing said
+        // in the same card, and 0.232 Kg a day printed as "232 gm" beside "3.419 Kg available" is
+        // the very switch this was built to stop — even though, on its own, "232 gm" reads better.
+        item?.lastsFor?.perDay,
+        ...batches.map((b: BatchStock) => b.quantity),
+        ...committed.map((c: CommittedMeal) => c.quantity),
+      ]),
+    [item, batches, committed]
+  );
+
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
     setActionError(null);
@@ -147,7 +184,7 @@ function ItemView() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl tabular-nums">{quantity(item.onHand, item.unit)}</p>
+                  <p className="text-3xl tabular-nums">{say(item.onHand)}</p>
                   <p className="text-sm text-ink-secondary">On hand</p>
                   <div className="mt-2 flex justify-end gap-1.5">
                     {/* Two ways to be Low, and the badge says which. The list column says only
@@ -202,22 +239,64 @@ function ItemView() {
                 "why does this say Low" answerable nowhere in the product — it was on no screen but
                 that one. Four numbers next to each other answer it without a word of explanation.
               */}
-              <dl className="card mb-8 grid grid-cols-3 gap-4 px-6 py-5">
+              <dl className="card mb-8 grid grid-cols-2 gap-4 px-6 py-5 sm:grid-cols-3">
                 <div>
                   <dt className="text-sm text-ink-secondary">Committed</dt>
                   <dd className="mt-1 text-xl tabular-nums">
-                    {item.committed === 0 ? "—" : quantity(item.committed, item.unit)}
+                    {item.committed === 0 ? "—" : say(item.committed)}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-sm text-ink-secondary">Available</dt>
-                  <dd className="mt-1 text-xl tabular-nums">{quantity(item.available, item.unit)}</dd>
+                  <dd className="mt-1 text-xl tabular-nums">{say(item.available)}</dd>
                 </div>
                 <div>
                   <dt className="text-sm text-ink-secondary">Reorder level</dt>
                   <dd className="mt-1 text-xl tabular-nums text-ink-secondary">
-                    {item.reorderThreshold == null ? "Not set" : quantity(item.reorderThreshold, item.unit)}
+                    {item.reorderThreshold == null ? "Not set" : say(item.reorderThreshold)}
                   </dd>
+                </div>
+                {/* The three T-432 added, on the second row of the same card rather than in a
+                    block of their own: they answer the same question the three above do — should
+                    somebody do something about this — and splitting them would make a reader hold
+                    two cards in their head to get one answer. Six boxes, three and three, so
+                    neither row is half empty at any width. */}
+                <div>
+                  <dt className="text-sm text-ink-secondary">On order</dt>
+                  <dd className="mt-1 text-xl tabular-nums">
+                    {item.onOrder == null ? "None" : say(item.onOrder)}
+                  </dd>
+                  {item.onOrder == null && (
+                    <p className="mt-1 text-xs text-ink-muted">A draft order is not on order.</p>
+                  )}
+                </div>
+                <div>
+                  <dt className="text-sm text-ink-secondary">Lasts</dt>
+                  {/* Amber only inside a week; "not enough history" is never coloured, because it
+                      is the absence of a judgement rather than a warning. */}
+                  <dd
+                    className={`mt-1 text-xl ${
+                      stockRunsOutSoon(item.lastsFor, item.onHand)
+                        ? "font-semibold text-warning"
+                        : item.lastsFor
+                          ? ""
+                          : "text-ink-secondary"
+                    }`}
+                  >
+                    {stockCoverPhrase(item.lastsFor, item.onHand)}
+                  </dd>
+                  {/* The working, or the reason there is none. An estimate nobody can check is an
+                      estimate nobody should act on, and the screen has the room here that the list
+                      does not. */}
+                  <p className="mt-1 text-xs text-ink-muted">
+                    {item.lastsFor
+                      ? `About ${say(item.lastsFor.perDay)} a day over three months.`
+                      : "We judge after six days of use over a fortnight."}
+                  </p>
+                </div>
+                <div>
+                  <dt className="text-sm text-ink-secondary">Last counted</dt>
+                  <dd className="mt-1 text-xl">{lastCountedPhrase(item.lastCounted)}</dd>
                 </div>
               </dl>
 
@@ -251,7 +330,7 @@ function ItemView() {
                       <tbody>
                         {batches.map((b: BatchStock) => (
                           <tr key={b.batchId} className={TR}>
-                            <td className={`${TD_LEAD} tabular-nums`}>{quantity(b.quantity, b.unit)}</td>
+                            <td className={`${TD_LEAD} tabular-nums`}>{say(b.quantity)}</td>
                             <td className={TD_FIXED} data-label="Expires">
                               {b.expiryDate ? dateWithYear(b.expiryDate) : "—"}
                               {b.expiringSoon && (
@@ -330,7 +409,7 @@ function ItemView() {
                                 {dateWithYear(c.planDate)}
                               </Link>
                             </td>
-                            <td className={TD_FIXED_NUM} data-label="Claims">{quantity(c.quantity, c.unit)}</td>
+                            <td className={TD_FIXED_NUM} data-label="Claims">{say(c.quantity)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -346,7 +425,11 @@ function ItemView() {
               <AdjustForm
                 batches={batches}
                 ingredientId={item.ingredientId}
+                ingredientName={item.ingredientName}
                 unit={item.unit}
+                // The same renderer the lot table above uses, so a lot does not read "850 gm" in
+                // this dropdown and "0.85 Kg" in the table it was picked from (T-432).
+                say={say}
                 busy={busy}
                 onSubmit={(input) => run((t) => api.adjustStock(id, input, t), "We couldn’t record that adjustment.")}
               />
@@ -390,13 +473,19 @@ function ItemView() {
 function AdjustForm({
   batches,
   ingredientId,
+  ingredientName,
   unit,
+  say,
   busy,
   onSubmit,
 }: {
   batches: BatchStock[];
   ingredientId: string;
+  /** Only so a refused fraction can name the thing rather than the box: "Agarbatti is counted in whole pieces" (T-431). */
+  ingredientName: string;
   unit: string;
+  /** The screen's one-unit-for-this-item renderer (T-432) — see where it is built. */
+  say: (value: number | null | undefined) => string;
   busy: boolean;
   onSubmit: (input: {
     batchId: string | null;
@@ -489,7 +578,7 @@ function AdjustForm({
             <select name="batchId" required className="min-h-touch rounded-control border border-hairline px-3">
               {batches.map((b) => (
                 <option key={b.batchId} value={b.batchId}>
-                  {quantity(b.quantity, b.unit)}
+                  {say(b.quantity)}
                   {b.expiryDate ? ` · use by ${dateWithYear(b.expiryDate)}` : ""}
                   {b.receivedDate ? ` · arrived ${dateWithYear(b.receivedDate)}` : ""}
                 </option>
@@ -515,11 +604,15 @@ function AdjustForm({
             // showing (T-424). A negative whole number is still fine — step counts from 0 in
             // both directions, so "-2" pieces passes and "-2.4" does not.
             step={stepForUnit(adjustUnit)}
+            // The label is "Change (e.g. -2)", which took "must be a whole number" after it and
+            // read like a machine. Named from the item and the unit picked beside it, so the two
+            // agree whichever way the picker is moved (T-431).
+            {...countedBox(ingredientName, adjustUnit)}
             min={opening ? 0 : undefined}
             required
             value={change}
             onChange={(e) => setChange(e.target.value)}
-            className="min-h-touch rounded-control border border-hairline px-3"
+            className={`min-h-touch rounded-control border border-hairline px-3 ${PLAIN_NUMBER}`}
           />
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">

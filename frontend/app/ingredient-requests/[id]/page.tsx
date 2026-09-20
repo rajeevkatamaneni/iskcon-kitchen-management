@@ -493,7 +493,12 @@ function RecordIssue({
    * and is refused on the press rather than rounded behind the storekeeper's back.
    */
   function wholeProblem(line: IngredientRequestDetail["lines"][number]): string | null {
-    return wholeNumberProblem(`Issued ${line.ingredientName}`, stepForUnit(line.unit), amounts[line.id]);
+    // "Issued Apron must be a whole number" was the label read back. The name and the unit turn it
+    // into the reason, and into the same sentence the server gives for the same refusal (T-431).
+    return wholeNumberProblem(`Issued ${line.ingredientName}`, stepForUnit(line.unit), amounts[line.id], {
+      subject: line.ingredientName,
+      unit: line.unit,
+    });
   }
   const anyWholeProblem = detail.lines.some((l) => wholeProblem(l) !== null);
 

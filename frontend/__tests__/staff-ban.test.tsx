@@ -7,10 +7,10 @@ import type {
   EmploymentBanView,
   JobTitleOption,
   StaffPayView,
-  StaffRegisterView,
+  StaffRecordView,
   UserSummary,
 } from "@/lib/api";
-import { CATEGORIES, TITLES, ban, kitchen, member, pay } from "./staff-fixtures";
+import { CATEGORIES, TITLES, ban, kitchen, member, pay, record } from "./staff-fixtures";
 
 /**
  * The three ban surfaces (B9): the option on the termination screen, what a check found at a hire,
@@ -27,7 +27,7 @@ import { CATEGORIES, TITLES, ban, kitchen, member, pay } from "./staff-fixtures"
 const {
   authRef,
   paramsRef,
-  registerRef,
+  recordRef,
   payRef,
   titlesRef,
   categoriesRef,
@@ -45,8 +45,8 @@ const {
     },
   },
   paramsRef: { current: { id: "s1" } },
-  registerRef: {
-    current: { data: null as StaffRegisterView | null, error: null as ApiError | null, loading: false },
+  recordRef: {
+    current: { data: null as StaffRecordView | null, error: null as ApiError | null, loading: false },
   },
   payRef: { current: { data: null as StaffPayView | null, error: null as ApiError | null, loading: false } },
   titlesRef: { current: { data: [] as JobTitleOption[], error: null, loading: false } },
@@ -73,8 +73,8 @@ vi.mock("@/lib/use-authed-query", () => ({
     const source = fn.toString();
     // Epic 12: a hire needs a kitchen, so the form is given one, which it then chooses by itself.
     if (source.includes("listKitchens")) return { data: [kitchen()], error: null, loading: false, reload: vi.fn() };
-    const ref = source.includes("staffRegister")
-      ? registerRef
+    const ref = source.includes("staffMember")
+      ? recordRef
       : source.includes("staffPay")
         ? payRef
         : source.includes("jobTitles")
@@ -120,7 +120,7 @@ const FINDING: BanFinding = {
 function signedInAdmin() {
   authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
   paramsRef.current = { id: "s1" };
-  registerRef.current = { data: { current: [member()], former: [] }, error: null, loading: false };
+  recordRef.current = { data: record(), error: null, loading: false };
   payRef.current = { data: pay(), error: null, loading: false };
   titlesRef.current = { data: TITLES, error: null, loading: false };
   categoriesRef.current = { data: CATEGORIES, error: null, loading: false };

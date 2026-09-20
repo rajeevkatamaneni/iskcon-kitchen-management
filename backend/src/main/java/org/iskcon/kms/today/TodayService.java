@@ -112,6 +112,20 @@ public class TodayService {
 				calendarNote(today, tomorrow),
 				meals,
 				plates(meals),
+				// The numerator and the denominator answer two different questions, and T-430 made
+				// the difference visible, so it is stated rather than left to be rediscovered.
+				//
+				// `itemsBelowThreshold` asks "how many things should somebody act on", and an
+				// ingredient the temple never buys is not one of them — it is excluded, by the same
+				// flag the low-stock screen and the nightly digest read, because all three count this
+				// one field rather than each deciding for itself.
+				//
+				// `itemsTracked` asks "is this temple tracking anything at all", and water genuinely
+				// is tracked: it has an inventory row, it draws down through the allocator, it is
+				// costed and it has a stock detail page. Taking it out of the denominator would
+				// answer neither question — it would not be the count of what is tracked, and it is
+				// not needed to make the numerator readable. So it stays, and "1 of 114 below par"
+				// counts water on the right-hand side only.
 				(int) stock.stream().filter(StockItemView::belowThreshold).count(),
 				stock.size(),
 				workforce(today, actor),

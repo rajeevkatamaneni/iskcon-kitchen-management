@@ -84,9 +84,9 @@ describe("adding to inventory", () => {
     render(<NewInventoryItemPage />);
     expect(screen.getByRole("heading", { name: "Add to inventory" })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+    fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "ing-rice" } });
     fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "40" } });
-    fireEvent.change(screen.getByLabelText(/where it lives/i), { target: { value: "Main store" } });
+    fireEvent.change(screen.getByLabelText(/where is it stored/i), { target: { value: "Main store" } });
     fireEvent.change(valueBox(), { target: { value: "62" } });
 
     // The commit button is in the sticky header, outside the form, and reaches it by name.
@@ -100,6 +100,8 @@ describe("adding to inventory", () => {
       ingredientId: "ing-rice",
       storageLocation: "Main store",
       reorderThreshold: null,
+      // No level was typed, so there is no unit for one either (T-432).
+      reorderThresholdUnit: null,
       notes: null,
       openingCount: { quantity: 40, unit: "KG", pricePerUnit: 62 },
     });
@@ -123,13 +125,16 @@ describe("adding to inventory", () => {
     const level = screen.getByLabelText(/tell me when stock drops below/i, { selector: "input" });
     expect(screen.queryByText(/reorder threshold/i)).not.toBeInTheDocument();
 
-    // The ingredient names the unit it is kept in, in the list and then on the field itself.
-    fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
-    const unit = screen.getByLabelText("Unit");
+    // The ingredient names the unit it is kept in, in the list and then on the field itself. The
+    // level has a picker of its OWN since T-432: it used to have none, and borrowed the factor from
+    // the opening count's picker two fields away.
+    fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "ing-rice" } });
+    const unit = screen.getByLabelText("Unit the level is in");
     expect(unit).toHaveValue("KG");
 
     // And the level may be typed in either unit of that family — "warn me at 500 grams" of a thing
-    // the store keeps in kilograms. What is stored is always the ingredient's own.
+    // the store keeps in kilograms. The browser sends what was typed and the unit it was typed in;
+    // the conversion is the server's, against the canonical unit it reads for itself.
     fireEvent.change(unit, { target: { value: "GM" } });
     fireEvent.change(level, { target: { value: "500" } });
     // The header button, as a person presses it (T-161). This used to fire a synthetic submit at
@@ -139,11 +144,63 @@ describe("adding to inventory", () => {
     await waitFor(() => expect(createItemMock).toHaveBeenCalledTimes(1));
     expect(createItemMock.mock.calls[0][0]).toMatchObject({
       ingredientId: "ing-rice",
-      reorderThreshold: 0.5,
+      reorderThreshold: 500,
+      reorderThresholdUnit: "GM",
     });
     // Nothing was typed into the count, so no lot is opened.
     expect(createItemMock.mock.calls[0][0].openingCount).toBeNull();
     expect(adjustMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The thousandfold bug this field had all along (T-432).
+   *
+   * <p>The level's box had no unit picker of its own and its value was multiplied by the factor
+   * belonging to the **opening count's** picker, two fields above it. So "tell me when ghee drops
+   * below 500", typed with the count in grams, stored 0.5 — and with the count in litres, 500. The
+   * same keystrokes, a thousandfold apart, decided by a box about something else. Nothing went wrong
+   * in practice only because the ingredient anybody tested it on was counted in pieces, where the
+   * factor is 1.
+   */
+  it("does not let the count's unit picker change what the level means", async () => {
+    render(<NewInventoryItemPage />);
+    fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "ing-rice" } });
+
+    // The count goes in grams; the level stays in kilograms and is untouched by that.
+    fireEvent.change(screen.getByLabelText("Unit the count is in"), { target: { value: "GM" } });
+    fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "800" } });
+    fireEvent.change(
+      screen.getByLabelText(/tell me when stock drops below/i, { selector: "input" }),
+      { target: { value: "5" } }
+    );
+    fireEvent.change(screen.getByLabelText(/what it would cost to buy today/i, { selector: "input" }), {
+      target: { value: "62" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
+
+    await waitFor(() => expect(createItemMock).toHaveBeenCalledTimes(1));
+    expect(createItemMock.mock.calls[0][0]).toMatchObject({
+      reorderThreshold: 5,
+      reorderThresholdUnit: "KG",
+      openingCount: { quantity: 800, unit: "GM", pricePerUnit: 62 },
+    });
+  });
+
+  /* Rajeev, 2026-09-20: the picker "shows ingredients and supplies merged into one list". They
+     always were, and on purpose — only the recipe picker leaves supplies out — but nothing on the
+     screen said so, so a storekeeper hunting for leaf plates had no reason to think they were in
+     there. The list is now grouped under the two words the menu already uses. */
+  it("names both halves of the catalogue, and offers a supply beside the food", () => {
+    ingRef.current = [
+      ingredient({ id: "ing-rice", name: "Rice", unit: "KG" }),
+      ingredient({ id: "ing-plate", name: "Leaf plates", unit: "PIECES", supply: true }),
+    ];
+    render(<NewInventoryItemPage />);
+
+    expect(screen.getByLabelText(/ingredient or supply/i)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Ingredients" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Supplies" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /^Leaf plates/ })).toBeInTheDocument();
   });
 
   /**
@@ -163,14 +220,14 @@ describe("adding to inventory", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
 
-    expectSaidBeside(screen.getByLabelText(/^ingredient$/i), "Ingredient is required");
+    expectSaidBeside(screen.getByLabelText(/ingredient or supply/i), "Ingredient or supply is required");
     expect(createItemMock).not.toHaveBeenCalled();
     expect(adjustMock).not.toHaveBeenCalled();
   });
 
   it("says a count below nothing must be at least 0, and adds nothing (T-161)", () => {
     render(<NewInventoryItemPage />);
-    fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+    fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "ing-rice" } });
     fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "-1" } });
 
     fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
@@ -193,7 +250,7 @@ describe("adding to inventory", () => {
       expect(valueBox()).toBeDisabled();
       expect(screen.getByText("What it would cost to buy today (₹)")).toBeInTheDocument();
 
-      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+      fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "ing-rice" } });
       await waitFor(() => expect(suggestMock).toHaveBeenCalledWith("ing-rice", "test-token"));
       // The unit is the ingredient's stock unit, in the app's own label.
       expect(screen.getByText("What it would cost to buy today (₹ per Kg)")).toBeInTheDocument();
@@ -211,7 +268,7 @@ describe("adding to inventory", () => {
 
     it("refuses 0 in red beside the box", () => {
       render(<NewInventoryItemPage />);
-      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+      fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "ing-rice" } });
       fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "40" } });
       fireEvent.change(valueBox(), { target: { value: "0" } });
 
@@ -224,7 +281,7 @@ describe("adding to inventory", () => {
     it("pre-fills the suggestion, and sends it with the count", async () => {
       suggestMock.mockResolvedValue({ pricePerUnit: 58.5, source: "PREFERRED_VENDOR" });
       render(<NewInventoryItemPage />);
-      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+      fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "ing-rice" } });
       await waitFor(() => expect(valueBox()).toHaveValue(58.5));
 
       fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "40" } });
@@ -241,16 +298,16 @@ describe("adding to inventory", () => {
 
     it("names the stock unit even when the count is typed in another unit of it", async () => {
       render(<NewInventoryItemPage />);
-      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-hing" } });
+      fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "ing-hing" } });
       await waitFor(() => expect(suggestMock).toHaveBeenCalledWith("ing-hing", "test-token"));
-      fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "KG" } });
+      fireEvent.change(screen.getByLabelText("Unit the count is in"), { target: { value: "KG" } });
       // Asafoetida is kept in gm, so its value is per gm whatever the count is typed in.
       expect(screen.getByText("What it would cost to buy today (₹ per gm)")).toBeInTheDocument();
     });
 
     it("does not ask for a value when no count is typed, because no stock is added", async () => {
       render(<NewInventoryItemPage />);
-      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+      fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "ing-rice" } });
       expect(valueBox()).not.toBeRequired();
 
       fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
@@ -275,7 +332,7 @@ describe("adding to inventory", () => {
         )
       );
       render(<NewInventoryItemPage />);
-      fireEvent.change(screen.getByLabelText(/^ingredient$/i), { target: { value: "ing-rice" } });
+      fireEvent.change(screen.getByLabelText(/ingredient or supply/i), { target: { value: "ing-rice" } });
       fireEvent.change(screen.getByPlaceholderText("e.g. 40"), { target: { value: "40" } });
       fireEvent.change(valueBox(), { target: { value: "62" } });
       fireEvent.click(screen.getByRole("button", { name: /add to inventory/i }));
@@ -320,6 +377,9 @@ describe("adding to inventory", () => {
         expiringSoon: false,
         soonestExpiry: null,
         notes: null,
+        lastCounted: null,
+        onOrder: null,
+        lastsFor: null,
       },
     ];
     render(<NewInventoryItemPage />);

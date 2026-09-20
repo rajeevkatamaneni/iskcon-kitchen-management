@@ -389,7 +389,7 @@ function Record({ item }: { item: EquipmentView }) {
         <Fact label="Condition">
           <ConditionBadge condition={item.condition} />
         </Fact>
-        <Fact label="Where it lives">{item.storageLocation ?? "—"}</Fact>
+        <Fact label="Where is it stored">{item.storageLocation ?? "—"}</Fact>
         <Fact label="How it came here">{item.source ? SOURCE_LABEL[item.source] : "—"}</Fact>
         <Fact label="Acquired on">
           {item.acquisitionDate ? dateWithYear(item.acquisitionDate) : "—"}

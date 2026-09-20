@@ -525,7 +525,7 @@ describe("a counted line on the shopping list", () => {
     render(<ShoppingListPage />);
     fireEvent.change(qty("Apron"), { target: { value: "3.6" } });
     fireEvent.blur(qty("Apron"));
-    expect(screen.getByText("Quantity for Apron must be a whole number")).toHaveClass("text-danger");
+    expect(screen.getByText("Apron is counted in whole pieces")).toHaveClass("text-danger");
     expect(setQty).not.toHaveBeenCalled();
     // What was typed is still there to be corrected, not silently dropped or rounded.
     expect(qty("Apron")).toHaveValue(3.6);
@@ -537,7 +537,7 @@ describe("a counted line on the shopping list", () => {
     render(<ShoppingListPage />);
     fireEvent.change(qty("Rice"), { target: { value: "3.6" } });
     fireEvent.blur(qty("Rice"));
-    expect(screen.queryByText(/must be a whole number/)).toBeNull();
+    expect(screen.queryByText(/whole/)).toBeNull();
     await act(async () => {});
     expect(setQty).toHaveBeenCalled();
   });
@@ -554,7 +554,7 @@ describe("a counted line on the shopping list", () => {
     const add = screen.getByRole("spinbutton", { name: "Quantity to add" });
     expect(add).toHaveAttribute("step", "1");
     fireEvent.change(add, { target: { value: "2.4" } });
-    expect(screen.getByText("Quantity to add must be a whole number")).toHaveClass("text-danger");
+    expect(screen.getByText("Apron is counted in whole pieces")).toHaveClass("text-danger");
     expect(screen.getByRole("button", { name: /add to list/i })).toBeDisabled();
   });
 });

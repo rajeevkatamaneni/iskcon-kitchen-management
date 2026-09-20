@@ -1,0 +1,73 @@
+-- =====================================================================
+-- V159 — Find a volunteer's own signups by the volunteer
+--        (T-429; Rajeev, 2026-09-20: "a volunteer cannot see anything
+--        she has already done")
+--
+-- `shift_signups` has carried two indexes since V34 and both of them
+-- lead with the shift:
+--
+--     shift_signups_one_active  UNIQUE (tenant_id, shift_id,
+--                                       volunteer_user_id)
+--                               WHERE released_at IS NULL
+--     shift_signups_by_shift           (tenant_id, shift_id)
+--
+-- That is the coordinator's question — *who is on this shift* — and it
+-- is the only question the table has been asked until now. The
+-- volunteer's question is the other way round: *which shifts am I on*.
+-- Neither index can answer it, because `volunteer_user_id` is the third
+-- column of one and absent from the other, so every read of a person's
+-- own roster is a sequential scan of every signup the temple has ever
+-- taken.
+--
+-- ---------------------------------------------------------------------
+-- Why now and not in V107, which explicitly refused an index
+--
+-- V107 declined to index `attended` and gave the reason in its own
+-- words: "an index guessed for a query nobody has written is paid for
+-- on every write and read by nothing." That was right then and it is
+-- the reason this index is not on `attended` either. It is on the
+-- column the new query actually filters by, and the query now exists:
+-- SignupService.myPastShifts (T-429). Two older readers get it for
+-- free, having quietly scanned the table since E6-S3 —
+-- SignupService.myShifts and SignupService.myReleasedShifts. Three
+-- readers, all filtering `WHERE volunteer_user_id = ?`, none of them
+-- served by anything.
+--
+-- ---------------------------------------------------------------------
+-- The column order, and why tenant_id leads
+--
+-- (tenant_id, volunteer_user_id), matching both existing indexes. Every
+-- read of this table runs under the RLS policy V34 put on it, which
+-- adds `tenant_id = current_setting(...)` to the WHERE clause of the
+-- statement itself, so the planner sees an equality on `tenant_id` on
+-- every single query whether the application wrote one or not. Leading
+-- with it keeps the whole predicate on the index. It also keeps one
+-- temple's entries contiguous, which is the same reason the other two
+-- are shaped that way.
+--
+-- Deliberately NOT included: `shift_id` as a third column, or
+-- `released_at` as a partial. A volunteer's signups at one temple
+-- number in the hundreds after years of service; once the scan is down
+-- to her own rows the remaining predicates cost nothing worth a wider
+-- index paid for on every signup, release and attendance mark. And a
+-- partial on `released_at IS NULL` would exclude exactly the rows
+-- `myReleasedShifts` reads.
+--
+-- ---------------------------------------------------------------------
+-- Not CONCURRENTLY
+--
+-- CREATE INDEX CONCURRENTLY cannot run inside a transaction, and Flyway
+-- runs each migration in one. `shift_signups` is small — a temple's
+-- whole history of seva — so the brief exclusive lock is not worth
+-- special-casing the migration runner for.
+--
+-- CREATE INDEX is DDL and runs as the table's owner (the migration
+-- role), which RLS does not constrain; and it writes no rows, so there
+-- is no per-tenant seed or backfill to get wrong here.
+-- =====================================================================
+
+CREATE INDEX shift_signups_by_volunteer
+    ON shift_signups (tenant_id, volunteer_user_id);
+
+COMMENT ON INDEX shift_signups_by_volunteer IS
+    'T-429: the volunteer''s own question — which shifts am I on — which the two shift-leading indexes from V34 cannot answer. Read by SignupService.myShifts, myPastShifts and myReleasedShifts.';

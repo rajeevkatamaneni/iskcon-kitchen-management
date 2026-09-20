@@ -6,9 +6,9 @@ import type {
   EmploymentBanView,
   StaffConductNoteView,
   StaffPayView,
-  StaffRegisterView,
+  StaffRecordView,
 } from "@/lib/api";
-import { CATEGORIES, ban, former, member, pay } from "./staff-fixtures";
+import { CATEGORIES, ban, former, pay, record } from "./staff-fixtures";
 
 /**
  * Taking somebody back on, from the record screen (T-014).
@@ -25,7 +25,7 @@ import { CATEGORIES, ban, former, member, pay } from "./staff-fixtures";
  * button.
  */
 
-const { authRef, paramsRef, registerRef, payRef, bansRef, categoriesRef, conductRef, reinstateMock } =
+const { authRef, paramsRef, recordRef, payRef, bansRef, categoriesRef, conductRef, reinstateMock } =
   vi.hoisted(() => ({
     authRef: {
       current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } } as {
@@ -34,8 +34,8 @@ const { authRef, paramsRef, registerRef, payRef, bansRef, categoriesRef, conduct
       },
     },
     paramsRef: { current: { id: "s2" } },
-    registerRef: {
-      current: { data: null as StaffRegisterView | null, error: null as ApiError | null, loading: false },
+    recordRef: {
+      current: { data: null as StaffRecordView | null, error: null as ApiError | null, loading: false },
     },
     payRef: { current: { data: null as StaffPayView | null, error: null as ApiError | null, loading: false } },
     bansRef: { current: { data: [] as EmploymentBanView[], error: null, loading: false } },
@@ -56,8 +56,8 @@ vi.mock("@/lib/use-authed-query", () => ({
     const source = fn.toString();
     const ref = source.includes("staffConductNotes")
       ? conductRef
-      : source.includes("staffRegister")
-        ? registerRef
+      : source.includes("staffMember")
+        ? recordRef
         : source.includes("staffPay")
           ? payRef
           : source.includes("templeBans")
@@ -74,23 +74,19 @@ vi.mock("@/lib/api", async (orig) => {
 import StaffRecordPage from "@/app/staff/[id]/page";
 
 /** The register the screen reads, with one former employee and one current one. */
-function registerWith(bannedFlag: boolean) {
-  return {
-    data: {
-      current: [member()],
-      former: [
-        former(
-          {
-            id: "s2",
-            fullName: "Madhava Das",
-            employmentStatus: "TERMINATED",
-            lastWorkingDay: "2026-08-15",
-            endReason: "Money missing from the box",
-          },
-          bannedFlag
-        ),
-      ],
+function recordWith(bannedFlag: boolean) {
+  const left = former(
+    {
+      id: "s2",
+      fullName: "Madhava Das",
+      employmentStatus: "TERMINATED",
+      lastWorkingDay: "2026-08-15",
+      endReason: "Money missing from the box",
     },
+    bannedFlag
+  );
+  return {
+    data: record(left.profile, { banned: left.banned }),
     error: null,
     loading: false,
   };
@@ -100,7 +96,7 @@ describe("taking a former member of staff back on", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     paramsRef.current = { id: "s2" };
-    registerRef.current = registerWith(false);
+    recordRef.current = recordWith(false);
     payRef.current = { data: pay({ staffId: "s2" }), error: null, loading: false };
     bansRef.current = { data: [], error: null, loading: false };
     categoriesRef.current = { data: CATEGORIES, error: null, loading: false };
@@ -159,13 +155,14 @@ describe("taking a former member of staff back on", () => {
 
   it("offers nothing to take back on somebody who has not left", () => {
     paramsRef.current = { id: "s1" };
+    recordRef.current = { data: record(), error: null, loading: false };
     render(<StaffRecordPage />);
     expect(screen.queryByRole("button", { name: /take them back on/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/take them back on/i)).not.toBeInTheDocument();
   });
 
   it("refuses rather than offers where a record still stands against them", () => {
-    registerRef.current = registerWith(true);
+    recordRef.current = recordWith(true);
     bansRef.current = { data: [ban({ personName: "Madhava Das" })], error: null, loading: false };
     render(<StaffRecordPage />);
 

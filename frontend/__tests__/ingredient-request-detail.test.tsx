@@ -433,7 +433,7 @@ describe("issuing a counted ingredient", () => {
     fireEvent.change(screen.getByLabelText(/issued apron/i), { target: { value: "1.5" } });
     fireEvent.click(screen.getByRole("button", { name: /record the issue/i }));
 
-    expect(screen.getByText("Issued Apron must be a whole number")).toHaveClass("text-danger");
+    expect(screen.getByText("Apron is counted in whole pieces")).toHaveClass("text-danger");
     expect(issueMock).not.toHaveBeenCalled();
     expect(screen.getByLabelText(/issued apron/i)).toHaveValue(1.5);
   });

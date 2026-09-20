@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ApiError, type StaffPayView, type StaffRegisterView } from "@/lib/api";
-import { advance, member, pay, payment } from "./staff-fixtures";
+import { ApiError, type StaffPayView, type StaffRecordView } from "@/lib/api";
+import { advance, member, pay, payment, record } from "./staff-fixtures";
 
 /**
  * Salary, advances and docking (B8), on the page one person's pay now has to itself.
@@ -21,7 +21,7 @@ import { advance, member, pay, payment } from "./staff-fixtures";
 const {
   authRef,
   paramsRef,
-  registerRef,
+  recordRef,
   payRef,
   reloadMock,
   paymentMock,
@@ -35,8 +35,8 @@ const {
     },
   },
   paramsRef: { current: { id: "s1" } },
-  registerRef: {
-    current: { data: null as StaffRegisterView | null, error: null as ApiError | null, loading: false },
+  recordRef: {
+    current: { data: null as StaffRecordView | null, error: null as ApiError | null, loading: false },
   },
   payRef: {
     current: { data: null as StaffPayView | null, error: null as ApiError | null, loading: false },
@@ -57,7 +57,7 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
     const source = fn.toString();
-    const ref = source.includes("staffRegister") ? registerRef : payRef;
+    const ref = source.includes("staffMember") ? recordRef : payRef;
     return { ...ref.current, reload: reloadMock };
   },
 }));
@@ -80,7 +80,7 @@ describe("the pay page", () => {
   beforeEach(() => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     paramsRef.current = { id: "s1" };
-    registerRef.current = { data: { current: [member()], former: [] }, error: null, loading: false };
+    recordRef.current = { data: record(), error: null, loading: false };
     payRef.current = { data: pay(), error: null, loading: false };
     reloadMock.mockReset();
     paymentMock.mockReset().mockResolvedValue({ id: "new" });
@@ -240,13 +240,8 @@ describe("the pay page", () => {
   });
 
   it("opens for a former staff member too, and records what they are paid as a settlement", async () => {
-    registerRef.current = {
-      data: {
-        current: [],
-        former: [
-          { profile: member({ employmentStatus: "RESIGNED", lastWorkingDay: "2026-07-31" }), banned: false },
-        ],
-      },
+    recordRef.current = {
+      data: record(member({ employmentStatus: "RESIGNED", lastWorkingDay: "2026-07-31" })),
       error: null,
       loading: false,
     };
@@ -264,8 +259,18 @@ describe("the pay page", () => {
     expect(paymentMock.mock.calls[0][1]).toMatchObject({ purpose: "SETTLEMENT" });
   });
 
-  it("says so plainly when the address belongs to nobody on the register", () => {
+  it("says so plainly when the address belongs to nobody at this temple", () => {
     paramsRef.current = { id: "gone" };
+    recordRef.current = {
+      data: null,
+      error: new ApiError({
+        code: "KMS-400030",
+        message: "We couldn’t find that.",
+        action: "Go back and try again.",
+        fieldErrors: [],
+      }),
+      loading: false,
+    };
     render(<StaffPayPage />);
     expect(screen.getByText(/can’t find that person/i)).toBeInTheDocument();
     expect(screen.queryByRole("form", { name: /record a payment/i })).not.toBeInTheDocument();

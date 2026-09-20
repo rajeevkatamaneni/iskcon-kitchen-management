@@ -103,7 +103,11 @@ function StaffView() {
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/staff" />
-      <main className="min-w-0 flex-1 px-8 py-10">
+      {/* 16px at phone width, 32 from `sm` (T-428). Measured at 390: this page was giving the
+          register a 32px gutter each side while the record screen beside it gave 16, and twenty of
+          the app's thirty page shells already use the narrower pair. The rule asks for 16; the two
+          staff screens now agree, and so do the majority of the rest. */}
+      <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -245,7 +249,17 @@ function StaffTable({
                 // 1280). Baseline alignment keeps both sizes and lines the words up.
                 <tr key={s.id} className={`${TR} [&>td]:align-baseline`}>
                   <td className={`${TD_PRIMARY} ${banned ? "text-danger" : ""}`}>
-                    {s.fullName}
+                    {/* The name is the way in (T-428). Rajeev, 2026-09-20: the person’s name should
+                        be clickable and open their record, with Edit on that record — "this is the
+                        pattern the rest of the app should follow". Same class string as the
+                        equipment register’s name link, except that a banned former employee keeps
+                        the danger ink: which record this is matters more than which link colour. */}
+                    <Link
+                      href={`/staff/${s.id}`}
+                      className={`font-medium hover:underline ${banned ? "text-danger" : "text-accent-text"}`}
+                    >
+                      {s.fullName}
+                    </Link>
                     {banned && (
                       <span className="ml-2">
                         <Badge tone="danger">Banned</Badge>
@@ -282,31 +296,20 @@ function StaffTable({
                     </td>
                   )}
                   <td className={TD_ACTIONS_FIXED}>
-                    {/* One row, ending at the table's right edge (T-228), and it stays one
-                        row: three buttons stacked into a column was what a crushed cell looked like.
-                        Terminate sits last: it is the one action here nobody takes twice. Former
-                        staff get View instead, because they have no editable form and would
-                        otherwise have no way into their own record. Current staff do not (Q6) —
-                        Update is that record, and a fourth button would be a second door to the
-                        same room. */}
+                    {/* One row, ending at the table's right edge (T-228), and it stays one row.
+                        Update and View both went on 2026-09-20 (T-428): the name opens the record
+                        and Edit is on it, so a button here would be a second door to the same room
+                        — the argument that used to keep View off a current employee’s row, now
+                        applied to both tables, which is what makes the two rows identical again.
+                        Terminate sits last: it is the one action here nobody takes twice. */}
                     <div className={ACTIONS_ROW}>
-                      {former && (
-                        <ButtonLink href={`/staff/${s.id}`} variant="ghost" size="sm">
-                          View
-                        </ButtonLink>
-                      )}
                       <ButtonLink href={`/staff/${s.id}/pay`} variant="ghost" size="sm">
                         Pay
                       </ButtonLink>
                       {!former && (
-                        <>
-                          <ButtonLink href={`/staff/${s.id}/edit`} variant="ghost" size="sm">
-                            Update
-                          </ButtonLink>
-                          <ButtonLink href={`/staff/${s.id}/terminate`} variant="danger" size="sm">
-                            Terminate
-                          </ButtonLink>
-                        </>
+                        <ButtonLink href={`/staff/${s.id}/terminate`} variant="danger" size="sm">
+                          Terminate
+                        </ButtonLink>
                       )}
                     </div>
                   </td>
