@@ -97,7 +97,7 @@ public class MasterRecipeController {
 	}
 
 	/**
-	 * Reads the vendored books into the library.
+	 * Reads the curated recipe books into the library.
 	 *
 	 * <p>Idempotent, so it is safe to press twice: the upsert keys on the book and the recipe slug.
 	 * Exposed as an endpoint as well as a startup job because loading a fresh environment should not

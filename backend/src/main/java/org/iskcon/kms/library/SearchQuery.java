@@ -19,7 +19,10 @@ import java.util.Locale;
  */
 public final class SearchQuery {
 
-	/** Enough words to narrow anything in a 5,376-row library; beyond this a person is pasting. */
+	/**
+	 * Enough words to narrow anything in a library this size — 44 rows today, 5,376 in the vendored
+	 * one this limit was set against; beyond this a person is pasting.
+	 */
 	private static final int MAX_TERMS = 6;
 
 	private SearchQuery() {

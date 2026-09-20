@@ -79,7 +79,7 @@ public class MasterRecipeService {
 				FROM master_recipes m
 				WHERE m.search_doc @@ to_tsquery('simple', ?)
 				-- Ordered like the browse above rather than by rank. Every row here already matches
-				-- what was typed, and on 5,376 short dish names the differences ts_rank_cd finds
+				-- what was typed, and on short dish names the differences ts_rank_cd finds
 				-- between "Poori" and "Aloo Poori" are noise a reader cannot see — while an order
 				-- that shifts under each keystroke is a list nobody can scan. One rule everywhere
 				-- recipes are listed (Rajeev, 2026-09-07).
@@ -380,13 +380,14 @@ public class MasterRecipeService {
 			Map<String, String> scaled = (Map<String, String>) line.get("scaled");
 			// Not String.valueOf, which the four fields above can afford because a line always has
 			// them: it turns a null into the four-character string "null", and prep is null on
-			// every line of every vendored book and on most of a curated one. "null" as a
+			// 371 of the catalogue's 454 lines, and was null on every line of every vendored
+			// book before it. "null" as a
 			// preparation would reach the screen as "Rice · null" and the shopping list as a note
 			// nobody wrote.
 			Object prep = line.get("prep");
 			// Boolean.TRUE.equals rather than a cast, because every row written before T-403 has no
 			// not_bought key at all and a cast of null to boolean throws. Absent reads as false —
-			// "the temple buys this" — which is the right answer for every vendored line and the
+			// "the temple buys this" — which was the right answer for every vendored line and the
 			// only safe default: the other way round would take an ingredient off the shopping list
 			// on the strength of a key nobody wrote.
 			out.add(new MasterRecipeView.MasterRecipeIngredient(

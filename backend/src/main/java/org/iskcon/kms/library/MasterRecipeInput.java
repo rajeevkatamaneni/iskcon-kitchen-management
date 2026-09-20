@@ -15,7 +15,8 @@ import java.util.List;
  * <p>The same shape the loader produces, minus the parts only a book has: there is no
  * {@code display_name} here because an operator naming a recipe by hand names it once and means it,
  * and no disambiguation rung for the same reason. The ladder exists to settle collisions inside a
- * batch of 5,376 nobody typed.
+ * loaded batch nobody typed — 44 recipes generated from Rajeev's curated files today, 5,376 vendored
+ * ones when it was written.
  */
 public record MasterRecipeInput(
 

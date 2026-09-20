@@ -433,7 +433,9 @@ public final class IngredientNameMatcher {
 	 * fold back, whereas a false match would stop every person who types the real, different
 	 * ingredient.
 	 *
-	 * <p>Measured against the recipe library (2,238 distinct names, 1,849 once normalised): 19 pairs
+	 * <p>Measured against the 32 vendored recipe books (2,238 distinct names, 1,849 once normalised),
+	 * which the curated catalogue replaced on 2026-09-19 — the measurement is kept because it is what
+	 * the thresholds were chosen against, and 2,238 names test them far harder than today's 99: 19 pairs
 	 * are close, and 18 are one thing spelled two ways ("tulasi leaf" / "tulsi leaf", "panch
 	 * phoran" / "panch phoron", "sweet corn" / "sweetcorn"). The one wrong pair is "chana" and
 	 * "chhana" (chickpea and chhena cheese), which the rule cannot tell from a typo. Outside the

@@ -570,7 +570,7 @@ public enum AuditAction {
 
 	MASTER_RECIPE_DELETED,
 
-	/** The loader read the vendored books into the library (E2-S9). Platform act, no temple. */
+	/** The loader read the recipe books into the library (E2-S9). Platform act, no temple. */
 	RECIPE_LIBRARY_LOADED,
 
 	/**

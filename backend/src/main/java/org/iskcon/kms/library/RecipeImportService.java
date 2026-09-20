@@ -276,10 +276,10 @@ public class RecipeImportService {
 	 *
 	 * <p><strong>Unless the line says its preparation outright, in which case that is the answer
 	 * (T-401).</strong> Splitting the name is a reconstruction, and it only works because the
-	 * vendored books file a name noun-first with a comma. Rajeev's curated recipes (2026-09-19) took
+	 * vendored books filed a name noun-first with a comma. Rajeev's curated recipes (2026-09-19) took
 	 * the commas out and put the preparation in {@code prep}: "Green chilli, slit" became "Green
-	 * chilli" with prep "Slit". Split, such a name yields nothing, and all 84 of his notes would
-	 * import empty. So a line carrying a {@code prep} is not split at all — the whole name is the
+	 * chilli" with prep "Slit". Split, such a name yields nothing, and all 83 of the catalogue's notes
+	 * would import empty. So a line carrying a {@code prep} is not split at all — the whole name is the
 	 * ingredient, and {@code prep} is the note, kept in the words he wrote. The split is the
 	 * fallback, for the books that still say it inside the name.
 	 *
@@ -467,8 +467,9 @@ public class RecipeImportService {
 	 * (see {@link #plan}): "Coconut, grated" then "Fresh grated coconut" make one Coconut, and a
 	 * second "Tomatos" line after "It's a different ingredient" goes on the Tomatos the first made.
 	 *
-	 * <p>The unit comes from the book's own quantity, which is why it can: all 46,337 ingredient
-	 * lines in the library parse, into five units the catalogue already knows.
+	 * <p>The unit comes from the book's own quantity, which is why it can: all 454 ingredient lines in
+	 * the catalogue parse, as all 46,337 of the vendored library's did, into five units the ingredient
+	 * catalogue already knows.
 	 *
 	 * <h2>What the book's {@code not_bought} mark does, and what it deliberately does not (T-403)</h2>
 	 *

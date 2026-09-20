@@ -27,13 +27,15 @@ kitchen is cooking) are built or designed and have no row here yet; their storie
 | 2 (cont.) — The shared recipe library | `EPIC-2-recipe-library-DESIGN.md` | 9 | E2 |
 | **Total** | | **98** | |
 
-**`EPIC-2-recipe-library-DESIGN.md` is a design, not yet built.** A platform-wide catalogue of 5,376
+**`EPIC-2-recipe-library-DESIGN.md` is a design, not yet built.** A platform-wide catalogue of
 recipes every temple can search and copy from, and the widening of yield and portion that made it
 possible. Its nine stories are E2-S9 to E2-S17; every design question it turned on was answered on
 2026-08-21 and each answer is recorded in §10 with the argument that produced it, including the two
-where Rajeev's reasoning overturned the recommendation. **The source data is vendored** at
-`backend/src/main/resources/recipe-library/`. E2-S16 and E2-S17 fix live defects in shipped code and
-do not depend on the library at all.
+where Rajeev's reasoning overturned the recommendation. **The source data lives at**
+`backend/src/main/resources/recipe-library/` — two generated books, 44 recipes, as of 2026-09-19,
+replacing the 32 vendored books of 5,376 unvetted ones the design describes. The design's counts are
+the vendored ones and are kept as the record of that investigation; the note under its §1 says so.
+E2-S16 and E2-S17 fix live defects in shipped code and do not depend on the library at all.
 
 **Epic 9 is the exception to every rule in this set.** It holds the only two features that
 deliberately cross tenant isolation, and its file keeps the design and the six questions it turned

@@ -25,13 +25,19 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Reads the vendored recipe books and writes them into {@code master_recipes} (E2-S9).
+ * Reads the curated recipe books and writes them into {@code master_recipes} (E2-S9).
  *
- * <p>The books live at {@code src/main/resources/recipe-library/} — 32 state files, 168 recipes
- * each, 5,376 in all. They are committed rather than fetched: a loader that reaches across to
- * another repository during a deployment is a deployment that can fail on somebody else's branch
- * name. They are also byte-for-byte copies rather than pre-transformed ones, so they can still be
- * diffed against upstream when the books change; <em>this</em> is where the transformation happens.
+ * <p>The books live at {@code src/main/resources/recipe-library/} — two state files, karnataka (42
+ * recipes) and andhra_pradesh (2), 44 in all, 454 ingredient lines. They are generated from the
+ * recipes Rajeev approved one at a time on 2026-09-19 by {@code tools/seed/02b-build-catalogue.mjs}
+ * and committed rather than fetched: a loader that reaches across to another repository during a
+ * deployment is a deployment that can fail on somebody else's branch name. The files are the
+ * converter's output and nobody hand-edits them; the editing source of truth is his curated
+ * per-recipe files, and <em>this</em> is where the transformation into rows happens.
+ *
+ * <p>Until 2026-09-19 the directory held 32 books vendored byte-for-byte from another repository —
+ * 5,376 recipes, 168 a book, none of them vetted. {@code recipe-library/README.md} keeps that
+ * provenance; every figure below counts the curated catalogue unless it says otherwise.
  *
  * <h2>The local-language fields are dropped here and nowhere else</h2>
  *
@@ -43,11 +49,16 @@ import org.springframework.stereotype.Component;
  *
  * <h2>Names are disambiguated in two passes, not one</h2>
  *
- * <p>1,272 of the recipes share a name with one from another state. Seventeen books have a Sabudana
- * Khichdi, and Bihar's, Maharashtra's and Uttar Pradesh's are three different dishes — 5 Kg of sago
- * against 7, one of them sweetened, one yielding kilos rather than litres. A temple may hold only
- * one active recipe of a given name, so the library settles this with itself before any temple sees
- * it.
+ * <p>No two recipes in today's catalogue share a name — all 44 keep their plain one, counted from
+ * the books on 2026-09-19 — and the ladder below still runs on every load. It is not dead code kept
+ * for sentiment. A temple may hold only one active recipe of a given name, so a collision has to be
+ * settled by the library before any temple sees it, and a catalogue Rajeev adds to book by book will
+ * produce one the first time two states send up their own Sabudana Khichdi. The vendored library
+ * this replaced had 1,272 such names, seventeen books carrying a Sabudana Khichdi between them, and
+ * Bihar's, Maharashtra's and Uttar Pradesh's were three different dishes — 5 Kg of sago against 7,
+ * one sweetened, one yielding kilos rather than litres. That is the shape of the problem the two
+ * passes exist for. {@code RecipeLibraryIT} proves them against a fixture book, because the real
+ * catalogue no longer collides with itself.
  *
  * <p>The obvious way to do that is wrong, and wrong quietly. "Suffix it if I have seen this name
  * before" is a decision made while streaming, and the <em>first</em> Sabudana Khichdi has not been
@@ -55,13 +66,15 @@ import org.springframework.stereotype.Component;
  * the files happened to be read in. Counting first and deciding second removes the question:
  *
  * <pre>
- *   pass 1   count every name across all 32 books, decide nothing
+ *   pass 1   count every name across every book, decide nothing
  *   pass 2   suffix every recipe whose name is held by more than one, the first included
  * </pre>
  *
- * <p>A third rung is needed for exactly two rows. Alugadde Palya appears twice in the Karnataka
- * book — once under Ekadashi with rock salt and no mustard, once under Sabji's Dry with a full
- * tempering — so the state alone does not separate them and the category is added too.
+ * <p>A third rung exists for the case the state does not separate either: the same name twice in one
+ * book, under two categories. The vendored library had exactly two such rows — Alugadde Palya
+ * appeared twice in the Karnataka book, once under Ekadashi with rock salt and no mustard, once
+ * under Sabji's Dry with a full tempering — so the category is added as well. The curated catalogue
+ * keeps only the Ekadashi one, and nothing in it currently needs this rung.
  *
  * <h2>It stops rather than skips</h2>
  *
@@ -75,13 +88,21 @@ public class LibraryLoader {
 	private static final Logger log = LoggerFactory.getLogger(LibraryLoader.class);
 
 	/**
-	 * Where the books came from, down to the commit, stamped on every row.
+	 * Where the books came from, stamped on every row as {@code SOURCE + ":" + filename} — so a row
+	 * reads {@code tools/seed/02b-build-catalogue.mjs@2026-09-19:karnataka.json}.
 	 *
-	 * <p><strong>Update this when the books are re-vendored</strong>, together with the table in
-	 * {@code recipe-library/README.md}. A row that cannot be traced to a commit is a row nobody can
-	 * check against its source.
+	 * <p>It names the converter that wrote the books and the day Rajeev approved the recipes in them,
+	 * which together are the whole provenance: the converter is in this repository and its input is
+	 * his per-recipe approvals in {@code docs/work/reference/curated-recipes/}. It is deliberately not
+	 * a commit of another repository any more — until 2026-09-19 this said
+	 * {@code kranthimj23/ikms@41cf173}, which was true of the vendored books and is false of these.
+	 *
+	 * <p><strong>Change this whenever the catalogue is rebuilt from a new round of approvals</strong>,
+	 * together with the table in {@code recipe-library/README.md}. A row that cannot be traced back to
+	 * what produced it is a row nobody can check. Rows written before a change keep the stamp they
+	 * were written with, and a re-load rewrites them, because the upsert updates in place.
 	 */
-	private static final String SOURCE = "kranthimj23/ikms@41cf173";
+	private static final String SOURCE = "tools/seed/02b-build-catalogue.mjs@2026-09-19";
 
 	private static final String BOOKS = "classpath:recipe-library/*.json";
 
@@ -106,11 +127,11 @@ public class LibraryLoader {
 
 	/**
 	 * Loads every book. Idempotent: the upsert keys on {@code (state_slug, recipe_slug)}, so running
-	 * this twice leaves 5,376 rows rather than 10,752, and a corrected book updates in place.
+	 * this twice leaves 44 rows rather than 88, and a corrected book updates in place.
 	 *
 	 * <p>Runs in one transaction. A partial library is harder to reason about than none — a temple
-	 * searching mid-load would find some of Karnataka and none of Kerala with nothing on the screen
-	 * to say so.
+	 * searching mid-load would find some of Karnataka and none of Andhra Pradesh with nothing on the
+	 * screen to say so.
 	 */
 	/**
 	 * <p>Deliberately not {@code @Transactional}. The flag that lets this write has to be on the
@@ -126,11 +147,15 @@ public class LibraryLoader {
 	 * Loads the books matching an Ant pattern. Production always loads {@link #BOOKS} and nothing
 	 * else; this exists so a test can hand the reader one small book of its own.
 	 *
-	 * <p>Needed because the vendored books carry neither a {@code prep} key nor a {@code not_bought}
-	 * one — the preparation is still inside their names, after a comma, and nothing in them says the
-	 * temple never buys a thing — so there is no real book that proves the reader carries either
-	 * across. {@link RecipeLibraryIT} reads the real 32 and is the test that matters for everything a
-	 * real book does say; a fixture is the only way to read a key none of them holds.
+	 * <p>{@link RecipeLibraryIT} loads the real catalogue and is the test that matters for everything
+	 * the real files do say — its 44 recipes, its 83 preparations and its 15 never-bought marks all
+	 * reach the table there. A fixture is for the two things the catalogue cannot show. One is a
+	 * collision: no name in it repeats, so the disambiguation ladder is driven from
+	 * {@code src/test/resources/ladder-book}, two small books that do repeat one. The other is the
+	 * older shape, a preparation still written inside the ingredient's name after a comma ("Green
+	 * chilli, slit") with no {@code prep} key at all — gone from the catalogue, still supported by the
+	 * reader, and covered by {@code src/test/resources/prep-book}. Both would otherwise go untested
+	 * the day the catalogue is regenerated.
 	 */
 	Result load(String books) {
 		TenantContext.setLibraryLoad();
@@ -238,14 +263,17 @@ public class LibraryLoader {
 
 			// The local-language name and unit are deliberately not carried across. `scaled` is,
 			// where the book precomputed it: it is the book's own arithmetic at 50, 100, 250 and
-			// 500 devotees, and showing it costs nothing.
+			// 500 devotees, and showing it costs nothing. No line of the curated catalogue carries
+			// one — the vendored books did, on 19,356 lines — so this reads null on all 454 of
+			// today's lines and is kept for a book that computes them again.
 			//
 			// `prep` is carried too, as of T-401. It is what the cook does to the line — "Slit",
 			// "Roasted", "Soaked overnight" — and the books used to say it inside the name, after a
 			// comma ("Green chilli, slit"), which is why nothing here ever stored it: the import
 			// split the name again at the far end and recovered it. Rajeev's curated recipes
 			// (2026-09-19) name the ingredient plainly and put the preparation in `prep`, so there
-			// is no comma left to split and this key is now the only record of 84 of his notes.
+			// is no comma left to split and this key is now the only record of the 83 such notes in
+			// the catalogue.
 			// Written even when the book has none, as an explicit null: a line whose key is absent
 			// and a line whose preparation is genuinely nothing would otherwise read alike, and the
 			// reader downstream could not tell an old row from a new one.
