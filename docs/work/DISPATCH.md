@@ -1,5 +1,223 @@
 # Dispatch ledger
 
+## ▶ WAVE S-I (2026-09-20): the staff record, the inventory screen, and three defects — T-428 to T-432
+
+**Source.** Rajeev's own words, relayed 2026-09-20: the Staff pages (name clickable → view page with
+Edit/Save/Cancel, photo top right, prominent name, PAN behind an eye in its own box, Notes removed
+unless justified, document uploads for scanned PAN and Aadhaar cards, previous employment history);
+"Inventory … is very confusing and not up to the standard of other pages in our app. It needs to be
+reimagined"; the two defects the seeding found; and a volunteer who cannot see anything she has
+already done. Plus one found by pressing staging: the whole-number refusal reads as a machine.
+
+**Where it is built.** A worktree of its own at `/Users/Rajeev/Workspace/kms-staff-inventory`, branch
+`wave-staff-inventory`, off `origin/main` `7ed4c3b1`. Its own database `kms_wave5` (a `pg_dump` copy
+of `kms_seed`, so it carries the seeded temple), its own API on **:8093** and its own web on
+**:3003**. It touches neither the :8080 stack nor the seeding team's :8091.
+
+**State at reservation, established from the tree and not from this ledger.** `HEAD` `7ed4c3b1`,
+tree clean. Highest migration on disk **`V154`**, confirmed both by `ls` and by
+`flyway_schema_history` on the booted `kms_wave5` — next free is **`V155`**. Highest 4xx error code
+**`KMS-400191`** (`PART_OF_A_COUNTED_THING`) — next free is **`KMS-400192`**.
+
+### Waves, and why they are drawn here
+
+**Wave 1: T-428, T-429, T-430, T-431 together.** Their path sets are disjoint — staff, shifts,
+backend inventory, and the shared form vocabulary.
+
+**Wave 2: T-432 alone.** The inventory rebuild cannot run beside wave 1 for two separate reasons,
+either of which on its own would be enough:
+
+- It owns `InventoryItemService.java` and `StockItemView.java`, which **T-430** is inside.
+- It owns `frontend/app/inventory/**` and `frontend/components/InventoryItemForm.tsx`, which
+  **T-431** is inside — three of the 26 counted quantity boxes live there.
+
+Running it second is also the better order on the merits: it inherits a `lowStock()` that knows
+about never-bought ingredients and a refusal sentence that says why, rather than having to be told
+about both and then diverge from them.
+
+### One correction to the brief, found before dispatch
+
+The brief names **four** surfaces for the never-bought defect — list, dashboard count, nightly
+digest, reorder suggestions. Measured against the tree, **reorder suggestions is already correct**:
+`ShoppingListService` drops a marked ingredient in the one loop where a line is born
+(`if (ref.notBought()) continue;`), naming the threshold stream explicitly among the things it
+drops. And there is a **fifth** surface nobody had named: the inventory screen counts its own "below
+reorder level" in the browser, over the unfiltered payload. So the work is three defective surfaces
+plus one nobody listed, and the shape of the fix is decided below rather than left to the builder,
+because it is a product decision and not a mechanical one.
+
+### Reservations, made in one pass
+
+Nothing was stubbed by the work manager this wave: the tooling refused it write access to
+`ErrorCode.java` and `frontend/lib/api.ts`. Both are therefore handed out **by ownership**, which is
+the same mechanism `D27-3` used, with each owner's region named so two builders are never in one
+place.
+
+- **Migrations.** `V155`, `V156`, `V157` to **T-428**, with `V158` spare for T-428 alone. `V159` to
+  **T-429**, only if it decides it wants the missing `(tenant_id, volunteer_user_id)` index on
+  `shift_signups`; an unused number stays unused. **T-430** and **T-431** get none and need none.
+- **`error/ErrorCode.java`.** Owned outright by **T-428**, which is the only task in the wave that
+  can need a code. Its allocation is **`KMS-400192`**, and **`KMS-400193`** if a second is genuinely
+  required. Document size and type failures are **not** new codes: `KMS-400165` and `KMS-400166`
+  already exist for exactly those two and are to be reused. Nobody else in the wave opens the file.
+- **`frontend/lib/api.ts`.** Two owners, two regions, about 2,600 lines apart, `Edit` only and never
+  `Write`:
+  - **T-428** — the `StaffProfileView` / `HireStaffInput` type block (~3500–3650) and the
+    `// ---- The staff register (E6-S8)` method block (~6810–6980).
+  - **T-429** — one insertion after `MyReleasedShiftView` (ends ~4219) for its view type, and one
+    after `myReleasedShifts` (ends ~7224) for its method. Nothing else.
+  - **T-430** and **T-431** must not open it. T-430's fix is deliberately designed so that it does
+    not have to (see the decisions below).
+  Each owner quotes the line ranges it added in its proof, so a widening can be audited.
+- **`auth/RolePermissions.java` and `auth/Permission.java`.** **Nobody.** `MANAGE_STAFF` already
+  gates everything on a staff record, which is what Rajeev asked for — "access through the same
+  permission as the rest of a staff record" — and `VIEW_OWN_SHIFTS` is already held by every role
+  and is already what `/my-shifts` and `/my-shifts/released` use. A task that believes it needs a
+  new permission stops and reports.
+- **`audit/AuditAction.java` and `audit/AuditEntityType.java`.** **T-428** only. Adding an action
+  needs no migration: `V3` puts the vocabulary in Java on purpose.
+- **`frontend/lib/nav.ts`, `Sidebar.tsx`, `routes.ts`.** **Nobody**, and nobody needs them. The staff
+  detail screen is a sub-route of `/staff`, which is already in the menu and already lights up
+  through `activeHref`; the volunteer's history goes on `/my-shifts`, which is already a row.
+- **`frontend/lib/format.ts`.** **Nobody** in wave 1; **T-432** owns it in wave 2, because the
+  one-row-one-unit fix lands at `format.ts:696` and `quantity()` has about forty callers.
+- **`frontend/components/ds/formMessages.ts` and `ds/Form.tsx`.** **T-431** only.
+- **`frontend/components/AttachmentUpload.tsx` and `AttachmentThumb.tsx`.** **T-428** only. T-431
+  imports `required` from `formMessages` into `AttachmentUpload` and must not edit it; if its reword
+  forces a change there, it stops and reports.
+
+### Decisions taken centrally, so two builders cannot answer them differently
+
+**1. A never-bought ingredient never reads "Low", anywhere.** The fix belongs on
+`StockItemView.belowThreshold` itself — `ITEM_SELECT` already joins `ingredients`, so carrying
+`is_not_bought` onto `ItemRow` costs no extra statement, which matters because
+`ShoppingListStatementCountIT` counts them. That one change corrects the endpoint, the digest, the
+dashboard count and the browser's own count together, because all four read the same flag.
+
+The product argument, which is the part that is not mechanical: "Low" is an instruction to act, and
+the action is to buy. A temple cannot buy water. A badge that says act-now when nothing can be done
+is the colour rule broken — amber warns, red is act-now, and neither is true of a tap. Water at
+minus 1,358 litres is not a shortage; it is a ledger artefact of cooking with something nobody
+stocks.
+
+**`list()` itself is not filtered.** Water keeps its inventory row, its stock detail page and its
+costing, exactly as `V153` promised — it still goes into the pot. Only the judgement changes.
+
+**2. `StockItemView` does not grow a `notBought` field in wave 1.** The client's question is "should
+somebody act", and `belowThreshold` already answers it. That is also what keeps T-430 out of
+`api.ts`. T-432 may add the field in wave 2 if the rebuilt screen needs to *explain* the absence.
+
+**3. The whole-number refusal takes the sentence the backend already has.** The server says
+*"Apron is counted in whole pieces. Enter 88 or 89."* — it names the thing, gives the reason and
+offers the two numbers either side. The browser says *"Tell me when Agarbatti drops below must be a
+whole number"*. One vocabulary, one wording: the browser adopts the server's, minus the full stop
+that `DESIGN_SYSTEM` §9 forbids under a field. T-431 owns the exact words; T-432 carries them onto
+the rebuilt screen rather than inventing its own.
+
+**4. The server-side whole-number check on the reorder threshold belongs to T-432, not T-431.**
+It is missing — `@PositiveOrZero` and nothing else, so `PUT /api/v1/inventory/items/{id}` carrying
+`{"reorderThreshold": 7.5}` is accepted and stored as `7.500`. The natural home for the fix is the
+task that is already rewriting that field to carry a unit, and it keeps T-431 out of
+`InventoryItemService.java`, which T-430 is in.
+
+### The rows
+
+| id | what, in a line | wave | state | proof |
+|---|---|---|---|---|
+| **T-428** | A staff record opens as a record, and carries its papers and its past jobs | 1 | `queued` | `docs/work/proof/T-428.md` |
+| **T-429** | A volunteer can see what she has already done | 1 | `queued` | `docs/work/proof/T-429.md` |
+| **T-430** | An ingredient the temple never buys never reads "Low" | 1 | `queued` | `docs/work/proof/T-430.md` |
+| **T-431** | The whole-number refusal says why, in every box | 1 | `queued` | `docs/work/proof/T-431.md` |
+| **T-432** | Inventory, reimagined | 2 | `queued` | `docs/work/proof/T-432.md` |
+
+The full `what`, `paths` and acceptance criteria for each are in the brief its builder was given.
+
+### States at the end of the wave — 2026-09-20
+
+All five `proven`. Nothing committed, pushed or deployed; the tree is dirty and waiting for the
+release agent.
+
+| id | state | proof |
+|---|---|---|
+| T-428 | `proven` | `docs/work/proof/T-428.md` (with the browser appendix) |
+| T-429 | `proven` | `docs/work/proof/T-429.md` |
+| T-430 | `proven` | `docs/work/proof/T-430.md` |
+| T-431 | `proven` | `docs/work/proof/T-431.md` |
+| T-432 | `proven` | `docs/work/proof/T-432.md` (with the merged-run addendum) |
+
+**Migrations actually used: `V155` (T-428, staff documents and previous employment) and `V159`
+(T-429, `shift_signups` by volunteer).** `V156`, `V157`, `V158`, `V160` and `V161` were reserved and
+are unused; they stay unused. **No new error code was minted** — `KMS-400192` and `KMS-400193` are
+still free, because T-428 found `KMS-400165`/`KMS-400166` already covered file type and size, and
+T-432 found `KMS-400191` already said exactly what a fractional counted threshold needs to say. No
+new permission, no nav or route change.
+
+### Final merged-tree check — after every builder was out
+
+**Backend**, tallied by the work manager from `backend/build/test-results/test/*.xml`, summed per
+file rather than keyed on the XML `name` attribute:
+```
+classes=261 tests=3755 failures=0 errors=0 skipped=7
+```
+`BUILD SUCCESSFUL in 7m 22s`. The `gradle-exit=0` line in the log is annotated *NOT evidence* on
+purpose: `work-lock` printed `exited 0` over a Gradle `BUILD FAILED` **four times in this wave
+alone**, twice inside T-430 and twice inside T-432, both caught by reading the log.
+
+**Frontend**, `tsc && eslint --max-warnings=0 && vitest run && next build`:
+```
+ Test Files  188 passed (188)
+      Tests  2756 passed (2756)
+ ✓ Compiled successfully
+ ✓ Generating static pages (77/77)
+```
+`tsc` silent, `eslint` clean.
+
+Started at 253 classes / 3693 backend tests and 187 files / 2702 frontend tests. Ended at 261 / 3755
+and 188 / 2756 — **+8 backend classes, +62 backend tests, +54 frontend tests**, nothing removed,
+nothing newly skipped.
+
+**And the merged run earned its place again.** Its first pass came back `Test Files 1 failed | 187
+passed (188)`, `Tests 2 failed | 2754 passed (2756)`: two tests in
+`frontend/__tests__/supplies.test.tsx` looking for the label `/^ingredient$/i` that T-432 had
+correctly renamed to "Ingredient or supply" at Rajeev's instruction. Every builder's own run was
+green. T-432 was granted the file after the work manager confirmed no other contract held it, and
+fixed it to 188/2756.
+
+**The lesson, which is new and belongs in `README.md` beside wave 6's:** *a test named after screen
+A that asserts on screen B is invisible to a contract keyed on filenames.* The wave-6 rule says to
+grant a task every existing test that covers a file it modifies, and the sweep for this wave did
+that — by filename. `supplies.test.tsx` is named for `/supplies` and reaches into the Add-to-inventory
+form, so no filename search would ever have found it. **Grep test bodies for the screens a task
+touches, not just test filenames.**
+
+### Two more things this wave learned, both worth carrying
+
+**A path contract does not isolate the backend *compile*, only the edits.** For about twenty minutes
+no builder could run any test: T-428 changed `staff/HireStaffRequest` and had not yet updated
+`OwnAccountsAtOtherTemplesIT`, and Gradle compiles the whole test source set, so one task's
+half-finished signature change broke three other tasks' runs with errors in files they had never
+opened. This is the same shape as `README.md` lesson 6 (Flyway reads the whole migration directory)
+in a second medium. The habit is the same: **a builder seeing mass failures at compile or context
+startup runs `git status` and reads the error's filename before believing it broke something.**
+
+**`git checkout HEAD -- <file>` destroys another builder's uncommitted work.** T-432 reverted
+`InventoryItemService.java` for a baseline measurement and only got away with it because it had
+copied the file first — T-430's `is_not_bought` change lives in there and is not committed. In a
+tree that always has builders in it, **copy before you revert, or do not revert.**
+
+### Two things that are NOT being built here, deliberately
+
+- **A `supply` / `ekadashi` / category field on a library recipe line.** Written up for Rajeev's
+  decision instead, as asked. The facts: `MasterRecipeIngredient` carries seven fields and none of
+  them says what kind of thing it is, so `RecipeImportService.create` inserts with `is_supply` unset
+  and the column's `false` default files leaf plates as food, with no warning to anybody.
+  `notBought` proves the mechanism exists end to end.
+- **A second storage mechanism for staff documents.** There is no need for one, which is the answer
+  to the question Rajeev asked be answered before building. `attachments` plus `DocumentStorage`
+  (`V144`) is the uploads path, it streams every read through an authorised endpoint with no signed
+  URL anywhere, and reads of staff PII are already recorded — `STAFF_PAN_VIEWED` sets the
+  convention, including recording *what* was read without recording its contents.
+
 ## ▶ LOCAL BUILD (2026-09-17 to 2026-09-19): T-217 to T-241, released 2026-09-19
 
 These were built and checked against the local stack (`docs/work/LOCAL-STACK.md`), not dispatched

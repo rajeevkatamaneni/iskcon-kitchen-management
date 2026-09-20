@@ -1233,6 +1233,55 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-20 — A staff member has a record, a volunteer can see what she has done, and Inventory is rebuilt (tasks T-428 to T-432)
+
+**Migrations V155** (staff documents and previous employment, both under `enable_tenant_rls()`) and
+**V159** (`shift_signups` indexed by volunteer); V156–V158 and V160–V161 were reserved to the wave
+and are unused, so **the next free is V156**. **No new error code** — the next free is still
+KMS-400192 — and **no new permission**: a staff record is behind `MANAGE_STAFF` and a volunteer's own
+history behind `VIEW_OWN_SHIFTS`, both of which already existed. Three new audit actions for staff
+documents. **Deployed to staging; not seen working by Rajeev.**
+
+**A staff member's name is a link, and it opens their record.** `/staff/[id]` leads with the person's
+own name and their photograph top right, Edit beside it, Save and Cancel where Edit was. A former
+employee is offered neither. The PAN sits in a box of its own behind an eye, and pressing the eye is
+audited as it always was. The record holds scans of the PAN and Aadhaar cards and a photograph — one
+of each per person — and where the person worked before: employer, their title there, the manager and
+their number, the dates and why they left. Nothing about previous employment is verified and there is
+deliberately no flag claiming it is. The scans go through the same storage, the same sniffed content
+type and the same ten-megabyte ceiling as a vendor's bill; there is no public or signed URL anywhere
+in this application, and every read of a document writes an audit row naming who read whose document
+of which kind. **Notes is retired** — Rajeev: *"If you cant justify why that is needed, remove it."*
+It was an unlabelled single-line box with no author and no date, which the next edit destroyed without
+trace. Nothing reads or writes the column now; it is **not dropped**, because three rows still hold
+text and that is a data decision, not a schema tidy-up.
+
+**A volunteer can see what she has already done.** *My shifts* grows a **Past shifts** section: the
+shifts she served, newest first, each saying whether she was recorded as having turned up. Capped at
+the fifty most recent, and the screen says so when fifty arrive rather than letting a volunteer of
+three years believe that is all of it.
+
+**An ingredient the temple never buys never reads "Low".** V153's mark kept such an ingredient off the
+shopping list but not out of the low-stock judgement, so the seeded temple showed **water at minus
+1,358.5 litres** — in the low-stock list, in the dashboard's below-par count, in the nightly digest,
+and in the inventory screen's own badge and tally, which counted for itself in the browser. "Low"
+means buy some, and a temple cannot buy water; the figure is an artefact of cooking with something
+nobody stocks and grows for as long as the temple keeps cooking, so it would never have cleared. All
+four surfaces now agree.
+
+**The whole-number refusal says why.** A counted thing refused a fraction with the field label read
+back at you — *"Tell me when Agarbatti drops below must be a whole number"*. It now gives the server's
+own reason, **"Agarbatti is counted in whole pieces"**, in all 26 counted quantity boxes across 17
+screens.
+
+**Inventory is rebuilt**, after Rajeev: *"is very confusing and not up to the standard of other pages
+in our app. It needs to be reimagined."* The list is one table read left to right as a sentence —
+**Item · On hand · Available · On order · Lasts · Last counted** — with the item's location as the
+muted line under its name and a search box over the top. On order, how long the stock lasts and when
+it was last counted are three facts the screen never carried. The item page follows the same order.
+It also closes a hole that had been open since the counted-units work: `PUT /inventory/items/{id}`
+accepted a fractional reorder level for a counted item, which the create path had always refused.
+
 ### 2026-09-20 — A temple arranges its own left-hand menu, and nothing counted one by one can be a fraction (tasks T-420 to T-427)
 
 **Migration V154**; the next free is V155. **Error codes KMS-400189** (`MENU_LAYOUT_NOT_UNDERSTOOD`),
