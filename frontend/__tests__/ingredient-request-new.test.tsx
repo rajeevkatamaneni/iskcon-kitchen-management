@@ -248,7 +248,10 @@ describe("raising an ingredient request", () => {
     );
     // A draft is a note to oneself until it is sent, so nothing goes for review.
     expect(submitMock).not.toHaveBeenCalled();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/ingredient-requests/ir-new"));
+    // It lands on the request, saying which of the two things happened (T-370).
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith("/ingredient-requests/ir-new?created=draft")
+    );
   });
 
   it("still asks for the kitchen and the date on a draft, because the record cannot exist without them", async () => {
@@ -283,7 +286,9 @@ describe("raising an ingredient request", () => {
       )
     );
     await waitFor(() => expect(submitMock).toHaveBeenCalledWith("ir-new", "token"));
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/ingredient-requests/ir-new"));
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith("/ingredient-requests/ir-new?created=submitted")
+    );
   });
 
   /**

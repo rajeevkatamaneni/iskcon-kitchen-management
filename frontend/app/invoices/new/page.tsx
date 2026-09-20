@@ -190,7 +190,17 @@ function CreateInvoiceView() {
   const [bill, setBill] = useState<AttachmentView | null>(null);
   const [totals, setTotals] = useState<InvoiceTotalsDraft>(EMPTY_TOTALS);
   const [tried, setTried] = useState(false);
-  const [problems, setProblems] = useState<string[]>([]);
+  /**
+   * Whether the copy of the bill is on its way up right now (T-370, staging defect 1).
+   *
+   * <p>The upload runs on its own clock, so between choosing the file and the server answering,
+   * `bill` is still null while the file's name, its thumbnail and Replace are all on the screen.
+   * Save read `bill` alone and refused with "Upload a copy of the bill." — telling the person to
+   * do the thing they had just done. It was seen once and could not be reproduced, because it needs
+   * the press to land inside the second the upload takes. Nothing here waits on a race being caught
+   * again: while this is true, Save is busy and says so, and the required-check below does not run.
+   */
+  const [billUploading, setBillUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -309,7 +319,9 @@ function CreateInvoiceView() {
   /** Why Save refuses, in the order a person would fix them (the mock's `savingProblems`). */
   function savingProblems(): string[] {
     const out: string[] = [];
-    if (!bill) out.push("Upload a copy of the bill.");
+    // A bill in flight is not a missing bill. Save is busy while it goes up, so this list is never
+    // the reason a person is kept waiting — it only ever names what they still have to do (T-370).
+    if (!bill && !billUploading) out.push("Upload a copy of the bill.");
     if (!isDirect && chosen.length === 0)
       out.push("Choose the deliveries this bill is for, or tick Direct, with no purchase order.");
     if (isDirect && directLines.length === 0) out.push("Add the items on the bill.");
@@ -320,12 +332,34 @@ function CreateInvoiceView() {
     return out;
   }
 
+  /**
+   * What the banner at the top says, worked out on every render rather than frozen at the last press
+   * (T-370, staging defect 2).
+   *
+   * <p>It used to be state, written once by `save` and left standing until the next press: attaching
+   * the bill the banner had asked for left the banner there, still asking. A person reading it has
+   * no way to tell a stale complaint from a live one, so the screen was lying between the fix and the
+   * next press. It is derived now, so every item leaves the list the moment the thing it names is
+   * supplied — the bill lands, a delivery is ticked, the grand total is corrected — and the banner
+   * disappears with the last of them.
+   *
+   * <p>`tried` is what keeps it quiet until somebody has actually pressed Save: nothing is complained
+   * about on a form nobody has tried to submit yet.
+   *
+   * <p>The shared `Form` already does this for the boxes it names (`components/ds/Form.tsx` rechecks
+   * on input and change), so this is the page-level banner catching up with the field-level one. That
+   * banner is this screen's alone — no other screen keeps a list of its own saving problems.
+   */
+  const problems = tried ? savingProblems() : [];
+
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Enter in a box can submit while the bill is still going up, where the Save button cannot be
+    // pressed at all. The upload is the thing to wait for, and the header says so; running the
+    // required-check now would refuse a bill that is seconds from being there.
+    if (billUploading) return;
     setTried(true);
-    const found = savingProblems();
-    setProblems(found);
-    if (found.length > 0 || !bill) return;
+    if (savingProblems().length > 0 || !bill) return;
 
     const f = new FormData(event.currentTarget);
     const invoiceNumber = String(f.get("invoiceNumber") ?? "").trim();
@@ -370,8 +404,11 @@ function CreateInvoiceView() {
           <ButtonLink href="/invoices" variant="ghost">
             Cancel
           </ButtonLink>
-          <Button type="submit" form={FORM} busy={busy}>
-            Save invoice
+          {/* Busy, not disabled, and it says which of the two waits it is: a bill on its way up, or
+              the invoice being saved. `Button`'s busy refuses the press and keeps the button's full
+              weight, which is what makes the wait readable rather than dimmed out (T-370). */}
+          <Button type="submit" form={FORM} busy={busy || billUploading}>
+            {billUploading ? "Uploading the bill…" : "Save invoice"}
           </Button>
         </>
       }
@@ -478,7 +515,8 @@ function CreateInvoiceView() {
           value={bill}
           onChange={setBill}
           upload={async (file) => api.uploadBill(file, await getToken())}
-          invalid={tried && !bill}
+          invalid={tried && !bill && !billUploading}
+          onUploadingChange={setBillUploading}
         />
 
         <div className="grid gap-2">

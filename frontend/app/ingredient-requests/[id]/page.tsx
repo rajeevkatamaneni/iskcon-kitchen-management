@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -57,7 +57,10 @@ const EVENT_LABEL: Record<string, string> = {
 export default function IngredientRequestPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <IngredientRequestRecordView />
+      {/* useSearchParams, for the confirmation "New request" comes back with (T-370). */}
+      <Suspense>
+        <IngredientRequestRecordView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -107,6 +110,34 @@ function RequestRecord({
   const [problem, setProblem] = useState<string | null>(null);
   const [decisionNote, setDecisionNote] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  /**
+   * The confirmation "New request" arrives with (T-370, staging defect 3).
+   *
+   * <p>Submitting a new request created it and then left the person on the emptied form with nothing
+   * on the screen saying so — no confirmation, no reference, no sign that `IR-2026-0003` now existed.
+   * A create ends on the thing it created everywhere else in this application, and says what
+   * happened when it gets there; this is that ending. The sentence goes into the same `notice` the
+   * page's own acts use, so there is one confirmation line on this screen and not two kinds.
+   *
+   * <p>Its words are the page's own: "Sent for review." and "Back to a draft." are what withdrawing
+   * and submitting already say here, so a create says the same thing in the same shape. The
+   * reference is not repeated in it — it is the h1, two lines above.
+   *
+   * <p><strong>The ref guards the capture.</strong> Setting state re-renders, and `router` is a new
+   * object on each render, so without it this effect re-runs for ever — the repo's known
+   * flash-capture loop, which takes a vitest run out of memory. Read once, then the address is
+   * cleared so a reload does not say it again.
+   */
+  const search = useSearchParams();
+  const created = search.get("created");
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !created) return;
+    captured.current = true;
+    setNotice(created === "submitted" ? "Created and sent for review." : "Saved as a draft.");
+    router.replace(`/ingredient-requests/${id}`);
+  }, [created, router, id]);
 
   // Who this person is to this request. The role decides which kind of person they are and the
   // authorship decides which rows are theirs — the same two layers the API answers in.

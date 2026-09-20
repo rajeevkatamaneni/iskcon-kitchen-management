@@ -61,6 +61,24 @@ export interface AttachmentUploadProps {
   /** Show the required message now, whatever the form has done. */
   invalid?: boolean;
   /**
+   * Called with `true` the moment a file starts going up and `false` the moment it is finished,
+   * failed or removed (T-370).
+   *
+   * <p><strong>Why the caller has to know.</strong> A file uploads on its own clock while the rest
+   * of the form is typed, and until it lands `value` is still null. A form whose Save reads only
+   * `value` therefore refuses a bill that is on the screen, with its name, its thumbnail and its
+   * Replace button all visible, and tells the person to upload the thing they have just uploaded.
+   * That was seen once on staging on 2026-09-19 with a 603 KB photo and could not be reproduced,
+   * because it needs Save to land inside the second or so the upload takes — which is exactly the
+   * kind of defect that cannot be closed by trying again. So the box says when it is working, the
+   * form puts its Save into that state, and the required-check never runs against an unfinished
+   * upload at all.
+   *
+   * <p>It is a report, not a request: this box keeps its own `busy` either way, and a caller that
+   * does not pass this behaves as before.
+   */
+  onUploadingChange?: (uploading: boolean) => void;
+  /**
    * Fetches the stored file, for a value that did not come from this device — an invoice being
    * corrected, say. Without it such a value shows an icon for its type rather than a picture.
    */
@@ -84,6 +102,7 @@ export function AttachmentUpload({
   upload,
   invalid = false,
   loadStored,
+  onUploadingChange,
 }: AttachmentUploadProps) {
   const ids = useId();
   const labelId = `${ids}-label`;
@@ -112,6 +131,15 @@ export function AttachmentUpload({
 
   const missing = required && !value && !busy && (invalid || submitted);
 
+  /**
+   * The one place `busy` moves, so the caller's copy of it cannot drift from this box's own.
+   * Every path that starts or ends an upload goes through here.
+   */
+  function setUploading(next: boolean) {
+    setBusy(next);
+    onUploadingChange?.(next);
+  }
+
   async function pick(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     // Cleared so the same file can be chosen again after being removed.
@@ -122,7 +150,7 @@ export function AttachmentUpload({
     const before = chosen;
     setChosen({ key: `chosen-${++chosenSeq}`, file });
     setFailure(null);
-    setBusy(true);
+    setUploading(true);
     try {
       const stored = await upload(file);
       if (mine !== latest.current) return;
@@ -133,14 +161,14 @@ export function AttachmentUpload({
       setChosen(before);
       setFailure(toApiError(caught, "We couldn't upload that file."));
     } finally {
-      if (mine === latest.current) setBusy(false);
+      if (mine === latest.current) setUploading(false);
     }
   }
 
   function remove() {
     latest.current++;
     setChosen(null);
-    setBusy(false);
+    setUploading(false);
     setFailure(null);
     onChange(null);
   }

@@ -271,6 +271,46 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.whatsappEverSent").value(true));
 	}
 
+	/**
+	 * The field is about the temple and never about this order, pinned on the one case that reads as
+	 * a defect until you know that (T-370).
+	 *
+	 * <p>The staging run of 2026-09-19 reported {@code whatsappEverSent: true} on a brand-new DRAFT
+	 * that had never been sent, to a vendor created minutes earlier, and filed it as a wrong value.
+	 * It is the right value: that temple had sent WhatsApp messages before, and this says so. What
+	 * says whether THIS order went out is {@code order.sentAt}, which is null on the very same
+	 * payload — so the two are asserted together here, because reading one as the other is the
+	 * mistake, and a test that only checked the true would not have shown the difference.
+	 *
+	 * <p>{@link #orderCarriesWhetherWhatsAppHasEverSent} covers the same field on an order that WAS
+	 * sent. Neither of them could have caught this, because both used a sent order; a draft is the
+	 * case where the two facts can disagree, and it had no test.
+	 */
+	@Test
+	@DisplayName("a draft that was never sent still reports the temple's WhatsApp, and its own sentAt stays null")
+	void draftNeverSentStillCarriesTheTemplesWhatsApp() throws Exception {
+		UUID poId = draftPo("PO-2026-0050");
+		admin.update("""
+				INSERT INTO tenant_settings (tenant_id, whatsapp_phone_number_id, whatsapp_waba_id,
+						whatsapp_webhook_token, whatsapp_verified_at, whatsapp_last_sent_at)
+				VALUES (?, 'phone-1', 'waba-1', 'tok-1', now(), now())
+				""", tenant);
+
+		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
+				.andExpect(jsonPath("$.order.status").value("DRAFT"))
+				// This order has asked nothing of anybody.
+				.andExpect(jsonPath("$.order.sentAt").doesNotExist())
+				// The temple's WhatsApp has, which is the whole of what this field claims.
+				.andExpect(jsonPath("$.whatsappEverSent").value(true));
+
+		// And it follows the temple, not the order: take the temple's send away and the same
+		// untouched draft reports false.
+		admin.update("UPDATE tenant_settings SET whatsapp_last_sent_at = NULL WHERE tenant_id = ?", tenant);
+		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
+				.andExpect(jsonPath("$.order.sentAt").doesNotExist())
+				.andExpect(jsonPath("$.whatsappEverSent").value(false));
+	}
+
 	@Test
 	@DisplayName("a volunteer cannot send POs on WhatsApp")
 	void volunteerForbidden() throws Exception {
@@ -557,6 +597,16 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 		UUID poId = admin.queryForObject("""
 				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, sent_at, created_by)
 				VALUES (?, ?, ?, 'SENT', now(), ?) RETURNING id
+				""", UUID.class, tenant, number, vendor, staffId);
+		line(poId);
+		return poId;
+	}
+
+	/** An order as it is the moment it is raised: no sent_at, and nothing has been asked of the vendor. */
+	private UUID draftPo(String number) {
+		UUID poId = admin.queryForObject("""
+				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, created_by)
+				VALUES (?, ?, ?, 'DRAFT', ?) RETURNING id
 				""", UUID.class, tenant, number, vendor, staffId);
 		line(poId);
 		return poId;

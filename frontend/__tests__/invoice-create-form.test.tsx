@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import {
   ApiError,
   type AttachmentView,
@@ -585,5 +585,103 @@ describe("saving", () => {
     expect(await screen.findByText("KMS-400169")).toBeInTheDocument();
     expect(screen.getByText("One of those deliveries has already been billed.")).toBeInTheDocument();
     expect(h.pushMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The bill while it is still going up, and the banner after the thing it asked for arrives
+ * (T-370, staging defects 1 and 2).
+ */
+describe("saving against an upload that has not finished", () => {
+  /** Holds `uploadBill` open until the returned function is called, the way a slow photo does. */
+  function heldUpload() {
+    let release!: (v: AttachmentView) => void;
+    h.uploadBill.mockImplementation(() => new Promise<AttachmentView>((resolve) => (release = resolve)));
+    return () => act(async () => void release(BILL));
+  }
+
+  function chooseTheBill() {
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], "KVM-0917.jpg", { type: "image/jpeg" });
+    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file] } });
+  }
+
+  /** Everything but the bill: a form whose only outstanding thing is the upload. */
+  async function readyButForTheBill() {
+    await open();
+    await chooseVendor();
+    await tick(L44);
+    await tick(L45);
+    type(box("Tomato, ripe billed quantity"), "50");
+    type(box("Tomato, ripe amount"), "4500");
+    type(box("Sona masoori rice amount"), "6000");
+    type(box("Cardamom billed quantity"), "0");
+    header();
+    totals("10500");
+  }
+
+  it("makes Save busy and says it is uploading, and refuses nothing for a bill that is on its way", async () => {
+    const finish = heldUpload();
+    await readyButForTheBill();
+    chooseTheBill();
+
+    const button = await screen.findByRole("button", { name: "Uploading the bill…" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("button", { name: "Save invoice" })).not.toBeInTheDocument();
+
+    // Enter in a box submits the form even though the button itself cannot be pressed. Nothing is
+    // saved and, above all, nobody is told to upload the file they are watching upload.
+    fireEvent.submit(screen.getByRole("form", { name: "Create an invoice" }));
+    expect(screen.queryByText("This invoice can’t be saved yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Upload a copy of the bill.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Copy of the bill is required")).not.toBeInTheDocument();
+    expect(h.recordInvoice).not.toHaveBeenCalled();
+
+    await finish();
+    const saveButton = await screen.findByRole("button", { name: "Save invoice" });
+    expect(saveButton).toBeEnabled();
+    fireEvent.click(saveButton);
+    await waitFor(() => expect(h.recordInvoice).toHaveBeenCalled());
+    expect(h.recordInvoice.mock.calls[0][0].billAttachmentId).toBe("att-1");
+  });
+
+  // The negative control for the one above: with no upload in flight, a missing bill is still
+  // refused in exactly the words it always was.
+  it("still refuses a bill that was never chosen at all", async () => {
+    await readyButForTheBill();
+    save();
+
+    expect(await screen.findByText("Upload a copy of the bill.")).toBeInTheDocument();
+    expect(screen.getByText("Copy of the bill is required")).toBeInTheDocument();
+    expect(h.recordInvoice).not.toHaveBeenCalled();
+  });
+
+  it("clears each line of the banner as the thing it names is supplied, and the banner with the last", async () => {
+    await open();
+    await chooseVendor();
+    await tick(L44);
+    await tick(L45);
+    type(box("Tomato, ripe billed quantity"), "50");
+    type(box("Tomato, ripe amount"), "4500");
+    type(box("Sona masoori rice amount"), "6000");
+    type(box("Cardamom billed quantity"), "0");
+    header();
+    // Two things wrong at once, so that fixing one is visibly not fixing the other.
+    totals("10000");
+    save();
+    expect(await screen.findByText("Upload a copy of the bill.")).toBeInTheDocument();
+    const adding = "The sub total, GST, other charges and discount don’t add up to the grand total on the bill.";
+    expect(screen.getByText(adding)).toBeInTheDocument();
+
+    // The bill arrives. Its line goes, with no second press; the figures' line stays.
+    await upload();
+    await waitFor(() => expect(screen.queryByText("Upload a copy of the bill.")).not.toBeInTheDocument());
+    expect(screen.getByText("This invoice can’t be saved yet.")).toBeInTheDocument();
+    expect(screen.getByText(adding)).toBeInTheDocument();
+
+    // The figures are put right. The last line goes and the banner goes with it.
+    totals("10500");
+    await waitFor(() => expect(screen.queryByText(adding)).not.toBeInTheDocument());
+    expect(screen.queryByText("This invoice can’t be saved yet.")).not.toBeInTheDocument();
   });
 });

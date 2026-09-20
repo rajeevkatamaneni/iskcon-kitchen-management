@@ -13,6 +13,8 @@ const {
   withdrawMock,
   issueMock,
   pushMock,
+  replaceMock,
+  searchRef,
 } = vi.hoisted(() => ({
   authRef: {
     current: {
@@ -35,12 +37,15 @@ const {
   withdrawMock: vi.fn(),
   issueMock: vi.fn(),
   pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+  /** The address the page opens on, so a test can arrive with "New request"'s ?created= on it. */
+  searchRef: { current: new URLSearchParams() },
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock, replace: vi.fn() }),
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
   useParams: () => ({ id: "ir1" }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => searchRef.current,
 }));
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => authRef.current }));
 vi.mock("@/lib/api", async (orig) => {
@@ -137,6 +142,8 @@ describe("the ingredient request record", () => {
     withdrawMock.mockReset().mockResolvedValue(undefined);
     issueMock.mockReset().mockResolvedValue(undefined);
     pushMock.mockReset();
+    replaceMock.mockReset();
+    searchRef.current = new URLSearchParams();
   });
 
   it("shows the request, its lines, its dishes and its trail", async () => {
@@ -200,6 +207,43 @@ describe("the ingredient request record", () => {
     await waitFor(() =>
       expect(pushMock).toHaveBeenCalledWith("/ingredient-requests?deleted=IR-2026-0041")
     );
+  });
+
+  // --- Arriving here from "New request" (T-370) -------------------------
+
+  /**
+   * Staging, 2026-09-19: submitting a new request created IR-2026-0003 and left the person on the
+   * emptied form with nothing saying so. A create ends on the thing it created and says what
+   * happened when it gets there, as every other create in this application does.
+   */
+  it("says the request was created and sent, and clears the address behind it", async () => {
+    searchRef.current = new URLSearchParams("created=submitted");
+    render(<IngredientRequestPage />);
+    await screen.findByRole("heading", { name: /IR-2026-0041/ });
+
+    expect(await screen.findByText("Created and sent for review.")).toBeInTheDocument();
+    // Read once: a reload must not say it again.
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/ingredient-requests/ir1"));
+    expect(replaceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("says a draft was saved when that is what happened", async () => {
+    searchRef.current = new URLSearchParams("created=draft");
+    render(<IngredientRequestPage />);
+    await screen.findByRole("heading", { name: /IR-2026-0041/ });
+
+    expect(await screen.findByText("Saved as a draft.")).toBeInTheDocument();
+    expect(screen.queryByText("Created and sent for review.")).not.toBeInTheDocument();
+  });
+
+  // The negative control: opening the record in the ordinary way says nothing and rewrites nothing.
+  it("says nothing when the record is simply opened", async () => {
+    render(<IngredientRequestPage />);
+    await screen.findByRole("heading", { name: /IR-2026-0041/ });
+
+    expect(screen.queryByText("Created and sent for review.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Saved as a draft.")).not.toBeInTheDocument();
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 
   it("refuses to send a draft with no dishes on it, and says why", async () => {

@@ -52,7 +52,13 @@ function NewIngredientRequestView() {
       if (intent === "SUBMIT") {
         await api.submitIngredientRequest(id, token);
       }
-      router.push(`/ingredient-requests/${id}`);
+      // The request's own page, carrying what just happened, so it lands with a confirmation
+      // instead of in silence (T-370, staging defect 3: a submit created IR-2026-0003 and left the
+      // person looking at an empty form, with nothing on the screen saying the request existed).
+      // The same shape "Create an invoice" uses — the destination reads the parameter once, shows
+      // the sentence and clears the address. Only what happened travels; the reference does not,
+      // because the page it lands on has already loaded the request and knows it.
+      router.push(`/ingredient-requests/${id}?created=${intent === "SUBMIT" ? "submitted" : "draft"}`);
     } catch (e) {
       setError(toApiError(e, "We couldn’t save that request."));
       setBusy(false);
