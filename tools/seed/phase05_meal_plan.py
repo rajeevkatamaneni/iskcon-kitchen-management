@@ -32,19 +32,55 @@ from __future__ import annotations
 
 import random
 import sys
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import ApiError, Tally, parse_args, sign_in, step, info, note  # noqa: E402
-from common.config import KITCHEN_MANAGER, TEMPLE_ADMIN  # noqa: E402
+from common.config import TEMPLE_ADMIN, kitchen_manager  # noqa: E402
 
 PHASE = "phase05"
 
 # A fixed seed, so two runs of this script plan the same menu. A simulation that changed every
 # time it was rebuilt would be impossible to talk about ("the Tuesday with the Puliyogare").
 SEED = 20260829
+
+
+# How long before a meal is ready the crew turns up, and how long after it they are still there.
+# Cooking and laying out the hall take the first; serving and clearing take the second.
+SHIFT_BEFORE = timedelta(hours=2, minutes=30)
+SHIFT_AFTER = timedelta(hours=2)
+
+# Where a meal kind has no ready time of its own — an event, a deity offering — the shift falls
+# back to the middle of the day rather than to a number typed twice.
+FALLBACK_READY = time(12, 0)
+
+
+def shift_hours(kind: dict) -> tuple[str, str]:
+    """
+    The hours of the volunteer shift on a meal, taken from when that meal is ready.
+
+    They used to be hard-coded: everything but dinner ran 10:00 to 14:00. That put a **breakfast
+    service at ten in the morning**, and on a festival day it put the breakfast, the lunch and the
+    feast in the identical four hours — three services nobody could work more than one of, which
+    is also what made the roster read as though nobody helps.
+
+    The application already knows the answer. Every meal kind carries a `defaultReadyTime`:
+    breakfast 07:30, lunch 12:00, the festival feast 12:30, dinner 19:30. A shift is that time with
+    the cooking before it and the clearing after it, so breakfast now starts at five in the morning,
+    which is when it really starts.
+    """
+    raw = (kind.get("defaultReadyTime") or "").strip()
+    try:
+        ready = time.fromisoformat(raw) if raw else FALLBACK_READY
+    except ValueError:
+        ready = FALLBACK_READY
+    # Any date will do; only the clock arithmetic matters, and datetime is the only thing that
+    # knows how to take two and a half hours off a time without going negative.
+    middle = datetime.combine(date(2000, 1, 1), ready)
+    return ((middle - SHIFT_BEFORE).time().isoformat(),
+            (middle + SHIFT_AFTER).time().isoformat())
 
 
 def heads(day: date, festival: str | None) -> tuple[int, int, int]:
@@ -174,7 +210,7 @@ def main() -> int:
 
     # The Kitchen Manager plans the meals: it is their job, and it exercises the planner's
     # kitchen guard rather than going round it as the Temple Admin.
-    planner = sign_in(args.api, KITCHEN_MANAGER, args.tenant)
+    planner = sign_in(args.api, kitchen_manager(args.api, args.tenant, needs_approval=False, needs_planner=True), args.tenant)
     admin = sign_in(args.api, TEMPLE_ADMIN, args.tenant)
 
     kinds = {k["name"]: k for k in planner.get("/api/v1/meal-kinds")}
@@ -265,11 +301,12 @@ def main() -> int:
 
             # A shift on the meals that need hands: every festival, and Sunday lunch.
             if festival or (kind_name == "Lunch" and day.weekday() == 6):
+                start, end = shift_hours(kind)
                 payload["volunteerShift"] = {
                     "title": f"{festival or 'Sunday'} {kind_name.lower()} service",
                     "description": "Serving prasadam and clearing the hall afterwards.",
-                    "startTime": "10:00:00" if kind_name != "Dinner" else "18:00:00",
-                    "endTime": "14:00:00" if kind_name != "Dinner" else "21:30:00",
+                    "startTime": start,
+                    "endTime": end,
                     "location": "Prasadam hall",
                     "capacity": 12 if festival else 6,
                     "reminderOffsetsMinutes": [1440, 120],
