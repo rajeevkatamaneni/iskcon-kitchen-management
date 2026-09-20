@@ -2,6 +2,13 @@
 
 ## ▶ WAVE S-I (2026-09-20): the staff record, the inventory screen, and three defects — T-428 to T-432
 
+**Released 2026-09-20.** Commits `88ba8c21` and `1c5e202d` on `main`, CI run 35522544700 green on all
+three jobs, deployed to staging as api `00175-gxb` / web `00163-btg` / worker `00157-8n7`, Flyway at
+**v159** having applied V155 and V159 and nothing else. V156–V158 and V160–V161 were reserved and
+never used, so the next free migration is **V156**. The evidence, including the one thing that cannot
+be seen on staging, is in `docs/work/proof/RELEASE-2026-09-20-staff-inventory.md`. **Nobody has driven
+it in a browser yet.**
+
 **Source.** Rajeev's own words, relayed 2026-09-20: the Staff pages (name clickable → view page with
 Edit/Save/Cancel, photo top right, prominent name, PAN behind an eye in its own box, Notes removed
 unless justified, document uploads for scanned PAN and Aadhaar cards, previous employment history);
