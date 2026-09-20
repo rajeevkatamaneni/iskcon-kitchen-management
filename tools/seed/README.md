@@ -142,6 +142,7 @@ Each is one file, runs on its own, and prints what it created.
 | 00 | preflight | checks the API, the accounts and the temple; refuses to go on if anything is missing |
 | 01 | opening stock | what a real temple has on the shelf on day one — ingredients **and** supplies, with realistic quantities and today's prices |
 | 01a | size the stock to the plan | run after 05: measures what the planned month actually needs and corrects the opening count and the reorder thresholds to match |
+| 01c | whole stock on counted things | repairs a temple holding 400.98 coconuts: recounts each lot down to a whole number, by reversing the fractional figures somebody typed before the whole-counts rule and posting what the lot really holds. A fraction the application worked out for itself is left alone and reported |
 | 02 | recipes | imports the curated catalogue; ingredients arrive with it |
 | 02a | curation fix-ups | the corrections to Rajeev's curated files (typos, water, coconut, commas) — run before the catalogue is built |
 | 02b | build the catalogue | turns his one-file-per-recipe curation into the loader's one-file-per-book shape, and replaces `backend/src/main/resources/recipe-library/` |
