@@ -37,12 +37,42 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import ApiError, Tally, parse_args, sign_in, step, info, note  # noqa: E402
-from common.config import KITCHEN_MANAGER, KITCHEN_STAFF, TEMPLE_ADMIN  # noqa: E402
+from common.config import KITCHEN_STAFF, TEMPLE_ADMIN, kitchen_manager  # noqa: E402
 
 PHASE = "phase07"
 
-# What happens to each order, in the order they were raised. Cycled if there are more orders.
+# What happens to each order. Chosen from the order's OWN NUMBER, not from its position in this
+# run's list, and that distinction is the whole reason the variety exists.
+#
+# Keyed on position, each ordering round starts counting again. On staging a round only ever had
+# three orders out with vendors, so the index never got past 2 and **rejected, returned and
+# still-short never happened at all** — four rounds produced nine orders, every one of them
+# received in full or in two parts, and none of the cases Rajeev asked for by name. Keyed on the
+# PO number, PO-2026-0004 is the rejected one wherever and whenever it is delivered.
 SCRIPTS = ["full", "partial_then_rest", "late", "rejected", "full_then_return", "still_short"]
+
+
+def part(quantity: float, share: float, unit: str) -> float:
+    """
+    A share of a delivered quantity, in a number that can actually turn up.
+
+    Sixty per cent of sixteen aprons is 9.6 aprons, and the application will happily record it —
+    it only knows the unit is PIECES, not that a piece is indivisible. A return of "1.5 Pieces of
+    Apron" is the sort of line that makes a reader distrust everything else on the screen, so a
+    count is rounded to a whole one here, and never to zero when something was meant to move.
+    """
+    value = quantity * share
+    if unit == "PIECES":
+        value = max(1.0, round(value)) if quantity >= 1 else quantity
+        return float(min(value, quantity))
+    return round(value, 3)
+
+
+def script_for(po_number: str) -> str:
+    """The delivery this order gets, from its own sequence number."""
+    digits = "".join(c for c in po_number.split("-")[-1] if c.isdigit())
+    n = int(digits) if digits else 1
+    return SCRIPTS[(n - 1) % len(SCRIPTS)]
 
 
 def receipt(session, po_id: str, key: str, lines: list, *, when: date | None = None,
@@ -62,6 +92,12 @@ def receipt(session, po_id: str, key: str, lines: list, *, when: date | None = N
 def extra_args(parser) -> None:
     parser.add_argument("--round", type=int, default=1, dest="round_no",
                         help="which ordering round these deliveries belong to")
+    parser.add_argument("--only", default=None,
+                        help="deliver just this purchase order, by its number")
+    parser.add_argument("--as", default=None, dest="as_script", choices=SCRIPTS,
+                        help="deliver it as this case instead of the one its number implies. "
+                             "For filling a gap: the mapping spreads six cases across the order "
+                             "book, so a case can go unrepresented if the book stops short of it.")
 
 
 def main() -> int:
@@ -71,11 +107,17 @@ def main() -> int:
 
     # Receiving is the store's job, not the manager's. KITCHEN_STAFF holds RECEIVE_DELIVERIES.
     store = sign_in(args.api, KITCHEN_STAFF[0], args.tenant)
-    manager = sign_in(args.api, KITCHEN_MANAGER, args.tenant)
+    manager = sign_in(args.api, kitchen_manager(args.api, args.tenant, needs_approval=False), args.tenant)
     admin = sign_in(args.api, TEMPLE_ADMIN, args.tenant)
 
     orders = [p for p in manager.get("/api/v1/purchase-orders")
               if p["status"] in ("SENT", "PARTIALLY_RECEIVED")]
+    if args.raw.only:
+        orders = [p for p in orders if p["poNumber"] == args.raw.only]
+        if not orders:
+            tally.problem(f"{args.raw.only} is not out with a vendor, so nothing can be "
+                          f"delivered against it")
+            return tally.report()
     orders.sort(key=lambda p: p["poNumber"])
     if not orders:
         tally.problem("no sent orders to deliver against — run phase 06 first")
@@ -84,9 +126,9 @@ def main() -> int:
     info(f"{len(orders)} order(s) out with vendors")
     today = date.today()
 
-    for index, order in enumerate(orders):
-        script = SCRIPTS[index % len(SCRIPTS)]
+    for order in orders:
         po_id, po_number = order["id"], order["poNumber"]
+        script = args.raw.as_script or script_for(po_number)
         detail = manager.get(f"/api/v1/purchase-orders/{po_id}")
 
         # Only catalogue lines can be received; a described line "arrives" instead.
@@ -116,7 +158,8 @@ def main() -> int:
                 if not args.state.has(first):
                     made = receipt(store, po_id, first, [
                         {"poLineId": l["id"],
-                         "receivedQty": round(float(l["quantity"]) * 0.6, 3), "rejectedQty": 0}
+                         "receivedQty": part(float(l["quantity"]), 0.6, l["unit"]),
+                         "rejectedQty": 0}
                         for l in lines
                     ], when=today - timedelta(days=5), ref=f"DN/{po_number[-4:]}/A",
                         note_text="Van could not take the whole order; rest to follow.")
@@ -180,23 +223,39 @@ def main() -> int:
                 if args.state.has(key):
                     tally.kept("delivery", po_number)
                     continue
+                # Which lines come in spoiled. The old rule — every fourth line, if it is
+                # bigger than two — matched nothing at all on a short order, and the "rejected"
+                # delivery then rejected nothing while still reporting itself as the rejection
+                # case. So the lines are chosen first and the order is guaranteed at least one.
+                spoiled = {i for i, l in enumerate(lines)
+                           if i % 4 == 1 and float(l["quantity"]) > 2}
+                if not spoiled:
+                    biggest = max(range(len(lines)), key=lambda i: float(lines[i]["quantity"]))
+                    if float(lines[biggest]["quantity"]) >= 2:
+                        spoiled = {biggest}
+
                 payload_lines = []
                 rejected_names = []
                 for position, line in enumerate(lines):
                     quantity = float(line["quantity"])
-                    # Two lines in every order come in spoiled. The rest is fine.
-                    if position % 4 == 1 and quantity > 2:
-                        bad = round(quantity * 0.2, 3)
+                    if position in spoiled:
+                        bad = part(quantity, 0.2, line["unit"])
+                        if bad >= quantity:
+                            bad = part(quantity, 0.5, line["unit"])
                         payload_lines.append({
                             "poLineId": line["id"],
                             "receivedQty": round(quantity - bad, 3),
                             "rejectedQty": bad,
                             "rejectReason": "SPOILED",
                         })
-                        rejected_names.append(f"{line['ingredientName']} {bad}")
+                        rejected_names.append(
+                            f"{line['ingredientName']} {bad:g} {line['unit']}")
                     else:
                         payload_lines.append({"poLineId": line["id"], "receivedQty": quantity,
                                               "rejectedQty": 0})
+                if not rejected_names:
+                    tally.problem(f"{po_number} was meant to have a rejection and nothing on it "
+                                  f"was big enough to reject")
                 made = receipt(store, po_id, key, payload_lines,
                                when=today - timedelta(days=1), ref=f"DN/{po_number[-4:]}/A",
                                note_text="Some of it had gone off in the van. Sent back at the gate.")
@@ -228,7 +287,8 @@ def main() -> int:
                     if not target:
                         tally.skip("return", f"{po_number} has nothing big enough to send back")
                     else:
-                        quantity = round(float(target["receivedQty"]) * 0.15, 3)
+                        quantity = part(float(target["receivedQty"]), 0.15,
+                                        target["unit"])
                         # Returns are MANAGE_INVENTORY, not MANAGE_PURCHASE_ORDERS — the store
                         # decides something has gone off, not the person who ordered it.
                         made = admin.post(f"/api/v1/goods-receipts/{receipt_id}/returns", {
@@ -250,7 +310,8 @@ def main() -> int:
                     continue
                 made = receipt(store, po_id, key, [
                     {"poLineId": l["id"],
-                     "receivedQty": round(float(l["quantity"]) * 0.45, 3), "rejectedQty": 0}
+                     "receivedQty": part(float(l["quantity"]), 0.45, l["unit"]),
+                     "rejectedQty": 0}
                     for l in lines
                 ], when=today - timedelta(days=4), ref=f"DN/{po_number[-4:]}/A",
                     note_text="Less than half came. Vendor has not said when the rest will.")

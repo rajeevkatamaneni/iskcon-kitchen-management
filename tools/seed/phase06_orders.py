@@ -36,7 +36,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import ApiError, Tally, parse_args, sign_in, step, info, note  # noqa: E402
-from common.config import KITCHEN_MANAGER, TEMPLE_ADMIN  # noqa: E402
+from common.config import TEMPLE_ADMIN, kitchen_manager  # noqa: E402
 
 PHASE = "phase06"
 DATA = Path(__file__).resolve().parent / "data" / "catalogue.json"
@@ -69,7 +69,7 @@ def main() -> int:
     round_no = args.raw.round_no
     tally = Tally(f"phase 06 — the shopping list and the orders (round {round_no})")
 
-    manager = sign_in(args.api, KITCHEN_MANAGER, args.tenant)
+    manager = sign_in(args.api, kitchen_manager(args.api, args.tenant, needs_approval=False), args.tenant)
     admin = sign_in(args.api, TEMPLE_ADMIN, args.tenant)
 
     ingredients = {i["name"]: i for i in admin.get("/api/v1/ingredients")}

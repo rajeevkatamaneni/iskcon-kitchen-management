@@ -38,7 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import ApiError, Tally, parse_args, sign_in, step, info, note  # noqa: E402
-from common.config import KITCHEN_MANAGER, TEMPLE_ADMIN  # noqa: E402
+from common.config import TEMPLE_ADMIN, kitchen_manager  # noqa: E402
 from common.receipt import bill_pdf, photo_png  # noqa: E402
 
 PHASE = "phase08"
@@ -84,7 +84,7 @@ def main() -> int:
     round_no = args.raw.round_no
     tally = Tally(f"phase 08 — invoices and payments (round {round_no})")
 
-    manager = sign_in(args.api, KITCHEN_MANAGER, args.tenant)
+    manager = sign_in(args.api, kitchen_manager(args.api, args.tenant, needs_approval=False), args.tenant)
     # Paying, crediting and voiding are MANAGE_VENDOR_PAYMENTS, which only the Temple Admin holds.
     # A Kitchen Manager can record the bill and then gets 403 on all three.
     admin = sign_in(args.api, TEMPLE_ADMIN, args.tenant)
@@ -290,18 +290,27 @@ def main() -> int:
             tally.problem(f"paying {invoice.get('number')}: {e}")
 
     # ---- one voided --------------------------------------------------------
+    # One voided bill on the system, decided across the whole book rather than this round's slice.
+    # `invoices[3]` meant "the fourth invoice of this run", and a run that billed three never
+    # voided anything — four rounds on staging produced nine invoices and not one void.
     step("voiding one")
-    if len(invoices) > 3:
-        invoice = invoices[3]
-        key = f"{PHASE}.r{round_no}.void.{invoice['id']}"
-        if args.state.has(key):
-            tally.kept("void")
+    already = [i for i in admin.get("/api/v1/vendor-invoices") if i["status"] == "VOIDED"]
+    if already:
+        tally.kept("void", f"{already[0]['invoiceNumber']} is already voided")
+    else:
+        # A bill nobody has paid yet: voiding one with payments against it is refused
+        # (KMS-400154), and rightly.
+        payable = [i for i in invoices
+                   if admin.get(f"/api/v1/vendor-invoices/{i['id']}").get("status") == "PENDING"
+                   and not admin.get(f"/api/v1/vendor-invoices/{i['id']}/payments")]
+        invoice = payable[-1] if payable else None
+        if not invoice:
+            tally.skip("void", "no unpaid bill to void")
         else:
             try:
                 admin.post(f"/api/v1/vendor-invoices/{invoice['id']}/void", {
                     "reason": "Raised against the wrong order. The vendor is re-issuing it.",
                 })
-                args.state.put(key, True)
                 tally.made("void", f"{invoice.get('number')} — wrong order, vendor re-issuing")
             except ApiError as e:
                 tally.problem(f"voiding {invoice.get('number')}: {e}")

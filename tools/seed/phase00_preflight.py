@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import ApiError, Tally, parse_args, sign_in, step, info, note, warn  # noqa: E402
 from common.config import (  # noqa: E402
-    DONORS, KITCHEN_MANAGER, KITCHEN_STAFF, TEMPLE_ADMIN, VOLUNTEERS,
+    DONORS, KITCHEN_STAFF, TEMPLE_ADMIN, VOLUNTEERS, kitchen_manager,
 )
 
 PHASE = "phase00"
@@ -61,7 +61,12 @@ def main() -> int:
 
     # ---- every account the simulation acts as ----------------------------
     step("the accounts")
-    wanted = [(TEMPLE_ADMIN, "TEMPLE_ADMIN"), (KITCHEN_MANAGER, "KITCHEN_MANAGER")]
+    # Not "this account must be a manager" — which temple has one, and who it is, differs
+    # between environments. What matters is that somebody can approve an ingredient request.
+    manager = kitchen_manager(args.api, args.tenant, needs_approval=True)
+    wanted = [(TEMPLE_ADMIN, "TEMPLE_ADMIN")]
+    if manager != TEMPLE_ADMIN:
+        wanted.append((manager, "KITCHEN_MANAGER"))
     wanted += [(e, "KITCHEN_STAFF") for e in KITCHEN_STAFF]
     wanted += [(e, "VOLUNTEER") for e in VOLUNTEERS + DONORS]
 

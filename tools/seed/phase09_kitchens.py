@@ -63,8 +63,24 @@ def main() -> int:
     tally = Tally("phase 09 — the sister kitchens")
     admin = sign_in(args.api, TEMPLE_ADMIN, args.tenant)
 
-    existing = {k["name"]: k for k in admin.get("/api/v1/kitchens")}
-    info(f"{len(existing)} kitchen(s) already: {', '.join(sorted(existing))}")
+    kitchens = admin.get("/api/v1/kitchens")
+    existing = {k["name"]: k for k in kitchens}
+    sisters = [k for k in kitchens if not k.get("isMain")]
+    info(f"{len(kitchens)} kitchen(s) already: {', '.join(sorted(existing))}")
+
+    # **Use the kitchens the temple already has.** The brief asks for "at least five kitchens",
+    # two of which plan their own meals — it does not ask for these particular names. Creating the
+    # list below regardless of what is there put "Govindas Bliss" next to staging's own "Govindas
+    # Restaurant": the same kitchen twice, under two names, on a screen Rajeev would open.
+    #
+    # So when the temple already has enough sisters, nothing is created and only the planner flags
+    # are set to give the shape the brief asks for. Names are matched without regard to case or
+    # surrounding space, because "Deity kitchen" and "Deity Kitchen" are not two kitchens either.
+    folded = {k["name"].strip().lower(): k for k in kitchens}
+    enough = len(sisters) >= 5
+    if enough:
+        note(f"{len(sisters)} sister kitchen(s) already — the brief asks for five, so none are "
+             f"created. Only the meal-planner flags are set.")
 
     # Somebody to put in charge of each. The staff register is the source, so the person named
     # really works here rather than being invented.
@@ -72,9 +88,21 @@ def main() -> int:
     roster = register.get("current", []) if isinstance(register, dict) else register
     candidates = [s for s in roster if s.get("userId")]
 
-    step("the five sister kitchens")
-    for position, wanted in enumerate(KITCHENS):
-        found = existing.get(wanted["name"])
+    step("the sister kitchens")
+
+    # Which of them plan and which draw. When the temple brought its own kitchens, the roles are
+    # handed to those rather than to invented ones: the first two sisters by name plan, the rest
+    # draw from the store.
+    if enough:
+        plan_for = {k["name"] for k in sorted(sisters, key=lambda k: k["name"])[:2]}
+        wanted_list = [{"name": k["name"], "plans": k["name"] in plan_for,
+                        "description": k.get("description"), "location": k.get("location")}
+                       for k in sisters]
+    else:
+        wanted_list = KITCHENS
+
+    for position, wanted in enumerate(wanted_list):
+        found = folded.get(wanted["name"].strip().lower())
         in_charge = candidates[position % len(candidates)]["userId"] if candidates else None
 
         payload = {

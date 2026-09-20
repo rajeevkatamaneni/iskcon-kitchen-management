@@ -38,7 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import ApiError, Tally, parse_args, sign_in, step, info, note  # noqa: E402
-from common.config import KITCHEN_MANAGER, TEMPLE_ADMIN  # noqa: E402
+from common.config import TEMPLE_ADMIN, kitchen_manager  # noqa: E402
 
 PHASE = "phase10"
 
@@ -67,15 +67,26 @@ DISHES = {
     "Individual Person": [("Sponsored Huggi offering", 12, "L")],
 }
 
-# Six requests across the three kitchens, each ending somewhere different.
-PLAN = [
-    ("Deity Kitchen", "issued_full", 12),
-    ("Govindas Bliss", "issued_short", 10),
-    ("Individual Person", "denied", 8),
-    ("Deity Kitchen", "approved_not_issued", 5),
-    ("Govindas Bliss", "submitted", 3),
-    ("Individual Person", "draft", 1),
+# Six requests, each ending somewhere different, so every state on the screen has something in
+# it. The kitchens are **whichever ones actually draw from the store**, not a hardcoded list:
+# staging's sister kitchens are not the local ones, and naming them meant phase 09 invented
+# "Govindas Bliss" beside staging's own "Govindas Restaurant" — the same kitchen twice.
+ENDINGS = [
+    ("issued_full", 12),
+    ("issued_short", 10),
+    ("denied", 8),
+    ("approved_not_issued", 5),
+    ("submitted", 3),
+    ("draft", 1),
 ]
+
+# What a kitchen that draws from the store asks for. Keyed by name where the temple has one of
+# these, and otherwise the general list, because every kitchen needs rice, dal and oil.
+GENERAL = [
+    ("Rice", 30, "KG"), ("Toor dal", 10, "KG"), ("Groundnut oil", 8, "L"),
+    ("Salt", 4, "KG"), ("Turmeric", 0.5, "KG"), ("Potato", 15, "KG"),
+]
+GENERAL_DISHES = [("Rice and dal for the day", 30, "L")]
 
 
 def main() -> int:
@@ -83,7 +94,7 @@ def main() -> int:
     tally = Tally("phase 10 — ingredient requests")
 
     admin = sign_in(args.api, TEMPLE_ADMIN, args.tenant)
-    manager = sign_in(args.api, KITCHEN_MANAGER, args.tenant)
+    manager = sign_in(args.api, kitchen_manager(args.api, args.tenant, needs_approval=True), args.tenant)
 
     kitchens = {k["name"]: k for k in admin.get("/api/v1/kitchens")}
     ingredients = {i["name"]: i for i in admin.get("/api/v1/ingredients")}
@@ -93,7 +104,7 @@ def main() -> int:
 
     # A kitchen on the meal planner cannot raise a request at all, so asking for one is a mistake
     # worth catching here rather than as a 409 halfway through.
-    for kitchen_name, _, _ in PLAN:
+    for kitchen_name in drawing:
         if kitchens.get(kitchen_name, {}).get("usesMealPlanner"):
             tally.problem(f"{kitchen_name} plans its own meals, so it cannot request ingredients "
                           f"(KMS-400110). Run phase 09 first.")
@@ -103,8 +114,17 @@ def main() -> int:
     if existing:
         note(f"{len(existing)} request(s) already on the system")
 
+    # Spread the six endings across whatever kitchens draw from the store, round-robin.
+    drawing_kitchens = sorted(drawing)
+    if not drawing_kitchens:
+        tally.problem("no kitchen draws from the store, so nobody can request anything. "
+                      "Run phase 09 first.")
+        return tally.report()
+    plan = [(drawing_kitchens[i % len(drawing_kitchens)], ending, days_ago)
+            for i, (ending, days_ago) in enumerate(ENDINGS)]
+
     step("raising, deciding and issuing")
-    for position, (kitchen_name, ending, days_ago) in enumerate(PLAN):
+    for position, (kitchen_name, ending, days_ago) in enumerate(plan):
         key = f"{PHASE}.request.{position}"
         if args.state.has(key):
             tally.kept("request", f"{kitchen_name} ({ending.replace('_', ' ')})")
@@ -115,7 +135,7 @@ def main() -> int:
             tally.problem(f"no kitchen called {kitchen_name}")
             continue
 
-        wants = WANTS[kitchen_name]
+        wants = WANTS.get(kitchen_name, GENERAL)
         lines = []
         for name, quantity, unit in wants:
             ingredient = ingredients.get(name)
@@ -130,10 +150,11 @@ def main() -> int:
         payload = {
             "kitchenId": kitchen["id"],
             "neededOn": (date.today() + timedelta(days=2)).isoformat(),
-            "purpose": f"{kitchen_name} — {', '.join(d[0] for d in DISHES[kitchen_name])}",
+            "purpose": f"{kitchen_name} — "
+                       f"{', '.join(d[0] for d in DISHES.get(kitchen_name, GENERAL_DISHES))}",
             "lines": lines,
             "dishes": [{"dishName": d, "quantity": q, "unit": u}
-                       for d, q, u in DISHES[kitchen_name]],
+                       for d, q, u in DISHES.get(kitchen_name, GENERAL_DISHES)],
         }
 
         if args.dry_run:

@@ -42,7 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import ApiError, Tally, parse_args, sign_in, step, info, note  # noqa: E402
-from common.config import KITCHEN_MANAGER, TEMPLE_ADMIN  # noqa: E402
+from common.config import TEMPLE_ADMIN, kitchen_manager  # noqa: E402
 
 PHASE = "phase12"
 
@@ -71,7 +71,7 @@ def main() -> int:
     args = parse_args(PHASE)
     tally = Tally("phase 12 — cooking and actuals")
 
-    planner = sign_in(args.api, KITCHEN_MANAGER, args.tenant)
+    planner = sign_in(args.api, kitchen_manager(args.api, args.tenant, needs_approval=False, needs_planner=True), args.tenant)
     admin = sign_in(args.api, TEMPLE_ADMIN, args.tenant)
 
     today = date.today()
