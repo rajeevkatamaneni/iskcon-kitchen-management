@@ -168,7 +168,7 @@ function LibraryView() {
               <p className="text-lg">Nothing here yet</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
                 {total === 0
-                  ? "Press “Load the books” to read the vendored recipe books in."
+                  ? "Press “Load the books” to bring in the approved catalogue."
                   : "Try a different search."}
               </p>
             </div>

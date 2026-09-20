@@ -115,8 +115,13 @@ describe("the recipe library, for a platform operator", () => {
 
     expect(await screen.findByRole("heading", { name: /recipe library/i })).toBeInTheDocument();
     expect(await screen.findByText(/nothing here yet/i)).toBeInTheDocument();
-    // The empty state names the button rather than apologising.
-    expect(screen.getByText(/press “load the books”/i)).toBeInTheDocument();
+    // The empty state names the button rather than apologising, and says what pressing it brings
+    // in. Asserted whole rather than as a fragment: until 2026-09-20 this line said the loader
+    // would "read the vendored recipe books in", which stopped being true the day the curated
+    // catalogue replaced those books, and a fragment match let the false half stay on screen.
+    expect(
+      screen.getByText("Press “Load the books” to bring in the approved catalogue.")
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /load the books/i })).toBeInTheDocument();
   });
 

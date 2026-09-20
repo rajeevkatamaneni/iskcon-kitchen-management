@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
+import org.iskcon.kms.ingredient.IngredientNameMatcher;
 
 /**
  * Which shelf an ingredient goes on, when a library import has to create it.
@@ -13,12 +14,31 @@ import java.util.regex.Pattern;
  * is that supply: a keyword map, in code, meant to be read as a document the way
  * {@code RolePermissions} is.
  *
- * <p><strong>Measured, not guessed.</strong> Against the real books these rules name
- * <strong>1,832 of the 2,238 distinct ingredients (82%)</strong> and cover
- * <strong>44,176 of the 46,337 ingredient lines (95.3%)</strong>. The share of lines is the number
- * that matters: the tail is regional and rare — <em>timur</em>, <em>jakhya</em>, <em>perilla
- * seeds</em>, <em>jambu</em>, <em>pancha phutana</em> — and each appears in a handful of recipes
- * from one state, while salt and ghee appear in thousands from every state.
+ * <p><strong>Measured, not guessed — and the measurement is now a test.</strong>
+ * {@code IngredientCategoriesTest} runs these rules over the real books in
+ * {@code src/main/resources/recipe-library} on every build, prints what it could not name, and holds
+ * the coverage to a floor. The figures below came from that test rather than from a script somebody
+ * ran once.
+ *
+ * <p>Against the curated catalogue, after the singular pass added on 2026-09-20 (see
+ * {@link #forName}): they name <strong>92 of its 99 distinct ingredients (93%)</strong> and cover
+ * <strong>430 of its 454 ingredient lines (94.7%)</strong>. Before that pass it was 88 of 99 and 423
+ * of 454 (93.2%) — the seven lines are the four plurals described below. Against the 32 vendored
+ * books the rules were written for, it was 1,832 of 2,238 distinct names (82%) and 44,176 of 46,337
+ * lines (95.3%).
+ *
+ * <p>What the remainder is has changed with the data, and it is worth knowing before anyone tunes
+ * these rules. In the vendored books the tail was regional and rare — <em>timur</em>,
+ * <em>jakhya</em>, <em>perilla seeds</em>, <em>jambu</em>, <em>pancha phutana</em> — each in a
+ * handful of recipes from one state, while salt and ghee appeared in thousands from every state. In
+ * the curated catalogue the 31 uncovered lines are water (15, and its shelf matters least of any
+ * ingredient in the product — it is the one the temple never buys), the temple's own spice blends
+ * (<em>bisi bele bath pudi</em>, <em>huli pudi</em>, <em>chutney pudi</em>, <em>vangi bath pudi</em>),
+ * <em>mixed vegetables</em> (4), <em>eno</em>, and four names — seven lines — that were only a plural
+ * away from a rule that already holds their singular: <em>Cloves</em> (1), <em>Coriander seeds</em>
+ * (4), <em>Lemons</em> (1), <em>Raisins</em> (1). Those four were never a regional tail, they were
+ * {@code \\b} against an {@code s}, and {@link #forName}'s second pass now names them. The 24 lines
+ * left are the water and the blends, which belong where they are.
  *
  * <p>The remainder lands on {@code Other}, which is not a new word: tenant provisioning already
  * files Egg there. A temple recategorises anything it disagrees with, which it may do freely — the
@@ -100,6 +120,28 @@ public final class IngredientCategories {
 	 *
 	 * <p>Matched on the whole name, so "Curd, fresh" and "Coriander leaves, chopped" work without
 	 * the caller having to strip the cook's qualifier off first.
+	 *
+	 * <p><strong>Two passes: the name as written, then its singular.</strong> A rule is a word with
+	 * {@code \b} at each end, and a trailing {@code s} sits inside that boundary — so the rule
+	 * holding <em>clove</em> did not name "Cloves", and <em>coriander seed</em> did not name
+	 * "Coriander seeds". Seven of the catalogue's lines fell to {@code Other} for that reason alone.
+	 * When no rule names the name as written, the rules run again over
+	 * {@link IngredientNameMatcher#normalise}'s form of it, which makes every word singular.
+	 *
+	 * <p>The order is the whole of it, and reversing it would be worse than leaving the bug. Several
+	 * rules are written in the plural because that is how the books write the ingredient —
+	 * <em>beans</em>, <em>greens</em>, <em>leaves</em>, <em>peas</em>, <em>dates</em> — and
+	 * singularising first would stop all of them matching. Trying the written name first means no
+	 * name that is filed correctly today can change shelf: the second pass is only ever reached by a
+	 * name that was going to be {@code Other}.
+	 *
+	 * <p><strong>Why the duplicate-ingredient rule's singularisation and not a new one.</strong>
+	 * {@link IngredientNameMatcher#normalise} is what decides that "Tomatoes" and "tomato" are the
+	 * same ingredient, and this class decides which shelf that ingredient goes on; two different
+	 * ideas of what a plural is would eventually file one ingredient in two places. It is reused as
+	 * it stands, with no change to it. It does slightly more than singularise — it drops accents and
+	 * punctuation and takes off a preparation ("Coconut, grated" becomes "coconut") — all of which
+	 * is either harmless here or helpful, and none of which can reach a name a rule already named.
 	 */
 	public static String forName(String ingredientName) {
 		if (ingredientName == null || ingredientName.isBlank()) {
@@ -110,11 +152,27 @@ public final class IngredientCategories {
 		if (exact != null) {
 			return exact;
 		}
+		String found = match(name);
+		if (found != null) {
+			return found;
+		}
+		String singular = IngredientNameMatcher.normalise(ingredientName);
+		if (!singular.isEmpty() && !singular.equals(name)) {
+			found = match(singular);
+			if (found != null) {
+				return found;
+			}
+		}
+		return FALLBACK;
+	}
+
+	/** The first rule that names {@code name}, or null. */
+	private static String match(String name) {
 		for (Rule rule : RULES) {
 			if (rule.pattern().matcher(name).find()) {
 				return rule.category();
 			}
 		}
-		return FALLBACK;
+		return null;
 	}
 }
