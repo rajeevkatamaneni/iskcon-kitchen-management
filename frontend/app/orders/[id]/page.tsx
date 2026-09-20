@@ -533,15 +533,18 @@ function PurchaseOrderDetailView() {
    * through it successfully", not merely configured — and where it does not apply it is **not there
    * at all**, not disabled and not greyed. So this is an `&&` on the render and never a `disabled`.
    *
-   * <p>`whatsappEverSent` is a fact about the temple that arrives on this order's own payload,
+   * <p>`templeWhatsappEverSent` is a fact about the temple that arrives on this order's own payload,
    * which is the whole point: the screen must not ask `api.whatsappSettings()` for it, because that
    * endpoint is behind `MANAGE_TEMPLE_SETTINGS` and the person raising a purchase order need not
    * hold it. The button would then vanish for a Kitchen Manager whose WhatsApp works perfectly.
    *
-   * <p>`=== true` rather than a truthiness check, because the field is optional on the interface
-   * (see `PurchaseOrderDetailView` in `lib/api.ts`) and `undefined` must read as "not proven".
+   * <p>It says nothing about whether THIS order has been sent — that is `po.sentAt`.
+   *
+   * <p>`=== true` rather than a truthiness check because of the `data?.`: the payload is undefined
+   * while it loads, and a screen that has not been told yet must read as "not proven" and offer
+   * nothing. The field itself is required (see `PurchaseOrderDetailView` in `lib/api.ts`).
    */
-  const whatsappWorks = data?.whatsappEverSent === true;
+  const whatsappWorks = data?.templeWhatsappEverSent === true;
   const canWhatsApp = whatsappWorks
     && (po?.status === "DRAFT" || po?.status === "SENT" || po?.status === "PARTIALLY_RECEIVED");
   /**

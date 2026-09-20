@@ -68,7 +68,11 @@ const DETAIL: PurchaseOrderDetailView = {
   // This temple's WhatsApp has actually sent something, so the button is on offer (T-136). Stated
   // on the base fixture because most of these tests are about something else and want the screen
   // in its ordinary state; the tests that are about the gate say `false` for themselves.
-  whatsappEverSent: true,
+  templeWhatsappEverSent: true,
+  // Required since T-365, so every fixture states it. These tests are about the order screen's
+  // buttons and panels rather than the delivery figure; null is "nothing to show", and the screen
+  // then prints no figure rather than a wrong one.
+  deliveryScore: null,
 };
 
 const RECEIPTS: GoodsReceiptView[] = [];
@@ -546,7 +550,7 @@ describe("purchase order detail", () => {
    * disabled. A greyed button is still an offer, and a person who presses it learns nothing.
    */
   it("does not offer Send on WhatsApp until a WhatsApp message has actually gone out", () => {
-    withDetail({ ...DETAIL, whatsappEverSent: false });
+    withDetail({ ...DETAIL, templeWhatsappEverSent: false });
     render(<PurchaseOrderDetailPage />);
 
     expect(screen.queryByRole("button", { name: /send on whatsapp/i })).not.toBeInTheDocument();
@@ -557,11 +561,14 @@ describe("purchase order detail", () => {
   });
 
   it("treats a missing WhatsApp fact as 'never sent', which hides the button", () => {
-    // `whatsappEverSent` is optional on the interface (see lib/api.ts), so `undefined` is reachable
-    // from an older payload. It must read as not-proven: hiding the button is the safe direction,
-    // and it is the ruling's own default.
-    const { whatsappEverSent: _omitted, ...withoutTheFact } = DETAIL;
-    withDetail(withoutTheFact);
+    // `templeWhatsappEverSent` is required on the interface (see lib/api.ts) and the server always
+    // sends it, so the cast is deliberate: it builds a payload the type says cannot arrive, to pin
+    // what the screen does if one ever does — an older server, a trimmed response. It must read as
+    // not-proven. Hiding the button is the safe direction and the ruling's own default. Without the
+    // cast this would not compile, and that is the convention working rather than a reason to drop
+    // the test: the type stops a fixture drifting by accident, this says what happens on purpose.
+    const { templeWhatsappEverSent: _omitted, ...withoutTheFact } = DETAIL;
+    withDetail(withoutTheFact as PurchaseOrderDetailView);
     render(<PurchaseOrderDetailPage />);
 
     expect(screen.queryByRole("button", { name: /send on whatsapp/i })).not.toBeInTheDocument();

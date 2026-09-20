@@ -75,7 +75,10 @@ const DETAIL: PurchaseOrderDetailView = {
   },
   lines: [RICE],
   events: [],
-  whatsappEverSent: false,
+  templeWhatsappEverSent: false,
+  // Required since T-365, so every fixture states it. This test is about the merged line table and
+  // never reads the score; null is "nothing to show".
+  deliveryScore: null,
 };
 
 function receiptLine(over: Partial<GoodsReceiptLineView>): GoodsReceiptLineView {

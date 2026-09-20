@@ -262,21 +262,22 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 				""", tenant);
 
 		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
-				.andExpect(jsonPath("$.whatsappEverSent").value(false));
+				.andExpect(jsonPath("$.templeWhatsappEverSent").value(false));
 
 		// One message actually out of the door, and the offer appears — for a reader with
 		// MANAGE_PURCHASE_ORDERS and nothing else.
 		admin.update("UPDATE tenant_settings SET whatsapp_last_sent_at = now() WHERE tenant_id = ?", tenant);
 		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
-				.andExpect(jsonPath("$.whatsappEverSent").value(true));
+				.andExpect(jsonPath("$.templeWhatsappEverSent").value(true));
 	}
 
 	/**
 	 * The field is about the temple and never about this order, pinned on the one case that reads as
 	 * a defect until you know that (T-370).
 	 *
-	 * <p>The staging run of 2026-09-19 reported {@code whatsappEverSent: true} on a brand-new DRAFT
-	 * that had never been sent, to a vendor created minutes earlier, and filed it as a wrong value.
+	 * <p>The staging run of 2026-09-19 reported this field {@code true} on a brand-new DRAFT that had
+	 * never been sent, to a vendor created minutes earlier, and filed it as a wrong value. (It was
+	 * called {@code whatsappEverSent} then, which is most of why it was misread; T-365 renamed it.)
 	 * It is the right value: that temple had sent WhatsApp messages before, and this says so. What
 	 * says whether THIS order went out is {@code order.sentAt}, which is null on the very same
 	 * payload — so the two are asserted together here, because reading one as the other is the
@@ -301,14 +302,14 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 				// This order has asked nothing of anybody.
 				.andExpect(jsonPath("$.order.sentAt").doesNotExist())
 				// The temple's WhatsApp has, which is the whole of what this field claims.
-				.andExpect(jsonPath("$.whatsappEverSent").value(true));
+				.andExpect(jsonPath("$.templeWhatsappEverSent").value(true));
 
 		// And it follows the temple, not the order: take the temple's send away and the same
 		// untouched draft reports false.
 		admin.update("UPDATE tenant_settings SET whatsapp_last_sent_at = NULL WHERE tenant_id = ?", tenant);
 		mvc.perform(authed(get("/api/v1/purchase-orders/{id}", poId)))
 				.andExpect(jsonPath("$.order.sentAt").doesNotExist())
-				.andExpect(jsonPath("$.whatsappEverSent").value(false));
+				.andExpect(jsonPath("$.templeWhatsappEverSent").value(false));
 	}
 
 	@Test

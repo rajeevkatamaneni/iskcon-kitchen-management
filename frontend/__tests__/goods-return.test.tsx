@@ -70,6 +70,11 @@ const DETAIL: PurchaseOrderDetailView = {
     { id: "l1", ingredientId: "ing1", ingredientName: "Rice", description: null, quantity: 36, unit: "KG", expectedPrice: 45, arrivedOn: null, packSizeId: null, packLabel: null, packQuantity: null, packCount: null },
   ],
   events: [],
+  // Both required since T-365, so every fixture states them. This test is about returning goods and
+  // reads neither: false hides Send on WhatsApp, which these tests never press, and a null score is
+  // "nothing to show", so the screen prints no figure rather than a wrong one.
+  templeWhatsappEverSent: false,
+  deliveryScore: null,
 };
 
 /**

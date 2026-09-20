@@ -2934,27 +2934,19 @@ export interface PurchaseOrderDetailView {
    * raises a purchase order need not hold, and the button would then vanish for a reason that has
    * nothing to do with WhatsApp.
    *
-   * <p><strong>Optional, against this file's own convention, and the reason is specific.</strong>
-   * Every other field here is required-and-nullable because an omitted optional field arrives as
-   * `undefined` and reads as the benign value while being indistinguishable from the truth — see
-   * `PurchaseOrderLineView.ingredientId`. That danger is inverted here: `undefined` reads as "no
-   * WhatsApp message has ever gone out", which hides the button, which is exactly the ruling's own
-   * default and the safe direction. It is optional only because two existing fixtures
-   * (`__tests__/goods-return.test.tsx`, `__tests__/described-po-line.test.tsx`) construct this
-   * interface and were outside T-135's path contract. Make it required the next time somebody may
-   * open those two files.
+   * <p><strong>The name carries "temple" on purpose.</strong> It was `whatsappEverSent` until
+   * T-365, and read that way the subject looks like the order in front of you: staging filed a
+   * brand-new draft reporting `true` as a defect, and it was the right value. Nothing about the
+   * behaviour changed then; only the subject of the name. The server always sends this field.
    */
-  whatsappEverSent?: boolean;
+  templeWhatsappEverSent: boolean;
   /**
-   * What this order scored on delivery (T-142, D-26). Optional for the same narrow reason
-   * `whatsappEverSent` is: existing fixtures construct this interface, and an absent score reads as
-   * "nothing to show", which is the safe direction — a screen that cannot see a figure prints no
-   * figure rather than a wrong one.
+   * What this order scored on delivery (T-142, D-26), or null when there is nothing to show.
    *
    * <p>**Shown, never edited.** There is no call in this file that changes it, and there must not
    * be: "Let us not let the admin adjust the score. Just show it to them."
    */
-  deliveryScore?: OrderDeliveryScore | null;
+  deliveryScore: OrderDeliveryScore | null;
 }
 
 export interface PoLineInput {

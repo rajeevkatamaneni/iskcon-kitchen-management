@@ -6,7 +6,7 @@ import org.iskcon.kms.vendor.OrderDeliveryScore;
 /**
  * A purchase order with its lines and activity trail (E5-S3).
  *
- * @param whatsappEverSent whether a WhatsApp message from this temple has ever gone out
+ * @param templeWhatsappEverSent whether a WhatsApp message from this temple has ever gone out
  *     successfully — which is what decides whether the order screen offers Send on WhatsApp at all
  *     (T-136). See the field's own note below.
  */
@@ -23,10 +23,15 @@ public record PurchaseOrderDetailView(
 		 * apply it is not there at all, not disabled and not greyed. False here means the button is
 		 * absent.
 		 *
-		 * <p><strong>A tenant-wide fact riding on an order, and that is deliberate.</strong> It is
-		 * not about this order and says nothing about whether this order was ever sent — that is
-		 * {@link PurchaseOrderView#sentAt()}. It is here because this is the payload the order screen
-		 * already reads, under {@code MANAGE_PURCHASE_ORDERS}.
+		 * <p><strong>A tenant-wide fact riding on an order, and that is deliberate.</strong> The
+		 * subject is the temple, which is why the name says so: it is not about this order and says
+		 * nothing about whether this order was ever sent — that is {@link PurchaseOrderView#sentAt()}.
+		 * It is here because this is the payload the order screen already reads, under
+		 * {@code MANAGE_PURCHASE_ORDERS}. Two orders of the same temple always carry the same value.
+		 *
+		 * <p>The name was {@code whatsappEverSent} until T-365, and it was read on staging as a claim
+		 * about the order in front of the reader — a brand-new draft reporting {@code true} looked
+		 * like a defect and was not one. The value never changed; only the subject of the name.
 		 *
 		 * <p>The alternative was for the screen to call {@code GET /api/v1/settings/whatsapp}, and
 		 * that is the trap this avoids. That endpoint is behind {@code MANAGE_TEMPLE_SETTINGS},
@@ -40,7 +45,7 @@ public record PurchaseOrderDetailView(
 		 * a message id. That method has two callers: {@code WhatsAppChannelAdapter}, for a real
 		 * notification, and the settings screen's Test button (T-151), which sends a real message too.
 		 */
-		boolean whatsappEverSent,
+		boolean templeWhatsappEverSent,
 
 		/**
 		 * What this order scored on delivery, shown and never editable (T-142, D-26).

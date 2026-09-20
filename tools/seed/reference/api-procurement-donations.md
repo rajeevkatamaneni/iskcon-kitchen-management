@@ -40,7 +40,7 @@ Chaining: `ingredientId`, `suggestedQty`, `unit`, `suggestedVendorId`, `neededBy
 `PurchaseOrderController.java`. Everything is `MANAGE_PURCHASE_ORDERS`.
 
 **GET /api/v1/purchase-orders?status=&vendorId=&openOnly=false** → `PurchaseOrderView[]`.
-**GET /api/v1/purchase-orders/{id}** → `PurchaseOrderDetailView { order: PurchaseOrderView, lines: PurchaseOrderLineView[], events: PoEventView[], whatsappEverSent: bool, deliveryScore: OrderDeliveryScore }`.
+**GET /api/v1/purchase-orders/{id}** → `PurchaseOrderDetailView { order: PurchaseOrderView, lines: PurchaseOrderLineView[], events: PoEventView[], templeWhatsappEverSent: bool, deliveryScore: OrderDeliveryScore }`.
 
 `PurchaseOrderView`: `id, poNumber, vendorId, vendorName, status (PoStatus), orderDate, neededBy, deliveryLocation, notes, cancelReason, vendorAbandoned, autoCancelled, sentAt, cancelledAt, createdAt, leadTimeDays, orderBy, orderUrgency, sentAfterLeadTime, closedAt, closeOutcome, closeNote`.
 `PurchaseOrderLineView`: `id, ingredientId, ingredientName, description, quantity, unit, expectedPrice, arrivedOn, packSizeId, packLabel, packQuantity, packCount`. **`id` here is the `poLineId` you send to receiving/arrivals.**

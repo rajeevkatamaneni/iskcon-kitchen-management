@@ -106,7 +106,7 @@ function detail(
     order: order(o),
     lines: LINES,
     events: [],
-    whatsappEverSent: false,
+    templeWhatsappEverSent: false,
     deliveryScore: score,
   };
 }

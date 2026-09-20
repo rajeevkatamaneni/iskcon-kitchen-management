@@ -111,7 +111,10 @@ function detail(o: Partial<PurchaseOrderView> = {}): PurchaseOrderDetailView {
     order: order(o),
     lines: LINES,
     events: [],
-    whatsappEverSent: false,
+    templeWhatsappEverSent: false,
+    // Required since T-365, so every fixture states it. These tests are about the promised date and
+    // never read the score; null is "nothing to show", which is what the screen then prints.
+    deliveryScore: null,
   };
 }
 

@@ -221,7 +221,7 @@ public class PurchaseOrderService {
 				""", EVENT_MAPPER, id);
 		// A tenant-wide fact, carried on the order because this is the payload the order screen
 		// already reads and it may not ask the settings endpoint for it — see the note on
-		// PurchaseOrderDetailView.whatsappEverSent. One extra single-row lookup by primary key.
+		// PurchaseOrderDetailView.templeWhatsappEverSent. One extra single-row lookup by primary key.
 		return new PurchaseOrderDetailView(
 				header, lines, events, whatsappSettings.hasEverSentSuccessfully(),
 				// Shown, never editable (D-26). One more read on a screen that already runs three,

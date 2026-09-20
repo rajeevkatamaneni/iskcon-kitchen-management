@@ -81,6 +81,11 @@ const MIXED: PurchaseOrderDetailView = {
     { id: "l3", ingredientId: null, ingredientName: null, description: "Extension cord", quantity: 2, unit: "PIECES", expectedPrice: 180, arrivedOn: null, packSizeId: null, packLabel: null, packQuantity: null, packCount: null },
   ],
   events: [],
+  // Both required since T-365, so every fixture states them. This test is about how a line that is
+  // not in the catalogue is keyed and rendered, and reads neither: false hides Send on WhatsApp,
+  // which these tests never press, and a null score is "nothing to show".
+  templeWhatsappEverSent: false,
+  deliveryScore: null,
 };
 
 const RECEIPTS: GoodsReceiptView[] = [];
