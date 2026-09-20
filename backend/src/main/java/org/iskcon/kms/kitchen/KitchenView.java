@@ -22,6 +22,13 @@ public record KitchenView(
 		UUID inChargeUserId,
 		String inChargeName,
 
+		/**
+		 * How many people currently work here (Epic 12): staff records naming this kitchen whose
+		 * employment is ACTIVE. Former staff are not counted — they still name a kitchen, because the
+		 * column is NOT NULL, but "4 staff" in the planner's kitchen picker means people there now.
+		 */
+		int staffCount,
+
 		String contactPhone,
 		String status,
 		Instant createdAt) {

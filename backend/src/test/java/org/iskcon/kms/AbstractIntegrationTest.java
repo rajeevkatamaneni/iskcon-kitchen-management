@@ -7,11 +7,15 @@ import java.sql.Statement;
 import javax.sql.DataSource;
 import org.iskcon.kms.testsupport.StubTokenVerifier;
 import org.iskcon.kms.testsupport.StubVerifierConfiguration;
+import org.iskcon.kms.testsupport.TestStaffRecords;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.extension.AfterTestExecutionCallback;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -97,6 +101,24 @@ public abstract class AbstractIntegrationTest {
 		sharedStubVerifier.reset();
 	}
 
+	/**
+	 * Takes away the employment records {@link TestStaffRecords} wrote for this test's signed-in cooks.
+	 *
+	 * <p><strong>Why it is an extension and not an {@code @AfterEach}.</strong> JUnit runs a subclass's
+	 * {@code @AfterEach} before a superclass's, so a teardown written here would run last — after the
+	 * test class's own {@code DELETE FROM users}, which is exactly the statement an employment record
+	 * left in place makes fail ({@code staff_profiles.user_id} is {@code ON DELETE RESTRICT}). An
+	 * {@code AfterTestExecutionCallback} runs in the other gap: after the test body and before any
+	 * {@code @AfterEach} at all. So a class that has never heard of Epic 12 tears down exactly the rows
+	 * it created, as it always did.
+	 *
+	 * <p>Static, so it is one registration for the whole suite rather than one per context, and it
+	 * builds its own privileged template because the rows can span temples.
+	 */
+	@RegisterExtension
+	static final AfterTestExecutionCallback DISCARD_AUTOMATIC_STAFF_RECORDS =
+			context -> TestStaffRecords.discardAll(new JdbcTemplate(adminDataSource()));
+
 	protected static final String APP_ROLE = "kms_app";
 	protected static final String APP_PASSWORD = "kms_app_password";
 
@@ -160,7 +182,7 @@ public abstract class AbstractIntegrationTest {
 	 * tenants. Never used for the assertions themselves; those go through the application's
 	 * tenant-aware DataSource so that what is being tested is what actually runs in production.
 	 */
-	protected static DataSource adminDataSource() {
+	public static DataSource adminDataSource() {
 		DriverManagerDataSource dataSource = new DriverManagerDataSource();
 		dataSource.setUrl(POSTGRES.getJdbcUrl());
 		dataSource.setUsername(POSTGRES.getUsername());

@@ -123,6 +123,13 @@ public record TodayView(
 			boolean recorded,
 			boolean awaitingRecord,
 			String occasionName,
+
+			/**
+			 * Who is cooking it (Epic 12): the names of the kitchens on the meal, in the order the
+			 * planner shows them to this person — their own kitchen first when it is on the meal, else
+			 * the main kitchen, then Settings order. Never empty: every meal has at least one kitchen.
+			 */
+			List<String> kitchenNames,
 			List<Dish> dishes) {
 	}
 

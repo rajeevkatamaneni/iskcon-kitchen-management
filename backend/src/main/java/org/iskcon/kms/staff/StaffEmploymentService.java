@@ -124,6 +124,11 @@ public class StaffEmploymentService {
 			}
 		}
 
+		// Asked again here although the controller asked first, so a hire reached any other way is held
+		// to the same rule. The controller's call is the one that matters for ordering: see there. After
+		// the account checks above, so naming another temple's devotee is still answered as that.
+		requireUsableKitchen(request.kitchenId());
+
 		if (request.systemAccess() != null) {
 			// users.email is NOT NULL and a person cannot be offered a channel we have no address
 			// for, so access without an address is refused here rather than at the database.
@@ -141,9 +146,10 @@ public class StaffEmploymentService {
 					id, tenant_id, user_id, full_name, phone, email, job_title, job_title_other,
 					employment_type, date_of_joining, date_of_birth, address,
 					emergency_contact_name, emergency_contact_relationship, emergency_contact_phone,
-					pan_ciphertext, pan_last4, employment_status, monthly_salary, notes)
+					pan_ciphertext, pan_last4, employment_status, monthly_salary, notes,
+					kitchen_id, kitchen_needs_check)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-					?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)
+					?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, false)
 				""",
 				id, userId, fullName, phone, email,
 				request.jobTitle().name(), trimToNull(request.jobTitleOther()),
@@ -153,13 +159,18 @@ public class StaffEmploymentService {
 				panCiphertext, last4(request.pan()),
 				// Written through as it arrived, null included: no pay agreed is not the same fact
 				// as pay of nothing, and the termination screen has to be able to tell them apart.
-				request.monthlySalary(), trimToNull(request.notes()));
+				// The admin chose this kitchen on the form, so it is not a guess and is not flagged for
+				// checking — unlike the kitchens V150 filled in for everybody already employed.
+				request.monthlySalary(), trimToNull(request.notes()), request.kitchenId());
 
 		seedWeekOfDaysOff(id);
 
+		// The kitchen in the audit shape is read back from the row, not taken from the request
+		// (docs/work/README.md, lesson 2): the trail says what was stored.
+		StaffProfileView stored = find(id).orElseThrow(() -> notFound(id));
 		auditService.record(actor, AuditAction.STAFF_HIRED, AuditEntityType.STAFF_MEMBER, id,
 				null, auditShape(fullName, request.jobTitle(), request.employmentType(),
-						request.dateOfJoining(), request.systemAccess(), request.monthlySalary()),
+						request.dateOfJoining(), request.systemAccess(), request.monthlySalary(), stored),
 				"Hired as " + titleLabel(request.jobTitle(), request.jobTitleOther()) + ".");
 		return id;
 	}
@@ -171,6 +182,10 @@ public class StaffEmploymentService {
 		StaffProfileView before = find(id).orElseThrow(() -> notFound(id));
 		requireOtherTitleNamed(request.jobTitle(), request.jobTitleOther());
 		requireStillEmployed(before);
+		// Required on every edit, not only when it changes: the form always shows the kitchen and
+		// always sends it, so an edit without one is a form that lost it, and quietly keeping the old
+		// value would hide that.
+		requireUsableKitchen(request.kitchenId());
 
 		String phone = trimToNull(request.phone());
 		String email = lower(trimToNull(request.email()));
@@ -219,7 +234,9 @@ public class StaffEmploymentService {
 					pan_ciphertext = CASE WHEN ? THEN ? ELSE pan_ciphertext END,
 					pan_last4      = CASE WHEN ? THEN ? ELSE pan_last4 END,
 					monthly_salary = ?,
-					notes = ?, updated_at = now()
+					notes = ?,
+					kitchen_id = ?, kitchen_needs_check = false,
+					updated_at = now()
 				WHERE id = ?
 				""",
 				userId, request.fullName().trim(), phone, email,
@@ -231,14 +248,17 @@ public class StaffEmploymentService {
 				// Unlike the PAN, an absent salary is not "leave it alone": the form shows the stored
 				// figure, so a cleared box means the temple no longer has an agreed one.
 				request.monthlySalary(),
-				trimToNull(request.notes()), id);
+				// Saving the record is the admin looking at it, kitchen included — the form shows the
+				// kitchen and they sent it — so it comes off the check list whether or not it moved.
+				trimToNull(request.notes()), request.kitchenId(), id);
 
+		StaffProfileView after = find(id).orElseThrow(() -> notFound(id));
 		auditService.record(actor, AuditAction.STAFF_UPDATED, AuditEntityType.STAFF_MEMBER, id,
 				auditShape(before.fullName(), before.jobTitle(), before.employmentType(),
-						before.dateOfJoining(), before.systemAccess(), salaryBefore),
+						before.dateOfJoining(), before.systemAccess(), salaryBefore, before),
 				auditShape(request.fullName().trim(), request.jobTitle(), request.employmentType(),
-						request.dateOfJoining(), request.systemAccess(), request.monthlySalary()),
-				describeChange(before, request));
+						request.dateOfJoining(), request.systemAccess(), request.monthlySalary(), after),
+				describeChange(before, request, after));
 
 		if (accessChanged) {
 			// A second event for the same request, deliberately, and not a replacement for the one
@@ -362,6 +382,13 @@ public class StaffEmploymentService {
 		StaffProfileView before = find(id).orElseThrow(() -> notFound(id));
 		requireEmploymentEnded(before);
 		requireNoRecordOnFile(actor, before, request);
+		// They come back to the kitchen their record still names (Epic 12) — the column is NOT NULL, so
+		// leaving took nothing away. That kitchen may have been archived while they were gone, which is
+		// allowed because archiving refuses only a kitchen with *current* staff. Coming back into it
+		// would make them current staff of a closed kitchen, the state KMS-400185 exists to prevent, so
+		// it is refused with the kitchen's own code: restore the kitchen first, reinstate, then move
+		// them. The request has no kitchen of its own to choose instead (open question in T-357's proof).
+		requireUsableKitchen(before.kitchenId());
 
 		// The ending is cleared, not merely overwritten. Leaving last_working_day and end_reason
 		// behind on an ACTIVE row would leave the record contradicting itself, and the record screen
@@ -396,6 +423,137 @@ public class StaffEmploymentService {
 						"systemAccess", accessRole(request.systemAccess()),
 						"signInRestored", request.systemAccess() != null),
 				trimToNull(request.reason()));
+	}
+
+	// ---- Which kitchen (Epic 12) ------------------------------------------
+
+	/**
+	 * Refuses a kitchen a staff record cannot be put in, and says which of three mistakes it was.
+	 *
+	 * <ul>
+	 *   <li>None given: {@code KMS-400184}. Every staff member belongs to exactly one kitchen (Rajeev,
+	 *       2026-09-19), so the form cannot be saved without one.
+	 *   <li>Not a kitchen of this temple: {@code KMS-400108}. The lookup runs under the row policy, so
+	 *       another temple's kitchen id finds nothing and is refused as unknown. That matters because the
+	 *       foreign key is checked as the table owner and does not know about temples: without this, a
+	 *       staff record here could point at a kitchen somewhere else.
+	 *   <li>Archived: {@code KMS-400109}. Nobody should be put to work in a kitchen the temple closed.
+	 * </ul>
+	 *
+	 * <p>A kitchen that does not plan its meals here is allowed. People work in every kitchen — the one
+	 * that only draws from the store included — and what that decides is whether they get the planner,
+	 * not whether they can be employed.
+	 *
+	 * <p>Public because the hire endpoint asks it before the cross-temple ban check runs: a hire refused
+	 * for a missing kitchen should not leave a ban check on the platform log for a hire that never had
+	 * a chance of happening.
+	 */
+	@Transactional(readOnly = true)
+	public void requireUsableKitchen(UUID kitchenId) {
+		if (kitchenId == null) {
+			throw new ApplicationException(ErrorCode.STAFF_NEEDS_A_KITCHEN, Map.of("field", "kitchenId"));
+		}
+		List<String> status = jdbc.queryForList(
+				"SELECT status FROM kitchens WHERE id = ?", String.class, kitchenId);
+		if (status.isEmpty()) {
+			throw new ApplicationException(ErrorCode.KITCHEN_NOT_FOUND, Map.of("kitchenId", kitchenId));
+		}
+		if (!"ACTIVE".equals(status.get(0))) {
+			throw new ApplicationException(ErrorCode.KITCHEN_ARCHIVED, Map.of("kitchenId", kitchenId));
+		}
+	}
+
+	/**
+	 * The Temple Admin's "Check these kitchen assignments" list: people currently employed whose kitchen
+	 * the system chose and nobody has looked at since. Former staff are left off — there is nothing to
+	 * decide about where somebody who has left works.
+	 */
+	@Transactional(readOnly = true)
+	public List<StaffKitchenCheckView> kitchenChecks() {
+		return jdbc.query("""
+				SELECT sp.id, sp.full_name, sp.job_title, sp.job_title_other, sp.kitchen_id, k.name AS kitchen_name
+				FROM staff_profiles sp JOIN kitchens k ON k.id = sp.kitchen_id
+				WHERE sp.kitchen_needs_check AND sp.employment_status = 'ACTIVE'
+				ORDER BY lower(sp.full_name), sp.id
+				""", (rs, n) -> new StaffKitchenCheckView(
+						rs.getObject("id", UUID.class),
+						rs.getString("full_name"),
+						titleLabel(JobTitle.valueOf(rs.getString("job_title")), rs.getString("job_title_other")),
+						rs.getObject("kitchen_id", UUID.class),
+						rs.getString("kitchen_name")));
+	}
+
+	/**
+	 * Puts one person in a kitchen and marks it checked — the check list's "change", and the same act
+	 * wherever else a kitchen is changed on its own.
+	 *
+	 * <p>Refused for a former employee, exactly as {@link #update} is: the record of somebody who has
+	 * left is closed, and a reinstatement is the way to open it. Audited as {@code STAFF_UPDATED} with
+	 * the kitchen before and after as the row holds them, and written even when the kitchen did not
+	 * move — choosing the same kitchen from the list is still the admin saying it is right, which is
+	 * what clears the flag, and the trail should show who said so.
+	 */
+	@Transactional
+	public void setKitchen(AuthenticatedUser actor, UUID id, SetStaffKitchenRequest request) {
+		StaffProfileView before = find(id).orElseThrow(() -> notFound(id));
+		requireStillEmployed(before);
+		requireUsableKitchen(request.kitchenId());
+
+		jdbc.update("""
+				UPDATE staff_profiles SET kitchen_id = ?, kitchen_needs_check = false, updated_at = now()
+				WHERE id = ?
+				""", request.kitchenId(), id);
+
+		StaffProfileView after = find(id).orElseThrow(() -> notFound(id));
+		auditService.record(actor, AuditAction.STAFF_UPDATED, AuditEntityType.STAFF_MEMBER, id,
+				kitchenShape(before), kitchenShape(after),
+				before.kitchenId().equals(after.kitchenId())
+						? "Kitchen checked: " + after.kitchenName() + "."
+						: "Kitchen " + before.kitchenName() + " → " + after.kitchenName() + ".");
+	}
+
+	/**
+	 * "These are right": marks the named records checked and leaves their kitchens alone.
+	 *
+	 * <p>All or nothing. Every id must be somebody currently employed at this temple; if any is not —
+	 * a typo, a record that has since ended, or an id from another temple, which the row policy hides
+	 * — nothing is marked and the answer is {@code RESOURCE_NOT_FOUND}. Marking the ones that were
+	 * found and saying "done" would tell the admin they had confirmed a list they had not.
+	 *
+	 * <p>A record already checked is accepted and changes nothing, so confirming twice (two tabs, a
+	 * double click) is harmless. Each record that actually changes gets its own audit entry, filed
+	 * against that person, because "who said Radha's kitchen was right" is asked about one person.
+	 */
+	@Transactional
+	public void confirmKitchenChecks(AuthenticatedUser actor, ConfirmKitchenChecksRequest request) {
+		List<UUID> ids = request.staffIds().stream().distinct().toList();
+		List<StaffProfileView> found = new ArrayList<>();
+		for (UUID id : ids) {
+			StaffProfileView staff = id == null ? null : find(id).orElse(null);
+			if (staff == null || staff.isFormer()) {
+				throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("staffId", String.valueOf(id)));
+			}
+			found.add(staff);
+		}
+		for (StaffProfileView staff : found) {
+			if (!staff.kitchenNeedsCheck()) {
+				continue;
+			}
+			jdbc.update("UPDATE staff_profiles SET kitchen_needs_check = false, updated_at = now() WHERE id = ?",
+					staff.id());
+			StaffProfileView after = find(staff.id()).orElseThrow(() -> notFound(staff.id()));
+			auditService.record(actor, AuditAction.STAFF_UPDATED, AuditEntityType.STAFF_MEMBER, staff.id(),
+					kitchenShape(staff), kitchenShape(after), "Kitchen checked: " + after.kitchenName() + ".");
+		}
+	}
+
+	/** The kitchen half of a staff record, for the audit entries the check list writes. */
+	private static Map<String, Object> kitchenShape(StaffProfileView staff) {
+		Map<String, Object> shape = new LinkedHashMap<>();
+		shape.put("kitchenId", staff.kitchenId().toString());
+		shape.put("kitchenName", staff.kitchenName());
+		shape.put("kitchenNeedsCheck", staff.kitchenNeedsCheck());
+		return shape;
 	}
 
 	// ---- The audited PAN read -------------------------------------------
@@ -673,7 +831,7 @@ public class StaffEmploymentService {
 	 */
 	private static Map<String, Object> auditShape(
 			String fullName, JobTitle title, EmploymentType type, LocalDate joined, SystemAccess access,
-			BigDecimal monthlySalary) {
+			BigDecimal monthlySalary, StaffProfileView storedKitchen) {
 		Map<String, Object> shape = new LinkedHashMap<>();
 		shape.put("fullName", fullName);
 		shape.put("jobTitle", title.name());
@@ -681,12 +839,20 @@ public class StaffEmploymentService {
 		shape.put("dateOfJoining", joined == null ? null : joined.toString());
 		shape.put("systemAccess", access == null ? "NONE" : access.name());
 		shape.put("monthlySalary", monthlySalary == null ? "NONE" : monthlySalary.toPlainString());
+		// Which kitchen they work in (Epic 12), by id and by the name it had at the time, taken from a
+		// read of the row: a kitchen renamed next year must not rewrite what this entry says.
+		shape.put("kitchenId", storedKitchen.kitchenId().toString());
+		shape.put("kitchenName", storedKitchen.kitchenName());
 		return shape;
 	}
 
 	/** A sentence for the log when the change is one a reader would want named. */
-	private static String describeChange(StaffProfileView before, UpdateStaffRequest after) {
+	private static String describeChange(
+			StaffProfileView before, UpdateStaffRequest after, StaffProfileView stored) {
 		List<String> parts = new ArrayList<>();
+		if (!before.kitchenId().equals(stored.kitchenId())) {
+			parts.add("kitchen " + before.kitchenName() + " → " + stored.kitchenName());
+		}
 		if (before.jobTitle() != after.jobTitle()) {
 			parts.add("job title " + before.jobTitle().label() + " → " + after.jobTitle().label());
 		}
@@ -745,16 +911,23 @@ public class StaffEmploymentService {
 	// ---------------------------------------------------------------------
 
 	/**
-	 * Left join, deliberately: an employment record without an account is ordinary here, and an inner
-	 * join would silently drop every member of staff the temple gave no login.
+	 * Left join to users, deliberately: an employment record without an account is ordinary here, and
+	 * an inner join would silently drop every member of staff the temple gave no login.
+	 *
+	 * <p>Inner join to kitchens, equally deliberately (Epic 12): {@code kitchen_id} is NOT NULL, so every
+	 * row has one, and the only way the join could drop a row is a kitchen this temple cannot see — which
+	 * {@link #requireUsableKitchen} refuses before anything is written. A left join would instead answer
+	 * with a record whose kitchen is null, a shape the screen is entitled to believe never happens.
 	 */
 	static final String SELECT = """
 			SELECT sp.id, sp.user_id, sp.full_name, sp.phone, sp.email, sp.job_title, sp.job_title_other,
 			       sp.employment_type, sp.date_of_joining, sp.date_of_birth, sp.address,
 			       sp.emergency_contact_name, sp.emergency_contact_relationship, sp.emergency_contact_phone,
 			       sp.pan_last4, sp.employment_status, sp.last_working_day, sp.end_reason, sp.notes,
-			       sp.created_at, u.role AS user_role
+			       sp.created_at, u.role AS user_role,
+			       sp.kitchen_id, k.name AS kitchen_name, sp.kitchen_needs_check
 			FROM staff_profiles sp LEFT JOIN users u ON u.id = sp.user_id
+			JOIN kitchens k ON k.id = sp.kitchen_id
 			""";
 
 	static final RowMapper<StaffProfileView> MAPPER = (rs, n) -> {
@@ -779,6 +952,9 @@ public class StaffEmploymentService {
 				rs.getString("emergency_contact_phone"),
 				rs.getString("pan_last4"),
 				role == null ? null : SystemAccess.of(User.Role.valueOf(role)),
+				rs.getObject("kitchen_id", UUID.class),
+				rs.getString("kitchen_name"),
+				rs.getBoolean("kitchen_needs_check"),
 				EmploymentStatus.valueOf(rs.getString("employment_status")),
 				rs.getObject("last_working_day", LocalDate.class),
 				rs.getString("end_reason"),

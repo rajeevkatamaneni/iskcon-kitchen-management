@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.UUID;
 import org.iskcon.kms.config.PhoneNumberDeserializer;
 
 /**
@@ -81,6 +82,16 @@ public record UpdateStaffRequest(
 		@Positive(message = "A salary has to be more than zero. Leave it blank if no pay has been agreed yet.")
 		@Digits(integer = 10, fraction = 2, message = "Enter a salary in rupees and paise, for example 18000.")
 		BigDecimal monthlySalary,
+
+		/**
+		 * The one kitchen this person works in (Epic 12). Required — every staff member belongs to
+		 * exactly one kitchen — but deliberately not {@code @NotNull}: a missing kitchen is its own
+		 * refusal, {@code KMS-400184}, which says what to do in words the form can show beside the
+		 * picker, rather than the generic field-error code. Any kitchen of this temple that is not
+		 * archived will do, including one that does not plan its meals here: people work in the store
+		 * kitchen too, they just do not get the planner.
+		 */
+		UUID kitchenId,
 
 		@Size(max = 2000, message = "That note is too long.") String notes) {
 }

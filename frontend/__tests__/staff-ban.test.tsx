@@ -10,7 +10,7 @@ import type {
   StaffRegisterView,
   UserSummary,
 } from "@/lib/api";
-import { CATEGORIES, TITLES, ban, member, pay } from "./staff-fixtures";
+import { CATEGORIES, TITLES, ban, kitchen, member, pay } from "./staff-fixtures";
 
 /**
  * The three ban surfaces (B9): the option on the termination screen, what a check found at a hire,
@@ -71,6 +71,8 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
     const source = fn.toString();
+    // Epic 12: a hire needs a kitchen, so the form is given one, which it then chooses by itself.
+    if (source.includes("listKitchens")) return { data: [kitchen()], error: null, loading: false, reload: vi.fn() };
     const ref = source.includes("staffRegister")
       ? registerRef
       : source.includes("staffPay")

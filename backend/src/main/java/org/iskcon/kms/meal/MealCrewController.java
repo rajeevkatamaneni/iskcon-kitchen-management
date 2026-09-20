@@ -4,11 +4,14 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.staff.WorkforceCount;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,8 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>Behind {@code MANAGE_MEAL_PLANS}, the same permission that governs the plans these figures are
  * read from and the same one {@code /api/v1/workforce} already sits behind. What is exposed is a
- * head count and a target — no name, no job title, no salary. A cook can already see who is standing
- * next to them.
+ * head count, a target and, since Epic 12, the rostered staff's names per kitchen — no job title, no
+ * salary, no contact detail. A cook can already see who is standing next to them.
  */
 @RestController
 @RequestMapping("/api/v1/meal-crew")
@@ -40,7 +43,8 @@ public class MealCrewController {
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public List<MealCrewView> range(
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
 
 		if (to.isBefore(from)) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
@@ -50,7 +54,8 @@ public class MealCrewController {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
 					Map.of("field", "to", "reason", "ask for at most " + MAX_DAYS + " days at a time"));
 		}
-		return mealCrew.crewFor(from, to);
+		// Each meal's kitchens come in the order this person sees them: their own kitchen first (Epic 12).
+		return mealCrew.crewFor(from, to, actor.getUserId());
 	}
 
 	/**
@@ -66,15 +71,24 @@ public class MealCrewController {
 	 * disagreement this endpoint exists to remove. Until a time is given the composer says it has not
 	 * counted, which is true.
 	 *
-	 * <p>Same permission as the rest of the crew figures: a head count, never a name.
+	 * <p>Same permission as the rest of the crew figures. Since Epic 12 the rostered staff come by name,
+	 * because the planner prints them under each kitchen; a cook can already see who is standing next to
+	 * them, and a planner allocating People needed per kitchen has to know who is in which.
+	 *
+	 * <p><strong>Per kitchen (Epic 12).</strong> With {@code kitchenId}, only that kitchen's staff count.
+	 * Volunteers belong to no kitchen, so the caller says with {@code countVolunteers} whether this is
+	 * the section the meal's volunteers fall to (the main kitchen's, else the first); false leaves them
+	 * out. Without a kitchen every staff member counts and volunteers always do, as before.
 	 */
 	@GetMapping("/at")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public CrewAt at(
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-			@RequestParam LocalTime readyBy) {
-		WorkforceCount count = mealCrew.crewAt(date, readyBy);
-		return new CrewAt(date, readyBy, count.staffIn(), count.volunteers(), count.rostered());
+			@RequestParam LocalTime readyBy,
+			@RequestParam(required = false) UUID kitchenId,
+			@RequestParam(defaultValue = "true") boolean countVolunteers) {
+		MealCrewService.CrewAtCount count = mealCrew.crewAt(date, readyBy, kitchenId, countVolunteers);
+		return new CrewAt(date, readyBy, count.staffIn(), count.volunteers(), count.rostered(), count.staffNames());
 	}
 
 	/**
@@ -86,8 +100,12 @@ public class MealCrewController {
 	 *
 	 * @param rostered staff and volunteers added, the figure People needed is measured against —
 	 *                 added by {@link WorkforceCount#rostered()}, the one place that sum is made.
+	 * @param staffNames the rostered staff by name, in the roster's order; {@code staffIn} is its size
+	 *                   (Epic 12)
 	 */
-	public record CrewAt(LocalDate planDate, LocalTime readyBy, int staffIn, int volunteers, int rostered) {
+	public record CrewAt(
+			LocalDate planDate, LocalTime readyBy, int staffIn, int volunteers, int rostered,
+			List<String> staffNames) {
 	}
 
 	/**
@@ -96,8 +114,10 @@ public class MealCrewController {
 	 */
 	@GetMapping("/suggested")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
-	public SuggestedCrew suggested(@RequestParam String mealKind) {
-		return new SuggestedCrew(mealCrew.suggestedCrew(mealKind));
+	public SuggestedCrew suggested(
+			@RequestParam String mealKind, @AuthenticationPrincipal AuthenticatedUser actor) {
+		// For the kitchen the composer opens its first band on: this person's (Epic 12).
+		return new SuggestedCrew(mealCrew.suggestedCrew(mealKind, actor.getUserId()));
 	}
 
 	/**

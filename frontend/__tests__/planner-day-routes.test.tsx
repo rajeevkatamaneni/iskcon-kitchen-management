@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 /**
  * The two screens the planner's overlays became on 2026-08-21 (items 16 and 22), on meal ids since
@@ -28,6 +28,13 @@ const { authRef, routeRef, searchRef, api } = vi.hoisted(() => ({
     mealSufficiency: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
     listRecipes: vi.fn(async (_f?: unknown, _t?: string) => [] as unknown[]),
     listMealKinds: vi.fn(async (_t?: string) => [] as unknown[]),
+    // Epic 12: the edit screen asks for the temple's kitchens for "+ Add another kitchen". Mocked so
+    // nothing reaches the network; the meal's own kitchens come with the meal.
+    listKitchens: vi.fn(async (_archived: boolean, _t?: string) => [
+      { id: "kit-main", name: "Main kitchen", description: null, location: null, isMain: true,
+        usesMealPlanner: true, inChargeUserId: null, inChargeName: null, staffCount: 5,
+        contactPhone: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00Z" },
+    ] as unknown[]),
     mealCrew: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
     suggestedCrew: vi.fn(async (_kind: string, _t?: string) => ({ crewRequired: null })),
     menuHistory: vi.fn(async () => ({
@@ -113,7 +120,7 @@ function preparation(
   id: string, recipeId: string, recipeName: string, overrides: Record<string, unknown> = {}
 ) {
   return {
-    id, mealId: "meal-lunch", recipeId, recipeName, targetYield: 133, targetYieldUnit: "KG",
+    id, mealId: "meal-lunch", kitchenId: "kit-main", recipeId, recipeName, targetYield: 133, targetYieldUnit: "KG",
     status: "PLANNED", actualServings: null, consumedQuantity: null, notMade: false,
     originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
     ekadashiAcknowledged: false, createdAt: "2026-08-20T10:00:00Z",
@@ -126,6 +133,7 @@ function lunch(overrides: Record<string, unknown> = {}) {
   return {
     mealId: "meal-lunch", mealKindId: "k1", planDate: TOMORROW, mealKind: "Lunch", readyBy: "12:00:00",
     adults: 120, children: 20, seniors: 0, plates: 133, crewRequired: 8,
+    kitchens: [{ kitchenId: "kit-main", kitchenName: "Main kitchen", isMain: true, crewRequired: 8 }],
     dayType: "REGULAR", occasionName: null,
     eventName: null, isOutside: false, handover: null, contactName: null, contactPhone: null,
     deliveryAddress: null, deliverySubLocation: null, deliveryPlaceId: null,
@@ -386,8 +394,12 @@ describe("editing one meal, at its own id", () => {
     expect(screen.getAllByRole("button", { name: /update this meal/i })).toHaveLength(1);
 
     // Both of the meal's preparations are on it, and the crew it takes came with them.
-    expect(screen.getByRole("checkbox", { name: /bisi bele bath/i })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /kesari bath/i })).toBeChecked();
+    // Since Epic 12 each is a row on its kitchen's band with its own amount (the tick-box list of every
+    // recipe is gone), and they are the only rows: nothing that is not on this meal is drawn.
+    const band = screen.getByRole("region", { name: "Main kitchen" });
+    expect(within(band).getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(133);
+    expect(within(band).getByLabelText("Amount of Kesari Bath")).toHaveValue(133);
+    expect(within(band).getAllByLabelText(/^Amount of /)).toHaveLength(2);
     expect(screen.getByLabelText("People needed")).toHaveValue(8);
   });
 

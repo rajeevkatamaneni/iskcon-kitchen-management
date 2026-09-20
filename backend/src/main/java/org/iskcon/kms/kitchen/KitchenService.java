@@ -52,12 +52,67 @@ public class KitchenService {
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
 	private final MealPlannerAdoption mealPlannerAdoption;
+	private final KitchenOrder kitchenOrder;
 
 	public KitchenService(
-			JdbcTemplate jdbc, AuditService auditService, MealPlannerAdoption mealPlannerAdoption) {
+			JdbcTemplate jdbc, AuditService auditService, MealPlannerAdoption mealPlannerAdoption,
+			KitchenOrder kitchenOrder) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.mealPlannerAdoption = mealPlannerAdoption;
+		this.kitchenOrder = kitchenOrder;
+	}
+
+	/**
+	 * Makes sure the current temple has a kitchen that plans its meals, and returns it (Epic 12, T-350).
+	 *
+	 * <p>Called by provisioning beside the meal-kind seed, so a brand-new temple can plan its first meal:
+	 * every meal now has at least one kitchen and every staff member belongs to one, and a temple with
+	 * no kitchen could do neither. There it creates 'Main kitchen', marked main and using the meal
+	 * planner.
+	 *
+	 * <p>Where the temple already has one, it is returned and nothing is written — the same choice
+	 * {@link KitchenOrder#defaultPlanningKitchen} makes for somebody with no kitchen of their own: the
+	 * main kitchen if it plans meals, else the first planner kitchen in Settings order. Where it has none,
+	 * the rules are V150's, so a temple migrated and a temple provisioned end up the same: named 'Main
+	 * kitchen', or 'Main kitchen (meals)' when that is taken (names compare case-insensitively); main only
+	 * if the temple has no main kitchen, because moving the title off a kitchen the temple chose is not
+	 * a side effect anybody asked for; and never by turning the planner on for an existing kitchen,
+	 * which would settle that kitchen's open ingredient requests ({@link MealPlannerAdoption}).
+	 *
+	 * <p>Runs in the caller's tenant context and transaction. Not audited on its own: at provisioning the
+	 * temple's creation is the audited event, and the interim callers in the meal and staff services
+	 * (until T-354/T-357) audit the save that needed it.
+	 *
+	 * @param createdBy who the kitchen is recorded as created by, if one has to be made
+	 * @return the temple's default planning kitchen
+	 */
+	@Transactional
+	public UUID seedMainKitchenForCurrentTenant(UUID createdBy) {
+		Optional<UUID> existing = kitchenOrder.defaultPlanningKitchen(null);
+		if (existing.isPresent()) {
+			return existing.get();
+		}
+		String name = "Main kitchen";
+		for (int attempt = 1; nameTaken(name); attempt++) {
+			name = attempt == 1 ? "Main kitchen (meals)" : "Main kitchen (meals " + attempt + ")";
+		}
+		Integer mains = jdbc.queryForObject("SELECT count(*) FROM kitchens WHERE is_main", Integer.class);
+		boolean main = mains == null || mains == 0;
+
+		UUID id = UUID.randomUUID();
+		jdbc.update("""
+				INSERT INTO kitchens (id, tenant_id, name, is_main, uses_meal_planner, status, created_by)
+				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, true, 'ACTIVE', ?)
+				""", id, name, main, createdBy);
+		return id;
+	}
+
+	/** Whether a kitchen of this temple already has this name, compared as kitchens_name_per_tenant does. */
+	private boolean nameTaken(String name) {
+		Integer n = jdbc.queryForObject(
+				"SELECT count(*) FROM kitchens WHERE lower(name) = lower(?)", Integer.class, name);
+		return n != null && n > 0;
 	}
 
 	/**
@@ -73,11 +128,16 @@ public class KitchenService {
 		String sql = """
 				SELECT k.id, k.name, k.description, k.location, k.is_main, k.uses_meal_planner,
 					   k.in_charge_user_id, u.full_name AS in_charge_name, k.contact_phone,
-					   k.status, k.created_at
+					   k.status, k.created_at,
+					   (SELECT count(*) FROM staff_profiles sp
+						WHERE sp.kitchen_id = k.id AND sp.employment_status = 'ACTIVE') AS staff_count
 				FROM kitchens k
 				LEFT JOIN users u ON u.id = k.in_charge_user_id
 				""" + (includeArchived ? "" : "WHERE k.status = 'ACTIVE'\n")
-				+ "ORDER BY k.is_main DESC, k.name";
+				// lower(name), as KitchenOrder.settingsOrder() sorts (Epic 12): the planner's sections follow
+				// "Settings order", so the Settings list and the planner must not disagree over two
+				// kitchens whose names differ only in case.
+				+ "ORDER BY k.is_main DESC, lower(k.name), k.id";
 		return jdbc.query(sql, VIEW_MAPPER);
 	}
 
@@ -208,6 +268,7 @@ public class KitchenService {
 		if ("ARCHIVED".equals(before.status())) {
 			return;
 		}
+		requireNoCurrentStaff(before);
 		jdbc.update("UPDATE kitchens SET status = 'ARCHIVED', updated_at = now() WHERE id = ?", id);
 		auditService.record(actor, AuditAction.KITCHEN_ARCHIVED, AuditEntityType.KITCHEN, id,
 				Map.of("status", "ACTIVE"), Map.of("status", "ARCHIVED"), null);
@@ -244,6 +305,9 @@ public class KitchenService {
 	public void delete(AuthenticatedUser actor, UUID id) {
 		KitchenView before = get(id);
 
+		// People working here now is the refusal with a way forward of its own — move them first —
+		// so it is asked before the general "something points at it" question below.
+		requireNoCurrentStaff(before);
 		if (isReferenced(id)) {
 			throw new ApplicationException(ErrorCode.KITCHEN_IN_USE, Map.of("kitchenId", id));
 		}
@@ -266,9 +330,38 @@ public class KitchenService {
 	 * error before now.
 	 */
 	private boolean isReferenced(UUID id) {
-		Integer requests = jdbc.queryForObject(
-				"SELECT count(*) FROM ingredient_requests WHERE kitchen_id = ?", Integer.class, id);
-		return requests != null && requests > 0;
+		// Two more references since Epic 12, both ON DELETE RESTRICT, and both would otherwise reach
+		// the user as an internal error at the DELETE: a staff record that names this kitchen (a former
+		// employee's — current staff are refused before this with KMS-400185), and a meal it cooked.
+		// Both are history the kitchen is part of, which is exactly the case archiving is for.
+		//
+		// The refusal is KMS-400107, whose sentence names only ingredient requests. It is the closest
+		// code whose next step is right ("archive it instead"); a sentence that covers all three is a
+		// wording change to ErrorCode.java, which T-357 does not own (flagged in its proof).
+		Integer references = jdbc.queryForObject("""
+				SELECT (SELECT count(*) FROM ingredient_requests WHERE kitchen_id = ?)
+					 + (SELECT count(*) FROM staff_profiles WHERE kitchen_id = ?)
+					 + (SELECT count(*) FROM meal_kitchens WHERE kitchen_id = ?)
+				""", Integer.class, id, id, id);
+		return references != null && references > 0;
+	}
+
+	/**
+	 * Refuses to close a kitchen people are working in now (Epic 12, {@code KMS-400185}).
+	 *
+	 * <p>Every staff member belongs to exactly one kitchen, and an archived kitchen is one nobody should
+	 * be put to work in — the staff form refuses it. Archiving a kitchen out from under its staff would
+	 * leave them in exactly that state, with no planner if it was their route to one, and nothing on
+	 * any screen saying why. So the temple moves them first, on the Staff page, and then closes it.
+	 *
+	 * <p>Only current staff count. A former employee's record still names the kitchen they left from,
+	 * and that must not stop a kitchen being archived for ever.
+	 */
+	private void requireNoCurrentStaff(KitchenView kitchen) {
+		if (kitchen.staffCount() > 0) {
+			throw new ApplicationException(ErrorCode.KITCHEN_HAS_STAFF,
+					Map.of("kitchenId", kitchen.id(), "staffCount", kitchen.staffCount()));
+		}
 	}
 
 	/**
@@ -366,7 +459,9 @@ public class KitchenService {
 		return jdbc.query("""
 				SELECT k.id, k.name, k.description, k.location, k.is_main, k.uses_meal_planner,
 					   k.in_charge_user_id, u.full_name AS in_charge_name, k.contact_phone,
-					   k.status, k.created_at
+					   k.status, k.created_at,
+					   (SELECT count(*) FROM staff_profiles sp
+						WHERE sp.kitchen_id = k.id AND sp.employment_status = 'ACTIVE') AS staff_count
 				FROM kitchens k
 				LEFT JOIN users u ON u.id = k.in_charge_user_id
 				WHERE k.id = ?
@@ -404,6 +499,7 @@ public class KitchenService {
 			rs.getBoolean("uses_meal_planner"),
 			rs.getObject("in_charge_user_id", UUID.class),
 			rs.getString("in_charge_name"),
+			rs.getInt("staff_count"),
 			rs.getString("contact_phone"),
 			rs.getString("status"),
 			rs.getObject("created_at", OffsetDateTime.class).toInstant());

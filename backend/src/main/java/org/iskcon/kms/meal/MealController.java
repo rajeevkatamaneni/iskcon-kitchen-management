@@ -37,6 +37,10 @@ import org.springframework.web.bind.annotation.RestController;
  * which is {@code CORRECT_RECORDED_MEAL} and the Temple Admin's alone (T-007, D-4). Saving a meal's
  * volunteer shift needs nothing more: every role that plans meals — Temple Admin, Kitchen Manager and
  * Kitchen Staff — also manages volunteer shifts (D-27, checked against {@code RolePermissions}).
+ *
+ * <p><strong>Every meal answered here has its kitchens in the signed-in person's order</strong> (Epic
+ * 12): their own kitchen first when it is on the meal, else the main kitchen, then Settings order. The
+ * screens draw sections in the order they arrive, so the order is decided once, on the server.
  */
 @RestController
 @RequestMapping("/api/v1/meals")
@@ -58,9 +62,10 @@ public class MealController {
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
 	public List<ServedMeal> list(
 			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+			@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
 
-		return mealPlanService.meals(from, to);
+		return mealPlanService.meals(from, to, actor);
 	}
 
 	/**
@@ -81,8 +86,8 @@ public class MealController {
 	/** One meal, with its live volunteer shift — the counts the cancel warning quotes are on it. */
 	@GetMapping("/{id}")
 	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
-	public ServedMeal get(@PathVariable UUID id) {
-		return mealPlanService.meal(id);
+	public ServedMeal get(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser actor) {
+		return mealPlanService.meal(id, actor);
 	}
 
 	/**
@@ -191,7 +196,7 @@ public class MealController {
 			@Valid @RequestBody RecordMealRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
-		return servedMealService.record(actor, id, request);
+		return servedMealService.forViewer(servedMealService.record(actor, id, request), actor.getUserId());
 	}
 
 	/**
@@ -210,7 +215,7 @@ public class MealController {
 			@Valid @RequestBody CorrectMealRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
-		return servedMealService.correct(actor, id, request);
+		return servedMealService.forViewer(servedMealService.correct(actor, id, request), actor.getUserId());
 	}
 
 	private static Map<String, Object> body(SavedMeal saved) {

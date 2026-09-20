@@ -26,7 +26,10 @@ import java.util.UUID;
  *                   hands than it asked for is covered, not surplus, and there is nothing to draw.
  * @param shortAt    the meal that is deepest short — its name, when it is due, what it asked for and
  *                   what it has. All four are null when the day is not short, because there is then
- *                   no meal they would be about.
+ *                   no meal they would be about. Since Epic 12 the shortfall is one kitchen's on that
+ *                   meal: required and rostered are that kitchen's, and the name reads <em>Lunch (Main
+ *                   kitchen)</em> where the meal has more than one kitchen, plain <em>Lunch</em> where
+ *                   it has one.
  * @param shortAtMealId the id of that meal (D-27), so the screen can open it rather than find it again
  *                   by its date and name. Null exactly when the four above are.
  */

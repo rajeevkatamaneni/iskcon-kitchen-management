@@ -71,6 +71,9 @@ function EditMealScreen() {
   const calQ = useAuthedQuery(
     useCallback((t?: string) => (date ? api.calendarRange(date, date, t) : Promise.resolve([])), [date])
   );
+  // The temple's kitchens (Epic 12), for "+ Add another kitchen". Not waited for: the meal opens on
+  // its own kitchens, which come with it, and the list only decides what else may be added.
+  const kitchensQ = useAuthedQuery(useCallback((t?: string) => api.listKitchens(false, t), []));
 
   // The composer owns the form; the focus screen owns the button that commits it, so it has to be
   // told what the form knows. Compared before it is stored, because setting an object that has not
@@ -167,6 +170,7 @@ function EditMealScreen() {
         date={meal.planDate}
         recipes={recipesQ.data ?? []}
         mealKinds={mealKinds ?? []}
+        kitchens={kitchensQ.data ?? []}
         isEkadashi={Boolean(calQ.data?.[0]?.isEkadashi)}
         ekadashiName={calQ.data?.[0]?.ekadashiName}
         existing={meal}

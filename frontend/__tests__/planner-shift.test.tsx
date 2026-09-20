@@ -6,7 +6,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
  * Asking for volunteers from the meal planner, as D-27 ruled it (Rajeev, 2026-09-13).
  *
  * <p>Before D-27 the day's block posted a shift the moment its layer was saved. Now asking for
- * volunteers is part of planning the meal: *Ask for volunteers* sits in section 4 of the composer the
+ * volunteers is part of planning the meal: *Ask for volunteers* sits in the kitchen's band of the composer the
  * moment People needed is more than Rostered, the layer's button reads **Done** and saves nothing,
  * and the shift goes to the server inside *Save this meal* or *Update this meal*, where the meal and
  * the shift are one transaction. Rajeev: *"we should not be left with an orphan shift."*
@@ -34,8 +34,10 @@ const { authRef, api } = vi.hoisted(() => ({
     meals: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
     mealCrew: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
     // Who is rostered at a date and ready-by before the meal is saved (T-215). Read-only.
-    mealCrewAt: vi.fn(async (_date: string, _readyBy: string, _t?: string) =>
-      ({ planDate: "", readyBy: "", staffIn: 0, volunteers: 0, rostered: 0 })),
+    // Since Epic 12 asked per kitchen, saying whether that kitchen is the one the volunteers fall to.
+    mealCrewAt: vi.fn(async (
+      _date: string, _readyBy: string, _t?: string, _kitchenId?: string, _countVolunteers?: boolean
+    ) => ({ planDate: "", readyBy: "", staffIn: 0, volunteers: 0, rostered: 0, staffNames: [] as string[] })),
     suggestedCrew: vi.fn(async (_kind: string, _t?: string) => ({ crewRequired: null as number | null })),
     // What the calendar says the date is (T-208). A new meal of any kind now asks, because a festival
     // day's usual crowd opens as its adults. A plain day here, read-only, so no meal in this file
@@ -56,7 +58,7 @@ const { authRef, api } = vi.hoisted(() => ({
 
 /** What a meal save or update sends, typed enough to index into. */
 type Body = Record<string, unknown> & {
-  dishes: { id: string | null; recipeId: string; targetYield: number }[];
+  dishes: { id: string | null; recipeId: string; targetYield: number; kitchenId: string }[];
   volunteerShift: Record<string, unknown> | null;
 };
 
@@ -125,6 +127,8 @@ function lunch(overrides: Record<string, unknown> = {}) {
   return {
     mealId: "meal-lunch", mealKindId: "k1", planDate: DATE, mealKind: "Lunch", readyBy: "12:00:00",
     adults: 200, children: 40, seniors: 30, plates: 248, crewRequired: 8,
+    // Epic 12: cooked by the main kitchen alone, which needs the eight.
+    kitchens: [{ kitchenId: "kit-main", kitchenName: "Main kitchen", isMain: true, crewRequired: 8 }],
     dayType: "REGULAR", occasionName: null, eventName: null, isOutside: false, handover: null,
     contactName: null, contactPhone: null, deliveryAddress: null, deliverySubLocation: null,
     deliveryPlaceId: null, deliveryLatitude: null, deliveryLongitude: null, guestsEatAt: null,
@@ -133,7 +137,7 @@ function lunch(overrides: Record<string, unknown> = {}) {
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
     corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
     dishes: [
-      { id: "d1", mealId: "meal-lunch", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 248,
+      { id: "d1", mealId: "meal-lunch", kitchenId: "kit-main", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 248,
         targetYieldUnit: "KG", status: "PLANNED", actualServings: null, consumedQuantity: null,
         notMade: false, originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
         ekadashiAcknowledged: false, createdAt: "2026-08-20T10:00:00Z" },
@@ -145,11 +149,30 @@ function lunch(overrides: Record<string, unknown> = {}) {
 
 /** Who is rostered over the meal. Five by default, so a meal needing eight is three short. */
 function crewOf(rostered = 5, required: number | null = 8, mealId = "meal-lunch") {
+  const shortOfCrew = required != null && rostered < required;
   return {
     mealId, planDate: DATE, mealKind: "Lunch", readyBy: "12:00:00",
-    crewRequired: required, staffIn: 3, volunteers: rostered - 3, rostered,
-    shortOfCrew: required != null && rostered < required,
+    crewRequired: required, staffIn: 3, volunteers: rostered - 3, rostered, shortOfCrew,
+    // Epic 12: the same figures for its one kitchen, which carries the meal's volunteers.
+    kitchens: [
+      { kitchenId: "kit-main", kitchenName: "Main kitchen", crewRequired: required, staffIn: 3,
+        staffNames: ["Govinda Das", "Madhava Das", "Keshava Das"], volunteers: rostered - 3, rostered,
+        shortOfCrew },
+    ],
   };
+}
+
+/** The temple's one kitchen, as `api.listKitchens(false)` gives it (Epic 12). */
+const KITCHENS = [
+  { id: "kit-main", name: "Main kitchen", description: null, location: null, isMain: true,
+    usesMealPlanner: true, inChargeUserId: null, inChargeName: null, staffCount: 3,
+    contactPhone: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00Z" },
+];
+
+/** Adds a dish through the kitchen's search, as a planner does since Epic 12. */
+function pick(name: RegExp, kitchen = "Main kitchen") {
+  fireEvent.change(screen.getByLabelText(`Add a dish to ${kitchen}`), { target: { value: name.source } });
+  fireEvent.click(within(screen.getByRole("region", { name: kitchen })).getByRole("button", { name }));
 }
 
 /**
@@ -165,6 +188,7 @@ function Harness(props: Partial<React.ComponentProps<typeof MealComposer>>) {
         date={DATE}
         recipes={RECIPES as never}
         mealKinds={KINDS as never}
+        kitchens={KITCHENS as never}
         isEkadashi={false}
         onClose={vi.fn()}
         onPlanned={vi.fn()}
@@ -184,7 +208,7 @@ function Harness(props: Partial<React.ComponentProps<typeof MealComposer>>) {
 async function planALunch(needed: string) {
   render(<Harness />);
   fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "200" } });
-  fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+  pick(/bisi bele bath/i);
   fireEvent.change(screen.getByLabelText("People needed"), { target: { value: needed } });
   // The crew readout is read from the server; wait for it so "Rostered" is the real figure.
   await screen.findByText(/3 staff · 2 volunteers/);
@@ -228,7 +252,7 @@ beforeEach(() => {
   api.updateMeal.mockReset().mockResolvedValue({ id: "meal-lunch" });
 });
 
-describe("Ask for volunteers, in section 4 of the composer", () => {
+describe("Ask for volunteers, in the kitchen's band of the composer (section 4 until Epic 12)", () => {
   it("appears exactly when People needed is more than Rostered — not at equal, not below", async () => {
     await planALunch("5");
     // Five needed, five rostered: covered, so nothing to ask for.
@@ -348,7 +372,10 @@ describe("a meal not saved yet is counted before its first save (T-215)", () => 
    * ready-by, echoing the time it was asked about as the server does.
    */
   function countOf(rostered: number, readyBy = "12:00") {
-    return { planDate: DATE, readyBy: `${readyBy}:00`, staffIn: rostered, volunteers: 0, rostered };
+    return {
+      planDate: DATE, readyBy: `${readyBy}:00`, staffIn: rostered, volunteers: 0, rostered,
+      staffNames: Array.from({ length: rostered }, (_, i) => `Cook ${i + 1}`),
+    };
   }
 
   async function planANewEvent(needed: string) {
@@ -369,7 +396,7 @@ describe("a meal not saved yet is counted before its first save (T-215)", () => 
 
     expect(await screen.findByText("2 staff · 0 volunteers · 2 of 5")).toBeInTheDocument();
     expect(screen.queryByText("Not counted yet")).toBeNull();
-    expect(api.mealCrewAt).toHaveBeenLastCalledWith(DATE, "12:00", "t");
+    expect(api.mealCrewAt).toHaveBeenLastCalledWith(DATE, "12:00", "t", "kit-main", true);
     // Five needed, two rostered: short, so asking is offered.
     expect(screen.getByRole("button", ASK)).toBeInTheDocument();
   });
@@ -448,7 +475,7 @@ describe("a meal not saved yet is counted before its first save (T-215)", () => 
 
     expect(await screen.findByText("1 staff · 0 volunteers · 1 of 5")).toBeInTheDocument();
     expect(api.mealCrewAt.mock.calls.length).toBe(asked + 1);
-    expect(api.mealCrewAt).toHaveBeenLastCalledWith(DATE, "18:00", "t");
+    expect(api.mealCrewAt).toHaveBeenLastCalledWith(DATE, "18:00", "t", "kit-main", true);
   });
 
   it("does not offer Ask for volunteers when the count already covers People needed", async () => {
@@ -476,7 +503,7 @@ describe("a meal not saved yet is counted before its first save (T-215)", () => 
 
     expect(await screen.findByText("2 staff · 0 volunteers · 2 of 6")).toBeInTheDocument();
     // Lunch opens at its kind's default ready-by.
-    expect(api.mealCrewAt).toHaveBeenLastCalledWith(DATE, "12:00", "t");
+    expect(api.mealCrewAt).toHaveBeenLastCalledWith(DATE, "12:00", "t", "kit-main", true);
   });
 
   it("does not ask for the count where the meal's kind already has a row that day", async () => {

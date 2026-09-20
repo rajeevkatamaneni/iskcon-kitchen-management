@@ -99,6 +99,7 @@ function meal(fields: Record<string, unknown> = {}) {
     adults: 120, children: 20, seniors: 0,
     plates: 133,
     crewRequired: null,
+    kitchens: [{ kitchenId: "kit-main", kitchenName: "Main kitchen", isMain: true, crewRequired: null }],
     dayType: "REGULAR",
     occasionName: null,
     eventName: null, contactName: null, contactPhone: null, deliveryAddress: null,
@@ -119,6 +120,7 @@ function meal(fields: Record<string, unknown> = {}) {
 function preparation(id: string, recipeName: string) {
   return {
     id, mealId: "meal-lunch",
+    kitchenId: "kit-main",
     recipeId: `r-${id}`, recipeName, targetYield: 133, targetYieldUnit: "KG", status: "PLANNED",
     actualServings: null, consumedQuantity: null, notMade: false,
     originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
@@ -339,6 +341,50 @@ describe("a meal is the unit of planning", () => {
     expect(
       screen.getByRole("button", { name: /1 meal planned$/i })
     ).toBeInTheDocument();
+  });
+
+  it("groups a two-kitchen meal's dishes under each kitchen on its week tile (Epic 12)", () => {
+    queryRef.current = [
+      meal({
+        // In the server's order for this reader: the sweets kitchen first, though it sorts second.
+        kitchens: [
+          { kitchenId: "kit-sweets", kitchenName: "Sweets kitchen", isMain: false, crewRequired: 2 },
+          { kitchenId: "kit-main", kitchenName: "Main kitchen", isMain: true, crewRequired: 6 },
+        ],
+        dishes: [
+          preparation("m1", "Bisi Bele Bath"),
+          { ...preparation("m2", "Kesari Bath"), kitchenId: "kit-sweets" },
+          preparation("m3", "Majjige"),
+        ],
+      }),
+    ];
+    render(<PlannerPage />);
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
+
+    // The count line is the meal's, unchanged.
+    expect(screen.getByText(/3 preparations · 133 servings/)).toBeInTheDocument();
+    const sweets = screen.getByText("Sweets kitchen");
+    const main = screen.getByText("Main kitchen");
+    expect(sweets.className).toContain("font-semibold");
+    // Each kitchen's name heads its own group, holding only its own dishes, in the order sent.
+    const sweetsGroup = sweets.parentElement!;
+    const mainGroup = main.parentElement!;
+    expect(sweetsGroup.className).toContain("mt-1 grid gap-px");
+    expect(Array.from(sweetsGroup.children).map((c) => c.textContent)).toEqual(["Sweets kitchen", "Kesari Bath"]);
+    expect(Array.from(mainGroup.children).map((c) => c.textContent)).toEqual([
+      "Main kitchen",
+      "Bisi Bele Bath",
+      "Majjige",
+    ]);
+    expect(sweetsGroup.compareDocumentPosition(mainGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("names no kitchen on a one-kitchen meal's week tile", () => {
+    render(<PlannerPage />);
+    fireEvent.click(within(views()).getByRole("tab", { name: "Week" }));
+
+    expect(screen.getByText("Kesari Bath")).toBeInTheDocument();
+    expect(screen.queryByText("Main kitchen")).not.toBeInTheDocument();
   });
 
   it("gives a month cell one line per meal kind and no preparation names — there is no room", () => {

@@ -1,7 +1,9 @@
 package org.iskcon.kms.testsupport;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import org.iskcon.kms.auth.TokenVerifier;
 
 /**
@@ -24,6 +26,12 @@ import org.iskcon.kms.auth.TokenVerifier;
  *
  * <p>The overloads are the union of what the private copies offered, each producing exactly the
  * subject its old copy did, so no test signs in as anyone different from before.
+ *
+ * <p><strong>It also completes the fixture of a cook (T-361).</strong> Being the one place every test
+ * class's sign-in passes through, it is also the one place that can give a Kitchen Staff or Kitchen
+ * Manager account the employment record a real one always has, which the meal planner's kitchen rule
+ * now requires. {@link TestStaffRecords} says what is written and why it is written here; a class whose
+ * subject is a cook who was never hired calls {@link #withoutAutomaticStaffRecords()}.
  */
 public class StubTokenVerifier implements TokenVerifier {
 
@@ -31,6 +39,24 @@ public class StubTokenVerifier implements TokenVerifier {
 	public static final String TOKEN = "valid-token";
 
 	private final Map<String, VerifiedSubject> accepted = new HashMap<>();
+
+	/**
+	 * Completes the fixture of a signed-in cook: see {@link TestStaffRecords} for the whole reason.
+	 * It is asked at {@link #verify} rather than at {@link #accept} because a test's {@code users} row
+	 * may be written either side of the sign-in, and only by the time a request arrives is it certainly
+	 * there.
+	 */
+	private final TestStaffRecords staffRecords;
+
+	/** Uids already looked at this test, so one test's several requests cost one query, not one each. */
+	private final Set<String> ensured = new HashSet<>();
+
+	/** Off for a class that is testing a cook who was never hired; back on for the next test. */
+	private boolean automaticStaffRecords = true;
+
+	public StubTokenVerifier(TestStaffRecords staffRecords) {
+		this.staffRecords = staffRecords;
+	}
 
 	/** Accepts {@link #TOKEN} for {@code uid}, with the email and phone most tests never look at. */
 	public void accept(String uid) {
@@ -62,9 +88,21 @@ public class StubTokenVerifier implements TokenVerifier {
 		accept(uid, email, "+919000000000", true);
 	}
 
+	/**
+	 * Stops this test giving a signed-in Kitchen Staff or Kitchen Manager account an employment record
+	 * it does not have ({@link TestStaffRecords}). For the classes whose subject is exactly that person
+	 * — somebody with a login and no hire. Called from the class's own {@code @BeforeEach}, because
+	 * {@link #reset()} turns it back on before every test.
+	 */
+	public void withoutAutomaticStaffRecords() {
+		automaticStaffRecords = false;
+	}
+
 	/** Forgets every accepted token. Called by {@code AbstractIntegrationTest} before each test. */
 	public void reset() {
 		accepted.clear();
+		ensured.clear();
+		automaticStaffRecords = true;
 	}
 
 	/** Whether nobody is signed in, for helpers that send a bearer token only when somebody is. */
@@ -77,6 +115,9 @@ public class StubTokenVerifier implements TokenVerifier {
 		VerifiedSubject subject = accepted.get(idToken);
 		if (subject == null) {
 			throw new InvalidTokenException("Unrecognised token");
+		}
+		if (automaticStaffRecords && ensured.add(subject.uid())) {
+			staffRecords.ensureFor(subject.uid());
 		}
 		return subject;
 	}

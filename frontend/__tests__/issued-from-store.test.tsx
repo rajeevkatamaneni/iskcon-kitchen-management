@@ -64,7 +64,7 @@ function rowFor(name: string) {
   return screen.getByRole("row", { name: new RegExp(name) });
 }
 
-describe("Issued from the temple store", () => {
+describe("Issued to kitchens", () => {
   beforeEach(() => {
     authRef.current = {
       status: "signed-in",
@@ -88,15 +88,17 @@ describe("Issued from the temple store", () => {
   });
 
   /**
-   * The INV5 condition, pinned. The heading names the store rather than the kitchen, and the line
-   * under it says in as many words that a kitchen's own buying is not in the figure.
+   * The INV5 condition, pinned. The heading says *issued* — what the store handed over, not what a
+   * kitchen spent — and the line under it says in as many words that a kitchen's own buying is not
+   * in the figure. The name is Rajeev's, 2026-09-19 ("Issued to kitchens", over "Out of the store");
+   * the verb is what carries the condition, and the sentence under it carries the rest.
    */
-  it("says it is what the store issued, and that the figures are a floor", () => {
+  it("says it is what was issued, and that the figures are a floor", () => {
     queryRef.current.data = report();
     render(<IssuedFromStorePage />);
 
     expect(
-      screen.getByRole("heading", { name: "Issued from the temple store" })
+      screen.getByRole("heading", { name: "Issued to kitchens" })
     ).toBeInTheDocument();
     expect(screen.getByText(/A kitchen may also buy food itself/)).toBeInTheDocument();
     expect(screen.getByText(/a floor, not a total/)).toBeInTheDocument();

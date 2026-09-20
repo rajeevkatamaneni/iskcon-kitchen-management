@@ -54,6 +54,8 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// Provisioning seeds a main kitchen (V150, T-350), and a staff record names it; after the staff.
+		admin.execute("DELETE FROM kitchens");
 		// Anything that moved through the stock ledger is tracked now, so the item rows exist
 		// even where the test never asked for them, and they hold the ingredient down.
 		admin.execute("DELETE FROM inventory_items");
@@ -109,6 +111,32 @@ class TenantProvisioningIT extends AbstractIntegrationTest {
 				""", Integer.class);
 		assertThat(days).as("the schedule grid edits seven days; it cannot edit rows that do not exist")
 				.isEqualTo(7);
+	}
+
+	@Test
+	@DisplayName("a new temple starts with a main kitchen that plans meals, and its administrator works in it")
+	void seedsAMainKitchen() {
+		signInAsSuperAdmin();
+
+		post("/api/v1/tenants", validRequest());
+
+		// Every meal needs a kitchen and every staff member belongs to one (Epic 12, V150). Without a
+		// seeded kitchen a brand-new temple could neither plan its first meal nor employ anybody.
+		Map<String, Object> kitchen = admin.queryForMap("""
+				SELECT k.id, k.name, k.is_main, k.uses_meal_planner, k.status, u.role AS created_by_role
+				FROM kitchens k JOIN users u ON u.id = k.created_by
+				""");
+		assertThat(kitchen.get("name")).isEqualTo("Main kitchen");
+		assertThat(kitchen.get("is_main")).isEqualTo(true);
+		assertThat(kitchen.get("uses_meal_planner")).isEqualTo(true);
+		assertThat(kitchen.get("status")).isEqualTo("ACTIVE");
+		assertThat(kitchen.get("created_by_role")).isEqualTo("TEMPLE_ADMIN");
+
+		Map<String, Object> staff = admin.queryForMap("SELECT kitchen_id, kitchen_needs_check FROM staff_profiles");
+		assertThat(staff.get("kitchen_id")).isEqualTo(kitchen.get("id"));
+		assertThat(staff.get("kitchen_needs_check"))
+				.as("one kitchen, so nothing was guessed and there is nothing to check")
+				.isEqualTo(false);
 	}
 
 	@Test

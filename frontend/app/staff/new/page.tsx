@@ -36,6 +36,8 @@ function HireScreen() {
   const { getToken } = useAuth();
 
   const titles = useAuthedQuery(useCallback((t: string | undefined) => api.jobTitles(t), []));
+  // Active kitchens only, in the order Settings lists them: the form offers them as they come.
+  const kitchens = useAuthedQuery(useCallback((t: string | undefined) => api.listKitchens(false, t), []));
   const devotees = useAuthedQuery(
     useCallback((t: string | undefined) => api.listUsers(t, "VOLUNTEER"), [])
   );
@@ -120,6 +122,9 @@ function HireScreen() {
       }
     >
       {actionError && <ErrorNotice error={actionError} />}
+      {/* Without the kitchens the form has nothing to offer under Kitchen, and would refuse the save
+          with "Kitchen is required" for a reason the reader cannot fix. Said here instead. */}
+      {kitchens.error && <ErrorNotice error={kitchens.error} />}
 
       {/* Above the form, because it has to be read before the button is pressed again (B9). */}
       {findings && (
@@ -130,6 +135,7 @@ function HireScreen() {
         staff={null}
         pay={null}
         options={titles.data ?? []}
+        kitchens={kitchens.data ?? []}
         devotees={(devotees.data ?? []).filter((d) => d.status === "ACTIVE")}
         onSubmit={(event) => {
           event.preventDefault();

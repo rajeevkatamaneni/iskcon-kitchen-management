@@ -38,7 +38,12 @@ vi.mock("@/lib/auth-context", () => ({
 }));
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
-    const ref = fn.toString().includes("staffRegister") ? registerRef : bansRef;
+    const source = fn.toString();
+    // The kitchens and the kitchen check list (Epic 12) have their own tests, in staff-kitchen.test.tsx.
+    if (source.includes("listKitchens") || source.includes("staffKitchenChecks")) {
+      return { data: [], error: null, loading: false, reload: vi.fn() };
+    }
+    const ref = source.includes("staffRegister") ? registerRef : bansRef;
     return { ...ref.current, reload: vi.fn() };
   },
 }));

@@ -6,7 +6,6 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
@@ -33,6 +32,9 @@ import org.iskcon.kms.shift.MealShiftDraft;
  * it is; a draft creates the meal's shift or changes it, committed only with the meal (answer 7:
  * <em>"nothing saved until the meal is saved : Aggreed"</em>). Cancelling a shift is not done here;
  * cancelling the meal cancels it.
+ *
+ * <p><strong>The kitchens (Epic 12).</strong> {@code kitchens} replaced the meal-level
+ * {@code crewRequired}: People needed is set per kitchen, and V151 dropped the meal's column.
  */
 public record UpdateMealRequest(
 		LocalTime readyBy,
@@ -60,7 +62,18 @@ public record UpdateMealRequest(
 		@PositiveOrZero(message = "A head count cannot be less than nothing.") Integer adults,
 		@PositiveOrZero(message = "A head count cannot be less than nothing.") Integer children,
 		@PositiveOrZero(message = "A head count cannot be less than nothing.") Integer seniors,
-		@Positive(message = "At least one person is needed on the crew.") Integer crewRequired,
+		/**
+		 * The kitchens cooking this meal, each with its People needed (Epic 12) — the whole list, like
+		 * {@code dishes}. A kitchen on the meal and left out here is taken off it, which is allowed only
+		 * when none of the dishes sent is under it (else KMS-400182); its planned dishes that are not
+		 * sent are cancelled as any dish left out is. An empty list is KMS-400180.
+		 *
+		 * <p>Null — a caller that predates Epic 12 — leaves the meal's kitchens and their figures exactly
+		 * as they are, and a dish sent without a kitchen stays where it was (or, added, goes to the
+		 * meal's one kitchen). Replacing them with the saver's default kitchen, as a new plan does, would
+		 * quietly move an existing meal to whoever edited it last.
+		 */
+		@Valid List<MealKitchenDraft> kitchens,
 		@Size(max = 2000, message = "That note is too long.") String kitchenNotes,
 		@Size(max = 2000, message = "That note is too long.") String serverNotes,
 		boolean ekadashiAcknowledged,

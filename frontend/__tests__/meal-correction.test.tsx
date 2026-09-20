@@ -81,6 +81,8 @@ function cooked(
   return {
     id,
     mealId: "meal-lunch",
+    // Epic 12: every dish is cooked by one of its meal's kitchens.
+    kitchenId: "kit-main",
     recipeId,
     recipeName,
     targetYield: 500,
@@ -113,6 +115,7 @@ function recordedLunch(overrides: Record<string, unknown> = {}) {
     seniors: 0,
     plates: 400,
     crewRequired: null,
+    kitchens: [{ kitchenId: "kit-main", kitchenName: "Main kitchen", isMain: true, crewRequired: null }],
     dayType: "REGULAR",
     occasionName: null,
     eventName: null,

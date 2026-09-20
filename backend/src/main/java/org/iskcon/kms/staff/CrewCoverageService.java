@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.iskcon.kms.meal.KitchenCrewView;
 import org.iskcon.kms.meal.MealCrewService;
 import org.iskcon.kms.meal.MealCrewView;
 import org.springframework.stereotype.Service;
@@ -72,23 +73,35 @@ public class CrewCoverageService {
 	 * <p>The deepest shortfall wins, and ties go to the earlier meal — the list arrives in the order
 	 * the kitchen works, so a breakfast and a dinner both three short name breakfast, which is the
 	 * one that goes wrong first.
+	 *
+	 * <p><strong>Per kitchen since Epic 12.</strong> People needed is answered per kitchen and held
+	 * against that kitchen's own staff (Rajeev, 2026-09-19), so the shortfall is read section by section
+	 * and never from the meal's sums: a Main kitchen four short beside a Sweets kitchen three over is a
+	 * lunch four short in the Main kitchen, not a lunch one short. Within a meal a tie goes to the section
+	 * listed first. Where a meal has more than one kitchen, the name carries the kitchen —
+	 * <em>Lunch (Main kitchen)</em> — so the line says where the hands are missing; a meal one kitchen
+	 * cooks reads exactly as it did.
 	 */
 	private static DayCoverageView fold(LocalDate date, WorkforceCount roster, List<MealCrewView> meals) {
 		int deepest = 0;
-		MealCrewView worst = null;
+		MealCrewView worstMeal = null;
+		KitchenCrewView worst = null;
 		boolean anyRequirement = false;
 
 		for (MealCrewView meal : meals) {
-			if (meal.crewRequired() == null) {
-				// Null is not zero. A meal nobody has crewed is not a meal that needs nobody, and
-				// counting it as covered would be the screen inventing reassurance.
-				continue;
-			}
-			anyRequirement = true;
-			int shortBy = meal.crewRequired() - meal.rostered();
-			if (shortBy > deepest) {
-				deepest = shortBy;
-				worst = meal;
+			for (KitchenCrewView kitchen : meal.kitchens()) {
+				if (kitchen.crewRequired() == null) {
+					// Null is not zero. A kitchen nobody has crewed is not a kitchen that needs nobody,
+					// and counting it as covered would be the screen inventing reassurance.
+					continue;
+				}
+				anyRequirement = true;
+				int shortBy = kitchen.crewRequired() - kitchen.rostered();
+				if (shortBy > deepest) {
+					deepest = shortBy;
+					worstMeal = meal;
+					worst = kitchen;
+				}
 			}
 		}
 
@@ -104,10 +117,15 @@ public class CrewCoverageService {
 				roster.volunteers(),
 				state,
 				deepest,
-				worst != null ? worst.mealKind() : null,
-				worst != null ? worst.readyBy() : null,
+				worst != null ? nameOf(worstMeal, worst) : null,
+				worst != null ? worstMeal.readyBy() : null,
 				worst != null ? worst.crewRequired() : null,
 				worst != null ? worst.rostered() : null,
-				worst != null ? worst.mealId() : null);
+				worst != null ? worstMeal.mealId() : null);
+	}
+
+	/** "Lunch", or "Lunch (Main kitchen)" where more than one kitchen cooks it. */
+	private static String nameOf(MealCrewView meal, KitchenCrewView kitchen) {
+		return meal.kitchens().size() > 1 ? meal.mealKind() + " (" + kitchen.kitchenName() + ")" : meal.mealKind();
 	}
 }

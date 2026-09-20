@@ -111,5 +111,15 @@ public record HireStaffRequest(
 		 */
 		AadhaarIdentity aadhaar,
 
+		/**
+		 * The one kitchen this person works in (Epic 12). Required — every staff member belongs to
+		 * exactly one kitchen — but deliberately not {@code @NotNull}: a missing kitchen is its own
+		 * refusal, {@code KMS-400184}, which says what to do in words the form can show beside the
+		 * picker, rather than the generic field-error code. Any kitchen of this temple that is not
+		 * archived will do, including one that does not plan its meals here: people work in the store
+		 * kitchen too, they just do not get the planner.
+		 */
+		UUID kitchenId,
+
 		@Size(max = 2000, message = "That note is too long.") String notes) {
 }

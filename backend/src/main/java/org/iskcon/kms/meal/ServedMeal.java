@@ -32,7 +32,15 @@ import org.iskcon.kms.shift.ShiftView;
  * @param plates        what the meal scales to. Never the sum of its dishes: a lunch of three dishes
  *                      at 250 servings each is 250 plates, not 750.
  * @param crewRequired  how many people it takes to execute this meal (item 24), any mix of staff and
- *                      volunteers. Null where nobody has said.
+ *                      volunteers: since Epic 12 the <strong>sum of its kitchens'</strong> figures,
+ *                      read-only, because People needed is set per kitchen and V151 dropped the meal's
+ *                      own column. Null only where no kitchen has said — one kitchen at 4 and another
+ *                      that has not said is 4, because what is known is still worth showing.
+ * @param kitchens      the kitchens cooking this meal (Epic 12), at least one, each with its own People
+ *                      needed ({@link MealKitchenView}). In the order to show them: for the planner's
+ *                      endpoints, ordered for the person asking ({@code KitchenOrder.forViewer}); from
+ *                      the internal readers, which have no viewer, the main kitchen first and then
+ *                      Settings order.
  * @param status        the meal's state as its dishes say it: COOKED once any dish went into a pot,
  *                      PLANNED while any is still to be cooked, CANCELLED when none will be. A meal
  *                      has no status column of its own, because every one of these is already a fact
@@ -57,6 +65,7 @@ public record ServedMeal(
 		Integer seniors,
 		int plates,
 		Integer crewRequired,
+		List<MealKitchenView> kitchens,
 
 		DayType dayType,
 		String occasionName,
@@ -130,10 +139,24 @@ public record ServedMeal(
 	/** The same meal with its live volunteer shift attached, or with none. */
 	public ServedMeal withVolunteerShift(ShiftView shift) {
 		return new ServedMeal(mealId, mealKindId, planDate, mealKind, readyBy, adults, children, seniors,
-				plates, crewRequired, dayType, occasionName, eventName, isOutside, handover, contactName,
+				plates, crewRequired, kitchens, dayType, occasionName, eventName, isOutside, handover, contactName,
 				contactPhone, deliveryAddress, deliverySubLocation, deliveryPlaceId, deliveryLatitude,
 				deliveryLongitude, guestsEatAt, travelMinutes, travelMinutesSource, purpose, kitchenNotes,
 				serverNotes, status, cardNumber, cardIssuedAt, recorded, recordedAt, recordedByName,
 				recordingNote, corrected, correctedAt, correctedByName, correctionNote, series, dishes, shift);
+	}
+
+	/**
+	 * The same meal with its kitchens in another order — the same sections, reordered for one viewer
+	 * ({@code ServedMealService.forViewer}). The crew sum does not depend on the order, so it stays.
+	 */
+	public ServedMeal withKitchens(List<MealKitchenView> ordered) {
+		return new ServedMeal(mealId, mealKindId, planDate, mealKind, readyBy, adults, children, seniors,
+				plates, crewRequired, List.copyOf(ordered), dayType, occasionName, eventName, isOutside, handover,
+				contactName, contactPhone, deliveryAddress, deliverySubLocation, deliveryPlaceId, deliveryLatitude,
+				deliveryLongitude, guestsEatAt, travelMinutes, travelMinutesSource, purpose, kitchenNotes,
+				serverNotes, status, cardNumber, cardIssuedAt, recorded, recordedAt, recordedByName,
+				recordingNote, corrected, correctedAt, correctedByName, correctionNote, series, dishes,
+				volunteerShift);
 	}
 }

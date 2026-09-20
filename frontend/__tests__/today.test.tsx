@@ -69,6 +69,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
         recorded: false,
         awaitingRecord: true,
         occasionName: null,
+        kitchenNames: ["Main kitchen"],
         dishes: [
           {
             id: "m1",
@@ -99,6 +100,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
         recorded: true,
         awaitingRecord: false,
         occasionName: null,
+        kitchenNames: ["Main kitchen"],
         dishes: [
           {
             id: "m2",
@@ -376,6 +378,31 @@ describe("today", () => {
     expect(tile).toHaveTextContent("Dinner 420");
   });
 
+  it("names the kitchens cooking each meal, quietly, beside its servings (Epic 12)", () => {
+    const base = today();
+    queryRef.current = {
+      data: today({
+        meals: [
+          { ...base.meals[0], occasionName: "Sunday feast", kitchenNames: ["Sweets kitchen", "Main kitchen"] },
+          base.meals[1],
+        ],
+      }),
+      error: null,
+      loading: false,
+    };
+    callRef.i = 0;
+    render(<TodayPage />);
+
+    const lunch = screen.getByRole("link", { name: "Lunch at 12:00" });
+    // In the order sent, joined with "and", after the occasion and in its style.
+    const line = within(lunch).getByText("820 servings · Sunday feast · Sweets kitchen and Main kitchen");
+    expect(line.className).toContain("text-ink-muted");
+    // A one-kitchen meal names its one kitchen too.
+    expect(
+      within(screen.getByRole("link", { name: "Dinner at 19:30" })).getByText("420 servings · Main kitchen")
+    ).toBeInTheDocument();
+  });
+
   it("groups the day's dishes under their meal, and links each meal to that day's planner", () => {
     queryRef.current = { data: today(), error: null, loading: false };
     callRef.i = 0;
@@ -612,13 +639,13 @@ describe("today", () => {
           volunteers: 3,
           meals: [
             { mealId: "meal-breakfast", planDate: "2026-08-14", mealKind: "Breakfast", readyBy: "07:30:00", crewRequired: 4,
-              staffIn: 4, volunteers: 0, rostered: 4, shortOfCrew: false },
+              staffIn: 4, volunteers: 0, rostered: 4, shortOfCrew: false, mealKitchenCount: 1, kitchens: [] },
             { mealId: "meal-lunch", planDate: "2026-08-14", mealKind: "Lunch", readyBy: "12:00:00", crewRequired: 8,
-              staffIn: 3, volunteers: 2, rostered: 5, shortOfCrew: true },
+              staffIn: 3, volunteers: 2, rostered: 5, shortOfCrew: true, mealKitchenCount: 1, kitchens: [] },
             // Nobody has said what the evening takes, so it is left out rather than drawn as short
             // of nothing.
             { mealId: "meal-dinner", planDate: "2026-08-14", mealKind: "Dinner", readyBy: "19:30:00", crewRequired: null,
-              staffIn: 2, volunteers: 1, rostered: 3, shortOfCrew: false },
+              staffIn: 2, volunteers: 1, rostered: 3, shortOfCrew: false, mealKitchenCount: 1, kitchens: [] },
           ],
         },
       }),
@@ -659,6 +686,7 @@ describe("today", () => {
         recorded: false,
         awaitingRecord: true,
         occasionName: null,
+        kitchenNames: ["Main kitchen"],
         dishes: [],
       };
     }
@@ -674,6 +702,8 @@ describe("today", () => {
         volunteers: 0,
         rostered,
         shortOfCrew: rostered < crewRequired,
+        mealKitchenCount: 1,
+        kitchens: [],
       };
     }
 

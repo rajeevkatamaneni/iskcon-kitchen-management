@@ -55,6 +55,7 @@ class StaffReinstatementIT extends AbstractIntegrationTest {
 	private JdbcTemplate admin;
 	private UUID tenant;
 	private UUID devotee;
+	private UUID kitchen;
 
 	@BeforeEach
 	void setUp() {
@@ -73,6 +74,7 @@ class StaffReinstatementIT extends AbstractIntegrationTest {
 				VALUES (?, 'uid-devotee', 'Gopal Das', 'gopal@example.com', '+919876500071', 'VOLUNTEER', 'ACTIVE')
 				RETURNING id
 				""", UUID.class, tenant);
+		kitchen = insertKitchen(tenant);
 		signIn("uid-admin");
 	}
 
@@ -84,6 +86,9 @@ class StaffReinstatementIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM staff_schedule_exceptions");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// A hire puts the person in the temple's planner kitchen, seeding one where there is none (V150,
+		// T-350); it holds its temple and creator, so it goes after the staff and before the users.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM notification_attempts");
 		admin.execute("DELETE FROM notifications");
 		admin.execute("DELETE FROM users");
@@ -142,11 +147,11 @@ class StaffReinstatementIT extends AbstractIntegrationTest {
 		// The guard on update has lifted. This exact request would have been refused with
 		// KMS-400085 a moment ago, which is the whole defect this task was raised for.
 		mvc.perform(authed(put("/api/v1/staff/members/{id}", id))
-						.contentType(MediaType.APPLICATION_JSON).content("""
+						.contentType(MediaType.APPLICATION_JSON).content(withKitchen("""
 						{"fullName":"Gopal Das","jobTitle":"HEAD_COOK","employmentType":"FULL_TIME",
 						 "dateOfJoining":"2026-02-01","systemAccess":"KITCHEN_MANAGER",
 						 "phone":"+919876500071","email":"gopal@example.com","notes":"Back on the roster"}
-						"""))
+						""")))
 				.andExpect(status().isNoContent());
 		assertThat(admin.queryForObject(
 				"SELECT notes FROM staff_profiles WHERE id = ?::uuid", String.class, id))
@@ -375,7 +380,8 @@ class StaffReinstatementIT extends AbstractIntegrationTest {
 	}
 
 	private MockHttpServletRequestBuilder hire(String json) {
-		return authed(post("/api/v1/staff/members")).contentType(MediaType.APPLICATION_JSON).content(json);
+		return authed(post("/api/v1/staff/members")).contentType(MediaType.APPLICATION_JSON)
+				.content(withKitchen(json));
 	}
 
 	private String hireId(String json) throws Exception {
@@ -397,6 +403,35 @@ class StaffReinstatementIT extends AbstractIntegrationTest {
 
 	private void signIn(String uid) {
 		stubVerifier.accept(uid);
+	}
+
+	/**
+	 * Adds the temple's kitchen to a hire or edit body that names none. Since Epic 12 (T-357) every
+	 * staff record names its kitchen and the hire and edit forms always send one; the tests in this
+	 * class are about other things, so the body they were written with gets the one kitchen here
+	 * rather than each of them spelling it out. A body that names a kitchen keeps its own.
+	 */
+	private String withKitchen(String json) {
+		try {
+			com.fasterxml.jackson.databind.node.ObjectNode node =
+					(com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(json);
+			if (!node.has("kitchenId")) {
+				node.put("kitchenId", kitchen.toString());
+			}
+			return JSON.writeValueAsString(node);
+		} catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/** The temple's one kitchen, main and planning its meals, created by its first user. */
+	private UUID insertKitchen(UUID temple) {
+		return admin.queryForObject("""
+				INSERT INTO kitchens (tenant_id, name, is_main, uses_meal_planner, status, created_by)
+				SELECT ?, 'Main kitchen', true, true, 'ACTIVE', id FROM users WHERE tenant_id = ?
+				ORDER BY created_at, id LIMIT 1
+				RETURNING id
+				""", UUID.class, temple, temple);
 	}
 
 }

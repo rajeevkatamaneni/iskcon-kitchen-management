@@ -127,6 +127,8 @@ function StaffRecordScreen() {
           <Card title="Employment">
             <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
               <Fact label="Job">{staff.jobTitleLabel}</Fact>
+              {/* Every staff record has exactly one (Epic 12), so there is no "Not recorded" here. */}
+              <Fact label="Kitchen">{staff.kitchenName}</Fact>
               <Fact label="Employment">{employmentTypeLabel(staff.employmentType)}</Fact>
               <Fact label="Joined">{dayMonthYear(staff.dateOfJoining)}</Fact>
               <Fact label="App access">

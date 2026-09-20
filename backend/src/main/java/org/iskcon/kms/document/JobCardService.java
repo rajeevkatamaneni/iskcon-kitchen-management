@@ -19,6 +19,8 @@ import java.util.Set;
 import java.util.UUID;
 import org.iskcon.kms.calendar.CalendarDayView;
 import org.iskcon.kms.calendar.CalendarService;
+import org.iskcon.kms.error.ApplicationException;
+import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.Quantities;
 import java.time.LocalTime;
 import org.iskcon.kms.geo.GeocodingProvider;
@@ -38,8 +40,8 @@ import org.iskcon.kms.recipe.ScaledRecipeView;
 import org.iskcon.kms.shift.RosterView;
 import org.iskcon.kms.shift.ShiftService;
 import org.iskcon.kms.shift.ShiftView;
-import org.iskcon.kms.staff.StaffScheduleService;
-import org.iskcon.kms.staff.WeekScheduleView;
+import org.iskcon.kms.staff.MealMoment;
+import org.iskcon.kms.staff.WorkforceService;
 import org.iskcon.kms.translation.Languages;
 import org.iskcon.kms.translation.RecipeTranslationService;
 import org.iskcon.kms.translation.TranslatedRecipe;
@@ -123,7 +125,8 @@ public class JobCardService {
 	private final RecipeTranslationService recipeTranslationService;
 	private final CalendarService calendarService;
 	private final EkadashiPolicy ekadashiPolicy;
-	private final StaffScheduleService staffScheduleService;
+	/** The per-kitchen roster, as the planner's own crew figures read it (T-358). */
+	private final WorkforceService workforceService;
 	private final ShiftService shiftService;
 	private final TranslationProvider translationProvider;
 	private final DocumentLabelTranslator labelTranslator;
@@ -131,7 +134,7 @@ public class JobCardService {
 	public JobCardService(
 			JdbcTemplate jdbc, ServedMealService servedMealService, RecipeService recipeService,
 			RecipeTranslationService recipeTranslationService, CalendarService calendarService,
-			EkadashiPolicy ekadashiPolicy, StaffScheduleService staffScheduleService,
+			EkadashiPolicy ekadashiPolicy, WorkforceService workforceService,
 			ShiftService shiftService, TranslationProvider translationProvider,
 			DocumentLabelTranslator labelTranslator, MealPlanService mealPlanService,
 			StaticMapProvider staticMapProvider, TempleClock clock) {
@@ -144,7 +147,7 @@ public class JobCardService {
 		this.recipeTranslationService = recipeTranslationService;
 		this.calendarService = calendarService;
 		this.ekadashiPolicy = ekadashiPolicy;
-		this.staffScheduleService = staffScheduleService;
+		this.workforceService = workforceService;
 		this.shiftService = shiftService;
 		this.translationProvider = translationProvider;
 		this.labelTranslator = labelTranslator;
@@ -158,8 +161,8 @@ public class JobCardService {
 	 * renderer.
 	 */
 	@Transactional
-	public String render(UUID mealId, String language) {
-		return JobCardTemplate.render(build(mealId, language, true));
+	public String render(UUID mealId, UUID kitchenId, String language) {
+		return JobCardTemplate.render(build(mealId, kitchenId, language, true));
 	}
 
 	/** The card and the running footer its renderer has to draw, for the PDF path. */
@@ -175,12 +178,82 @@ public class JobCardService {
 	 * the PDF cannot drift apart.
 	 */
 	@Transactional
-	public RenderedCard renderForPdf(UUID mealId, String language) {
-		JobCardTemplate.CardModel model = build(mealId, language, false);
+	public RenderedCard renderForPdf(UUID mealId, UUID kitchenId, String language) {
+		JobCardTemplate.CardModel model = build(mealId, kitchenId, language, false);
 		return new RenderedCard(
 				JobCardTemplate.render(model),
 				new PdfRenderer.Footer(
 						JobCardTemplate.footerLeft(model), model.cardNumber()));
+	}
+
+	/**
+	 * One kitchen's section of a meal, as its card needs it: who, and how many people it needs.
+	 *
+	 * @param crewRequired that kitchen's People needed ({@code meal_kitchens.crew_required}), null
+	 *                     where nobody has said
+	 */
+	public record CardKitchen(UUID id, String name, Integer crewRequired) {
+	}
+
+	/**
+	 * Whose card this is (Epic 12): the kitchen asked for, or the meal's only kitchen.
+	 *
+	 * <p>Rajeev, 2026-09-19: a meal cooked by two kitchens shows one meal card with a section per
+	 * kitchen, and each kitchen gets its own job card, downloaded from its own section. So a card is
+	 * always one kitchen's, and the question is only how that kitchen is named.
+	 *
+	 * <ul>
+	 *   <li><strong>Named.</strong> It has to be one of this meal's kitchens. A kitchen of this temple
+	 *       that is not cooking the meal is refused ({@code KITCHEN_NOT_ON_THIS_MEAL}) rather than
+	 *       printed as an empty sheet, because an empty sheet with a real kitchen's name on it reads as
+	 *       "nothing to cook" to the person who picks it up. Another temple's kitchen reads as the same
+	 *       refusal: row-level security hides its row, and absent is absent.</li>
+	 *   <li><strong>Not named, one kitchen.</strong> That kitchen. This is every meal before Epic 12
+	 *       and most meals after it, and it keeps every caller that never learnt about kitchens — an
+	 *       old screen, a bookmarked print link — working exactly as it did.</li>
+	 *   <li><strong>Not named, two or more.</strong> Refused ({@code JOB_CARD_NEEDS_A_KITCHEN}). There
+	 *       is no right default: printing the main kitchen's card to somebody who asked from the
+	 *       sweets kitchen's section is the one mistake this whole change exists to prevent, and
+	 *       printing every kitchen's dishes on one sheet is the sheet Rajeev ruled out.</li>
+	 * </ul>
+	 *
+	 * <p>The meal is required first, so a meal that is not this temple's is the same 404 it always
+	 * was, before any question about kitchens is asked. Callers run this before the card number is
+	 * issued, so a refused request spends no number.
+	 */
+	@Transactional(readOnly = true)
+	public CardKitchen kitchenFor(UUID mealId, UUID requested) {
+		servedMealService.require(mealId);
+		// Settings order (is_main DESC, lower(name)), so that "the only one" and anything that ever
+		// lists them read in the order a temple already sees its kitchens in.
+		List<CardKitchen> sections = jdbc.query("""
+				SELECT mk.kitchen_id, k.name, mk.crew_required
+				FROM meal_kitchens mk JOIN kitchens k ON k.id = mk.kitchen_id
+				WHERE mk.meal_id = ?
+				ORDER BY k.is_main DESC, lower(k.name), k.id
+				""", (rs, n) -> new CardKitchen(
+						rs.getObject("kitchen_id", UUID.class),
+						rs.getString("name"),
+						(Integer) rs.getObject("crew_required")),
+				mealId);
+
+		if (requested != null) {
+			return sections.stream().filter(k -> k.id().equals(requested)).findFirst()
+					.orElseThrow(() -> new ApplicationException(ErrorCode.KITCHEN_NOT_ON_THIS_MEAL,
+							Map.of("mealId", String.valueOf(mealId), "kitchenId", String.valueOf(requested))));
+		}
+		if (sections.size() == 1) {
+			return sections.get(0);
+		}
+		if (sections.isEmpty()) {
+			// Not reachable: V150 gave every meal a section and the meal save always writes one. A meal
+			// without one is a fault in the data, not something the person printing can act on, so it
+			// goes to the logs with an incident id rather than borrowing a refusal that would tell them
+			// something untrue.
+			throw new IllegalStateException("Meal " + mealId + " has no kitchen");
+		}
+		throw new ApplicationException(ErrorCode.JOB_CARD_NEEDS_A_KITCHEN,
+				Map.of("mealId", String.valueOf(mealId), "kitchens", String.valueOf(sections.size())));
 	}
 
 	/**
@@ -255,13 +328,24 @@ public class JobCardService {
 
 	// ---------------------------------------------------------------------
 
-	JobCardTemplate.CardModel build(UUID mealId, String language, boolean footerInDocument) {
+	JobCardTemplate.CardModel build(UUID mealId, UUID kitchenId, String language, boolean footerInDocument) {
 		ServedMeal meal = servedMealService.require(mealId);
+		CardKitchen kitchen = kitchenFor(mealId, kitchenId);
+
+		// Only this kitchen's dishes (Epic 12). A sheet for the sweets kitchen listing the main
+		// kitchen's rice is worse than no sheet — somebody cooks it twice, or trusts that somebody
+		// else has. Read here from meal_dishes rather than off the dish view, because which kitchen a
+		// dish is in is a fact of the row, and one query answers it for the whole meal. Everything
+		// below — the food items, the recipes appendix and its translations, the serving sheet —
+		// is built from this list, so filtering it once is filtering all of them.
+		Map<UUID, UUID> kitchenOfDish = kitchensOfDishes(mealId);
 
 		// A preparation that was called off is not work; printing it would put a pot on the card that
 		// nobody is meant to fill, and a ruled box beside it that nobody is meant to write in.
 		List<MealDishView> live = meal.dishes().stream()
-				.filter(dish -> dish.status() != MealStatus.CANCELLED).toList();
+				.filter(dish -> dish.status() != MealStatus.CANCELLED)
+				.filter(dish -> kitchen.id().equals(kitchenOfDish.get(dish.id())))
+				.toList();
 
 		boolean wantsAppendix = !WORKSHEET_ONLY.equalsIgnoreCase(trimmed(language));
 		String appendixLanguage = wantsAppendix ? resolveAppendixLanguage(language, live) : null;
@@ -310,6 +394,7 @@ public class JobCardService {
 				// "Outside Event : Bhagavad Gita Parayanam" on 2026-09-05 — the kind says what shape
 				// of thing this is, the name says which one, and a folder of Saturdays needs both.
 				meal.eventName(),
+				kitchen.name(),
 				DATE_LONG.format(meal.planDate()),
 				meal.readyBy() == null ? null : CLOCK.format(meal.readyBy()),
 				String.valueOf(meal.plates()),
@@ -318,8 +403,8 @@ public class JobCardService {
 				meal.kitchenNotes(),
 				meal.serverNotes(),
 				preparations,
-				plannedCrewText(meal),
-				staffOn(meal.planDate()),
+				peopleNeededText(kitchen),
+				staffOn(meal, kitchen.id()),
 				volunteersOn(meal.planDate()),
 				delivery,
 				recipes,
@@ -328,7 +413,16 @@ public class JobCardService {
 				footerInDocument,
 				labels);
 
-		return withVersion(meal, model);
+		return withVersion(meal.mealId(), kitchen.id(), model);
+	}
+
+	/** Which of its meal's kitchens each dish is in (V150's meal_dishes.kitchen_id). */
+	private Map<UUID, UUID> kitchensOfDishes(UUID mealId) {
+		Map<UUID, UUID> byDish = new HashMap<>();
+		jdbc.query("SELECT id, kitchen_id FROM meal_dishes WHERE meal_id = ?", rs -> {
+			byDish.put(rs.getObject("id", UUID.class), rs.getObject("kitchen_id", UUID.class));
+		}, mealId);
+		return byDish;
 	}
 
 	// ---- The version in the footer --------------------------------------
@@ -347,17 +441,23 @@ public class JobCardService {
 	 * is on the sheet it is in the hash, because the hash is taken from the sheet.
 	 *
 	 * <p>What is deliberately left out is in {@link #fingerprint}.
+	 *
+	 * <p><strong>Per kitchen (Epic 12, V152).</strong> Each kitchen's card is its own sheet, so each
+	 * has its own version, on its own {@code meal_kitchens} row: changing the halva moves the sweets
+	 * kitchen's card on and leaves the main kitchen's where it was, because nothing on the main
+	 * kitchen's sheet changed and a cook there must not go hunting for a difference. V150 copied the
+	 * meal's version and fingerprint onto every section, so a card printed before this change carries
+	 * on from the number already on the kitchen wall.
 	 */
-	private JobCardTemplate.CardModel withVersion(ServedMeal meal, JobCardTemplate.CardModel model) {
+	private JobCardTemplate.CardModel withVersion(UUID mealId, UUID kitchenId, JobCardTemplate.CardModel model) {
 		String fingerprint = fingerprint(model);
-		// Every meal has a row of its own (D-27), so there is always somewhere to remember the version
-		// against. The case this used to handle — a meal previewed before anything had created its
-		// meal_services row, printed as v1 and remembered nowhere — went with that table. Locked, so two
-		// prints of a changed meal at the same moment move the version once rather than both to the
-		// same number.
-		UUID mealId = meal.mealId();
-		Map<String, Object> row = jdbc.queryForMap(
-				"SELECT card_version, card_fingerprint FROM meals WHERE id = ? FOR UPDATE", mealId);
+		// Every meal has a row of its own (D-27) and every kitchen on it a section (V150), so there is
+		// always somewhere to remember the version against. Locked, so two prints of a changed card at
+		// the same moment move the version once rather than both to the same number.
+		Map<String, Object> row = jdbc.queryForMap("""
+				SELECT card_version, card_fingerprint FROM meal_kitchens
+				WHERE meal_id = ? AND kitchen_id = ? FOR UPDATE
+				""", mealId, kitchenId);
 		int current = row.get("card_version") == null ? 0 : (Integer) row.get("card_version");
 		String stored = (String) row.get("card_fingerprint");
 
@@ -367,35 +467,50 @@ public class JobCardService {
 			// the printer later.
 			return version(model, current);
 		}
-		if (stored != null && current > 0
-				&& stored.equals(fingerprint(model, legacyEquipment()))) {
-			// The same meal, fingerprinted the old way. Until 2026-09-14 the hash also covered the
-			// temple's equipment list, and taking equipment off the card changed every stored value at
-			// once. Without this, every card in every kitchen would have moved to a new version on its
-			// next print while its cooking instructions stayed word for word the same, and the rule on
-			// the sheet — the higher number wins — would have sent people hunting for a change that is
-			// not there. So the old value is recognised, and quietly replaced with the new one, so this
-			// meal never takes this path again.
+		if (stored != null && current > 0 && printedTheOldWay(stored, model)) {
+			// The same card, fingerprinted an older way. Two older ways, both recognised:
+			//
+			//  - before T-356 (2026-09-19) the hash had no kitchen in it, because a card had no
+			//    kitchen. Putting the kitchen's name on the sheet changed every stored value at once.
+			//  - before 2026-09-14 it also covered the temple's equipment list, and taking equipment
+			//    off the card changed every stored value at once too.
+			//
+			// Without this, every card in every kitchen would have moved to a new version on its next
+			// print while its cooking instructions stayed word for word the same, and the rule on the
+			// sheet — the higher number wins — would have sent people hunting for a change that is not
+			// there. So the old value is recognised, and quietly replaced with the new one, so this
+			// card never takes this path again.
 			//
 			// updated_at is left alone on purpose: nothing about the meal changed, only how its
 			// fingerprint is written down.
-			jdbc.update("UPDATE meals SET card_fingerprint = ? WHERE id = ?", fingerprint, mealId);
+			jdbc.update("UPDATE meal_kitchens SET card_fingerprint = ? WHERE meal_id = ? AND kitchen_id = ?",
+					fingerprint, mealId, kitchenId);
 			return version(model, current);
 		}
 		int next = current + 1;
 		jdbc.update("""
-				UPDATE meals SET card_version = ?, card_fingerprint = ?, updated_at = now()
-				WHERE id = ?
-				""", next, fingerprint, mealId);
+				UPDATE meal_kitchens SET card_version = ?, card_fingerprint = ?, updated_at = now()
+				WHERE meal_id = ? AND kitchen_id = ?
+				""", next, fingerprint, mealId, kitchenId);
 		return version(model, next);
+	}
+
+	/**
+	 * Whether a stored fingerprint is this very card in one of the older forms. The kitchen-less form
+	 * is tried first because it is the one every card printed before Epic 12 carries, and it costs no
+	 * query; the equipment list is read only when that fails.
+	 */
+	private boolean printedTheOldWay(String stored, JobCardTemplate.CardModel model) {
+		return stored.equals(fingerprint(model, null, false))
+				|| stored.equals(fingerprint(model, legacyEquipment(), false));
 	}
 
 	private static JobCardTemplate.CardModel version(JobCardTemplate.CardModel m, int version) {
 		return new JobCardTemplate.CardModel(
 				m.templeName(), m.cardNumber(), version, m.mealKindLabel(), m.eventName(),
-				m.dateText(), m.readyByText(), m.headCountText(), m.headCountDetail(),
+				m.kitchenName(), m.dateText(), m.readyByText(), m.headCountText(), m.headCountDetail(),
 				m.warnings(), m.kitchenNotes(),
-				m.serverNotes(), m.preparations(), m.plannedCrewText(), m.staff(),
+				m.serverNotes(), m.preparations(), m.peopleNeededText(), m.staff(),
 				m.volunteers(), m.delivery(), m.recipes(), m.recipeLanguageLabel(), m.generatedOn(),
 				m.footerInDocument(), m.labels());
 	}
@@ -415,10 +530,16 @@ public class JobCardService {
 	 *       press of the button, which is the behaviour this design exists to avoid.</li>
 	 * </ul>
 	 *
-	 * <p>So what it covers is: the meal's kind and event name, its date, ready-by time and head count,
-	 * both sets of notes, the planned crew, the day's warnings, each preparation with its planned
-	 * quantity, and the delivery details where food leaves by van. Every one of those is printed on
-	 * the card, which is what makes the version trustworthy.
+	 * <p>So what it covers is: the meal's kind and event name, the kitchen the card is for, its date,
+	 * ready-by time and head count, both sets of notes, that kitchen's planned crew, the day's
+	 * warnings, each of that kitchen's preparations with its planned quantity, and the delivery
+	 * details where food leaves by van. Every one of those is printed on the card, which is what makes
+	 * the version trustworthy.
+	 *
+	 * <p><strong>The kitchen's name went in on 2026-09-19 (T-356)</strong>, when it went on the sheet.
+	 * {@code includeKitchen = false} rebuilds the form every card printed before then was stored in, so
+	 * {@link #withVersion} can recognise one and keep its version rather than moving every card in
+	 * every kitchen on at once.
 	 *
 	 * <p><strong>Equipment used to be in here too, and the legacy form still exists.</strong> Until
 	 * 2026-09-14 the card listed the temple's equipment, so the hash covered it. When the list came off
@@ -434,21 +555,28 @@ public class JobCardService {
 	 * not already match.
 	 */
 	private static String fingerprint(JobCardTemplate.CardModel m) {
-		return fingerprint(m, null);
+		return fingerprint(m, null, true);
 	}
 
-	/** See {@link #fingerprint(JobCardTemplate.CardModel)}. Package-private for the reprint test. */
-	static String fingerprint(JobCardTemplate.CardModel m, List<String> legacyEquipment) {
+	/** See {@link #fingerprint(JobCardTemplate.CardModel)}. Package-private for the reprint tests. */
+	static String fingerprint(
+			JobCardTemplate.CardModel m, List<String> legacyEquipment, boolean includeKitchen) {
 		StringBuilder material = new StringBuilder()
 				.append(m.mealKindLabel()).append('\u001f')
-				.append(nullSafe(m.eventName())).append('\u001f')
+				.append(nullSafe(m.eventName())).append('\u001f');
+		if (includeKitchen) {
+			// Only in the current form, so that the kitchen-less form is byte for byte what the code
+			// before T-356 hashed.
+			material.append("kitchen=").append(nullSafe(m.kitchenName())).append('\u001f');
+		}
+		material
 				.append(nullSafe(m.dateText())).append('\u001f')
 				.append(nullSafe(m.readyByText())).append('\u001f')
 				.append(nullSafe(m.headCountText())).append('\u001f')
 				.append(nullSafe(m.headCountDetail())).append('\u001f')
 				.append(nullSafe(m.kitchenNotes())).append('\u001f')
 				.append(nullSafe(m.serverNotes())).append('\u001f')
-				.append(nullSafe(m.plannedCrewText())).append('\u001f')
+				.append(nullSafe(m.peopleNeededText())).append('\u001f')
 				.append(String.join(",", m.warnings())).append('\u001f');
 		if (legacyEquipment != null) {
 			material.append(String.join(",", legacyEquipment)).append('\u001f');
@@ -647,20 +775,26 @@ public class JobCardService {
 	}
 
 	/**
-	 * How many people the meal was planned to take (item 24).
+	 * How many people this kitchen needs (item 24, per kitchen since Epic 12).
 	 *
-	 * <p>The figure is a whole-meal fact carried on every one of the meal's rows, exactly as
-	 * {@code adults}, {@code ready_by} and the rest are, so {@link ServedMeal} has already collapsed
-	 * them into one. A meal planned weeks before anybody was rostered has none, and the line simply
-	 * does not appear — the card is not the place to print a blank where a decision has not been
-	 * taken yet.
+	 * <p>That kitchen's People needed, from its own section of the meal ({@code
+	 * meal_kitchens.crew_required}) — not the meal's figure, which is the sum over its kitchens and
+	 * would tell the sweets kitchen it has the main kitchen's people. Not read off {@link ServedMeal}
+	 * either: its figure is {@code meals.crew_required}, which V151 drops. A section planned weeks
+	 * before anybody was rostered has none, and the line simply does not appear — the card is not the
+	 * place to print a blank where a decision has not been taken yet.
+	 *
+	 * <p><strong>"People needed", not "Planned crew" (T-361.)</strong> The planner screen calls this
+	 * figure People needed, and so does the composer's field, and so does the crew readout that says
+	 * "Lunch at 4 of 6". A sheet that called the same number something else would be one more thing
+	 * for a head cook to work out; Rajeev's standing rule is the same label in every view.
 	 */
-	private String plannedCrewText(ServedMeal meal) {
-		Integer crew = meal.crewRequired();
+	private static String peopleNeededText(CardKitchen kitchen) {
+		Integer crew = kitchen.crewRequired();
 		if (crew == null || crew <= 0) {
 			return null;
 		}
-		return "Planned crew · " + crew + (crew == 1 ? " person" : " people");
+		return "People needed · " + crew + (crew == 1 ? " person" : " people");
 	}
 
 
@@ -689,31 +823,52 @@ public class JobCardService {
 	}
 
 	/**
-	 * The staff rostered on this date, read the way the week grid reads them: the weekly template
-	 * adjusted by any per-date override, and minus approved leave.
+	 * The staff this kitchen has for this meal: the people the planner counts in that kitchen's
+	 * section, with a number to ring (Epic 12, T-361).
 	 *
-	 * <p>Asked for as a one-day week — {@code weekView(date)} returns seven days beginning at the date
-	 * given, so the first of them is this date — rather than by working out which Monday the date
-	 * belongs to. That is one assumption fewer to get wrong, and it uses the narrowest public method
-	 * the schedule offers instead of a second query with its own opinion of the roster.
+	 * <p><strong>What changed and why.</strong> Until now the card printed the whole temple's roster
+	 * for the day — everybody working, whichever kitchen they work in and whatever hours they keep. A
+	 * meal is now cooked by several kitchens and each of them prints its own card, so the sweets
+	 * kitchen's sheet was listing the main kitchen's twelve cooks under a figure of two. It now prints
+	 * the people that kitchen's own section is counting, which is the set of names the planner screen
+	 * shows beside "4 of 6" for the same meal and the same kitchen.
+	 *
+	 * <p><strong>Whose answer it is.</strong> {@link WorkforceService#rosterAt} — the per-kitchen
+	 * roster T-358 built for the crew readouts — is asked, not asked again here in different words.
+	 * That matters twice over: who is in for a meal is a rule with edges (an active record, a working
+	 * day that is not half-day leave, and a window covering the ready-by, both ends inclusive), and a
+	 * card that answered it its own way would sooner or later print a name the screen does not count,
+	 * or count a name it does not print.
+	 *
+	 * <p>It does mean a narrower list than before: somebody working that day whose hours end before the
+	 * food is due is no longer on the sheet. That is the same person the planner already leaves out of
+	 * "4 of 6", and a card is asked for at 05:40 to find out who should be standing in this kitchen
+	 * now, not who is in the building at some point today.
+	 *
+	 * <p>A volunteer has no kitchen — a shift is posted for a meal or a stretch of the day, never for a
+	 * kitchen — so {@link #volunteersOn} is unchanged and every kitchen's card lists the day's
+	 * volunteers.
 	 */
-	private List<JobCardTemplate.Person> staffOn(LocalDate date) {
-		WeekScheduleView week = staffScheduleService.weekView(date);
-		List<WeekScheduleView.StaffWeek> working = new ArrayList<>();
-		for (WeekScheduleView.StaffWeek person : week.staff()) {
-			WeekScheduleView.ResolvedDay today = person.days().stream()
-					.filter(d -> d.date().equals(date)).findFirst().orElse(null);
-			if (today != null && today.working()) {
-				working.add(person);
-			}
+	private List<JobCardTemplate.Person> staffOn(ServedMeal meal, UUID kitchenId) {
+		MealMoment moment = new MealMoment(
+				meal.mealId(), meal.planDate(), meal.readyBy(), meal.mealKind(), meal.eventName());
+		WorkforceService.RosterAt roster = workforceService.rosterAt(List.of(moment), null).get(moment);
+		if (roster == null) {
+			return List.of();
 		}
-		Map<UUID, String> phones = staffPhones(working.stream()
-				.map(WeekScheduleView.StaffWeek::staffProfileId).toList());
+		List<WorkforceService.RosteredPerson> here = roster.staff().stream()
+				.filter(person -> kitchenId.equals(person.kitchenId()))
+				.toList();
+		Map<UUID, String> phones = staffPhones(here.stream()
+				.map(WorkforceService.RosteredPerson::staffProfileId).toList());
 
 		List<JobCardTemplate.Person> people = new ArrayList<>();
-		for (WeekScheduleView.StaffWeek person : working) {
+		for (WorkforceService.RosteredPerson person : here) {
+			// The third field is the job title, and the card prints it for volunteers only (it says
+			// which shift they signed up for). Staff are listed by name and number, so there is nothing
+			// to fetch a title for.
 			people.add(new JobCardTemplate.Person(
-					person.fullName(), phones.get(person.staffProfileId()), person.jobTitleLabel()));
+					person.name(), phones.get(person.staffProfileId()), null));
 		}
 		return people;
 	}

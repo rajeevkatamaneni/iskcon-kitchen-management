@@ -68,6 +68,9 @@ class TodayIT extends AbstractIntegrationTest {
 		insertUser("uid-admin", "admin@example.com", "TEMPLE_ADMIN");
 		insertUser("uid-staff", "staff@example.com", "KITCHEN_STAFF");
 		insertUser("uid-vol", "vol@example.com", "VOLUNTEER");
+		// Every temple has a kitchen its meals go to (Epic 12): provisioning seeds one, and a save with
+		// no kitchen named goes to it. Made here as provisioning would make it.
+		MealFixture.plannerKitchen(admin, tenant, null);
 
 		UUID rice = admin.queryForObject("""
 				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
@@ -107,10 +110,11 @@ class TodayIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM ingredient_request_dishes");
 		admin.execute("DELETE FROM ingredient_request_events");
 		admin.execute("DELETE FROM ingredient_requests");
-		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM staff_leave");
 		admin.execute("DELETE FROM staff_profiles");
 		MealFixture.deleteAll(admin);
+		// After the staff and the meals, which both name a kitchen now (V150).
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM shift_signups");
 		admin.execute("DELETE FROM shifts");
 		admin.execute("DELETE FROM donations");
@@ -150,7 +154,17 @@ class TodayIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.meals[0].readyBy").value("12:00:00"))
 				.andExpect(jsonPath("$.meals[0].recorded").value(false))
 				.andExpect(jsonPath("$.meals[0].dishes.length()").value(1))
+				// Who is cooking it (Epic 12): the meal's one kitchen, by the name the temple gave it.
+				.andExpect(jsonPath("$.meals[0].kitchenNames.length()").value(1))
+				.andExpect(jsonPath("$.meals[0].kitchenNames[0]").value(admin.queryForObject("""
+						SELECT kt.name FROM meals m
+						JOIN meal_kinds k ON k.id = m.meal_kind_id
+						JOIN meal_kitchens mk ON mk.meal_id = m.id
+						JOIN kitchens kt ON kt.id = mk.kitchen_id
+						WHERE m.tenant_id = ? AND k.name = 'Lunch'
+						""", String.class, tenant)))
 				.andExpect(jsonPath("$.meals[1].mealKind").value("Dinner"))
+				.andExpect(jsonPath("$.meals[1].kitchenNames.length()").value(1))
 				.andExpect(jsonPath("$.platesToday").value(1200));
 	}
 
@@ -510,10 +524,10 @@ class TodayIT extends AbstractIntegrationTest {
 		}
 		return admin.queryForObject("""
 				INSERT INTO staff_profiles
-					(tenant_id, user_id, full_name, job_title, employment_type, date_of_joining)
-				VALUES (?, ?, 'Test Person', 'COOK', 'FULL_TIME', DATE '2026-01-01')
+					(tenant_id, user_id, full_name, job_title, employment_type, date_of_joining, kitchen_id)
+				VALUES (?, ?, 'Test Person', 'COOK', 'FULL_TIME', DATE '2026-01-01', ?)
 				RETURNING id
-				""", UUID.class, tenant, userId);
+				""", UUID.class, tenant, userId, MealFixture.plannerKitchen(admin, tenant, null));
 	}
 
 	private UUID userId(String email) {

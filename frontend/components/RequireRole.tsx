@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import type { PrincipalRole } from "@/lib/api";
-import { navForRole } from "@/lib/nav";
+import { isMealPlannerPath, navForRole, plannerRefused } from "@/lib/nav";
 import { homeForRole } from "@/lib/routes";
 import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
@@ -196,6 +196,9 @@ function WrongRole({ role }: { role: PrincipalRole }) {
   );
 }
 
+/** A layout effect in the browser and a plain one on the server, where there is no layout. */
+const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 export function RequireRole({
   roles,
   children,
@@ -205,6 +208,23 @@ export function RequireRole({
 }) {
   const { status, appUser, refresh } = useAuth();
   const router = useRouter();
+
+  // The address this guard is standing at, for the one refusal a role cannot decide (Epic 12): the
+  // meal planner is shut to somebody whose kitchen does not plan its meals here, whatever their role.
+  // Every planner page already mounts this guard, so refusing here covers all of them — the week, a
+  // day, a meal, compose, reuse, catch-up — and any added later, without each page having to
+  // remember.
+  //
+  // Read from `window.location` after the commit rather than from `usePathname()`, for two reasons.
+  // On a client-side navigation the router writes the new URL in an insertion effect, so a read
+  // during render still sees the page being left; after the commit it sees the page arrived at. And
+  // `usePathname` would be a new import that every test mocking `next/navigation` without it would
+  // fail on — over a hundred of them — for a guard none of them is about. Setting the same string
+  // again is a no-op, so running after every commit cannot loop.
+  const [path, setPath] = useState<string | null>(null);
+  useBrowserLayoutEffect(() => {
+    setPath(window.location.pathname);
+  });
 
   useEffect(() => {
     if (status === "signed-out") {
@@ -233,6 +253,24 @@ export function RequireRole({
   if (status === "signed-in" && appUser) {
     if (!roles.includes(appUser.role)) {
       return <WrongRole role={appUser.role} />;
+    }
+    // Only a person the planner is shut to waits for the address; everybody else renders exactly as
+    // before. They see the spinner below for one commit, which is before the first paint, and the
+    // page's children never mount — so a planner page does not start asking the server for a week
+    // it would refuse them with `KMS-400183`.
+    if (plannerRefused(appUser)) {
+      if (path === null) {
+        return (
+          <main className="flex min-h-screen items-center justify-center px-6">
+            <Loading />
+          </main>
+        );
+      }
+      // The same refusal as a wrong role, deliberately: to the reader it is the same fact — this
+      // part of the app is not theirs — and the menu beside it no longer offers the planner either.
+      if (isMealPlannerPath(path)) {
+        return <WrongRole role={appUser.role} />;
+      }
     }
     return <>{children}</>;
   }

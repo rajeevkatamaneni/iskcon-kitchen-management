@@ -1,18 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 
 /**
- * The crew pebble on a planned meal — "5 of 8" — and the breakdown behind it (T-147).
+ * The crew pebble on a planned meal — "5 of 8 rostered" — and the breakdown behind it (T-147, and
+ * Epic 12's per-kitchen sections).
  *
- * <p>The breakdown, "3 staff and 2 volunteers, of 8 needed", used to be the pebble's native `title`.
- * That is shown only under a resting mouse pointer, so a keyboard user and anyone on a phone never
- * got it. It now sits behind an `InfoHint`, and these tests hold it there.
- *
- * <p>The other `InfoHint` tests open the hint with `mouseOver`. That proves the text is attached,
- * not that it is reachable without a mouse, which is the whole defect here — so the reach is asserted
- * by focus, the way a Tab lands on it. There is no `user-event` in this project to press Tab itself,
- * so the test proves the two halves of it: that the "i" is a real, focusable button in the tab order,
- * and that focus alone, with no pointer event at all, opens the text.
+ * <p>The breakdown, "3 staff and 2 volunteers, of 8 needed", used to be the pebble's native `title`,
+ * which only a resting mouse pointer ever sees; T-147 moved it behind an `InfoHint`. Epic 12 moved the
+ * pebble into each kitchen's section, to the approved mock's footer: "People needed 8 · 5 of 8
+ * rostered", with the rostered people named on the line under it. The breakdown is now on the page
+ * in plain text, reachable by everyone without pressing anything, so there is no hint to open. These
+ * tests hold that, and hold the pebble's colour rule where it now lives.
  *
  * <p>Harness copied from `planner-shift.test.tsx`, which drives `MealServices` the same way.
  */
@@ -74,6 +72,8 @@ function lunch(crewRequired: number | null = 8, mealKind = "Lunch", eventName: s
     mealId: "meal-1", mealKindId: "k1", planDate: DATE, mealKind, readyBy: "12:00:00",
     adults: 200, children: 40, seniors: 30, plates: 248,
     crewRequired,
+    // Epic 12: People needed belongs to the kitchen; the meal's figure is the sum of its kitchens'.
+    kitchens: [{ kitchenId: "kit-main", kitchenName: "Main kitchen", isMain: true, crewRequired }],
     dayType: "REGULAR", occasionName: null, eventName,
     isOutside: false, handover: null,
     contactName: null, contactPhone: null, deliveryAddress: null, deliverySubLocation: null,
@@ -84,7 +84,7 @@ function lunch(crewRequired: number | null = 8, mealKind = "Lunch", eventName: s
     corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
     dishes: [
       {
-        id: "m1", mealId: "meal-1", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 248,
+        id: "m1", mealId: "meal-1", kitchenId: "kit-main", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 248,
         targetYieldUnit: "KG", status: "PLANNED", actualServings: null, consumedQuantity: null,
         notMade: false, originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
         ekadashiAcknowledged: false, createdAt: "2026-08-20T10:00:00Z",
@@ -94,13 +94,23 @@ function lunch(crewRequired: number | null = 8, mealKind = "Lunch", eventName: s
   };
 }
 
-/** The crew readout for that meal, matched to it by the meal's id and never by the kind's name. */
+/**
+ * The crew readout for that meal, matched to it by the meal's id and never by the kind's name, and
+ * to its kitchen's section by the kitchen's id. The staff are named, as the server names them.
+ */
 function crewOf(staffIn: number, volunteers: number, required: number | null = 8, mealKind = "Lunch") {
   const rostered = staffIn + volunteers;
+  const shortOfCrew = required != null && rostered < required;
+  const staffNames = ["Govinda Das", "Madhava Das", "Keshava Das", "Damodara Das", "Gopal Das"].slice(0, staffIn);
   return {
     mealId: "meal-1", planDate: DATE, mealKind, readyBy: "12:00:00",
-    crewRequired: required, staffIn, volunteers, rostered,
-    shortOfCrew: required != null && rostered < required,
+    crewRequired: required, staffIn, volunteers, rostered, shortOfCrew,
+    kitchens: [
+      {
+        kitchenId: "kit-main", kitchenName: "Main kitchen", crewRequired: required,
+        staffIn, staffNames, volunteers, rostered, shortOfCrew,
+      },
+    ],
   };
 }
 
@@ -127,7 +137,7 @@ async function pebble(container: HTMLElement, count: string): Promise<HTMLElemen
   return icon.parentElement;
 }
 
-describe("the crew pebble's breakdown", () => {
+describe("the crew pebble, in its kitchen's section", () => {
   beforeEach(() => {
     meals.mockReset().mockResolvedValue([lunch()]);
     mealCrew.mockReset().mockResolvedValue([crewOf(3, 2)]);
@@ -135,7 +145,7 @@ describe("the crew pebble's breakdown", () => {
 
   it("carries no native title, on the pebble or anywhere near it", async () => {
     const day = await openTheDay();
-    const pill = await pebble(day, "5 of 8");
+    const pill = await pebble(day, "5 of 8 rostered");
 
     expect(pill).not.toHaveAttribute("title");
     // Not moved onto the wrapper or anything else either: no element on the day holds the
@@ -143,93 +153,64 @@ describe("the crew pebble's breakdown", () => {
     expect(day.querySelector('[title*="volunteers"]')).toBeNull();
   });
 
-  it("is reached by keyboard: a focusable button that opens the breakdown on focus alone", async () => {
+  it("says the breakdown on the page, where no pointer or keyboard is needed to reach it", async () => {
     const day = await openTheDay();
-    await pebble(day, "5 of 8");
+    await pebble(day, "5 of 8 rostered");
+    const section = screen.getByRole("region", { name: "Main kitchen" });
 
-    const hint = screen.getByRole("button", { name: "More about crew for Lunch" });
-    // In the tab order, the way a Tab lands on it: a real button, enabled, not taken out by tabindex.
-    expect(hint.tagName).toBe("BUTTON");
-    expect(hint).toHaveAttribute("type", "button");
-    expect(hint).not.toBeDisabled();
-    expect(hint.tabIndex).toBeGreaterThanOrEqual(0);
-
-    // Shut until asked for.
-    expect(screen.queryByRole("tooltip")).toBeNull();
-    expect(day.textContent).not.toContain("3 staff and 2 volunteers");
-
-    // Focus, with no pointer event at all.
-    act(() => hint.focus());
-    expect(document.activeElement).toBe(hint);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("3 staff and 2 volunteers, of 8 needed");
-
-    // And Escape puts it away again, as every other hint does.
-    fireEvent.keyDown(hint, { key: "Escape" });
-    expect(screen.queryByRole("tooltip")).toBeNull();
+    // People needed, then the pebble, then who they are: the staff by name and the volunteers counted.
+    expect(within(section).getByText(/^People needed/)).toHaveTextContent("People needed 8");
+    expect(within(section).getByText("Govinda Das, Madhava Das, Keshava Das, 2 volunteers")).toBeInTheDocument();
+    // Nothing left to open: the hint that used to hold this is gone rather than repeating it.
+    expect(screen.queryByRole("button", { name: /more about crew/i })).toBeNull();
   });
 
-  it("says the breakdown once: the pebble's own sentence does not repeat it", async () => {
+  it("sits in the kitchen's section, not in the meal's header", async () => {
     const day = await openTheDay();
-    const pill = await pebble(day, "5 of 8");
-
-    act(() => screen.getByRole("button", { name: "More about crew for Lunch" }).focus());
-    // Exactly one place in the page holds the sentence, and it is the tip.
-    const holders = Array.from(day.querySelectorAll("*")).filter(
-      (el) => el.children.length === 0 && el.textContent?.includes("volunteers, of 8 needed")
-    );
-    expect(holders).toHaveLength(1);
-    expect(holders[0]).toHaveAttribute("role", "tooltip");
-    // The pebble still says what it said, and no more.
-    expect(pill.textContent).toBe("5 of 8 people rostered of the number needed");
+    const pill = await pebble(day, "5 of 8 rostered");
+    expect(pill.closest("section")).toHaveAttribute("aria-label", "Main kitchen");
+    expect(day.querySelector("header .ti-users")).toBeNull();
   });
 
-  it("names the hint for its meal, so a day of meals is not a row of identical buttons", async () => {
-    const day = await openTheDay();
-    await pebble(day, "5 of 8");
-    // The meal kind for an ordinary meal, as the header reads it.
-    expect(screen.getByRole("button", { name: "More about crew for Lunch" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "More about crew" })).toBeNull();
-  });
-
-  it("names the hint for an event by the event's own name, as the header does", async () => {
+  it("names an event's section controls by the event's own name, as the header does", async () => {
     meals.mockResolvedValue([lunch(8, "Event", "Bhagavad Gita Parayanam")]);
     mealCrew.mockResolvedValue([crewOf(3, 2, 8, "Event")]);
     const day = await openTheDay("Bhagavad Gita Parayanam");
-    await pebble(day, "5 of 8");
-    // Not "crew for Event": two events on one day would share that.
+    await pebble(day, "5 of 8 rostered");
+    // Not "Event, Main kitchen": two events on one day would share that.
     expect(
-      screen.getByRole("button", { name: "More about crew for Bhagavad Gita Parayanam" })
+      screen.getByRole("button", { name: "Download the Bhagavad Gita Parayanam, Main kitchen job card" })
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "More about crew for Event" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Download the Event/ })).toBeNull();
   });
 
-  it("keeps the count and the warning tone when the meal is short", async () => {
+  it("keeps the count and the warning tone when the kitchen is short", async () => {
     const day = await openTheDay();
-    const pill = await pebble(day, "5 of 8");
+    const pill = await pebble(day, "5 of 8 rostered");
 
     expect(pill.className).toContain("bg-warning-bg");
     expect(pill.className).toContain("text-warning");
   });
 
-  it("drops the warning tone once the meal is fully crewed", async () => {
+  it("drops the warning tone once the kitchen is fully crewed", async () => {
     mealCrew.mockResolvedValue([crewOf(5, 3)]);
     const day = await openTheDay();
-    const pill = await pebble(day, "8 of 8");
+    const pill = await pebble(day, "8 of 8 rostered");
 
     expect(pill.className).toContain("bg-sunken");
     expect(pill.className).not.toContain("bg-warning-bg");
   });
 
-  it("draws no pebble and no hint for a meal nobody has given a crew number", async () => {
+  it("draws no pebble and no People needed for a kitchen nobody has given a crew number", async () => {
     meals.mockResolvedValue([lunch(null)]);
     mealCrew.mockResolvedValue([crewOf(3, 2, null)]);
     const day = await openTheDay();
     // Give the crew request its turn to land before asserting absence.
     await waitFor(() => expect(mealCrew).toHaveBeenCalled());
-    await act(async () => {});
+    await screen.findByText("Govinda Das, Madhava Das, Keshava Das, 2 volunteers");
 
     expect(day.querySelector(".ti-users")).toBeNull();
-    // No crew hint of any name, not merely none named for Lunch.
+    expect(screen.queryByText(/People needed/)).toBeNull();
     expect(screen.queryByRole("button", { name: /more about crew/i })).toBeNull();
   });
 });

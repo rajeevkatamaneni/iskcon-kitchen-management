@@ -34,17 +34,20 @@ public class TenantProvisioningService {
 	private final org.iskcon.kms.calendar.CalendarPrecomputeScheduler calendarScheduler;
 	private final org.iskcon.kms.occasion.OccasionService occasionService;
 	private final org.iskcon.kms.meal.MealKindService mealKindService;
+	private final org.iskcon.kms.kitchen.KitchenService kitchenService;
 
 	public TenantProvisioningService(
 			JdbcTemplate jdbc, AuditService auditService,
 			org.iskcon.kms.calendar.CalendarPrecomputeScheduler calendarScheduler,
 			org.iskcon.kms.occasion.OccasionService occasionService,
-			org.iskcon.kms.meal.MealKindService mealKindService) {
+			org.iskcon.kms.meal.MealKindService mealKindService,
+			org.iskcon.kms.kitchen.KitchenService kitchenService) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
 		this.calendarScheduler = calendarScheduler;
 		this.occasionService = occasionService;
 		this.mealKindService = mealKindService;
+		this.kitchenService = kitchenService;
 	}
 
 	/**
@@ -93,6 +96,11 @@ public class TenantProvisioningService {
 
 		// The kinds of meal a temple cooks, with the everyday ones already timed (E4-S7).
 		mealKindService.seedForCurrentTenant();
+
+		// Its main kitchen, marked main and using the meal planner (Epic 12, T-350), was seeded above in
+		// insertFirstAdministrator rather than here: the administrator's own staff record has to name a
+		// kitchen (staff_profiles.kitchen_id is NOT NULL), and the kitchen has to name who created it,
+		// so it goes between the two.
 
 		// The permanent record of provisioning, on the shared audit trail (E1-S7). before is null
 		// — provisioning is a creation. The event belongs to this tenant, so a Temple Admin of the
@@ -193,7 +201,12 @@ public class TenantProvisioningService {
 					request.adminEmail().toLowerCase(),
 					request.adminPhone());
 
-			employFirstAdministrator(request, tenantId, adminId);
+			// The temple's main kitchen, so it can plan its first meal and so the administrator has a
+			// kitchen to belong to. Created by them: the kitchen register says who added each kitchen,
+			// and the super-admin doing the provisioning is not a person at this temple.
+			UUID kitchenId = kitchenService.seedMainKitchenForCurrentTenant(adminId);
+
+			employFirstAdministrator(request, tenantId, adminId, kitchenId);
 
 		} catch (org.springframework.dao.DuplicateKeyException e) {
 			throw new ApplicationException(
@@ -216,16 +229,19 @@ public class TenantProvisioningService {
 	 * correct both, and inventing a joining date we were never told would be worse than a wrong one
 	 * they can see and fix.
 	 */
-	private void employFirstAdministrator(ProvisionTenantRequest request, UUID tenantId, UUID adminId) {
+	private void employFirstAdministrator(
+			ProvisionTenantRequest request, UUID tenantId, UUID adminId, UUID kitchenId) {
 		UUID profileId = UUID.randomUUID();
+		// In the main kitchen, and not flagged for checking: a new temple has exactly one kitchen, so
+		// there is nothing to have guessed.
 		jdbc.update("""
 				INSERT INTO staff_profiles (
 					id, tenant_id, user_id, full_name, phone, email,
-					job_title, employment_type, date_of_joining, employment_status)
-				VALUES (?, ?, ?, ?, ?, ?, 'TEMPLE_ADMINISTRATOR', 'FULL_TIME', CURRENT_DATE, 'ACTIVE')
+					job_title, employment_type, date_of_joining, employment_status, kitchen_id)
+				VALUES (?, ?, ?, ?, ?, ?, 'TEMPLE_ADMINISTRATOR', 'FULL_TIME', CURRENT_DATE, 'ACTIVE', ?)
 				""",
 				profileId, tenantId, adminId, request.adminName(),
-				request.adminPhone(), request.adminEmail().toLowerCase());
+				request.adminPhone(), request.adminEmail().toLowerCase(), kitchenId);
 
 		// The seven days-off rows the schedule grid edits, as every hire gets.
 		for (int day = 1; day <= 7; day++) {

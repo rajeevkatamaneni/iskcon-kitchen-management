@@ -99,6 +99,19 @@ class TenantLoopMigrationIT extends AbstractIntegrationTest {
 		assertThat(countOf("SELECT count(*) FROM shifts"))
 				.as("nor the reseed's volunteer shifts")
 				.isZero();
+
+		// V150 (Epic 12) gives every staff member a kitchen, per temple. This temple has staff and no
+		// kitchen, so the loop body that creates one is planned and run here, not first on a deployment.
+		assertThat(countOf(
+				"SELECT count(*) FROM kitchens WHERE name = 'Main kitchen' AND is_main AND uses_meal_planner"))
+				.as("the temple should have been given a main kitchen that plans meals")
+				.isEqualTo(1);
+		assertThat(countOf("""
+				SELECT count(*) FROM staff_profiles sp JOIN kitchens k ON k.id = sp.kitchen_id
+				WHERE k.name = 'Main kitchen' AND sp.kitchen_needs_check
+				"""))
+				.as("both retrospective hires put in it, and flagged for the Temple Admin to check")
+				.isEqualTo(2);
 	}
 
 	// ---------------------------------------------------------------------

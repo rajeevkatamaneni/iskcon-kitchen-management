@@ -2,13 +2,11 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ds/Badge";
+import { Button } from "@/components/ds/Button";
 import { FieldRow } from "@/components/ds/FieldRow";
 import { Form } from "@/components/ds/Form";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { AddressPicker } from "@/components/planner/AddressPicker";
-import { Button } from "@/components/ds/Button";
-import { ButtonLink } from "@/components/ds/ButtonLink";
-import { Card } from "@/components/ds/Card";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { BusyPot } from "@/components/Loading";
@@ -20,8 +18,11 @@ import {
   type CrewAtView,
   type EventNameSuggestion,
   type Handover,
+  type Kitchen,
+  type KitchenCrewView,
   type MealCrewView,
   type MealKindView,
+  type MealKitchenDraft,
   type MealShiftDraft,
   type MealView,
   type MenuHistoryView,
@@ -34,9 +35,17 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { ShiftLayer, timesChanged, timesChangedWarning } from "@/components/planner/ShiftLayer";
 import { ConfirmLayer, useLeaveGuard } from "@/app/planner/confirm-layer";
-import { convertQuantity, longDate, unitLabel } from "@/lib/format";
+import { convertQuantity, longDate } from "@/lib/format";
 import { ekadashiLabel } from "@/lib/vaishnava-day";
-import { FIELD_LABEL } from "@/components/Field";
+import {
+  AddKitchen,
+  Counter,
+  KitchenBand,
+  NARROW_TWO_UP,
+  Readout,
+  ROW_LABEL,
+  type BandDish,
+} from "@/components/planner/KitchenSections";
 
 /**
  * Planning a meal, in the order a kitchen decides one: what kind of meal it is, who is expected,
@@ -86,6 +95,31 @@ interface Draft {
    * rather than deleted, so its history survives.
    */
   dishId?: string;
+  /**
+   * The kitchen cooking it (Epic 12): always one of the meal's bands. A dish never moves between
+   * kitchens — it is taken off one band and added in another, which makes a new draft.
+   */
+  kitchenId: string;
+  /**
+   * What the saved dish was called and measured in, for a meal being edited. Only a fallback, for a
+   * planned dish whose recipe is no longer in the recipe list (archived since it was planned); the
+   * recipe itself is always preferred.
+   */
+  saved?: { name: string; unit: string };
+}
+
+/**
+ * One kitchen on the meal, as the composer holds it (Epic 12): a band in step 3.
+ *
+ * <p>`crewRequired` is that kitchen's People needed. There is no meal-level figure any more; the
+ * meal's is the sum the server works out.
+ */
+interface Band {
+  kitchenId: string;
+  kitchenName: string;
+  /** The temple's main kitchen, which the meal's volunteers are counted under when it is on the meal. */
+  isMain: boolean;
+  crewRequired: number | null;
 }
 
 /**
@@ -104,7 +138,7 @@ interface Draft {
  */
 type MealFacts = Omit<
   SaveMealInput,
-  "planDate" | "mealKindId" | "ekadashiAcknowledged" | "dishes" | "volunteerShift"
+  "planDate" | "mealKindId" | "ekadashiAcknowledged" | "dishes" | "volunteerShift" | "kitchens"
 >;
 
 /**
@@ -133,6 +167,7 @@ export function MealComposer({
   date,
   recipes,
   mealKinds,
+  kitchens,
   isEkadashi,
   ekadashiName,
   existing,
@@ -144,6 +179,12 @@ export function MealComposer({
   date: string;
   recipes: RecipeSummary[];
   mealKinds: MealKindView[];
+  /**
+   * The temple's kitchens, `api.listKitchens(false)`, in the order Settings lists them (Epic 12). What
+   * a new meal's first band is chosen from and what "+ Add another kitchen" offers. May arrive after
+   * the composer mounts: a new meal gets its first band the moment it does.
+   */
+  kitchens: Kitchen[];
   isEkadashi: boolean;
   /**
    * What the calendar calls this day, so the picker can say why its list is short in the same words
@@ -166,7 +207,7 @@ export function MealComposer({
   /** Lets a focus screen keep its own button in step with the form it commits. */
   onStatus?: (status: ComposerStatus) => void;
 }) {
-  const { getToken } = useAuth();
+  const { getToken, appUser } = useAuth();
   // Held in a ref rather than read in the effects below. `getToken` is a fresh closure on most
   // renders, so an effect that depends on it re-runs on every render — and an effect that also
   // sets state then never stops.
@@ -193,7 +234,27 @@ export function MealComposer({
   const [adults, setAdults] = useState(existing?.adults ?? 0);
   const [children, setChildren] = useState(existing?.children ?? 0);
   const [seniors, setSeniors] = useState(existing?.seniors ?? 0);
-  const [picked, setPicked] = useState<Draft[]>(() => openDrafts(existing));
+  /**
+   * The kitchens cooking this meal, in the order their bands are drawn (Epic 12). A meal being edited
+   * opens on its own kitchens in the order the server sent them, which is already the order for the
+   * person looking, and is never re-sorted here. A new meal opens on one: see {@link firstBand}.
+   * Bands added while building appear in the order they were added.
+   */
+  const [bands, setBands] = useState<Band[]>(() =>
+    existing?.kitchens?.length
+      ? existing.kitchens.map((k) => ({
+          kitchenId: k.kitchenId,
+          kitchenName: k.kitchenName,
+          isMain: k.isMain,
+          crewRequired: k.crewRequired,
+        }))
+      : startingBands(kitchens, appUser?.kitchenId ?? null, null)
+  );
+  const [picked, setPicked] = useState<Draft[]>(() =>
+    openDrafts(existing, existing?.kitchens?.[0]?.kitchenId ?? null)
+  );
+  /** The band whose removal is being confirmed, inside that band. */
+  const [removing, setRemoving] = useState<string | null>(null);
   const [notes, setNotes] = useState(existing?.kitchenNotes ?? "");
   const [serverNotes, setServerNotes] = useState(existing?.serverNotes ?? "");
 
@@ -271,17 +332,42 @@ export function MealComposer({
   const [occasionName, setOccasionName] = useState(existing?.occasionName ?? "");
 
   /**
-   * How many people it takes to cook this meal (item 24). One counter, not two: at execution time
-   * the number can be met by any mix of staff and volunteers, and splitting it would invent a
-   * constraint the temple does not have.
+   * How many people it takes to cook this meal (item 24) is asked per kitchen since Epic 12, in each
+   * band's own People needed (`Band.crewRequired`). Still one counter per kitchen, not two: at
+   * execution time the number can be met by any mix of staff and volunteers, and splitting it would
+   * invent a constraint the temple does not have. Null, not zero, until somebody says.
    *
-   * <p>Null, not zero, until somebody says. Null is the honest answer for a meal nobody has thought
-   * about the hands for yet, and it is drawn as an empty box rather than a nought.
+   * <p>Once the planner has touched any People needed it is theirs, and the kind's suggestion stops
+   * arriving over the top of the first band when they change the kind of meal. The suggestion is the
+   * meal's (the median of the last three of its kind), so it goes to the first band, which on a new
+   * meal is the only one.
    */
-  const [crewRequired, setCrewRequired] = useState<number | null>(existing?.crewRequired ?? null);
-  // Once the planner has touched the counter it is theirs, and the suggestion stops arriving over
-  // the top of it when they change the kind of meal.
   const crewTouched = useRef(editing);
+  const suggestedCrewRef = useRef<number | null>(null);
+
+  /**
+   * A new meal gets its first band as soon as the kitchens are known. They usually are at mount; this
+   * is for a screen that renders the composer before its kitchens have loaded.
+   */
+  const ownKitchenId = appUser?.kitchenId ?? null;
+  useEffect(() => {
+    if (editing || kitchens.length === 0) return;
+    setBands((bs) =>
+      bs.length > 0
+        ? bs
+        : startingBands(kitchens, ownKitchenId, crewTouched.current ? null : suggestedCrewRef.current)
+    );
+  }, [editing, kitchens, ownKitchenId]);
+
+  /**
+   * Which band the meal's volunteers are counted in: the main kitchen's if it is on the meal, else the
+   * first. The server counts them the same way (`KitchenCrewView`), so the kitchens add up to the meal
+   * and no volunteer is counted twice.
+   */
+  const volunteerBandId = (bands.find((b) => b.isMain) ?? bands[0])?.kitchenId ?? null;
+
+  /** What "+ Add another kitchen" offers: the kitchens that plan meals here and are not on it, in Settings order. */
+  const addable = kitchens.filter((k) => plansMeals(k) && !bands.some((b) => b.kitchenId === k.id));
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -385,36 +471,64 @@ export function MealComposer({
    * is on its way, and if it cannot be fetched at all, the readout says it has not counted, which is
    * true.
    */
-  const needsCount = !existingId && crewLooked && crew === null;
+  /**
+   * <p>Since Epic 12 the question is asked per band: each kitchen's own staff over the ready-by, with
+   * the meal's volunteers counted in one band only (`countVolunteers`, see {@link volunteerBandId}).
+   * A band reads the meal's crew row where the row has that kitchen — the row also counts the
+   * volunteers signed up to this meal's own shift, which a count at a time cannot — and is counted at
+   * the date and ready-by otherwise: every band of a new meal, and a kitchen added while editing one.
+   * Each answer is kept under the exact question it answers, so a reply to an earlier time, or for a
+   * band that has since changed whether it carries the volunteers, is never read out as this one's.
+   */
   const countableReadyBy = /^\d{2}:\d{2}(:\d{2})?$/.test(readyBy) ? readyBy.slice(0, 5) : null;
-  const [crewAt, setCrewAt] = useState<CrewAtView | null>(null);
+  const rowFor = (kitchenId: string): KitchenCrewView | null =>
+    crew?.kitchens?.find((k) => k.kitchenId === kitchenId) ?? null;
+  const countKey = (kitchenId: string, withVolunteers: boolean) =>
+    `${date}|${countableReadyBy}|${kitchenId}|${withVolunteers ? "v" : "-"}`;
+  const [counts, setCounts] = useState<Record<string, CrewAtView>>({});
+  /** The bands to count, as one string so the effect below re-runs only when the question changes. */
+  const toCount = crewLooked
+    ? bands
+        .filter((b) => rowFor(b.kitchenId) === null)
+        .map((b) => `${b.kitchenId}:${b.kitchenId === volunteerBandId ? "v" : "-"}`)
+        .join(",")
+    : "";
   useEffect(() => {
-    if (!needsCount || !countableReadyBy) return;
+    if (!toCount || !countableReadyBy) return;
     let live = true;
-    tokenRef
-      .current()
-      .then((t) => api.mealCrewAt(date, countableReadyBy, t))
-      .then((count) => {
-        if (live) setCrewAt(count);
-      })
-      .catch(() => {
-        if (live) setCrewAt(null);
-      });
+    for (const item of toCount.split(",")) {
+      const [kitchenId, v] = item.split(":");
+      const withVolunteers = v === "v";
+      const key = `${date}|${countableReadyBy}|${kitchenId}|${v}`;
+      tokenRef
+        .current()
+        .then((t) => api.mealCrewAt(date, countableReadyBy, t, kitchenId, withVolunteers))
+        .then((count) => {
+          if (live) setCounts((c) => ({ ...c, [key]: count }));
+        })
+        .catch(() => {
+          if (!live) return;
+          setCounts((c) => {
+            if (!(key in c)) return c;
+            const next = { ...c };
+            delete next[key];
+            return next;
+          });
+        });
+    }
     return () => {
       live = false;
     };
-  }, [needsCount, date, countableReadyBy]);
+  }, [toCount, date, countableReadyBy]);
 
-  /** What step 4 reads out and measures People needed against: the meal's row, else the count. */
-  const roster: Roster | null =
-    crew ??
-    (needsCount &&
-    crewAt &&
-    countableReadyBy &&
-    crewAt.planDate === date &&
-    crewAt.readyBy.slice(0, 5) === countableReadyBy
-      ? crewAt
-      : null);
+  /** What a band reads out and measures its People needed against: the meal's row, else the count. */
+  function rosterFor(kitchenId: string): BandRoster | null {
+    const row = rowFor(kitchenId);
+    if (row) return row;
+    if (!crewLooked || !countableReadyBy) return null;
+    const count = counts[countKey(kitchenId, kitchenId === volunteerBandId)];
+    return count && count.planDate === date && count.readyBy.slice(0, 5) === countableReadyBy ? count : null;
+  }
 
   /** The median of the last three ordinary meals of this kind (Q11), or null where there are none. */
   useEffect(() => {
@@ -424,7 +538,11 @@ export function MealComposer({
       .current()
       .then((t) => api.suggestedCrew(kindName, t))
       .then((s) => {
-        if (live && !crewTouched.current) setCrewRequired(s.crewRequired);
+        if (!live || crewTouched.current) return;
+        suggestedCrewRef.current = s.crewRequired;
+        setBands((bs) =>
+          bs.length === 0 ? bs : [{ ...bs[0], crewRequired: s.crewRequired }, ...bs.slice(1)]
+        );
       })
       .catch(() => undefined);
     return () => {
@@ -645,25 +763,23 @@ export function MealComposer({
   const loadingFastingList = isEkadashi && fastingList.status === "loading";
 
   /**
-   * The preparations the picker draws.
+   * The preparations a band's search may offer: the day's list, less every dish already on the meal
+   * in any band, because a dish belongs to exactly one kitchen (Epic 12).
    *
-   * <p>Anything already picked stays on the list whatever the filter says. A meal being corrected
-   * on a fasting day may hold a grain preparation somebody deliberately confirmed, and hiding it
-   * would leave its servings box — and the block that box can put on saving — out of reach.
+   * <p>A dish already picked is on its band as a row whatever the filter says. A meal being corrected
+   * on a fasting day may hold a grain preparation somebody deliberately confirmed, and its row — with
+   * the amount box and the block that box can put on saving — stays in reach; the filter only decides
+   * what the search offers next.
    */
-  const visible = useMemo(() => {
-    // Nothing until the filtered list lands. Drawing the full one and shrinking it would flash
-    // every grain preparation the temple cooks, which is the one thing this control prevents.
+  const offered = useMemo(() => {
+    // Nothing until the filtered list lands. Offering the full one and then shrinking it would put
+    // every grain preparation the temple cooks in front of the planner, which is the one thing this
+    // control prevents.
     if (loadingFastingList) return [];
-    if (!filtering || fastingList.status !== "ready") return recipes;
-    const shown = new Set(fastingList.recipes.map((r) => r.id));
-    const kept = picked
-      .filter((d) => !shown.has(d.recipeId))
-      .map((d) => byId.get(d.recipeId))
-      .filter((r): r is RecipeSummary => Boolean(r));
-    if (kept.length === 0) return fastingList.recipes;
-    return [...fastingList.recipes, ...kept].sort((a, b) => a.name.localeCompare(b.name));
-  }, [loadingFastingList, filtering, fastingList, recipes, picked, byId]);
+    const pool = filtering && fastingList.status === "ready" ? fastingList.recipes : recipes;
+    const taken = new Set(picked.map((d) => d.recipeId));
+    return pool.filter((r) => !taken.has(r.id));
+  }, [loadingFastingList, filtering, fastingList, recipes, picked]);
 
   // --- the form itself -------------------------------------------------------
 
@@ -846,11 +962,46 @@ export function MealComposer({
     return recipe.baseYieldUnit === "PIECES" ? Math.ceil(raw) : Math.round(raw * 100) / 100;
   }
 
-  function toggle(recipeId: string) {
+  /**
+   * A dish added to one kitchen's band, scaled to the head count like any other. A recipe already on
+   * the meal is not offered by any band's search, and is refused here too rather than trusted.
+   */
+  function addDish(recipeId: string, kitchenId: string) {
+    setDirty(true);
     setPicked((list) =>
       list.some((d) => d.recipeId === recipeId)
-        ? list.filter((d) => d.recipeId !== recipeId)
-        : [...list, { recipeId, target: targetFor(recipeId, headCount), overridden: false }]
+        ? list
+        : [...list, { recipeId, kitchenId, target: targetFor(recipeId, headCount), overridden: false }]
+    );
+  }
+
+  /** Taken off its kitchen. There is no move: to cook it elsewhere, add it in the other band. */
+  function dropDish(recipeId: string) {
+    setDirty(true);
+    setPicked((list) => list.filter((d) => d.recipeId !== recipeId));
+  }
+
+  /** A kitchen added from "+ Add another kitchen", as a new band at the end, with nobody counted yet. */
+  function addBand(kitchenId: string) {
+    const k = kitchens.find((x) => x.id === kitchenId);
+    if (!k || bands.some((b) => b.kitchenId === kitchenId)) return;
+    setDirty(true);
+    setBands((bs) => [...bs, { kitchenId: k.id, kitchenName: k.name, isMain: k.isMain, crewRequired: null }]);
+  }
+
+  /** A kitchen taken off the meal, and its dishes with it. Only ever reached with another band left. */
+  function removeBand(kitchenId: string) {
+    setDirty(true);
+    setPicked((list) => list.filter((d) => d.kitchenId !== kitchenId));
+    setBands((bs) => bs.filter((b) => b.kitchenId !== kitchenId));
+    setRemoving(null);
+  }
+
+  function setBandCrew(kitchenId: string, v: number | null) {
+    crewTouched.current = true;
+    setDirty(true);
+    setBands((bs) =>
+      bs.map((b) => (b.kitchenId === kitchenId ? { ...b, crewRequired: v === null ? null : Math.max(0, v) } : b))
     );
   }
 
@@ -877,15 +1028,25 @@ export function MealComposer({
    * and last year's per-preparation overrides are deliberately dropped: an override was a judgement
    * about last year's crowd, and re-applying it against a different head count would be wrong in a
    * way nobody would notice. Everything stays editable afterwards.
+   *
+   * <p>Every dish goes into the first band (Epic 12). Last year's menu does not say which kitchen
+   * cooked what in a way this year's kitchens can be trusted to match, and taking a dish off one band
+   * and adding it in another is two presses.
    */
   function useLastMenu() {
-    if (!history) return;
+    const into = bands[0]?.kitchenId;
+    if (!history || !into) return;
     setDirty(true);
     setPicked((list) => {
       const already = new Set(list.map((d) => d.recipeId));
       const added = history.preparations
         .filter((p) => byId.has(p.recipeId) && !already.has(p.recipeId))
-        .map((p) => ({ recipeId: p.recipeId, target: targetFor(p.recipeId, headCount), overridden: false }));
+        .map((p) => ({
+          recipeId: p.recipeId,
+          kitchenId: into,
+          target: targetFor(p.recipeId, headCount),
+          overridden: false,
+        }));
       return [...list, ...added];
     });
     setMenuUsed(true);
@@ -966,7 +1127,9 @@ export function MealComposer({
     // Named, because a festival lunch has eight preparations and "a quantity is missing" sends
     // somebody hunting through all of them.
     if (missingQuantity) {
-      return `Say how much ${byId.get(missingQuantity.recipeId)?.name ?? "this dish"} to make`;
+      return `Say how much ${
+        byId.get(missingQuantity.recipeId)?.name ?? missingQuantity.saved?.name ?? "this dish"
+      } to make`;
     }
     return null;
   }
@@ -1017,7 +1180,6 @@ export function MealComposer({
       adults,
       children,
       seniors,
-      crewRequired,
       kitchenNotes: notes.trim() || null,
       serverNotes: serverNotes.trim() || null,
     };
@@ -1030,8 +1192,13 @@ export function MealComposer({
    * not saved yet the count at its date and ready-by (T-215). Where neither is known — the count could
    * not be fetched, or no ready-by is given yet — nobody is counted as rostered, and the layer opens on
    * People needed in full, as it did before the count existed.
+   *
+   * <p>Per kitchen since Epic 12: each band is short, or not, of its own People needed. The meal still
+   * has one volunteer shift, so the layer opens on the meal's whole shortfall — every short band's
+   * added together — whichever band's button opened it.
    */
-  const shortBy = crewRequired == null ? 0 : crewRequired - (roster?.rostered ?? 0);
+  const shortOf = (b: Band) => (b.crewRequired == null ? 0 : b.crewRequired - (rosterFor(b.kitchenId)?.rostered ?? 0));
+  const shortBy = bands.reduce((sum, b) => sum + Math.max(0, shortOf(b)), 0);
 
   /**
    * Whether this save changes the times of a shift people have signed up for — the one save that stops
@@ -1062,10 +1229,32 @@ export function MealComposer({
     setError(null);
     const token = await tokenRef.current();
 
+    // Epic 12: the kitchens in band order, each with its own People needed, and every dish under the
+    // kitchen whose band it is on — sent band by band, so the request reads in the order the screen
+    // does. A People needed of 0 goes as null: the server reads null as "nobody has said" and never
+    // takes 0 (`MealKitchenDraft`), and a counter pressed down to nought has not said anything more.
+    const bandIndex = (kitchenId: string) => {
+      const i = bands.findIndex((b) => b.kitchenId === kitchenId);
+      return i < 0 ? bands.length : i;
+    };
+    const kitchensSent: MealKitchenDraft[] = bands.map((b) => ({
+      kitchenId: b.kitchenId,
+      crewRequired: b.crewRequired != null && b.crewRequired > 0 ? b.crewRequired : null,
+    }));
     const body: UpdateMealInput = {
       ...mealFacts(),
+      kitchens: kitchensSent,
       ekadashiAcknowledged: acknowledge,
-      dishes: picked.map((d) => ({ id: d.dishId ?? null, recipeId: d.recipeId, targetYield: d.target ?? 0 })),
+      // Ordered, never filtered: a dish whose kitchen somehow has no band is still sent, last, so the
+      // server refuses it in its own words (KMS-400182) instead of this quietly cancelling a dish.
+      dishes: [...picked]
+        .sort((a, b) => bandIndex(a.kitchenId) - bandIndex(b.kitchenId))
+        .map((d) => ({
+          id: d.dishId ?? null,
+          recipeId: d.recipeId,
+          targetYield: d.target ?? 0,
+          kitchenId: d.kitchenId,
+        })),
       volunteerShift: shiftDraft,
     };
 
@@ -1516,13 +1705,14 @@ export function MealComposer({
         </FieldRow>
       </section>
 
-      {/* 3 — preparations */}
+      {/* 3 — what each kitchen cooks (Epic 12, the approved mock's step 3). One band per kitchen,
+          each holding what that kitchen cooks and who cooks it. The composer's old steps 3
+          (Preparations) and 4 (Who will run it) meet here, because splitting a kitchen's dishes and
+          its people across two cards would put the main kitchen in two places. Still after the head
+          count and not before (Q10): the crew a kitchen takes depends on what it is cooking as much
+          as on how many are eating. */}
       <section className="card grid gap-3 p-5">
-        <Step
-          n={3}
-          title="Preparations"
-          hint="Increase any dish that usually runs out."
-        />
+        <Step n={3} title="What each kitchen cooks" hint="Increase any dish that usually runs out." />
 
         {/* Why the list is short, in the calendar's own words for the day, and the way out for
             somebody who means to cook a grain preparation anyway. Beside the list rather than
@@ -1586,155 +1776,108 @@ export function MealComposer({
           </span>
         )}
 
-        <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
-          {visible.map((recipe) => {
-            const draft = picked.find((d) => d.recipeId === recipe.id);
+        {/* Edge to edge: `-mx-5` takes back the card's padding, so each kitchen's sunken band runs the
+            card's full width and reads as its own place inside the one meal. */}
+        <div className="-mx-5 grid gap-3">
+          {bands.map((b) => {
+            const roster = rosterFor(b.kitchenId);
+            const carriesVolunteers = b.kitchenId === volunteerBandId;
+            const short = b.crewRequired != null && roster != null && roster.rostered < b.crewRequired;
+            const hasShift = Boolean(shiftDraft || liveShift);
+            const bandDishes: BandDish[] = picked
+              .filter((d) => d.kitchenId === b.kitchenId)
+              .map((d) => {
+                const recipe = byId.get(d.recipeId);
+                return {
+                  recipeId: d.recipeId,
+                  name: recipe?.name ?? d.saved?.name ?? "A preparation",
+                  category: recipe?.categoryName ?? "",
+                  unit: recipe?.baseYieldUnit ?? d.saved?.unit ?? "",
+                  target: d.target,
+                  max: MAX_TARGET_YIELD,
+                };
+              });
             return (
-              // One row per dish, ticked or not: the name on the left and, once ticked, the amount
-              // box and its unit on the same line to its right (Rajeev, 2026-09-18, T-237). The box
-              // used to sit on a line of its own under the name, and because the grid gives every
-              // cell in a row the height of the tallest, one ticked dish left its neighbours standing
-              // over ~50px of nothing. Measured before and after in the proof (T-237).
-              //
-              // A grid rather than a flex row, so a refused amount's red sentence goes under the
-              // box and not beside it (Rajeev, 2026-09-18). `Form` places its error slot straight
-              // after the box, which in a flex row made it a third item on the line: it took the
-              // room the unit had, and "L · set by hand" was squeezed into a column that broke
-              // over three lines. Here the name, the box and the unit are pinned to the first row
-              // and the slot, whatever its position in the markup, spans the row beneath from the
-              // box's left edge — so the red sentence is the only thing that makes a ticked dish
-              // taller. The slot is still `Form`'s own, so the sentence stays tied to the box by
-              // aria-describedby exactly as before.
-              //
-              // The slot is `w-0 min-w-full`: it fills the two columns it spans but asks nothing of
-              // their width. Without that, the sentence ("Amount of Arbi ki Sabzi (Haryana) can be
-              // at most 50,000") sized the two `auto` columns to its own length and squeezed the
-              // name's column to 0px, so the name broke a word per line (measured: a 138px cell).
-              //
-              // `content-start` because the outer grid stretches every cell in a row to the tallest:
-              // without it an unticked neighbour's one row stretched too and `items-center` floated
-              // its name down to the middle of the cell, out of line with the ticked dish's name.
-              // The name itself is `self-start` for the same reason on a smaller scale: the box is
-              // 44px and a name with its category 36px, so centring put a ticked dish's name 4px
-              // below its unticked neighbours' (measured 677 against 673).
-              <div
-                key={recipe.id}
-                className="grid grid-cols-[minmax(0,1fr)_auto_auto] content-start items-center gap-x-2 border-t border-hairline py-2 first:border-t-0 sm:border-t-0 [&>[data-form-error-slot]]:col-span-2 [&>[data-form-error-slot]]:col-start-2 [&>[data-form-error-slot]]:row-start-2 [&>[data-form-error-slot]]:w-0 [&>[data-form-error-slot]]:min-w-full"
-              >
-                <label className="col-start-1 row-start-1 flex cursor-pointer items-start gap-2 self-start">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(draft)}
-                    onChange={() => toggle(recipe.id)}
-                    className="mt-1 h-4 w-4 flex-none accent-accent"
-                  />
-                  <span className="grid min-w-0">
-                    <span className="text-sm text-ink">{recipe.name}</span>
-                    <span className="text-xs text-ink-muted">{recipe.categoryName}</span>
-                  </span>
-                </label>
-
-                {draft && (
-                  <>
-                    {/* `max` is the server's ceiling on a dish's amount and the scaler's (T-217):
-                        past 50,000 the Today screen cannot scale the dish and fails for everyone.
-                        `Form` reads it off the element and puts the refusal under this box in red
-                        on the press, so the button stays live for it — adding it to firstBlocker
-                        would disable the button and the red sentence would never be reached. */}
-                    <input
-                      type="number"
-                      min={0}
-                      max={MAX_TARGET_YIELD}
-                      step="any"
-                      aria-label={`Amount of ${recipe.name}`}
-                      value={draft.target ?? ""}
-                      onChange={(e) => setTarget(recipe.id, e.target.value)}
-                      className={[
-                        "col-start-2 row-start-1 min-h-touch w-20 rounded-control border px-2 text-sm tabular-nums",
-                        draft.target === null || !(draft.target > 0) || draft.target > MAX_TARGET_YIELD
-                          ? "border-warning"
-                          : "border-hairline",
-                      ].join(" ")}
-                    />
-                    <span className="col-start-3 row-start-1 max-w-20 text-xs text-ink-muted">
-                      {/* The unit is the recipe's, never chosen here — nobody can plan ten litres
-                          of a dry podi. Written the way it is said rather than lower-cased: a
-                          litre is "L", and toLowerCase() rendered it as the digit-like "l". */}
-                      {unitLabel(recipe.baseYieldUnit)}
-                      {draft.overridden && draft.target !== targetFor(recipe.id, headCount) && (
-                        <> · set by hand</>
-                      )}
-                    </span>
-                  </>
-                )}
-              </div>
+              <KitchenBand
+                key={b.kitchenId}
+                kitchen={b}
+                dishes={bandDishes}
+                offered={offered}
+                needed={b.crewRequired}
+                confirming={removing === b.kitchenId}
+                readout={{
+                  value: rosterReadout(roster, b.crewRequired, carriesVolunteers),
+                  // Quiet, and only a warning. A meal is planned weeks before anybody is rostered, so
+                  // being short of hands today says nothing about the plan and never blocks saving it.
+                  tone: short ? "warning" : "neutral",
+                }}
+                names={roster && roster.staffNames?.length ? roster.staffNames.join(", ") : null}
+                action={
+                  // *Ask for volunteers* in any band short of its People needed (strictly more needed
+                  // than rostered — at equal the kitchen is covered). The meal has one volunteer shift,
+                  // so once one is drafted here or saved, *View volunteer shift* takes its place in the
+                  // band its volunteers are counted in, whatever the numbers say, so a shift can always
+                  // be opened. Both open the same layer, and neither saves anything — the meal's own
+                  // Save or Update does.
+                  (hasShift ? carriesVolunteers : shortOf(b) > 0) ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      icon="hand-stop"
+                      aria-haspopup="dialog"
+                      onClick={() => setShiftOpen(true)}
+                      className="h-full w-full justify-center"
+                    >
+                      {hasShift ? "View volunteer shift" : "Ask for volunteers"}
+                    </Button>
+                  ) : null
+                }
+                footer={
+                  hasShift && carriesVolunteers ? (
+                    <p className="mt-2 text-sm text-ink-secondary">{shiftLine(liveShift, shiftDraft)}</p>
+                  ) : null
+                }
+                onNeeded={(v) => setBandCrew(b.kitchenId, v)}
+                onAdd={(recipeId) => addDish(recipeId, b.kitchenId)}
+                onAmount={setTarget}
+                onDrop={dropDish}
+                // The last kitchen cannot go: a meal nobody cooks is not a plan. With dishes in it, the
+                // band asks first, inside itself; an empty band has nothing to lose and goes at once.
+                onRemove={
+                  bands.length > 1
+                    ? () =>
+                        bandDishes.length > 0 ? setRemoving(b.kitchenId) : removeBand(b.kitchenId)
+                    : null
+                }
+                onConfirmRemove={() => removeBand(b.kitchenId)}
+                onKeep={() => setRemoving(null)}
+              />
             );
           })}
         </div>
-      </section>
-
-      {/* 4 — who will run it. After the preparations and not before (Q10): the crew a meal takes
-          depends on what is being cooked as much as on how many are eating, and three preparations
-          for 133 and eight for 133 are not the same morning’s work. */}
-      <section className="card grid gap-3 p-5">
-        <Step n={4} title="Who will run it" hint="Any mix of staff and volunteers" />
-        {/* The two numbers and the button that acts on them, in one row of three equal columns that
-            share the card's whole width, rather than the button dropping to a row of its own under a
-            stretch of white space (Rajeev, 2026-09-17). The counter centres its controls in the
-            wider box, and the Rostered sentence gets room to sit on one line. */}
-        <FieldRow className={`[grid-template-columns:repeat(3,minmax(16rem,1fr))] ${NARROW_TWO_UP}`}>
-          <Counter
-            label="People needed"
-            hint="Leave it empty until you know"
-            value={crewRequired}
-            onChange={(v) => {
-              crewTouched.current = true;
-              setDirty(true);
-              setCrewRequired(v === null ? null : Math.max(0, v));
-            }}
+        {bands.length === 0 && (
+          // Only reachable when the temple's kitchens have not loaded, or none of them plans its meals
+          // here. The server is the guard (KMS-400180); this says why there is nowhere to add a dish.
+          <p className="text-sm text-ink-secondary">
+            No kitchen that plans its meals here is set up yet. A Temple Admin can set one up in Settings.
+          </p>
+        )}
+        {addable.length > 0 && bands.length > 0 && (
+          <AddKitchen
+            options={addable.map((k) => ({ id: k.id, name: k.name, staffCount: k.staffCount }))}
+            onPick={addBand}
           />
-          <Readout
-            label="Rostered"
-            value={rosterReadout(roster, crewRequired)}
-            // Quiet, and only a warning. A meal is planned weeks before anybody is rostered, so
-            // being short of hands today says nothing about the plan and never blocks saving it.
-            tone={crewRequired != null && roster != null && roster.rostered < crewRequired ? "warning" : "neutral"}
-          />
-          {/* Asking for volunteers, beside the two numbers that say whether any are needed (D-27, the
-              first of the screens that change). *Ask for volunteers* appears the moment People needed
-              is more than Rostered, and not at equal: a covered meal is not short. Once a shift has
-              been drafted here, or the meal already has one, *View volunteer shift* takes its place
-              whatever the numbers say, so a shift can always be opened. Both open the same layer, and
-              neither saves anything — the meal's own Save or Update does. The empty first cell sits in
-              the shared label track, so the button lines up with the two boxes, not their labels. */}
-          {(shiftDraft || liveShift || shortBy > 0) && (
-            <span className="contents">
-              <span aria-hidden="true" />
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                icon="hand-stop"
-                aria-haspopup="dialog"
-                onClick={() => setShiftOpen(true)}
-                className="h-full w-full justify-center"
-              >
-                {shiftDraft || liveShift ? "View volunteer shift" : "Ask for volunteers"}
-              </Button>
-            </span>
-          )}
-        </FieldRow>
-        {(shiftDraft || liveShift) && (
-          <span className="text-sm text-ink-secondary">{shiftLine(liveShift, shiftDraft)}</span>
         )}
       </section>
 
-      {/* 5 — notes. In a card of their own, numbered like the four above (Rajeev, Decisions Desk,
+      {/* 4 — notes. In a card of their own, numbered like the steps above (Rajeev, Decisions Desk,
           2026-09-18): the two boxes used to sit loose under the step cards, so they read as an
-          afterthought to step 4 rather than as the last thing a meal's plan carries. The same card,
-          padding and gap as every step, so the column of cards stays one rhythm. */}
+          afterthought rather than as the last thing a meal's plan carries. The same card, padding
+          and gap as every step, so the column of cards stays one rhythm. Step 4 since Epic 12, when
+          the dishes and the crew became one step. */}
       <section className="card grid gap-3 p-5">
-        <Step n={5} title="Notes" />
+        <Step n={4} title="Notes" />
         <label className="grid gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Notes for the kitchen</span>
           <textarea
@@ -1835,7 +1978,7 @@ export function MealComposer({
  * happened. A servings figure that does not match the meal's own head count was set by hand, so it
  * is marked as such and a later change to the count leaves it alone.
  */
-function openDrafts(meal: MealView | undefined): Draft[] {
+function openDrafts(meal: MealView | undefined, firstKitchenId: string | null): Draft[] {
   if (!meal) return [];
   const drafts: Draft[] = [];
   const seen = new Set<string>();
@@ -1850,9 +1993,36 @@ function openDrafts(meal: MealView | undefined): Draft[] {
       // silently rewriting a figure somebody chose. The head count stops driving it either way.
       overridden: true,
       dishId: dish.id,
+      // Under the kitchen the server says cooks it. The first band only for a dish that came back
+      // without one, which the server never sends (every dish has a kitchen since Epic 12).
+      kitchenId: dish.kitchenId ?? firstKitchenId ?? "",
+      saved: { name: dish.recipeName, unit: dish.targetYieldUnit },
     });
   }
   return drafts;
+}
+
+/** A kitchen that can cook a planned meal: not archived, and planning its meals here (E10's `uses_meal_planner`). */
+function plansMeals(k: Kitchen): boolean {
+  return k.status === "ACTIVE" && k.usesMealPlanner;
+}
+
+/**
+ * The one band a new meal starts with (Epic 12): the planner's own kitchen, if it plans its meals
+ * here; else the main kitchen; else the first kitchen that plans meals, in Settings order. The same
+ * fallback the server uses to order a meal's kitchens for somebody with no kitchen of their own (a
+ * Temple Admin usually), so the band a meal opens on is the band it is shown first under.
+ */
+function firstBand(kitchens: Kitchen[], ownKitchenId: string | null): Kitchen | null {
+  const planners = kitchens.filter(plansMeals);
+  return (
+    planners.find((k) => k.id === ownKitchenId) ?? planners.find((k) => k.isMain) ?? planners[0] ?? null
+  );
+}
+
+function startingBands(kitchens: Kitchen[], ownKitchenId: string | null, crewRequired: number | null): Band[] {
+  const k = firstBand(kitchens, ownKitchenId);
+  return k ? [{ kitchenId: k.id, kitchenName: k.name, isMain: k.isMain, crewRequired }] : [];
 }
 
 /**
@@ -1869,13 +2039,20 @@ function shiftLine(saved: ShiftView | null, draft: MealShiftDraft | null): strin
 }
 
 /**
- * The three figures step 4 reads, whether they came from the meal's crew row or, before its first
- * save, from the count at its date and ready-by (T-215). Both are counted the same way on the server.
+ * The figures a band reads, whether they came from the meal's crew row for that kitchen or, for a
+ * kitchen the row does not have, from the count at the date and ready-by (T-215). Both are counted
+ * the same way on the server.
  */
-type Roster = Pick<MealCrewView, "staffIn" | "volunteers" | "rostered">;
+type BandRoster = Pick<KitchenCrewView, "staffIn" | "volunteers" | "rostered"> & {
+  /** Optional only because a server older than Epic 12 does not send it; then no names line is drawn. */
+  staffNames?: string[];
+};
 
 /**
- * "3 staff · 2 volunteers · 5 of 8" — who is rostered over this meal, against what it takes.
+ * "5 staff · 5 of 6" — who is rostered in one kitchen over this meal, against what it takes (the
+ * approved mock's wording). The band the meal's volunteers are counted in says them too, in the words
+ * the composer always used: "3 staff · 2 volunteers · 5 of 8". The other bands leave them out, because
+ * they never carry any and "0 volunteers" there would read as nobody having come forward.
  *
  * <p>Nothing counted is <em>not knowing</em> rather than nobody: the day may be fully staffed. Since
  * T-215 a meal not yet saved is counted at its date and ready-by, so this is left for the count that
@@ -1883,12 +2060,10 @@ type Roster = Pick<MealCrewView, "staffIn" | "volunteers" | "rostered">;
  * count the screen had not made — the same mistake in the opposite direction to counting an uncrewed
  * meal as covered (E6-S15).
  */
-function rosterReadout(crew: Roster | null, required: number | null): string {
+function rosterReadout(crew: BandRoster | null, required: number | null, withVolunteers: boolean): string {
   if (!crew) return "Not counted yet";
-  const parts = [
-    `${crew.staffIn} staff`,
-    `${crew.volunteers} ${crew.volunteers === 1 ? "volunteer" : "volunteers"}`,
-  ];
+  const parts = [`${crew.staffIn} staff`];
+  if (withVolunteers) parts.push(`${crew.volunteers} ${crew.volunteers === 1 ? "volunteer" : "volunteers"}`);
   if (required != null) parts.push(`${crew.rostered} of ${required}`);
   return parts.join(" · ");
 }
@@ -1913,9 +2088,6 @@ function Step({ n, title, hint }: { n: number; title: string; hint?: string }) {
     </span>
   );
 }
-
-/** The label and its "i", in the row's first track. One shape for a field, a counter and a readout. */
-const ROW_LABEL = `${FIELD_LABEL} flex items-center gap-1.5`;
 
 /**
  * One field in a {@link FieldRow}: its label with its "i", and its control.
@@ -1989,15 +2161,6 @@ function travelHint(manual: boolean, estimate: TravelEstimate | null): string {
  * temple tells us thirty is wrong, that is the moment to make it theirs — with a direction and a
  * figure, rather than a guess with a text box round it.
  */
-/**
- * A row of three 16rem fields is 50rem, and the card has that much room only from `xl` (1280px):
- * below it — a tablet, or a laptop narrower than 1184px beside the sidebar — the row ran past the
- * card and took the page sideways with it. Below `xl` the row goes two to a line instead, and
- * `FieldRow`'s own rule still stacks it to one below `sm`.
- */
-const NARROW_TWO_UP =
-  "max-xl:grid-flow-row max-xl:gap-y-4 max-xl:![grid-template-columns:repeat(2,minmax(0,1fr))]";
-
 const LOADING_MINUTES = 30;
 
 /** "45" out of a text box, or null. Anything that is not a positive whole number is not a figure. */
@@ -2021,92 +2184,4 @@ function leaveByLine(minutes: string, guestsEatAt: string): string | null {
   const hh = String(Math.floor(at / 60)).padStart(2, "0");
   const mm = String(at % 60).padStart(2, "0");
   return `Leave the temple by ${hh}:${mm} to be there before ${guestsEatAt}.`;
-}
-
-/**
- * A figure the form worked out rather than asked for.
- *
- * <p>Same three parts as every other field in the row — the label above the box, not inside it —
- * so it is a peer of the counters beside it and not a shape of its own. Its label being inside its
- * box is what made this pill impossible to align and what two previous fixes were aimed at.
- *
- * <p>A readout takes a warning tone when the figure is short of what the form was told it needs.
- * Quiet, and never a block: it is telling the planner something, not refusing them.
- */
-function Readout({
-  label,
-  hint,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  /** The arithmetic behind the figure, on the figure rather than on the boxes that feed it. */
-  hint?: string;
-  value: string;
-  tone?: "neutral" | "warning";
-}) {
-  return (
-    <span className="contents">
-      <span className={ROW_LABEL}>
-        <span>{label}</span>
-        {hint && <InfoHint text={hint} label={label} />}
-      </span>
-      <span
-        className={[
-          "flex items-center rounded-control px-5 py-2 text-lg font-semibold leading-snug tabular-nums",
-          tone === "warning" ? "bg-warning-bg text-warning" : "bg-sunken text-ink",
-        ].join(" ")}
-      >
-        {value}
-      </span>
-    </span>
-  );
-}
-
-function Counter({
-  label, hint, value, onChange,
-}: {
-  label: string;
-  hint?: string;
-  /** Null draws an empty box — an honest answer where nobody has said, and not a nought. */
-  value: number | null;
-  onChange: (value: number | null) => void;
-}) {
-  return (
-    <span className="contents">
-      {/* Not a `<label>`, and not now either: the counter is three controls in one box — a minus, a
-          figure and a plus — each carrying its own name. The "i" sits beside the word the way it
-          does on a field. */}
-      <span className={ROW_LABEL}>
-        <span>{label}</span>
-        {hint && <InfoHint text={hint} label={label} />}
-      </span>
-      <span className="flex items-center justify-center gap-2 rounded-control bg-sunken px-3 py-1">
-        <button
-          type="button"
-          aria-label={`One fewer ${label.toLowerCase()}`}
-          onClick={() => onChange((value ?? 0) - 1)}
-          className="min-h-touch w-9 rounded-control text-lg text-ink-secondary transition-colors duration-state hover:bg-hairline"
-        >
-          −
-        </button>
-        <input
-          type="number"
-          min={0}
-          aria-label={label}
-          value={value ?? ""}
-          onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
-          className="w-16 bg-transparent text-center text-base tabular-nums text-ink outline-none"
-        />
-        <button
-          type="button"
-          aria-label={`One more ${label.toLowerCase()}`}
-          onClick={() => onChange((value ?? 0) + 1)}
-          className="min-h-touch w-9 rounded-control text-lg text-ink-secondary transition-colors duration-state hover:bg-hairline"
-        >
-          +
-        </button>
-      </span>
-    </span>
-  );
 }

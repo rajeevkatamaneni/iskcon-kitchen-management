@@ -42,6 +42,8 @@ function EditStaffScreen() {
 
   const { staff, pay, loading, error } = useStaffRecord(id);
   const titles = useAuthedQuery(useCallback((t: string | undefined) => api.jobTitles(t), []));
+  // Active kitchens only, in the order Settings lists them: the form offers them as they come.
+  const kitchens = useAuthedQuery(useCallback((t: string | undefined) => api.listKitchens(false, t), []));
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
@@ -90,6 +92,9 @@ function EditStaffScreen() {
       }
     >
       {actionError && <ErrorNotice error={actionError} />}
+      {/* Without the kitchens the form has nothing to offer under Kitchen, and would refuse the save
+          with "Kitchen is required" for a reason the reader cannot fix. Said here instead. */}
+      {kitchens.error && <ErrorNotice error={kitchens.error} />}
 
       {loading ? (
         <Loading label="Loading the record…" />
@@ -103,6 +108,7 @@ function EditStaffScreen() {
             staff={staff}
             pay={pay}
             options={titles.data ?? []}
+            kitchens={kitchens.data ?? []}
             devotees={[]}
             revealedPan={revealedPan}
             onRevealPan={revealPan}

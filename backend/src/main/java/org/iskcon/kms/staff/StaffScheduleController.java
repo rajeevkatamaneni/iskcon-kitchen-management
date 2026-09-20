@@ -98,6 +98,11 @@ public class StaffScheduleController {
 			@Valid @RequestBody HireStaffRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 
+		// The kitchen first (Epic 12), before the ban check: that check writes to the platform log in a
+		// transaction of its own, and a hire with no kitchen, or an archived one, could never have
+		// completed — so it should not leave a record that a check was run for it.
+		employment.requireUsableKitchen(request.kitchenId());
+
 		org.iskcon.kms.ban.BanCheckResult check = bans.check(
 				actor, request.fullName(), request.phone(), request.address(),
 				request.pan(), request.aadhaar());
@@ -156,6 +161,47 @@ public class StaffScheduleController {
 			@Valid @RequestBody ReinstateStaffRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 		employment.reinstate(actor, id, request);
+		return ResponseEntity.noContent().build();
+	}
+
+	// ---- Which kitchen each person works in (Epic 12) --------------------
+
+	/**
+	 * The Temple Admin's "Check these kitchen assignments" list: current staff whose kitchen the system
+	 * filled in (V150 put everybody already employed in the main kitchen) and nobody has looked at
+	 * since. Empty once every one has been checked.
+	 *
+	 * <p>{@code MANAGE_STAFF}, like the register it sits on. Which kitchen somebody works in is part of
+	 * deciding who works here and where, not part of the roster, and no new permission was added for it.
+	 */
+	@GetMapping("/kitchen-checks")
+	@PreAuthorize("hasAuthority('MANAGE_STAFF')")
+	public List<StaffKitchenCheckView> kitchenChecks() {
+		return employment.kitchenChecks();
+	}
+
+	/**
+	 * Moves one person to a kitchen, and marks their kitchen checked. {@code KMS-400184} with no
+	 * kitchen, {@code KMS-400108} for one this temple does not have, {@code KMS-400109} for an archived
+	 * one; a kitchen that does not plan its meals here is allowed.
+	 */
+	@PutMapping("/members/{id}/kitchen")
+	@PreAuthorize("hasAuthority('MANAGE_STAFF')")
+	public ResponseEntity<Void> setKitchen(
+			@PathVariable UUID id,
+			@Valid @RequestBody SetStaffKitchenRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		employment.setKitchen(actor, id, request);
+		return ResponseEntity.noContent().build();
+	}
+
+	/** "These are right": marks the named records checked, leaving their kitchens as they are. */
+	@PostMapping("/kitchen-checks/confirm")
+	@PreAuthorize("hasAuthority('MANAGE_STAFF')")
+	public ResponseEntity<Void> confirmKitchenChecks(
+			@Valid @RequestBody ConfirmKitchenChecksRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		employment.confirmKitchenChecks(actor, request);
 		return ResponseEntity.noContent().build();
 	}
 

@@ -98,7 +98,7 @@ public class DocumentGenerationService {
 		Map<String, Object> doc;
 		try {
 			doc = jdbc.queryForMap("""
-					SELECT kind, recipe_id, po_id, meal_id, ingredient_request_id, donation_id,
+					SELECT kind, recipe_id, po_id, meal_id, kitchen_id, ingredient_request_id, donation_id,
 						   target_yield, language, status
 					FROM documents WHERE id = ?
 					""", documentId);
@@ -125,8 +125,11 @@ public class DocumentGenerationService {
 				html = PurchaseOrderSheetTemplate.render(buildSheetModel((UUID) doc.get("po_id"), language));
 				path = "generated/purchase-orders/" + documentId + ".pdf";
 			} else if ("JOB_CARD_PDF".equals(kind)) {
-				JobCardService.RenderedCard card =
-						jobCardService.renderForPdf((UUID) doc.get("meal_id"), language);
+				// The kitchen rides on the row (V152), as the language does: the worker is handed only
+				// the document's id. Null on a card requested before V152, which means the meal's only
+				// kitchen, and JobCardService resolves it by the same rule the request did.
+				JobCardService.RenderedCard card = jobCardService.renderForPdf(
+						(UUID) doc.get("meal_id"), (UUID) doc.get("kitchen_id"), language);
 				html = card.html();
 				footer = card.footer();
 				path = "generated/job-cards/" + documentId + ".pdf";
@@ -183,8 +186,8 @@ public class DocumentGenerationService {
 	 * Renders a job card to HTML directly (B5), for the browser print view — no PDF, no worker. The
 	 * same template the PDF is built from, so what is printed and what is filed are the same sheet.
 	 */
-	public String renderJobCardHtml(UUID mealId, String language) {
-		return jobCardService.render(mealId, language);
+	public String renderJobCardHtml(UUID mealId, UUID kitchenId, String language) {
+		return jobCardService.render(mealId, kitchenId, language);
 	}
 
 	/**

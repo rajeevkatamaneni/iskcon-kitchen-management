@@ -60,6 +60,8 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 	private JdbcTemplate admin;
 	private UUID bengaluru;
 	private UUID mayapur;
+	/** Whoever {@link #signIn} last signed in, so a hire body gets their temple's kitchen. */
+	private String signedIn;
 
 	@BeforeEach
 	void setUp() {
@@ -76,6 +78,9 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM staff_schedule_exceptions");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// A hire puts the person in the temple's planner kitchen, seeding one where there is none (V150,
+		// T-350); it holds its temple and creator, so it goes after the staff and before the users.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM notification_attempts");
 		admin.execute("DELETE FROM notifications");
 		admin.execute("DELETE FROM users");
@@ -425,10 +430,10 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 		assertThat(platformEvents("BAN_CHECK_RUN")).hasSize(1);
 
 		mvc.perform(authed(put("/api/v1/staff/members/{id}", hired))
-						.contentType(MediaType.APPLICATION_JSON).content("""
+						.contentType(MediaType.APPLICATION_JSON).content(withKitchen("""
 						{"fullName":"Priya Sharma","phone":"+919812300088","jobTitle":"HEAD_COOK",
 						 "employmentType":"FULL_TIME","dateOfJoining":"2026-08-01"}
-						"""))
+						""")))
 				.andExpect(status().isNoContent());
 
 		assertThat(platformEvents("BAN_CHECK_RUN"))
@@ -538,6 +543,11 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
 				VALUES (?, ?, 'Temple Admin', ?, '+919876500001', 'TEMPLE_ADMIN', 'ACTIVE')
 				""", id, uid, uid + "@example.com");
+		// Every staff record names its kitchen since Epic 12 (T-357), so each temple has one.
+		admin.update("""
+				INSERT INTO kitchens (tenant_id, name, is_main, uses_meal_planner, status, created_by)
+				SELECT ?, 'Main kitchen', true, true, 'ACTIVE', id FROM users WHERE firebase_uid = ?
+				""", id, uid);
 		return id;
 	}
 
@@ -572,7 +582,8 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 	}
 
 	private MockHttpServletRequestBuilder hire(String json) {
-		return authed(post("/api/v1/staff/members")).contentType(MediaType.APPLICATION_JSON).content(json);
+		return authed(post("/api/v1/staff/members")).contentType(MediaType.APPLICATION_JSON)
+				.content(withKitchen(json));
 	}
 
 	private String hireId(String json) throws Exception {
@@ -586,7 +597,31 @@ class EmploymentBanIT extends AbstractIntegrationTest {
 	}
 
 	private void signIn(String uid) {
+		signedIn = uid;
 		stubVerifier.accept(uid);
+	}
+
+	/**
+	 * Adds the signed-in admin's temple's kitchen to a hire or edit body that names none. Since Epic 12
+	 * (T-357) every staff record names its kitchen and the forms always send one; this class is about
+	 * the ban check, so its bodies get the one kitchen here rather than each spelling it out. Two temples
+	 * hire in this class, so the kitchen is looked up for whoever is signed in.
+	 */
+	private String withKitchen(String json) {
+		try {
+			com.fasterxml.jackson.databind.node.ObjectNode node =
+					(com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(json);
+			if (!node.has("kitchenId")) {
+				UUID kitchen = admin.queryForObject("""
+						SELECT k.id FROM kitchens k JOIN users u ON u.tenant_id = k.tenant_id
+						WHERE u.firebase_uid = ?
+						""", UUID.class, signedIn);
+				node.put("kitchenId", kitchen.toString());
+			}
+			return JSON.writeValueAsString(node);
+		} catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+			throw new IllegalStateException(e);
+		}
 	}
 
 }

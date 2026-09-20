@@ -113,6 +113,9 @@ class LeaveWithdrawalIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM staff_schedule_exceptions");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// A hire puts the person in the temple's planner kitchen, seeding one where there is none (V150,
+		// T-350); it holds its temple and creator, so it goes after the staff and before the users.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM notification_attempts");
 		admin.execute("DELETE FROM notifications");
 		admin.execute("DELETE FROM tenant_settings");
@@ -604,7 +607,9 @@ class LeaveWithdrawalIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"existingUserId\":\"" + userId + "\",\"fullName\":\"Hired Person\","
 								+ "\"jobTitle\":\"COOK\",\"employmentType\":\"FULL_TIME\","
-								+ "\"dateOfJoining\":\"2026-01-05\",\"systemAccess\":\"" + systemAccess + "\"}"))
+								+ "\"dateOfJoining\":\"2026-01-05\",\"systemAccess\":\"" + systemAccess + "\","
+								// Every staff member belongs to a kitchen (Epic 12, KMS-400184 without one).
+								+ "\"kitchenId\":\"" + org.iskcon.kms.meal.MealFixture.plannerKitchen(admin, tenant, null) + "\"}"))
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		return UUID.fromString(JSON.readTree(created).get("id").asText());

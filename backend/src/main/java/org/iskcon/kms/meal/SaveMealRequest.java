@@ -97,8 +97,17 @@ public record SaveMealRequest(
 		@PositiveOrZero(message = "A head count cannot be less than nothing.") Integer adults,
 		@PositiveOrZero(message = "A head count cannot be less than nothing.") Integer children,
 		@PositiveOrZero(message = "A head count cannot be less than nothing.") Integer seniors,
-		/** How many people it takes to execute this meal (item 24). */
-		@Positive(message = "At least one person is needed on the crew.") Integer crewRequired,
+		/**
+		 * The kitchens cooking this meal, each with its own People needed (Epic 12). Replaces the
+		 * meal-level {@code crewRequired} this record used to carry: V151 dropped that column, and the
+		 * meal's figure is now the sum of its kitchens'.
+		 *
+		 * <p>Null — a caller that predates Epic 12 — means one section, in the saver's default planning
+		 * kitchen ({@code KitchenOrder.defaultPlanningKitchen}). An empty list is KMS-400180: a meal
+		 * somebody explicitly said nobody is cooking is not a plan. Each kitchen once, each one that
+		 * plans its meals here (KMS-400181).
+		 */
+		@Valid List<MealKitchenDraft> kitchens,
 		@Size(max = 2000, message = "That note is too long.") String kitchenNotes,
 		/** Anything the people serving this meal need to know (V92). */
 		@Size(max = 2000, message = "That note is too long.") String serverNotes,
@@ -108,6 +117,33 @@ public record SaveMealRequest(
 		@Valid @NotEmpty(message = "Choose at least one preparation.") List<DishDraft> dishes,
 
 		@Valid MealShiftDraft volunteerShift) {
+
+	/**
+	 * The shape this record had before Epic 12, with one meal-level {@code crewRequired} where
+	 * {@code kitchens} now is. <strong>For existing Java callers only</strong> — nothing new should use
+	 * it, and no JSON reaches it (Jackson binds a record through its canonical constructor).
+	 *
+	 * <p>It saves exactly what such a caller always meant: one section, in the saver's default
+	 * planning kitchen, carrying that crew figure. With no figure it passes {@code kitchens = null},
+	 * which is the same one default section with nobody having said. With one, the single draft's
+	 * kitchen is null, which {@link MealPlanService} reads as "the saver's default planning kitchen" —
+	 * the only way that kitchen can be named before the service has looked the saver up.
+	 */
+	public SaveMealRequest(
+			LocalDate planDate, UUID mealKindId, LocalTime readyBy, String eventName, boolean isOutside,
+			Handover handover, String contactName, String contactPhone, String deliveryAddress,
+			String deliverySubLocation, String deliveryPlaceId, BigDecimal deliveryLatitude,
+			BigDecimal deliveryLongitude, Integer travelMinutes, boolean travelMinutesManual,
+			LocalTime guestsEatAt, String purpose, String occasionName, Integer adults, Integer children,
+			Integer seniors, Integer crewRequired, String kitchenNotes, String serverNotes,
+			boolean ekadashiAcknowledged, List<DishDraft> dishes, MealShiftDraft volunteerShift) {
+		this(planDate, mealKindId, readyBy, eventName, isOutside, handover, contactName, contactPhone,
+				deliveryAddress, deliverySubLocation, deliveryPlaceId, deliveryLatitude, deliveryLongitude,
+				travelMinutes, travelMinutesManual, guestsEatAt, purpose, occasionName, adults, children,
+				seniors,
+				crewRequired == null ? null : List.of(new MealKitchenDraft(null, crewRequired)),
+				kitchenNotes, serverNotes, ekadashiAcknowledged, dishes, volunteerShift);
+	}
 
 	/**
 	 * One dish as the composer holds it.
@@ -125,6 +161,9 @@ public record SaveMealRequest(
 	 *
 	 * @param id null for a dish being added; the dish's own id for one already on the meal, which is
 	 *           only meaningful on an update ({@link UpdateMealRequest}) and refused on a plan.
+	 * @param kitchenId which of the meal's {@code kitchens} cooks it (Epic 12). May be left out only
+	 *           when the meal has exactly one kitchen, and then it is that one; with two or more, or
+	 *           naming a kitchen not on the meal, it is KMS-400182.
 	 */
 	public record DishDraft(
 			UUID id,
@@ -132,6 +171,15 @@ public record SaveMealRequest(
 			@NotNull(message = "Enter how much is being made.")
 			@Positive(message = "Enter an amount greater than zero.")
 			@DecimalMax(value = "50000", message = "Amount can be at most 50,000.")
-			BigDecimal targetYield) {
+			BigDecimal targetYield,
+			UUID kitchenId) {
+
+		/**
+		 * The shape before Epic 12, with no kitchen. <strong>For existing Java callers only</strong>: the
+		 * dish goes to the meal's one kitchen, and a meal with two is KMS-400182.
+		 */
+		public DishDraft(UUID id, UUID recipeId, BigDecimal targetYield) {
+			this(id, recipeId, targetYield, null);
+		}
 	}
 }

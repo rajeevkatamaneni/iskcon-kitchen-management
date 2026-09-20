@@ -42,6 +42,21 @@ public record StaffProfileView(
 		/** TEMPLE_ADMIN, KITCHEN_STAFF, or null when they hold no login. */
 		SystemAccess systemAccess,
 
+		/**
+		 * The one kitchen this person works in (Epic 12). Never null: {@code staff_profiles.kitchen_id}
+		 * is NOT NULL since V150, because Rajeev's rule is that every staff member belongs to exactly
+		 * one kitchen. The name rides along so a list can print it without a second request.
+		 */
+		UUID kitchenId,
+		String kitchenName,
+
+		/**
+		 * True where the system chose this kitchen and nobody has looked at it since — everybody V150
+		 * put in the main kitchen. It feeds the Temple Admin's "Check these kitchen assignments" list,
+		 * and saving the record or confirming it there clears it.
+		 */
+		boolean kitchenNeedsCheck,
+
 		EmploymentStatus employmentStatus,
 		LocalDate lastWorkingDay,
 		String endReason,

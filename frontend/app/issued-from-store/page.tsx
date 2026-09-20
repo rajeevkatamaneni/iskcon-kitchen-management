@@ -27,8 +27,17 @@ import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM 
  * sometimes buy things themselves, and E10 D2 accepts that on purpose — issuing takes food off the
  * temple's books and what the kitchen does next is its own business. So every figure here is what
  * the store issued and can never be what the kitchen spent. Called "Deity kitchen food cost" it
- * would be quoted as one inside a week, which is why it is called what it is in the heading, in the
- * sentence under it, and in the notice above the table.
+ * would be quoted as one inside a week, which is why *issued* is in the heading, in the sentence
+ * under it, and in the notice above the table.
+ *
+ * <p><b>"Issued to kitchens" since 2026-09-19</b>, Rajeev's own words, chosen over "Out of the store".
+ * The verb carries the INV5 condition exactly as "Issued from the temple store" did — it is still
+ * what was issued, never what was spent — and naming the kitchens says what the screen is for: the
+ * one place to see what each kitchen took, when, how much and what it cost. It will grow to billing
+ * the sister kitchens, and those bills belong beside it under *Kitchens* in the menu, which is why
+ * *Cost per serving* (what the planner planned) was kept out of that group and left with the daily
+ * screens. The address stays `/issued-from-store`: renaming words is free, renaming a route breaks
+ * every link and bookmark that already points here.
  */
 
 type View = "week" | "month" | "year";
@@ -67,7 +76,7 @@ function IssuedFromStoreView() {
       <main className="min-w-0 flex-1">
         <Screen>
           <PageHeader
-            title="Issued from the temple store"
+            title="Issued to kitchens"
             subtitle="What the store issued to each kitchen, costed. A kitchen may also buy food itself, and that never reaches these figures. Each one is a floor, not a total."
             tabs={
               <PeriodNav

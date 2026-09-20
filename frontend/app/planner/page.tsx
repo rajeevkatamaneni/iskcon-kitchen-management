@@ -597,11 +597,30 @@ function WeekGrid({
                         {dishes.length} {dishes.length === 1 ? "preparation" : "preparations"} ·{" "}
                         {Number(m.plates).toLocaleString("en-IN")} servings
                       </span>
-                      {dishes.map((d) => (
-                        <span key={d.id} className="truncate text-xs text-ink-secondary">
-                          {d.recipeName}
-                        </span>
-                      ))}
+                      {/* A meal two or more kitchens cook groups its dishes under each kitchen's
+                          name, in the order the day view's sections take (Epic 12, the approved
+                          mock's week tile). A one-kitchen meal names no kitchen — nearly every meal
+                          is one, and a kitchen's name on every tile of the week would be noise the
+                          reader learns to skip, which is how they would miss it on the one day it
+                          matters. */}
+                      {(m.kitchens ?? []).length > 1
+                        ? m.kitchens.map((k) => (
+                            <span key={k.kitchenId} className="mt-1 grid gap-px">
+                              <span className="truncate text-xs font-semibold text-ink">{k.kitchenName}</span>
+                              {dishes
+                                .filter((d) => d.kitchenId === k.kitchenId)
+                                .map((d) => (
+                                  <span key={d.id} className="truncate text-xs text-ink-secondary">
+                                    {d.recipeName}
+                                  </span>
+                                ))}
+                            </span>
+                          ))
+                        : dishes.map((d) => (
+                            <span key={d.id} className="truncate text-xs text-ink-secondary">
+                              {d.recipeName}
+                            </span>
+                          ))}
                     </span>
                   );
                 })

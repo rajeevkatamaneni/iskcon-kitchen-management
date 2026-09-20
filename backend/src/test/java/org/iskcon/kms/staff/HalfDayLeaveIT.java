@@ -77,6 +77,8 @@ class HalfDayLeaveIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM staff_schedule_exceptions");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// The kitchen a staff record or a meal names (V150) holds its temple and creator; after both.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM notification_attempts");
 		admin.execute("DELETE FROM notifications");
 		admin.execute("DELETE FROM audit_events");
@@ -143,10 +145,10 @@ class HalfDayLeaveIT extends AbstractIntegrationTest {
 	private UUID hire(String uid, String name) {
 		UUID profile = admin.queryForObject("""
 				INSERT INTO staff_profiles (
-					tenant_id, user_id, full_name, job_title, employment_type, date_of_joining)
-				VALUES (?, (SELECT id FROM users WHERE firebase_uid = ?), ?, 'COOK', 'FULL_TIME', '2026-01-01')
+					tenant_id, user_id, full_name, job_title, employment_type, date_of_joining, kitchen_id)
+				VALUES (?, (SELECT id FROM users WHERE firebase_uid = ?), ?, 'COOK', 'FULL_TIME', '2026-01-01', ?)
 				RETURNING id
-				""", UUID.class, tenant, uid, name);
+				""", UUID.class, tenant, uid, name, org.iskcon.kms.meal.MealFixture.plannerKitchen(admin, tenant, null));
 		for (int day = 1; day <= 7; day++) {
 			admin.update("""
 					INSERT INTO staff_schedule_template (

@@ -1176,6 +1176,42 @@ public enum ErrorCode {
 			"The later events changed while you were deciding, so nothing was cancelled.",
 			"Look at the list again, then confirm."),
 
+	// Which kitchen is cooking (Epic 12, 2026-09-19). A meal's dishes are cooked by one or more
+	// kitchens, each a section of the meal; every staff member belongs to exactly one kitchen, and only
+	// people whose kitchen plans its meals here may open the planner. Reserved by the work manager for
+	// T-354 (400180-400182), T-357 (400183-400185) and T-356 (400186-400187).
+	MEAL_NEEDS_A_KITCHEN(400180, 400,
+			"Say which kitchen is cooking this meal.",
+			"Add a kitchen to the meal, then add each dish under the kitchen cooking it."),
+
+	KITCHEN_DOES_NOT_PLAN_MEALS(400181, 409,
+			"That kitchen doesn't plan its meals here, so it can't cook for this meal.",
+			"Pick one of the kitchens in the list."),
+
+	DISH_KITCHEN_NOT_ON_MEAL(400182, 400,
+			"A dish is under a kitchen that isn't cooking this meal.",
+			"Add that kitchen to the meal, or take the dish off."),
+
+	PLANNER_NOT_FOR_YOUR_KITCHEN(400183, 403,
+			"Your kitchen doesn't plan its meals here, so the meal planner isn't open to you.",
+			"If you have moved kitchens, ask a Temple Admin to change your kitchen on the Staff page."),
+
+	STAFF_NEEDS_A_KITCHEN(400184, 400,
+			"Say which kitchen this person works in.",
+			"Pick their kitchen from the list. Everyone on the staff belongs to one."),
+
+	KITCHEN_HAS_STAFF(400185, 409,
+			"People still work in this kitchen, so it can't be archived or removed.",
+			"Move them to another kitchen on the Staff page first."),
+
+	JOB_CARD_NEEDS_A_KITCHEN(400186, 400,
+			"More than one kitchen is cooking this meal, so say whose job card to print.",
+			"Use Download job card in that kitchen's section of the meal."),
+
+	KITCHEN_NOT_ON_THIS_MEAL(400187, 404,
+			"That kitchen isn't cooking anything for this meal.",
+			"Open the meal again to see which kitchens are cooking it."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

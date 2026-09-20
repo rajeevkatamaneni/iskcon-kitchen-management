@@ -212,10 +212,27 @@ function WhatItCosts({ id }: { id: string }) {
   );
 }
 
-/** "Lunch on 24 Aug at 4 of 8" — the meal, the day, and the two numbers that matter. */
+/**
+ * "Lunch (Sweets kitchen) on 24 Aug at 4 of 8" — the meal, whose kitchen, the day, and the two
+ * numbers that matter.
+ *
+ * <p>The kitchen is named because since Epic 12 the numbers are one kitchen's, not the meal's. A
+ * person works in exactly one kitchen, so their leave costs exactly one of the meal's sections, and
+ * the server sends a line per affected section with that section's People needed and rostered in it.
+ * Without the name, an approver at a temple that cooks a lunch in two kitchens reads "Lunch at 0 of
+ * 2" for a meal that has eight people on it and cannot tell which reading it is.
+ *
+ * <p><b>And only then.</b> Where one kitchen cooks the meal, the section's numbers are the meal's, so
+ * the name distinguishes nothing — and most temples cook most meals in one kitchen, which is the case
+ * that would carry "(Main Kitchen)" on every line of every request forever. So the server says how
+ * many kitchens are on the meal ({@code mealKitchenCount}, not {@code kitchens.length}: this row
+ * deliberately holds the one affected section) and the name appears only when there is more than one.
+ */
 function describe(meal: MealCrewView): string {
   const at = meal.crewRequired === null ? `at ${meal.rostered}` : `at ${meal.rostered} of ${meal.crewRequired}`;
-  return `${meal.mealKind} on ${shortDate(meal.planDate)} ${at}`;
+  const kitchen = meal.mealKitchenCount > 1 ? meal.kitchens[0]?.kitchenName : undefined;
+  const what = kitchen ? `${meal.mealKind} (${kitchen})` : meal.mealKind;
+  return `${what} on ${shortDate(meal.planDate)} ${at}`;
 }
 
 /**

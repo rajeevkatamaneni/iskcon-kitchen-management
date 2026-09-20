@@ -357,6 +357,20 @@ export interface WhoAmI {
    * fetched on its own, so switching temples repaints without anybody arranging for it to.
    */
   themeId: string | null;
+  /**
+   * The kitchen this person works in (Epic 12): their staff record's kitchen. Null for someone with
+   * no staff record at this temple — a Temple Admin usually, and a platform operator always. The
+   * planner opens a new meal with this kitchen's section, and lists it first on every meal.
+   */
+  kitchenId: string | null;
+  kitchenName: string | null;
+  /**
+   * Whether the meal planner is open to this person: they hold MANAGE_MEAL_PLANS and either are the
+   * Temple Admin (every kitchen) or have a staff record in a kitchen that plans its meals here. No
+   * staff record, or a kitchen that only draws from the store, means false. The server
+   * enforces the same rule (`KMS-400183`); this only keeps the menu from offering a refusal.
+   */
+  canPlanMeals: boolean;
 }
 
 export interface TempleMembership {
@@ -1405,6 +1419,8 @@ export interface MealDishView {
   /** The dish's own id. The stock ledger and its corrections point at it, so it never changes. */
   id: string;
   mealId: string;
+  /** The kitchen cooking this dish (Epic 12) — always one of its meal's `kitchens`. */
+  kitchenId: string;
   recipeId: string;
   recipeName: string;
   targetYield: number;
@@ -1462,8 +1478,18 @@ export interface MealView {
   seniors: number | null;
   /** What the meal scales to. Never the sum of its dishes — three dishes at 250 is 250 plates. */
   plates: number;
-  /** How many people it takes to execute this meal (item 24). Null where nobody has said. */
+  /**
+   * How many people it takes to execute this meal (item 24): since Epic 12 the sum of its kitchens'
+   * `crewRequired`, and null only where no kitchen has said. Read-only — it is set per kitchen.
+   */
   crewRequired: number | null;
+  /**
+   * The kitchens cooking this meal (Epic 12), at least one, **already in the order to show them to the
+   * signed-in person**: their own kitchen first when it is on the meal, otherwise the main kitchen
+   * first when it is; then the rest in the order Settings lists kitchens (main first, then by name).
+   * Draw them in this order; never re-sort.
+   */
+  kitchens: MealKitchenView[];
 
   dayType: DayType;
   occasionName: string | null;
@@ -1685,6 +1711,11 @@ export interface TodayMeal {
   /** Still has a dish to cook, and nobody has typed the card back in. */
   awaitingRecord: boolean;
   occasionName: string | null;
+  /**
+   * Who is cooking it (Epic 12): the names of the kitchens on the meal, in the same order the planner
+   * shows them to this person (their own kitchen first). Never empty.
+   */
+  kitchenNames: string[];
   dishes: TodayDish[];
 }
 
@@ -1781,8 +1812,13 @@ export interface SaveMealInput {
   adults?: number | null;
   children?: number | null;
   seniors?: number | null;
-  /** How many people it takes to execute this meal (item 24). Optional: planned before rostered. */
-  crewRequired?: number | null;
+  /**
+   * The kitchens cooking this meal (Epic 12), at least one (`KMS-400180`), each kitchen once, each one
+   * that plans its meals here (`KMS-400181`). Carries each kitchen's own "People needed" — there is no
+   * meal-level crew figure to send any more. On an update, a kitchen left out is taken off the meal,
+   * and it may only be left out if none of the dishes sent are under it (`KMS-400182`).
+   */
+  kitchens: MealKitchenDraft[];
   kitchenNotes?: string | null;
   /** What the people serving need to know. Printed on the job card's serving sheet. */
   serverNotes?: string | null;
@@ -1812,6 +1848,46 @@ export interface MealDishDraft {
   id: string | null;
   recipeId: string;
   targetYield: number;
+  /** Which of the meal's `kitchens` cooks it (`KMS-400182` if it is not one of them). */
+  kitchenId: string;
+}
+
+/** One kitchen's section of a meal as the planner shows it (Epic 12). */
+export interface MealKitchenView {
+  kitchenId: string;
+  kitchenName: string;
+  /** The temple's main kitchen — the fallback first section for a person with no kitchen of their own. */
+  isMain: boolean;
+  /** This kitchen's "People needed". Null where nobody has said; null is not zero. */
+  crewRequired: number | null;
+}
+
+/** One kitchen's section of a meal being saved (Epic 12). */
+export interface MealKitchenDraft {
+  kitchenId: string;
+  /** This kitchen's "People needed"; null until somebody knows. Never 0 — empty means unknown. */
+  crewRequired: number | null;
+}
+
+/**
+ * One kitchen's hands for one meal (Epic 12): its People needed against its own staff. Rostered staff
+ * are the people whose staff record is in this kitchen and whose working window covers the meal's
+ * ready-by. The meal's volunteers are counted in one section only — the main kitchen's where it is
+ * cooking this meal, otherwise the first section in {@link MealView.kitchens} order — so the kitchens'
+ * figures add up to the meal's and no volunteer is counted twice.
+ */
+export interface KitchenCrewView {
+  kitchenId: string;
+  kitchenName: string;
+  crewRequired: number | null;
+  staffIn: number;
+  /** The rostered staff by name, in the order the roster gives them. `staffIn === staffNames.length`. */
+  staffNames: string[];
+  volunteers: number;
+  /** staffIn + volunteers. */
+  rostered: number;
+  /** A number was set and `rostered` does not reach it. */
+  shortOfCrew: boolean;
 }
 
 /**
@@ -1881,6 +1957,18 @@ export interface MealCrewView {
    * never blocks saving, and it never blocks leave.
    */
   shortOfCrew: boolean;
+  /**
+   * How many kitchens are cooking this meal (Epic 12). One readout can carry a single section — the
+   * leave impact sends the section the person on leave works in — so `kitchens.length` does not answer
+   * "is this meal cooked by more than one kitchen", and only a meal that is names its kitchen on the
+   * leave line.
+   */
+  mealKitchenCount: number;
+  /**
+   * The same readout per kitchen (Epic 12), in the meal's `kitchens` order for the signed-in person.
+   * The meal-level figures above are these added up; `shortOfCrew` above is true when any kitchen is short.
+   */
+  kitchens: KitchenCrewView[];
 }
 
 /**
@@ -1896,6 +1984,12 @@ export interface CrewAtView {
   staffIn: number;
   volunteers: number;
   rostered: number;
+  /**
+   * The rostered staff by name (Epic 12). Asked with a `kitchenId`, `staffIn` and these are that
+   * kitchen's staff only; volunteers are then counted only when that kitchen is the one the meal's
+   * volunteers fall to (see {@link KitchenCrewView}) — the caller says so with `countVolunteers`.
+   */
+  staffNames: string[];
 }
 
 /**
@@ -3324,6 +3418,16 @@ export interface StaffProfileView {
 
   systemAccess: SystemAccess | null;
 
+  /** The one kitchen this person works in (Epic 12). Every staff record has one. */
+  kitchenId: string;
+  kitchenName: string;
+  /**
+   * True where the kitchen was filled in when the kitchen classifier shipped (everyone went to the
+   * main kitchen) and nobody has looked at it since. The Temple Admin's "Check these kitchen
+   * assignments" list is exactly the records with this set; saving the record or confirming clears it.
+   */
+  kitchenNeedsCheck: boolean;
+
   employmentStatus: EmploymentStatus;
   lastWorkingDay: string | null;
   endReason: string | null;
@@ -3402,6 +3506,20 @@ export interface HireStaffInput {
    */
   acknowledgedBanCheckId?: string | null;
   notes?: string | null;
+  /** The one kitchen this person works in (Epic 12). Required on hiring and on every edit (`KMS-400184`). */
+  kitchenId: string;
+}
+
+/**
+ * One staff record whose kitchen was filled in by the Epic 12 migration and has not been looked at
+ * since — a row of the Temple Admin's "Check these kitchen assignments" list.
+ */
+export interface StaffKitchenCheckView {
+  staffId: string;
+  fullName: string;
+  jobTitleLabel: string;
+  kitchenId: string;
+  kitchenName: string;
 }
 
 /**
@@ -5747,9 +5865,22 @@ export const api = {
    * meal's Rostered and its Volunteers requested prefill are real figures. Read-only: asking saves
    * nothing.
    */
-  mealCrewAt: (date: string, readyBy: string, token?: string) =>
+  mealCrewAt: (
+    date: string,
+    readyBy: string,
+    token?: string,
+    /** Epic 12: count only this kitchen's staff. Omitted, every staff member counts, as before. */
+    kitchenId?: string,
+    /** With `kitchenId`: whether this section is the one the meal's volunteers fall to. Default true. */
+    countVolunteers?: boolean
+  ) =>
     request<CrewAtView>(
-      `/api/v1/meal-crew/at?${new URLSearchParams({ date, readyBy }).toString()}`,
+      `/api/v1/meal-crew/at?${new URLSearchParams({
+        date,
+        readyBy,
+        ...(kitchenId ? { kitchenId } : {}),
+        ...(kitchenId && countVolunteers === false ? { countVolunteers: "false" } : {}),
+      }).toString()}`,
       { method: "GET", token }
     ),
 
@@ -5813,10 +5944,21 @@ export const api = {
    * <p>`language` is the recipes appendix's, not the sheet's — the worksheet is always English.
    * Pass `"none"` for the worksheet on its own.
    */
-  requestJobCard: (mealId: string, language?: string, token?: string) =>
+  requestJobCard: (
+    mealId: string,
+    language?: string,
+    token?: string,
+    /**
+     * Epic 12: whose card. Each kitchen cooking the meal gets its own card listing only its dishes.
+     * Omitted is allowed only while one kitchen is cooking the meal (`KMS-400186`); a kitchen not on
+     * the meal is `KMS-400187`.
+     */
+    kitchenId?: string
+  ) =>
     request<{ documentId: string; cardNumber: string; status: string }>(
       `/api/v1/job-cards?mealId=${encodeURIComponent(mealId)}` +
-        (language ? `&language=${encodeURIComponent(language)}` : ""),
+        (language ? `&language=${encodeURIComponent(language)}` : "") +
+        (kitchenId ? `&kitchenId=${encodeURIComponent(kitchenId)}` : ""),
       { method: "POST", token }
     ),
 
@@ -5849,9 +5991,10 @@ export const api = {
   },
 
   /** The browser print view of the same card. `language` means what it does above. */
-  jobCardPrintUrl: (mealId: string, language?: string): string =>
+  jobCardPrintUrl: (mealId: string, language?: string, kitchenId?: string): string =>
     `${BASE_URL}/api/v1/job-cards/print?mealId=${encodeURIComponent(mealId)}` +
-    (language ? `&language=${encodeURIComponent(language)}` : ""),
+    (language ? `&language=${encodeURIComponent(language)}` : "") +
+    (kitchenId ? `&kitchenId=${encodeURIComponent(kitchenId)}` : ""),
 
   mealSufficiency: (from: string, to: string, token?: string) =>
     request<MealSufficiency[]>(`/api/v1/meal-plans/sufficiency?from=${from}&to=${to}`, {
@@ -6494,6 +6637,32 @@ export const api = {
   // ---- The staff register (E6-S8), behind MANAGE_STAFF. --------------------
   staffRegister: (token?: string) =>
     request<StaffRegisterView>("/api/v1/staff/register", { method: "GET", token }),
+
+  /**
+   * Epic 12: the Temple Admin's "Check these kitchen assignments" list — current staff whose kitchen
+   * was filled in by the migration and has not been looked at since. Empty once all are checked.
+   */
+  staffKitchenChecks: (token?: string) =>
+    request<StaffKitchenCheckView[]>("/api/v1/staff/kitchen-checks", { method: "GET", token }),
+
+  /**
+   * Epic 12: set one person's kitchen from the check list (or anywhere), which also marks it checked.
+   * `KMS-400184` without a kitchen; `KMS-400108`/`KMS-400109` for one that is gone or archived.
+   */
+  setStaffKitchen: (staffId: string, kitchenId: string, token?: string) =>
+    request<void>(`/api/v1/staff/members/${staffId}/kitchen`, {
+      method: "PUT",
+      body: JSON.stringify({ kitchenId }),
+      token,
+    }),
+
+  /** Epic 12: "These are right" — marks the named records checked, leaving their kitchens as they are. */
+  confirmStaffKitchens: (staffIds: string[], token?: string) =>
+    request<void>("/api/v1/staff/kitchen-checks/confirm", {
+      method: "POST",
+      body: JSON.stringify({ staffIds }),
+      token,
+    }),
 
   jobTitles: (token?: string) =>
     request<JobTitleOption[]>("/api/v1/staff/job-titles", { method: "GET", token }),
@@ -7342,6 +7511,8 @@ export interface Kitchen {
   usesMealPlanner: boolean;
   inChargeUserId: string | null;
   inChargeName: string | null;
+  /** How many current staff work in this kitchen (Epic 12) — "4 staff" in the planner's kitchen picker. */
+  staffCount: number;
   contactPhone: string | null;
   status: "ACTIVE" | "ARCHIVED";
   createdAt: string;

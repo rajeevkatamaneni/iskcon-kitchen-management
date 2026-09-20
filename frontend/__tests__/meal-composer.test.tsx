@@ -23,8 +23,12 @@ const {
   mealCrew: vi.fn(async (_from: string, _to: string, _token?: string) => [] as unknown[]),
   // Who is rostered at a date and ready-by before the meal is saved (T-215). Refused by default, so
   // every test here that is not about it reads the honest "Not counted yet" it always did.
-  mealCrewAt: vi.fn(async (_date: string, _readyBy: string, _token?: string): Promise<{
+  // Since Epic 12 asked per kitchen, saying whether that kitchen is the one the volunteers fall to.
+  mealCrewAt: vi.fn(async (
+    _date: string, _readyBy: string, _token?: string, _kitchenId?: string, _countVolunteers?: boolean
+  ): Promise<{
     planDate: string; readyBy: string; staffIn: number; volunteers: number; rostered: number;
+    staffNames?: string[];
   }> => { throw new Error("not counted"); }),
   menuHistory: vi.fn(async (_occasion: string, _before: string, _token?: string) => ({
     occasionName: "Janmashtami",
@@ -96,7 +100,7 @@ import { ApiError } from "@/lib/api";
 
 /** What the meal save and update send, read loosely enough to assert on and typed enough to index. */
 type MealBody = Record<string, unknown> & {
-  dishes: { id: string | null; recipeId: string; targetYield: number }[];
+  dishes: { id: string | null; recipeId: string; targetYield: number; kitchenId: string }[];
   volunteerShift: Record<string, unknown> | null;
 };
 
@@ -125,6 +129,40 @@ const KINDS = [
 ];
 
 /**
+ * The temple's one kitchen, as `api.listKitchens(false)` gives it (Epic 12). One is the ordinary
+ * temple, and every test in this file is about something other than kitchens — those are in
+ * `meal-composer-kitchens.test.tsx` — so the meal opens on this band and nothing else changes.
+ */
+const MAIN = {
+  id: "kit-main", name: "Main kitchen", description: null, location: null, isMain: true,
+  usesMealPlanner: true, inChargeUserId: null, inChargeName: null, staffCount: 5,
+  contactPhone: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00Z",
+};
+const KITCHENS = [MAIN];
+/** A saved meal's one section, as `MealView.kitchens` carries it. */
+const MAIN_SECTION = { kitchenId: "kit-main", kitchenName: "Main kitchen", isMain: true };
+
+/**
+ * Adds a dish the way a planner does since Epic 12: types into the kitchen's "Add a dish to …" search
+ * and presses the recipe it offers. It replaced ticking a box in a list of every recipe.
+ */
+function pick(name: RegExp, kitchen = "Main kitchen") {
+  fireEvent.change(screen.getByLabelText(`Add a dish to ${kitchen}`), { target: { value: name.source } });
+  const band = screen.getByRole("region", { name: kitchen });
+  fireEvent.click(within(band).getByRole("button", { name }));
+}
+
+/** What a kitchen's search offers for a query: the recipe names, in the order listed. */
+function offered(query: string, kitchen = "Main kitchen"): string[] {
+  const box = screen.getByLabelText(`Add a dish to ${kitchen}`);
+  fireEvent.change(box, { target: { value: query } });
+  const list = box.parentElement!.querySelector("ul");
+  return list
+    ? Array.from(list.querySelectorAll("button")).map((b) => b.firstElementChild?.textContent ?? "")
+    : [];
+}
+
+/**
  * The composer as a screen actually mounts it.
  *
  * <p>Since 2026-09-05 the composer draws the fields and nothing else: the screen around it — the
@@ -145,6 +183,7 @@ function Harness(props: Partial<React.ComponentProps<typeof MealComposer>>) {
         date="2026-08-16"
         recipes={RECIPES as never}
         mealKinds={KINDS as never}
+        kitchens={KITCHENS as never}
         isEkadashi={false}
         onClose={vi.fn()}
         onPlanned={vi.fn()}
@@ -186,8 +225,8 @@ describe("planning a meal", () => {
     open();
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "200" } });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
+    pick(/bisi bele bath/i);
+    pick(/kesari bath/i);
 
     const sweet = screen.getByLabelText("Amount of Kesari Bath");
     expect(sweet).toHaveValue(200);
@@ -206,8 +245,8 @@ describe("planning a meal", () => {
     // Said out loud, because nothing is assumed any more: the 100 that scales Bisi Bele Bath is a
     // number the planner typed.
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "100" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
+    pick(/bisi bele bath/i);
+    pick(/kesari bath/i);
     fireEvent.change(screen.getByLabelText("Amount of Kesari Bath"), { target: { value: "150" } });
     fireEvent.change(screen.getByLabelText(/notes for the kitchen/i), {
       target: { value: "Cook the kesari thin." },
@@ -223,11 +262,14 @@ describe("planning a meal", () => {
       planDate: "2026-08-16", mealKindId: "k1", readyBy: "12:00", kitchenNotes: "Cook the kesari thin.",
     });
     expect(input.dishes).toEqual([
-      { id: null, recipeId: "r1", targetYield: 100 },
-      { id: null, recipeId: "r2", targetYield: 150 },
+      { id: null, recipeId: "r1", targetYield: 100, kitchenId: "kit-main" },
+      { id: null, recipeId: "r2", targetYield: 150, kitchenId: "kit-main" },
     ]);
+    // Epic 12: the kitchens cooking it, with their own People needed, and no meal-level crew figure.
+    expect(input.kitchens).toEqual([{ kitchenId: "kit-main", crewRequired: null }]);
     // By the kind's id, never its name, and the shift said out loud as none rather than left out.
     const keys = Object.keys(input);
+    expect(keys).not.toContain("crewRequired");
     expect(keys).not.toContain("mealKind");
     expect(keys).toContain("volunteerShift");
     expect(input.volunteerShift).toBeNull();
@@ -242,7 +284,7 @@ describe("planning a meal", () => {
   it("carries no default time on an occasional kind, so one has to be given", () => {
     open();
     fireEvent.click(screen.getByRole("button", { name: "Event" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
 
     expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
     expect(screen.getByText(/pick the time it must be ready/i)).toBeInTheDocument();
@@ -279,7 +321,7 @@ describe("an event, and what it is asked", () => {
   function planAnEvent(props: Partial<React.ComponentProps<typeof MealComposer>> = {}) {
     open(props);
     fireEvent.click(screen.getByRole("button", { name: "Event" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
     fireEvent.change(screen.getByLabelText("Amount of Bisi Bele Bath"), {
       target: { value: "30" },
     });
@@ -735,7 +777,7 @@ describe("the head count is asked for, never assumed", () => {
 
   it("leaves a preparation's quantity empty until there is somebody to eat it", () => {
     open();
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
 
     // Empty, not nought. A nought is an answer; this is the absence of one, and the box fills
     // itself the moment the counter is typed.
@@ -744,8 +786,8 @@ describe("the head count is asked for, never assumed", () => {
 
   it("rescales every preparation as the count is typed, which is what the plan is costed on", () => {
     open();
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
+    pick(/bisi bele bath/i);
+    pick(/kesari bath/i);
 
     // Each keystroke, not a press of anything. Both recipes are 1 KG a head here.
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "200" } });
@@ -766,7 +808,7 @@ describe("the head count is asked for, never assumed", () => {
 
   it("refuses to save something being cooked for nobody, and says which number is missing", () => {
     open();
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
 
     // The server refuses this too (KMS-400080). Here so the planner is stopped before the work goes.
     expect(screen.getByRole("button", { name: /save this meal/i })).toBeDisabled();
@@ -782,7 +824,7 @@ describe("the head count is asked for, never assumed", () => {
 
   it("counts a hall of children as a head count, small as it weighs", () => {
     open();
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
     fireEvent.change(screen.getByLabelText("Children"), { target: { value: "1" } });
 
     // 0.6 of a portion is a hall somebody counted. Checking the weighted total instead of the three
@@ -803,7 +845,7 @@ describe("the head count is asked for, never assumed", () => {
     open();
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "200" } });
     fireEvent.change(screen.getByLabelText("Seniors"), { target: { value: "10" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
     await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
@@ -828,7 +870,7 @@ describe("a portion in a smaller unit than the recipe (T-217)", () => {
 
   it("plans 600 people at 350 ml on a recipe in litres as 210 L, not 210,000", async () => {
     open({ recipes: [GHEE_RICE] as never });
-    fireEvent.click(screen.getByRole("checkbox", { name: /basmati ghee rice/i }));
+    pick(/basmati ghee rice/i);
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "600" } });
     expect(screen.getByLabelText("Amount of Basmati Ghee Rice")).toHaveValue(210);
 
@@ -839,14 +881,14 @@ describe("a portion in a smaller unit than the recipe (T-217)", () => {
 
   it("plans grams a head on a recipe in kilos in kilos", () => {
     open({ recipes: [PULIYOGARE] as never });
-    fireEvent.click(screen.getByRole("checkbox", { name: /puliyogare/i }));
+    pick(/puliyogare/i);
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "600" } });
     expect(screen.getByLabelText("Amount of Puliyogare")).toHaveValue(90);
   });
 
   it("leaves the box empty when the portion and the recipe measure different things", () => {
     open({ recipes: [ODD] as never });
-    fireEvent.click(screen.getByRole("checkbox", { name: /rasam rice/i }));
+    pick(/rasam rice/i);
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "600" } });
     expect(screen.getByLabelText("Amount of Rasam Rice")).toHaveValue(null);
   });
@@ -854,7 +896,7 @@ describe("a portion in a smaller unit than the recipe (T-217)", () => {
   it("refuses an amount over 50,000 under that dish's box, and sends nothing", async () => {
     open();
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "100" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
     fireEvent.change(screen.getByLabelText("Amount of Bisi Bele Bath"), { target: { value: "60000" } });
 
     // The button stays live: the refusal is said on the press, in red, under the box.
@@ -870,23 +912,17 @@ describe("a portion in a smaller unit than the recipe (T-217)", () => {
     expect(saveMeal).not.toHaveBeenCalled();
 
     // Under the box, not beside it (Rajeev, 2026-09-18; T-234). jsdom has no layout, so what is
-    // pinned is the grid the placement was measured on in Chrome. Since T-237 the dish's name, its
-    // box and its unit share the first row (name, box, unit), and the error slot is sent to the row
-    // beneath, spanning the box's and the unit's columns from the box's edge, without widening them.
-    const row = box.parentElement!;
+    // pinned is the rule that places it. Since Epic 12 the dish row is the approved mock's: the box
+    // and its unit are a pair in a wrapping flex line, and `Form`'s error slot lands in that pair
+    // straight after the box. The pair sends the slot last and full width, so the sentence takes a
+    // line of its own under the box and its unit rather than sitting between them.
+    const pair = box.parentElement!;
     const slot = sentence.closest("[data-form-error-slot]")!;
-    expect(slot.parentElement).toBe(row);
-    expect(row.className).toContain("grid-cols-[minmax(0,1fr)_auto_auto]");
-    expect(row.className).toContain("[&>[data-form-error-slot]]:row-start-2");
-    expect(row.className).toContain("[&>[data-form-error-slot]]:col-start-2");
-    expect(row.className).toContain("[&>[data-form-error-slot]]:col-span-2");
-    expect(row.className).toContain("[&>[data-form-error-slot]]:w-0");
-    expect(box.className).toContain("col-start-2");
-    expect(box.className).toContain("row-start-1");
-    expect(row.querySelector("label.col-start-1.row-start-1")).toContainElement(
-      screen.getByRole("checkbox", { name: /bisi bele bath/i })
-    );
-    expect(row.querySelector(".col-start-3.row-start-1")).not.toBeNull();
+    expect(slot.parentElement).toBe(pair);
+    expect(pair.className).toContain("flex-wrap");
+    expect(pair.className).toContain("[&>[data-form-error-slot]]:order-last");
+    expect(pair.className).toContain("[&>[data-form-error-slot]]:basis-full");
+    expect(slot.previousElementSibling).toBe(box);
 
     // 50,000 itself is allowed — it is what the Today screen can still scale.
     fireEvent.change(screen.getByLabelText("Amount of Bisi Bele Bath"), { target: { value: "50000" } });
@@ -896,31 +932,35 @@ describe("a portion in a smaller unit than the recipe (T-217)", () => {
   });
 });
 
-describe("the notes are step 5, in a card like the other four (T-234)", () => {
+describe("the notes are step 4, in a card like the other three (T-234, Epic 12)", () => {
   it("puts both notes boxes in one card with the steps' own classes and a numbered heading", () => {
     // They sat loose under the step cards (Rajeev, Decisions Desk, 2026-09-18). The same class string
-    // as step 4's card is what gives the same padding, gap and surface.
+    // as step 3's card is what gives the same padding, gap and surface. Step 4 since Epic 12 made the
+    // dishes and the crew one step, "What each kitchen cooks".
     open();
     const kitchen = screen.getByLabelText("Notes for the kitchen");
     const card = kitchen.closest("section")!;
     expect(card).toContainElement(screen.getByLabelText("Notes for the servers"));
-    expect(within(card).getByText("5")).toBeInTheDocument();
+    expect(within(card).getByText("4")).toBeInTheDocument();
     expect(within(card).getByText("Notes")).toBeInTheDocument();
 
-    const step4 = screen.getByText("Who will run it").closest("section")!;
-    expect(card.className).toBe(step4.className);
+    const step3 = screen.getByText("What each kitchen cooks").closest("section")!;
+    expect(card.className).toBe(step3.className);
+    // The old two steps are gone, not renamed beside the new one.
+    expect(screen.queryByText("Who will run it")).toBeNull();
+    expect(screen.queryByText("Preparations")).toBeNull();
   });
 });
 
 describe("item 23 — the row of fields keeps its shape", () => {
-  it("puts every field in steps 1, 2 and 4 into the row's own tracks", () => {
+  it("puts every field in steps 1, 2 and each kitchen's band into the row's own tracks", () => {
     // The bug this replaces was not a wrong value of align-items but the use of align-items at all:
     // a readout with its label inside its box can never line up with a counter that has one above.
     // So what is asserted is that no field is laying itself out — every one of them is in a track
     // the row owns. jsdom has no layout, and a pixel assertion here would prove nothing.
     const { container } = openAndGet();
     const rows = container.querySelectorAll("[data-field-row]");
-    // What kind of meal, who is expected, and who will run it.
+    // What kind of meal, who is expected, and the one kitchen's People needed and Rostered.
     expect(rows.length).toBe(3);
     rows.forEach((row) => {
       const cells = row.querySelectorAll(":scope > *");
@@ -974,30 +1014,44 @@ describe("who will run it", () => {
     suggestedCrew.mockResolvedValue({ crewRequired: 8 });
     mealCrew.mockResolvedValue([
       { planDate: "2026-08-16", mealKind: "Lunch", readyBy: "12:00:00", crewRequired: 8,
-        staffIn: 3, volunteers: 2, rostered: 5, shortOfCrew: true },
+        staffIn: 3, volunteers: 2, rostered: 5, shortOfCrew: true,
+        kitchens: [
+          { kitchenId: "kit-main", kitchenName: "Main kitchen", crewRequired: 8, staffIn: 3,
+            staffNames: ["Govinda Das", "Madhava Das", "Keshava Das"], volunteers: 2, rostered: 5,
+            shortOfCrew: true },
+        ] },
     ]);
     open();
 
+    // The main kitchen's band carries the meal's volunteers, so it says them, in today's words.
     const readout = await screen.findByText("3 staff · 2 volunteers · 5 of 8");
     expect(readout.className).toContain("text-warning");
+    expect(screen.getByText("Rostered in Main kitchen")).toBeInTheDocument();
+    // And who they are, from the row's own names.
+    expect(screen.getByText("Govinda Das, Madhava Das, Keshava Das")).toBeInTheDocument();
 
     // Never a block: a meal is planned weeks before anybody is rostered. The head count is a
     // block, so it is given one — this test is about the crew and nothing else.
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "100" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
     expect(screen.getByRole("button", { name: /save this meal/i })).not.toBeDisabled();
   });
 
   it("reads a new meal with no crew row as the count at its date and ready-by (T-215)", async () => {
     suggestedCrew.mockResolvedValue({ crewRequired: 8 });
-    mealCrewAt.mockImplementationOnce(async (date: string, readyBy: string) => ({
+    mealCrewAt.mockImplementation(async (date: string, readyBy: string) => ({
       planDate: date, readyBy: `${readyBy}:00`, staffIn: 2, volunteers: 1, rostered: 3,
+      staffNames: ["Govinda Das", "Madhava Das"],
     }));
     open();
 
     const readout = await screen.findByText("2 staff · 1 volunteer · 3 of 8");
     expect(readout.className).toContain("text-warning");
-    expect(mealCrewAt).toHaveBeenLastCalledWith("2026-08-16", "12:00", "t");
+    // Asked for this kitchen, and as the band the meal's volunteers are counted in (Epic 12).
+    expect(mealCrewAt).toHaveBeenLastCalledWith("2026-08-16", "12:00", "t", "kit-main", true);
+    expect(screen.getByText("Govinda Das, Madhava Das")).toBeInTheDocument();
+    mealCrewAt.mockReset();
+    mealCrewAt.mockRejectedValue(new Error("not counted"));
   });
 
   it("sends the number with the meal", async () => {
@@ -1007,11 +1061,13 @@ describe("who will run it", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /one more people needed/i }));
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "100" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
     await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
-    expect(saveMeal.mock.calls[0][0]).toMatchObject({ crewRequired: 7 });
+    // On the kitchen, since Epic 12: there is no meal-level figure to send.
+    expect(saveMeal.mock.calls[0][0].kitchens).toEqual([{ kitchenId: "kit-main", crewRequired: 7 }]);
+    expect(Object.keys(saveMeal.mock.calls[0][0])).not.toContain("crewRequired");
   });
 });
 
@@ -1060,7 +1116,7 @@ describe("a festival feast", () => {
     });
     open();
     fireEvent.click(screen.getByRole("button", { name: "Festival feast" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
     fireEvent.change(screen.getByLabelText("Ready by"), { target: { value: "12:00" } });
 
     expect(await screen.findByText(/name the occasion this feast is for/i)).toBeInTheDocument();
@@ -1117,6 +1173,7 @@ describe("editing a meal as one thing", () => {
     mealId: "meal-lunch", mealKindId: "k1",
     planDate: "2026-08-16", mealKind: "Lunch", readyBy: "12:00:00",
     adults: 100, children: 0, seniors: 0, plates: 100, crewRequired: 6,
+    kitchens: [{ ...MAIN_SECTION, crewRequired: 6 }],
     dayType: "REGULAR", occasionName: null,
     eventName: null, isOutside: false, handover: null, contactName: null, contactPhone: null,
     deliveryAddress: null, deliverySubLocation: null, deliveryPlaceId: null,
@@ -1127,7 +1184,7 @@ describe("editing a meal as one thing", () => {
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
     corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
     dishes: [
-      { id: "p1", mealId: "meal-lunch", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 100,
+      { id: "p1", mealId: "meal-lunch", kitchenId: "kit-main", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 100,
         targetYieldUnit: "KG", status: "PLANNED", actualServings: null, consumedQuantity: null,
         notMade: false, originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
         ekadashiAcknowledged: false, createdAt: "2026-08-15T10:00:00Z" },
@@ -1153,8 +1210,10 @@ describe("editing a meal as one thing", () => {
     // yet opens empty; this one was counted, and the figure is the planner's to correct.
     expect(screen.getByLabelText("Adults")).toHaveValue(100);
     expect(screen.getByLabelText("People needed")).toHaveValue(6);
-    expect(screen.getByRole("checkbox", { name: /bisi bele bath/i })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /kesari bath/i })).not.toBeChecked();
+    // Its one dish, under its own kitchen, and nothing that is not on it.
+    const band = screen.getByRole("region", { name: "Main kitchen" });
+    expect(within(band).getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(100);
+    expect(screen.queryByLabelText("Amount of Kesari Bath")).toBeNull();
   });
 
   it("does not offer to move the meal to another kind", () => {
@@ -1166,18 +1225,19 @@ describe("editing a meal as one thing", () => {
 
   it("updates the whole meal in one request: a kept dish by its id, an added one with none", async () => {
     openEdit();
-    fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
+    pick(/kesari bath/i);
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "150" } });
     fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
 
     await vi.waitFor(() => expect(updateMeal).toHaveBeenCalledTimes(1));
     const [mealId, input] = updateMeal.mock.calls[0];
     expect(mealId).toBe("meal-lunch");
-    expect(input).toMatchObject({ adults: 150, crewRequired: 6 });
+    expect(input).toMatchObject({ adults: 150 });
+    expect(input.kitchens).toEqual([{ kitchenId: "kit-main", crewRequired: 6 }]);
     // The dish that was already there keeps its identity and its history; the added one has none yet.
     expect(input.dishes).toEqual([
-      { id: "p1", recipeId: "r1", targetYield: 100 },
-      { id: null, recipeId: "r2", targetYield: 150 },
+      { id: "p1", recipeId: "r1", targetYield: 100, kitchenId: "kit-main" },
+      { id: null, recipeId: "r2", targetYield: 150, kitchenId: "kit-main" },
     ]);
     expect(saveMeal).not.toHaveBeenCalled();
     // An update cannot move a meal, so it carries neither a day nor a kind. And an update that touched
@@ -1191,15 +1251,15 @@ describe("editing a meal as one thing", () => {
 
   it("leaves a preparation taken off the meal out of the list, which is how the server cancels it", async () => {
     openEdit();
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /kesari bath/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Take Bisi Bele Bath off Main kitchen" }));
+    pick(/kesari bath/i);
     fireEvent.click(screen.getByRole("button", { name: /update this meal/i }));
 
     await vi.waitFor(() => expect(updateMeal).toHaveBeenCalledTimes(1));
     // Cancelled rather than deleted, on the server: a planned dish missing from the whole list.
     const dishes = updateMeal.mock.calls[0][1].dishes;
     expect(dishes.map((d) => d.id)).not.toContain("p1");
-    expect(dishes).toEqual([{ id: null, recipeId: "r2", targetYield: 100 }]);
+    expect(dishes).toEqual([{ id: null, recipeId: "r2", targetYield: 100, kitchenId: "kit-main" }]);
   });
 });
 
@@ -1227,6 +1287,7 @@ describe("correcting a delivery event that was picked from the map", () => {
     mealId: "meal-mantri", mealKindId: "k2",
     planDate: "2026-08-16", mealKind: "Event", readyBy: "11:00:00",
     adults: 200, children: 0, seniors: 0, plates: 200, crewRequired: null,
+    kitchens: [{ ...MAIN_SECTION, crewRequired: null }],
     dayType: "REGULAR", occasionName: null,
     eventName: "Mantri Serenity programme", isOutside: true, handover: "DELIVERY",
     contactName: "Mrs Latha Rao", contactPhone: "+91 98862 30011",
@@ -1238,7 +1299,7 @@ describe("correcting a delivery event that was picked from the map", () => {
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
     corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
     dishes: [
-      { id: "p1", mealId: "meal-mantri", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 200,
+      { id: "p1", mealId: "meal-mantri", kitchenId: "kit-main", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 200,
         targetYieldUnit: "KG", status: "PLANNED", actualServings: null, consumedQuantity: null,
         notMade: false, originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
         ekadashiAcknowledged: false, createdAt: "2026-08-15T10:00:00Z" },
@@ -1341,11 +1402,9 @@ describe("planning a meal on a fasting day", () => {
   it("opens already filtered, and says why in the calendar's words", async () => {
     open({ isEkadashi: true, ekadashiName: "Pavitraropana Ekadasi" });
 
-    await vi.waitFor(() =>
-      expect(screen.getByRole("checkbox", { name: /sabudana khichadi/i })).toBeInTheDocument()
-    );
+    // What the kitchen's search offers is the short list: "a" is in all three names.
+    await vi.waitFor(() => expect(offered("a")).toEqual(["Sabudana Khichadi"]));
     expect(listRecipes).toHaveBeenCalledWith({ ekadashiCompatible: true }, "t");
-    expect(screen.queryByRole("checkbox", { name: /bisi bele bath/i })).not.toBeInTheDocument();
     expect(screen.getByText(/Pavitraropana Ekadashi\. Grain and bean preparations are hidden\./))
       .toBeInTheDocument();
   });
@@ -1355,13 +1414,12 @@ describe("planning a meal on a fasting day", () => {
     const escape = await screen.findByRole("button", { name: "Show grain preparations too" });
 
     fireEvent.click(escape);
-    expect(screen.getByRole("checkbox", { name: /bisi bele bath/i })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /kesari bath/i })).toBeInTheDocument();
+    expect(offered("a")).toEqual(["Bisi Bele Bath", "Kesari Bath", "Sabudana Khichadi"]);
     expect(screen.getByText(/Pavitraropana Ekadashi\. Every preparation is listed\./)).toBeInTheDocument();
 
     // And it goes back, without asking the server a second time — the short list is already held.
     fireEvent.click(screen.getByRole("button", { name: "Hide grain preparations" }));
-    expect(screen.queryByRole("checkbox", { name: /bisi bele bath/i })).not.toBeInTheDocument();
+    expect(offered("a")).toEqual(["Sabudana Khichadi"]);
     expect(listRecipes).toHaveBeenCalledTimes(1);
   });
 
@@ -1377,6 +1435,7 @@ describe("planning a meal on a fasting day", () => {
         date="2026-08-16"
         recipes={RECIPES as never}
         mealKinds={KINDS as never}
+        kitchens={KITCHENS as never}
         isEkadashi
         ekadashiName="Pavitraropana Ekadasi"
         existing={{
@@ -1385,8 +1444,9 @@ describe("planning a meal on a fasting day", () => {
           occasionName: null, eventName: null, contactName: null, contactPhone: null,
           deliveryAddress: null, purpose: null,
           adults: 100, children: 0, seniors: 0, crewRequired: null, kitchenNotes: null,
+          kitchens: [{ ...MAIN_SECTION, crewRequired: null }],
           dishes: [
-            { id: "p1", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 100,
+            { id: "p1", kitchenId: "kit-main", recipeId: "r1", recipeName: "Bisi Bele Bath", targetYield: 100,
               status: "PLANNED", actualServings: null, notMade: false, cookedAt: null,
               ekadashiAcknowledged: true, createdAt: "2026-08-15T10:00:00Z" },
           ],
@@ -1398,10 +1458,10 @@ describe("planning a meal on a fasting day", () => {
 
     // Somebody confirmed it deliberately. Hiding it would put its servings box, and the block that
     // box can put on saving, out of reach.
-    const grain = await screen.findByRole("checkbox", { name: /bisi bele bath/i });
-    expect(grain).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /sabudana khichadi/i })).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: /kesari bath/i })).not.toBeInTheDocument();
+    // Since Epic 12 it is a row on its kitchen's band, with its amount, whatever the filter says; the
+    // filter decides only what the search offers next.
+    expect(await screen.findByLabelText("Amount of Bisi Bele Bath")).toHaveValue(100);
+    await vi.waitFor(() => expect(offered("a")).toEqual(["Sabudana Khichadi"]));
   });
 
   it("shows everything, and offers no way out, when the filter cannot be fetched", async () => {
@@ -1410,7 +1470,7 @@ describe("planning a meal on a fasting day", () => {
 
     expect(await screen.findByText(/Pavitraropana Ekadashi\. Every preparation is listed\./))
       .toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /bisi bele bath/i })).toBeInTheDocument();
+    expect(offered("a")).toEqual(["Bisi Bele Bath", "Kesari Bath", "Sabudana Khichadi"]);
     expect(screen.queryByRole("button", { name: /grain preparations/i })).not.toBeInTheDocument();
   });
 
@@ -1435,14 +1495,14 @@ describe("planning a meal on a fasting day", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Show grain preparations too" }));
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "100" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /sabudana khichadi/i }));
+    pick(/bisi bele bath/i);
+    pick(/sabudana khichadi/i);
     fireEvent.click(screen.getByRole("button", { name: /save this meal/i }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Leave it out" }));
 
-    expect(screen.getByRole("checkbox", { name: /bisi bele bath/i })).not.toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /sabudana khichadi/i })).toBeChecked();
+    expect(screen.queryByLabelText("Amount of Bisi Bele Bath")).toBeNull();
+    expect(screen.getByLabelText("Amount of Sabudana Khichadi")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Leave it out" })).not.toBeInTheDocument();
     // Nothing is saved behind the planner's back: the next save is theirs to press.
     expect(saveMeal).toHaveBeenCalledTimes(1);
@@ -1453,8 +1513,7 @@ describe("planning a meal on a fasting day", () => {
   it("leaves an ordinary day alone", () => {
     open();
     expect(listRecipes).not.toHaveBeenCalled();
-    expect(screen.getByRole("checkbox", { name: /bisi bele bath/i })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /sabudana khichadi/i })).toBeInTheDocument();
+    expect(offered("a")).toEqual(["Bisi Bele Bath", "Kesari Bath", "Sabudana Khichadi"]);
     expect(screen.queryByRole("button", { name: /grain preparations/i })).not.toBeInTheDocument();
   });
 });
@@ -1478,7 +1537,7 @@ describe("a figure out of range names its box (T-165)", () => {
   it("says a travel time of 0 must be at least 1, and saves nothing", async () => {
     open();
     fireEvent.click(screen.getByRole("button", { name: "Event" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
     fireEvent.change(screen.getByLabelText("Amount of Bisi Bele Bath"), { target: { value: "30" } });
     fireEvent.change(screen.getByLabelText(/ready by/i), { target: { value: "11:00" } });
     fireEvent.change(screen.getByLabelText(/event name/i, { selector: "input" }), {
@@ -1530,6 +1589,7 @@ describe("a festival day opens on its usual crowd (T-208)", () => {
     mealId: "meal-lunch", mealKindId: "k1",
     planDate: "2026-08-16", mealKind: "Lunch", readyBy: "12:00:00",
     adults: 100, children: 0, seniors: 0, plates: 100, crewRequired: null,
+    kitchens: [{ ...MAIN_SECTION, crewRequired: null }],
     dayType: "FESTIVAL", occasionName: null,
     eventName: null, isOutside: false, handover: null, contactName: null, contactPhone: null,
     deliveryAddress: null, deliverySubLocation: null, deliveryPlaceId: null,
@@ -1572,7 +1632,7 @@ describe("a festival day opens on its usual crowd (T-208)", () => {
     expect(screen.getByText("500 people")).toBeInTheDocument();
 
     // A ticked preparation follows the default exactly as it follows a typed count.
-    fireEvent.click(screen.getByRole("checkbox", { name: /bisi bele bath/i }));
+    pick(/bisi bele bath/i);
     expect(screen.getByLabelText("Amount of Bisi Bele Bath")).toHaveValue(500);
 
     fireEvent.change(screen.getByLabelText("Adults"), { target: { value: "320" } });

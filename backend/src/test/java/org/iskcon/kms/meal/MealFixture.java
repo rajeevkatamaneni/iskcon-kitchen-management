@@ -97,10 +97,67 @@ public final class MealFixture {
 		if (existing != null) {
 			return existing;
 		}
-		return admin.queryForObject("""
+		UUID mealId = admin.queryForObject("""
 				INSERT INTO meals (tenant_id, meal_plan_day_id, meal_kind_id, event_name, ready_by)
 				VALUES (?, ?, ?, ?, ?) RETURNING id
 				""", UUID.class, tenant, dayId, kind, eventName, readyBy);
+		section(admin, tenant, mealId, null);
+		return mealId;
+	}
+
+	/**
+	 * The meal's kitchen — its one section — created in the temple's planner kitchen if it has none
+	 * (Epic 12, V150). Every meal has at least one kitchen and every dish sits under one of its meal's
+	 * kitchens (a composite foreign key), so a fixture meal needs a section as surely as a planned one.
+	 *
+	 * <p>The kitchen is chosen as V150 and {@code KitchenService.seedMainKitchenForCurrentTenant} choose
+	 * it — the main kitchen if it plans meals, else the first planner kitchen by name — and created as
+	 * they create it where the temple has none, so a fixture temple ends up shaped like a real one.
+	 *
+	 * @param createdBy who a kitchen made here is recorded as created by; null takes the temple's
+	 *                  earliest Temple Admin, else its earliest user
+	 */
+	public static UUID section(JdbcTemplate admin, UUID tenant, UUID mealId, UUID createdBy) {
+		UUID existing = admin.query("""
+				SELECT kitchen_id FROM meal_kitchens WHERE meal_id = ? ORDER BY created_at, kitchen_id LIMIT 1
+				""", (rs, n) -> rs.getObject("kitchen_id", UUID.class), mealId).stream().findFirst().orElse(null);
+		if (existing != null) {
+			return existing;
+		}
+		UUID kitchen = plannerKitchen(admin, tenant, createdBy);
+		admin.update("""
+				INSERT INTO meal_kitchens (tenant_id, meal_id, kitchen_id)
+				SELECT tenant_id, id, ? FROM meals WHERE id = ?
+				""", kitchen, mealId);
+		return kitchen;
+	}
+
+	/** The temple's planner kitchen, created 'Main kitchen' (main if it has none) where it has none. */
+	public static UUID plannerKitchen(JdbcTemplate admin, UUID tenant, UUID createdBy) {
+		UUID found = admin.query("""
+				SELECT id FROM kitchens
+				WHERE tenant_id = ? AND status = 'ACTIVE' AND uses_meal_planner
+				ORDER BY is_main DESC, lower(name), id LIMIT 1
+				""", (rs, n) -> rs.getObject("id", UUID.class), tenant).stream().findFirst().orElse(null);
+		if (found != null) {
+			return found;
+		}
+		UUID creator = createdBy != null ? createdBy : admin.queryForObject("""
+				SELECT id FROM users WHERE tenant_id = ?
+				ORDER BY (role = 'TEMPLE_ADMIN') DESC, created_at, id LIMIT 1
+				""", UUID.class, tenant);
+		String name = "Main kitchen";
+		for (int attempt = 1; admin.queryForObject(
+				"SELECT count(*) FROM kitchens WHERE tenant_id = ? AND lower(name) = lower(?)",
+				Integer.class, tenant, name) > 0; attempt++) {
+			name = attempt == 1 ? "Main kitchen (meals)" : "Main kitchen (meals " + attempt + ")";
+		}
+		boolean main = admin.queryForObject(
+				"SELECT count(*) FROM kitchens WHERE tenant_id = ? AND is_main", Integer.class, tenant) == 0;
+		return admin.queryForObject("""
+				INSERT INTO kitchens (tenant_id, name, is_main, uses_meal_planner, status, created_by)
+				VALUES (?, ?, ?, true, 'ACTIVE', ?) RETURNING id
+				""", UUID.class, tenant, name, main, creator);
 	}
 
 	/** Sets the head count on a meal; nulls are written as nulls. */
@@ -112,10 +169,18 @@ public final class MealFixture {
 	/**
 	 * Sets one column on a meal. For the handful of whole-meal facts a test needs beyond the head
 	 * count — an event going outside, a crew figure, an occasion — without a method per column.
+	 *
+	 * <p>{@code crew_required} is no longer a column of {@code meals} (V151): People needed is each
+	 * kitchen's. Asked for by that name, it is set on the meal's one section, which is what a fixture
+	 * meal has and what the old single figure meant.
 	 */
 	public static void set(JdbcTemplate admin, UUID mealId, String column, Object value) {
 		if (!column.matches("[a-z_]+")) {
 			throw new IllegalArgumentException("Not a column name: " + column);
+		}
+		if ("crew_required".equals(column)) {
+			admin.update("UPDATE meal_kitchens SET crew_required = ? WHERE meal_id = ?", value, mealId);
+			return;
 		}
 		admin.update("UPDATE meals SET " + column + " = ? WHERE id = ?", value, mealId);
 	}
@@ -129,10 +194,11 @@ public final class MealFixture {
 	/** One dish of a meal in the given status. Answers with the dish's id. */
 	public static UUID dish(JdbcTemplate admin, UUID tenant, UUID mealId, UUID recipeId, BigDecimal targetYield,
 			String status, UUID createdBy) {
+		UUID kitchen = section(admin, tenant, mealId, createdBy);
 		return admin.queryForObject("""
-				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by)
-				VALUES (?, ?, ?, ?, ?, ?) RETURNING id
-				""", UUID.class, tenant, mealId, recipeId, targetYield, status, createdBy);
+				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by, kitchen_id)
+				VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
+				""", UUID.class, tenant, mealId, recipeId, targetYield, status, createdBy, kitchen);
 	}
 
 	/**
@@ -163,10 +229,22 @@ public final class MealFixture {
 	 */
 	public static void deleteAll(JdbcTemplate admin) {
 		admin.execute("DELETE FROM meal_dishes");
+		// A meal's kitchens (V150) would go with it by cascade; said here so the order is on the page.
+		admin.execute("DELETE FROM meal_kitchens");
 		admin.execute("DELETE FROM meals");
 		admin.execute("DELETE FROM meal_series");
 		admin.execute("DELETE FROM meal_plan_days");
 		admin.execute("DELETE FROM meal_card_sequence");
 		admin.execute("DELETE FROM meal_kinds");
+		// The kitchens a meal needed (V150) — made here by section(), or by the planner's own seed when a
+		// test planned through the API — hold their temple and their creator with RESTRICT keys, so a
+		// class cleaning up with this helper would otherwise fail at DELETE FROM users. Only kitchens
+		// nothing else holds: one a staff member works in, or a request was raised by, is the class's
+		// own to remove in its own order.
+		admin.execute("""
+				DELETE FROM kitchens k
+				WHERE NOT EXISTS (SELECT 1 FROM staff_profiles sp WHERE sp.kitchen_id = k.id)
+				  AND NOT EXISTS (SELECT 1 FROM ingredient_requests r WHERE r.kitchen_id = k.id)
+				""");
 	}
 }

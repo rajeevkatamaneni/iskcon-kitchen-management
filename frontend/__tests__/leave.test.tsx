@@ -132,6 +132,15 @@ describe("leave queue", () => {
           volunteers: 1,
           rostered: 4,
           shortOfCrew: true,
+          // One kitchen cooks this lunch, so the section's figures are the meal's.
+          mealKitchenCount: 1,
+          kitchens: [
+            {
+              kitchenId: "kit-main", kitchenName: "Main kitchen", crewRequired: 8,
+              staffIn: 3, staffNames: ["Govinda Das", "Madhava Das", "Keshava Das"],
+              volunteers: 1, rostered: 4, shortOfCrew: true,
+            },
+          ],
         },
       ],
       error: null,
@@ -140,14 +149,55 @@ describe("leave queue", () => {
     render(<LeavePage />);
 
     // The date is written by shortDate, so its order follows the reader's locale; what is asserted
-    // is the meal, the day and the two numbers, not the arrangement of the month and the day.
+    // is the meal, the day and the two numbers, not the arrangement of the month and the day. No
+    // kitchen in the sentence: one kitchen cooks this lunch, so naming it would distinguish nothing
+    // and would put "(Main Kitchen)" on every line at the temples that cook everything in one.
     const line = screen.getByText(/^Approving this leaves Lunch on .* at 4 of 8\.$/);
     expect(line.textContent).toContain("Sep");
+    expect(line.textContent).not.toContain("Main kitchen");
 
     const approve = screen.getByRole("button", { name: "Approve" });
     expect(approve).not.toBeDisabled();
     fireEvent.click(approve);
     await waitFor(() => expect(decideMock).toHaveBeenCalledWith("l1", "approve", null, "test-token"));
+  });
+
+  it("names the kitchen whose figures those are, where more than one kitchen cooks the meal", async () => {
+    // Epic 12: a person works in one kitchen, so their leave costs one of the meal's sections, and
+    // the line carries that section's People needed and rostered. A sweets cook being away leaves a
+    // lunch that eight people are cooking reading "0 of 2" — which is right, and unreadable without
+    // the kitchen's name on it. `mealKitchenCount`, not `kitchens.length`: the row deliberately holds
+    // only the affected section.
+    impactRef.current = {
+      data: [
+        {
+          mealId: "meal-lunch-3-sep",
+          planDate: "2026-09-03",
+          mealKind: "Lunch",
+          readyBy: "12:00:00",
+          crewRequired: 2,
+          staffIn: 0,
+          volunteers: 0,
+          rostered: 0,
+          shortOfCrew: true,
+          // Two kitchens cook this lunch; only the sweets cook's section is on this line.
+          mealKitchenCount: 2,
+          kitchens: [
+            {
+              kitchenId: "kit-sweets", kitchenName: "Sweets kitchen", crewRequired: 2,
+              staffIn: 0, staffNames: [],
+              volunteers: 0, rostered: 0, shortOfCrew: true,
+            },
+          ],
+        },
+      ],
+      error: null,
+      loading: false,
+    };
+    render(<LeavePage />);
+
+    expect(screen.getByText(/^Approving this leaves Lunch \(Sweets kitchen\) on .* at 0 of 2\.$/))
+      .toBeInTheDocument();
   });
 
   it("says nothing where the day off costs the kitchen nothing", () => {

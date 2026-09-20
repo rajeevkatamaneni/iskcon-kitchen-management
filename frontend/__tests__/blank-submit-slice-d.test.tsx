@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ResolvedDay, WeekScheduleView } from "@/lib/api";
 import { dateWithYear } from "@/lib/format";
-import { CATEGORIES, TITLES, ban, former, member, pay } from "./staff-fixtures";
+import { CATEGORIES, TITLES, ban, former, kitchen, member, pay } from "./staff-fixtures";
 
 /**
  * Blank required boxes on the staff, pay, ban, conduct-note, schedule and leave forms are named in
@@ -85,6 +85,8 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
     const asks = fn.toString();
+    // Epic 12: a hire needs a kitchen, so the form is given one, which it then chooses by itself.
+    if (asks.includes("listKitchens")) return { data: [kitchen()], error: null, loading: false, reload: reloadMock };
     const ref = asks.includes("staffConductNotes")
       ? refs.conduct
       : asks.includes("staffRegister")

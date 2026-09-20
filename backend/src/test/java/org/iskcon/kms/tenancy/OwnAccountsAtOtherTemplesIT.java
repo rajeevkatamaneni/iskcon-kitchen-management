@@ -281,17 +281,18 @@ class OwnAccountsAtOtherTemplesIT extends AbstractIntegrationTest {
 	void hireRefusesOwnAccountElsewhere() {
 		signedInAtA();
 		AuthenticatedUser actor = actingAsPersonAtA();
+		UUID kitchen = kitchenAtA();
 
 		// existingUserId comes from the request, chosen off the devotee register — which, before its
 		// own fix, listed the administrator's account at temple B. Hiring it wrote a staff record at
 		// temple A pointing at a user row that belongs to temple B.
-		assertThatThrownBy(() -> employment.hire(actor, hireExisting(personAtB)))
+		assertThatThrownBy(() -> employment.hire(actor, hireExisting(personAtB, kitchen)))
 				.isInstanceOfSatisfying(ApplicationException.class,
 						e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
 		assertThat(admin.queryForObject("SELECT count(*) FROM staff_profiles", Integer.class)).isZero();
 
 		// This temple's own devotee is still hired in exactly the same way.
-		employment.hire(actor, hireExisting(devoteeAtA));
+		employment.hire(actor, hireExisting(devoteeAtA, kitchen));
 		assertThat(admin.queryForObject(
 				"SELECT user_id FROM staff_profiles WHERE tenant_id = ?", UUID.class, templeA))
 				.isEqualTo(devoteeAtA);
@@ -411,10 +412,24 @@ class OwnAccountsAtOtherTemplesIT extends AbstractIntegrationTest {
 		return new CreateKitchenRequest(name, null, null, true, false, inCharge, null);
 	}
 
-	private static HireStaffRequest hireExisting(UUID userId) {
+	private static HireStaffRequest hireExisting(UUID userId, UUID kitchenId) {
 		return new HireStaffRequest(
 				userId, "Hired Person", null, null, JobTitle.COOK, null, EmploymentType.FULL_TIME,
-				LocalDate.of(2026, 9, 1), null, null, null, null, null, null, null, null, null, null, null);
+				LocalDate.of(2026, 9, 1), null, null, null, null, null, null, null, null, null, null,
+				kitchenId, null);
+	}
+
+	/**
+	 * A kitchen at temple A, written straight in. Every staff member belongs to one (Epic 12), so a hire
+	 * with none is refused {@code KMS-400184} before it gets anywhere near the question this class asks.
+	 * Not made in {@code setUp}: {@code kitchenInChargeMustBeThisTemples} counts the temple's kitchens
+	 * from zero.
+	 */
+	private UUID kitchenAtA() {
+		return admin.queryForObject("""
+				INSERT INTO kitchens (tenant_id, name, is_main, uses_meal_planner, status, created_by)
+				VALUES (?, 'Main kitchen', true, true, 'ACTIVE', ?) RETURNING id
+				""", UUID.class, templeA, personAtA);
 	}
 
 	private UUID insertTenant(String slug, String name) {

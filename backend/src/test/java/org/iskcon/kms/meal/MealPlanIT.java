@@ -108,6 +108,10 @@ class MealPlanIT extends AbstractIntegrationTest {
 						(SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'))
 				""", tenant, rice, UUID.randomUUID());
 
+		// Every meal is cooked by one of the temple's kitchens (Epic 12), and saving one no longer makes a
+		// kitchen: a real temple is given its main kitchen when it is provisioned. This temple is made by
+		// hand, so it is given one here, as provisioning would (T-354).
+		MealFixture.plannerKitchen(admin, tenant, null);
 		TenantContext.set(tenant);
 		try {
 			mealKindService.seedForCurrentTenant();

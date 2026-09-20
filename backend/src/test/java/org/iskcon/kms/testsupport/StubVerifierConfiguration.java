@@ -1,8 +1,10 @@
 package org.iskcon.kms.testsupport;
 
+import org.iskcon.kms.AbstractIntegrationTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Registers the suite's one {@link StubTokenVerifier}, ahead of the application's rejecting verifier.
@@ -23,6 +25,10 @@ public class StubVerifierConfiguration {
 	@Bean
 	@Primary
 	StubTokenVerifier stubTokenVerifier() {
-		return new StubTokenVerifier();
+		// The privileged fixture DataSource, not the application's: completing a cook's fixture writes a
+		// row the signed-in cook's own connection could not (T-361), and it must not be constrained by
+		// the tenant setting of whatever request happens to be in flight.
+		return new StubTokenVerifier(
+				new TestStaffRecords(new JdbcTemplate(AbstractIntegrationTest.adminDataSource())));
 	}
 }

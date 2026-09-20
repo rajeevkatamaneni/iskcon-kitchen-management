@@ -57,6 +57,8 @@ class KitchenIT extends AbstractIntegrationTest {
 	void tearDown() {
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM ingredient_requests");
+		// Staff records name a kitchen since Epic 12 (T-357), so they go before the kitchens.
+		admin.execute("DELETE FROM staff_profiles");
 		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
@@ -282,6 +284,80 @@ class KitchenIT extends AbstractIntegrationTest {
 		mvc.perform(createRequest(body("Sneaky kitchen", false, false, null)))
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.code").value("KMS-400021"));
+	}
+
+	// ---- Staff in a kitchen (Epic 12, T-357) -------------------------------------
+
+	@Test
+	@DisplayName("each kitchen says how many people work in it now; former staff are not counted")
+	void staffCountIsCurrentStaff() throws Exception {
+		String deity = createKitchen("Deity kitchen");
+		String store = createKitchen("Store kitchen");
+		staffIn(deity, "ACTIVE");
+		staffIn(deity, "ACTIVE");
+		staffIn(deity, "RESIGNED");
+
+		mvc.perform(authed(get("/api/v1/kitchens")))
+				.andExpect(jsonPath("$[?(@.name=='Deity kitchen')].staffCount").value(2))
+				.andExpect(jsonPath("$[?(@.name=='Store kitchen')].staffCount").value(0));
+		mvc.perform(authed(get("/api/v1/kitchens/{id}", deity)))
+				.andExpect(jsonPath("$.staffCount").value(2));
+		mvc.perform(authed(get("/api/v1/kitchens/{id}", store)))
+				.andExpect(jsonPath("$.staffCount").value(0));
+	}
+
+	@Test
+	@DisplayName("a kitchen people work in now cannot be archived or deleted; moved out, it can be archived")
+	void aKitchenWithStaffIsNotClosed() throws Exception {
+		createKitchen("Deity kitchen");
+		String store = createKitchen("Store kitchen");
+		UUID cook = staffIn(store, "ACTIVE");
+
+		mvc.perform(authed(post("/api/v1/kitchens/{id}/archive", store)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400185"));
+		mvc.perform(authed(delete("/api/v1/kitchens/{id}", store)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400185"));
+		assertThat(admin.queryForObject(
+				"SELECT status FROM kitchens WHERE id = ?::uuid", String.class, store)).isEqualTo("ACTIVE");
+		assertThat(auditCount("KITCHEN_ARCHIVED")).isZero();
+
+		// Their employment ends; a former employee's record still names the kitchen, and must not
+		// hold it open for ever.
+		admin.update("""
+				UPDATE staff_profiles SET employment_status = 'RESIGNED', last_working_day = DATE '2026-06-30'
+				WHERE id = ?
+				""", cook);
+		mvc.perform(authed(post("/api/v1/kitchens/{id}/archive", store)))
+				.andExpect(status().isNoContent());
+		assertThat(admin.queryForObject(
+				"SELECT status FROM kitchens WHERE id = ?::uuid", String.class, store)).isEqualTo("ARCHIVED");
+	}
+
+	@Test
+	@DisplayName("a kitchen only a former employee names is archived rather than deleted, not an internal error")
+	void aKitchenAFormerEmployeeNamesIsArchivedNotDeleted() throws Exception {
+		createKitchen("Deity kitchen");
+		String store = createKitchen("Store kitchen");
+		staffIn(store, "RESIGNED");
+
+		mvc.perform(authed(delete("/api/v1/kitchens/{id}", store)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("KMS-400107"));
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM kitchens WHERE id = ?::uuid", Integer.class, store)).isEqualTo(1);
+	}
+
+	/** One staff record in the kitchen, written straight to the table: the point is the reference. */
+	private UUID staffIn(String kitchenId, String employmentStatus) {
+		return admin.queryForObject("""
+				INSERT INTO staff_profiles (tenant_id, full_name, job_title, employment_type, date_of_joining,
+					employment_status, last_working_day, kitchen_id)
+				VALUES (?, 'Test Cook', 'COOK', 'FULL_TIME', DATE '2026-01-01', ?,
+					CASE WHEN ? = 'ACTIVE' THEN NULL ELSE DATE '2026-06-30' END, ?::uuid)
+				RETURNING id
+				""", UUID.class, templeA, employmentStatus, employmentStatus, kitchenId);
 	}
 
 	// ---------------------------------------------------------------------

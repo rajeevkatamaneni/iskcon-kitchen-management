@@ -20,9 +20,11 @@ import {
   toApiError,
   ApiError,
   type CancelScope,
+  type KitchenCrewView,
   type LaterInSeries,
   type MealCrewView,
   type MealDishView,
+  type MealKitchenView,
   type MealSeries,
   type MealSufficiency,
   type MealView,
@@ -230,7 +232,7 @@ function shortBadge(sufficiency: MealSufficiency) {
   return <Badge tone="danger">Short · won’t arrive in time</Badge>;
 }
 
-/** One meal: its dishes, its job card, and the record of what went out. */
+/** One meal: its header, the record of what went out, and a section per kitchen cooking it (Epic 12). */
 function MealBlock({
   meal,
   crew,
@@ -260,7 +262,6 @@ function MealBlock({
   const { getToken, appUser } = useAuth();
   const [recording, setRecording] = useState(false);
   const [justRecorded, setJustRecorded] = useState(false);
-  const [preparingPdf, setPreparingPdf] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [justCorrected, setJustCorrected] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -388,28 +389,15 @@ function MealBlock({
     }
   }
 
-  // The card is two halves with two readers (build brief Q3). The worksheet is always English and
-  // goes back to the office; the recipes are optional, and print in a language chosen here for the
-  // cooks — any of the 23, translated when the card is asked for. The list used to be narrowed to
-  // what had already been translated, on the assumption that a temple's cooks read the language of
-  // the state it stands in, which is not true of any kitchen this is for.
-  // Unchecked by default since 2026-09-05. The recipes are pages a cook works from and throws away,
-  // and most prints are the worksheet alone — a default that quietly attaches five pages of
-  // ingredients to every card is a default that wastes paper on most of them.
-  const [includeRecipes, setIncludeRecipes] = useState(false);
-  // Null until somebody picks: the server says which language the picker should open on, and that
-  // answer arrives after the first render.
-  const [language, setLanguage] = useState<string | null>(null);
+  // Which language the recipes should open on, asked once for the meal rather than once per kitchen:
+  // the server answers it from the temple, not from the kitchen, so every section's picker opens on
+  // the same language and each kitchen can then change its own.
   const { data: offered } = useAuthedQuery(
     useCallback(
       (t?: string) => api.jobCardLanguages(meal.mealId, t),
       [meal.mealId]
     )
   );
-  const recipeLanguage = language ?? offered?.defaultLanguage ?? "en";
-  // What the card is asked for, in one value: a language for the appendix, or the sentinel that
-  // means the worksheet on its own.
-  const printLanguage = includeRecipes ? recipeLanguage : "none";
 
   /**
    * What a preparation's quantities are in — the stored yield unit of the recipe behind it.
@@ -424,26 +412,14 @@ function MealBlock({
   const live = meal.dishes.filter((dish) => dish.status !== "CANCELLED" || dish.notMade);
   const open = meal.dishes.filter((dish) => dish.status === "PLANNED");
 
-
-
-  async function downloadPdf() {
-    setPreparingPdf(true);
-    try {
-      const token = await getToken();
-      await generateAndDownload({
-        request: () =>
-          api.requestJobCard(meal.mealId, printLanguage, token),
-        status: (documentId) => api.getJobCardDocument(documentId, token),
-        download: (documentId) => api.downloadJobCardDocument(documentId, token),
-        filename: `${meal.cardNumber ?? "job-card"}.pdf`,
-      });
-      onChanged();
-    } catch (e) {
-      onError(toApiError(e, "We couldn’t generate that job card."));
-    } finally {
-      setPreparingPdf(false);
-    }
-  }
+  /**
+   * The kitchens cooking this meal, in the order the server chose for the person reading it (Epic
+   * 12): their own kitchen first when it is on the meal, else the main kitchen, then Settings order.
+   * Drawn exactly in that order and never re-sorted here, so the planner, Today and the job cards all
+   * agree about which kitchen comes first. `?? []` only because a fixture written before Epic 12 may
+   * leave the field out; the server always sends at least one.
+   */
+  const kitchens = meal.kitchens ?? [];
 
   return (
     <Card padding="p-6">
@@ -475,7 +451,8 @@ function MealBlock({
                 Neutral both ways: green is kept for the moment the recording itself succeeds (the
                 notice below), not a standing state (Rajeev, 2026-09-18, T-227). */}
             {meal.recorded ? <Badge>Recorded</Badge> : <Badge>Not yet recorded</Badge>}
-            <CrewPebble crew={crew} required={meal.crewRequired} name={meal.eventName || meal.mealKind} />
+            {/* No crew pebble here any more (Epic 12): People needed belongs to each kitchen, so the
+                count sits in each kitchen's section below, against that kitchen's own staff. */}
             {/* What has been asked for, beside the number that says it is needed. Asking, and changing
                 what was asked, happen on the meal's own form (section 4) since D-27, because a shift
                 is saved only with its meal — a layer here that saved a shift by itself would be the
@@ -501,6 +478,9 @@ function MealBlock({
             {[
               headCount(meal) ? `${headCount(meal)} expected` : null,
               meal.plates > 0 ? `${meal.plates.toLocaleString("en-IN")} servings` : null,
+              // Who is cooking it, beside how much (Epic 12): "Main kitchen and Sweets kitchen", in
+              // the sections' own order. Said even for one kitchen, as every meal shows its sections.
+              kitchens.length > 0 ? kitchens.map((k) => k.kitchenName).join(" and ") : null,
               meal.occasionName,
               meal.deliveryAddress,
               // Who to ring, beside where it is going. Food that has left the building is the one
@@ -635,87 +615,6 @@ function MealBlock({
         <RepeatForward meal={meal} onChanged={onChanged} />
       )}
 
-      <div className="mt-4 grid">
-        {live.map((dish) => (
-            <div
-              key={dish.id}
-              className="flex flex-wrap items-center gap-3 border-t border-hairline py-3 first:border-t-0"
-            >
-              {/* The name, then what the name is doing — the state of the preparation sits beside
-                  it rather than across the row, because "Kosu Palya, short of ingredients" is one
-                  fact and reading it used to mean crossing an empty gap to find the second half.
-                  Pressing the name opens the recipe over the planner: a preparation is worth
-                  reading before it is committed to, and that was previously a trip off this screen
-                  and back. */}
-              <span className="flex min-w-[14rem] flex-1 flex-wrap items-center gap-x-3 gap-y-1">
-                <button
-                  type="button"
-                  onClick={() => onReadRecipe(dish.recipeId, dish.recipeName)}
-                  className="rounded-sm font-medium text-ink underline decoration-hairline-strong underline-offset-4 transition-colors duration-state hover:decoration-ink"
-                >
-                  {dish.recipeName}
-                </button>
-
-                {/* Only a shortage is coloured here. Not made, cooked and ingredients-ready are
-                    states to read, not results of what the reader just did, so they are plain
-                    (Rajeev, 2026-09-18, T-227). */}
-                {dish.notMade ? (
-                  <Badge>Not made</Badge>
-                ) : dish.status === "COOKED" ? (
-                  <Badge>Cooked</Badge>
-                ) : sufficiency.get(dish.id)?.status === "SHORT" ? (
-                  shortBadge(sufficiency.get(dish.id)!)
-                ) : sufficiency.get(dish.id)?.status === "SUFFICIENT" ? (
-                  <Badge>Ingredients ready</Badge>
-                ) : (
-                  <Badge>Planned</Badge>
-                )}
-
-                {dish.ekadashiAcknowledged && (
-                  <span className="text-xs text-ink-muted">
-                    Has grains · fasting day
-                  </span>
-                )}
-              </span>
-
-              {/* What this preparation is for, on the right, in the name's own size and colour:
-                  the quantity is half of what the row says and was being whispered under it. */}
-              {/* ml-auto: when a long name pushes the figure onto its own line on a phone, it stays
-                  at the right edge with every other row's figure instead of jumping to the left. */}
-              <span className="ml-auto text-right font-medium text-ink">
-                {cooksQuantity(dish.targetYield, yieldUnit(dish.recipeId))}
-                {dish.actualServings != null && !dish.notMade && (
-                  <span className="block text-xs font-normal text-ink-muted">
-                    {/* Cooked and served used to be bare numbers — "248 cooked" against a target
-                        that carried a unit, so the two figures on one row did not read as the same
-                        kind of thing. */}
-                    {cooksQuantity(dish.actualServings, yieldUnit(dish.recipeId))} cooked
-                    {dish.consumedQuantity != null
-                      ? ` · ${cooksQuantity(dish.consumedQuantity, yieldUnit(dish.recipeId))} served`
-                      : ""}
-                  </span>
-                )}
-
-                {/* What this dish used to say, on the dish that says something else now (T-007).
-                    Beside the figure rather than in a footnote, because a number that changed and a
-                    number that never did look identical, and the only reader who can tell them
-                    apart is the one who remembers yesterday's screen. `originalActualServings` is
-                    non-null only on a dish a correction actually changed — restating an unchanged
-                    figure is not correcting it — so an untouched preparation of a corrected meal
-                    stays quiet rather than offering "640 cooked, corrected from 640". */}
-                {dish.originalActualServings != null && (
-                  <span className="block text-xs font-normal text-ink-muted">
-                    corrected from{" "}
-                    {cooksQuantity(dish.originalActualServings, yieldUnit(dish.recipeId))}
-                    {meal.correctedByName ? ` by ${meal.correctedByName}` : ""}
-                    {meal.correctedAt ? ` on ${templeDay(meal.correctedAt)}` : ""}
-                  </span>
-                )}
-              </span>
-            </div>
-        ))}
-      </div>
-
       {/* Saying so, and then getting out of the way. The form closes itself on success — leaving it
           open over the figures it just saved asks the person to work out whether anything happened. */}
       {justRecorded && (
@@ -783,52 +682,33 @@ function MealBlock({
         )
       )}
 
-      {/* The job card, in one place. There were two of it: a "Job card" button on the header that
-          opened a printable copy in a new tab, and a "Download PDF" link down here — two controls
-          for one document, and the choices that shape it (the recipes, the language) attached to
-          only one of them. This row is the whole of it now. Marking off and signing are paper —
-          the card carries the sign-off boxes, and the app carries no checklist, because a cook
-          mid-service will not use one. */}
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-hairline pt-4">
-        <label className="flex min-h-touch cursor-pointer items-center gap-2 text-sm text-ink">
-          <input
-            type="checkbox"
-            checked={includeRecipes}
-            aria-label={`Include the recipes with the ${meal.mealKind} card`}
-            onChange={(e) => setIncludeRecipes(e.target.checked)}
-            // Matched to the composer's list of preparations (2026-09-05): `rounded-sm` and a border
-            // do nothing to a native checkbox, and without accent-color a ticked one is browser blue.
-            className="h-4 w-4 flex-none accent-accent"
+      {/* One recessed band per kitchen, the full width of the card (Epic 12, Option 1 of the approved
+          mock): a sunken band inside a raised card, so the kitchens are told apart by edge and tone
+          as well as by their headings. Edge to edge (-mx-6 px-6) rather than an inset well, so the
+          dishes keep the width they had before there were sections; an inset well took 34px from a
+          390 phone and pushed every quantity onto a line of its own. The last band runs into the
+          card's foot (last:-mb-6), which is why the recording and correcting above sit over the
+          sections rather than under them.
+
+          Every meal has its sections, one-kitchen meals included: one headed section is the same
+          shape as two, so a cook never has to learn which of two layouts they are looking at. */}
+      <div className="-mx-6 mt-5 grid gap-3">
+        {kitchens.map((kitchen) => (
+          <KitchenSection
+            key={kitchen.kitchenId}
+            meal={meal}
+            name={name}
+            kitchen={kitchen}
+            dishes={live.filter((dish) => dish.kitchenId === kitchen.kitchenId)}
+            crew={crew?.kitchens?.find((k) => k.kitchenId === kitchen.kitchenId) ?? null}
+            defaultLanguage={offered?.defaultLanguage ?? "en"}
+            sufficiency={sufficiency}
+            yieldUnit={yieldUnit}
+            onReadRecipe={onReadRecipe}
+            onChanged={onChanged}
+            onError={onError}
           />
-          Include the recipes
-        </label>
-        {includeRecipes && (
-          <select
-            aria-label={`Recipe language for ${meal.mealKind}`}
-            value={recipeLanguage}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="min-h-touch rounded-control border border-hairline px-3 text-sm"
-          >
-            {/* Every language, from the one list the application keeps. The server is asked only
-                which one to open on — the offer itself does not depend on a round trip, so a slow
-                or failed call cannot silently shrink a picker of 23 down to English. */}
-            {ALL_LANGUAGES.map((language) => (
-              <option key={language.code} value={language.code}>
-                {language.label}
-              </option>
-            ))}
-          </select>
-        )}
-        <Button size="sm" variant="secondary" disabled={preparingPdf} onClick={downloadPdf} busy={preparingPdf}>
-          {preparingPdf ? (
-            <span className="inline-flex items-center gap-2">
-              <BusyPot />
-              Preparing the card…
-            </span>
-          ) : (
-            "Download job card"
-          )}
-        </Button>
+        ))}
       </div>
     </Card>
   );
@@ -1281,76 +1161,303 @@ function CorrectMeal({
 }
 
 /**
- * How many hands this meal has against how many it takes — "5 of 8" (item 24).
+ * One kitchen's part of a meal (Epic 12): its heading, the preparations it cooks, who is cooking
+ * them, and its own job card. Drawn as the approved mock's Option 1 draws a kitchen, class for class.
  *
- * <p>Absent where nobody has said how many it takes. Null is not zero, and a meal planned weeks
- * before anybody is rostered must not be drawn as short of a number it was never given. Short, it
- * takes the warning tone and nothing more: it is telling the kitchen something, not refusing it.
+ * <p>Everything a kitchen needs to get its part of the meal out is here and nothing it does not:
+ * another kitchen's dishes are in another section and on another card. What belongs to the whole
+ * meal (its name, ready-by, head count, Edit, Cancel, recording) stays in the card's header above.
  */
-function CrewPebble({
-  crew,
-  required,
+function KitchenSection({
+  meal,
   name,
+  kitchen,
+  dishes,
+  crew,
+  defaultLanguage,
+  sufficiency,
+  yieldUnit,
+  onReadRecipe,
+  onChanged,
+  onError,
 }: {
-  crew: MealCrewView | null;
-  required: number | null;
-  /** The meal as the header names it, so the "i" beside the count says whose crew it is about. */
+  meal: MealView;
+  /** The meal as its header names it: an event by its own name, anything else by its kind. */
   name: string;
+  kitchen: MealKitchenView;
+  /** This kitchen's live preparations, and no other kitchen's. */
+  dishes: MealDishView[];
+  /** This kitchen's crew readout, or null where nothing has been counted or the count was refused. */
+  crew: KitchenCrewView | null;
+  /** The language the recipes picker opens on, as the server answered it for the meal. */
+  defaultLanguage: string;
+  sufficiency: Map<string, MealSufficiency>;
+  yieldUnit: (recipeId: string) => string;
+  onReadRecipe: (recipeId: string, name: string) => void;
+  onChanged: () => void;
+  onError: (e: ApiError) => void;
 }) {
-  if (required == null) return null;
+  const { getToken } = useAuth();
+  // "Lunch, Main kitchen": what this section's controls are named for, so a day of two meals cooked
+  // by two kitchens is not four checkboxes all called "Include the recipes".
+  const label = `${name}, ${kitchen.kitchenName}`;
+  const n = dishes.length;
+
+  // The card is two halves with two readers (build brief Q3). The worksheet is always English and
+  // goes back to the office; the recipes are optional, and print in a language chosen here for the
+  // cooks — any of the 23, translated when the card is asked for. The list used to be narrowed to
+  // what had already been translated, on the assumption that a temple's cooks read the language of
+  // the state it stands in, which is not true of any kitchen this is for.
+  // Unchecked by default since 2026-09-05. The recipes are pages a cook works from and throws away,
+  // and most prints are the worksheet alone — a default that quietly attaches five pages of
+  // ingredients to every card is a default that wastes paper on most of them.
+  // Held per kitchen since Epic 12: the sweets kitchen may want its recipes in Hindi while the main
+  // kitchen prints the worksheet alone.
+  const [includeRecipes, setIncludeRecipes] = useState(false);
+  // Null until somebody picks, so the picker follows the server's answer when it arrives.
+  const [language, setLanguage] = useState<string | null>(null);
+  const [preparingPdf, setPreparingPdf] = useState(false);
+  const recipeLanguage = language ?? defaultLanguage;
+  // What the card is asked for, in one value: a language for the appendix, or the sentinel that
+  // means the worksheet on its own.
+  const printLanguage = includeRecipes ? recipeLanguage : "none";
+
+  /**
+   * This kitchen's card, and only this kitchen's: its own dishes, its own people. The kitchen goes
+   * with every request, a one-kitchen meal's too, so the card asked for is never a matter of which
+   * kitchens the server happens to find on the meal (`KMS-400186` refuses the question without one
+   * once a second kitchen is on it).
+   */
+  async function downloadPdf() {
+    setPreparingPdf(true);
+    try {
+      const token = await getToken();
+      await generateAndDownload({
+        request: () => api.requestJobCard(meal.mealId, printLanguage, token, kitchen.kitchenId),
+        status: (documentId) => api.getJobCardDocument(documentId, token),
+        download: (documentId) => api.downloadJobCardDocument(documentId, token),
+        // The kitchen in the file's name: the card number is the meal's, one for every kitchen, so
+        // two kitchens' cards saved from one meal would otherwise overwrite or number each other.
+        filename: `${meal.cardNumber ?? "job-card"}-${fileSafe(kitchen.kitchenName)}.pdf`,
+      });
+      onChanged();
+    } catch (e) {
+      onError(toApiError(e, "We couldn’t generate that job card."));
+    } finally {
+      setPreparingPdf(false);
+    }
+  }
+
+  /**
+   * How many hands this kitchen has against how many it needs — "5 of 6 rostered" (item 24).
+   *
+   * <p>No pebble where nobody has said how many it needs. Null is not zero, and a meal planned weeks
+   * before anybody is rostered must not be drawn as short of a number it was never given. Short, it
+   * takes the warning tone and nothing more: it is telling the kitchen something, not refusing it.
+   * The server's own `shortOfCrew` decides it where there is a readout, so the planner, Today and the
+   * leave screen cannot disagree; with no readout nobody is counted as rostered, as the pebble has
+   * always drawn it.
+   */
+  const required = kitchen.crewRequired;
   const rostered = crew?.rostered ?? 0;
-  const short = shortOfCrew(required, crew);
+  const short = crew ? crew.shortOfCrew : required != null && rostered < required;
+  // Who is cooking, by name: the kitchen's own rostered staff, then the meal's volunteers where they
+  // fall to this section (the server counts them in one section only, so none is counted twice).
+  const volunteers = crew?.volunteers ?? 0;
+  const who = [
+    ...(crew?.staffNames ?? []),
+    ...(volunteers > 0 ? [`${volunteers} ${volunteers === 1 ? "volunteer" : "volunteers"}`] : []),
+  ];
 
   return (
-    // The breakdown behind the number lives in an "i" rather than a native `title`, which is what it
-    // used to be (T-147). A `title` only appears under a mouse pointer that rests on it: a phone
-    // never shows it and a keyboard never reaches it, the exact failure `InfoHint` was written to
-    // close. The pebble itself is left drawn exactly as it was.
-    //
-    // The "i" sits *beside* the pebble, not inside it, and the two share one wrapper that does not
-    // wrap. Inside, the 20px button would make the pill taller than the 16px line it is sized to,
-    // lift it out of line with the Recorded badge beside it, set the button's grey ring on the
-    // warning fill, and hand the pill's semibold weight down to the tip's sentence. Beside it, loose
-    // in the row, the row's `flex-wrap` would at phone width happily put the "i" at the start of the
-    // next line, answering a question asked on the line above. One non-wrapping wrapper avoids both.
-    //
-    // Nothing is said twice to a screen reader. The pebble reads "5 of 8 people rostered of the
-    // number this meal takes"; the button reads its own name; and the staff-and-volunteers sentence
-    // exists in the page only while the tip is open, and nowhere else.
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className={[
-          "inline-flex items-center gap-1.5 rounded-control px-2.5 py-1 text-xs font-semibold tabular-nums",
-          short ? "bg-warning-bg text-warning" : "bg-sunken text-ink",
-        ].join(" ")}
-      >
-        <i aria-hidden="true" className="ti ti-users" />
-        {rostered} of {required}
-        <span className="sr-only"> people rostered of the number needed</span>
-      </span>
-      {/* "More about crew for Lunch", named for the meal so a day of three meals is not three
-          buttons all called "More about crew" — the trade `InfoHint` itself argues against. The name
-          is handed in from the header rather than read off the crew row, because that row is matched
-          on the meal kind alone (every event would be "crew for Event") and is null where the count
-          was refused. */}
-      <InfoHint
-        text={`${crew?.staffIn ?? 0} staff and ${crew?.volunteers ?? 0} volunteers, of ${required} needed`}
-        label={`crew for ${name}`}
-      />
-    </span>
+    <section
+      aria-label={kitchen.kitchenName}
+      className="border-y border-hairline bg-sunken px-6 pb-4 pt-3 last:-mb-6 last:border-b-0"
+    >
+      <h3 className="flex flex-wrap items-baseline gap-x-3 border-b border-hairline-strong pb-2">
+        <span className="text-base font-semibold text-ink">{kitchen.kitchenName}</span>
+        <span className="text-sm text-ink-secondary">
+          {n} {n === 1 ? "preparation" : "preparations"}
+        </span>
+      </h3>
+
+      <div className="grid">
+        {/* A kitchen can be on a meal before anything is given to it to cook (the section exists
+            with no dishes yet), and an empty band under a heading reads as something failing to
+            load. */}
+        {n === 0 && <p className="py-3 text-sm text-ink-secondary">No preparations yet.</p>}
+            {dishes.map((dish) => (
+                <div
+                  key={dish.id}
+                  className="flex flex-wrap items-center gap-3 border-t border-hairline py-3 first:border-t-0"
+                >
+                  {/* The name, then what the name is doing — the state of the preparation sits beside
+                      it rather than across the row, because "Kosu Palya, short of ingredients" is one
+                      fact and reading it used to mean crossing an empty gap to find the second half.
+                      Pressing the name opens the recipe over the planner: a preparation is worth
+                      reading before it is committed to, and that was previously a trip off this screen
+                      and back. */}
+                  <span className="flex min-w-[14rem] flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                    <button
+                      type="button"
+                      onClick={() => onReadRecipe(dish.recipeId, dish.recipeName)}
+                      className="rounded-sm font-medium text-ink underline decoration-hairline-strong underline-offset-4 transition-colors duration-state hover:decoration-ink"
+                    >
+                      {dish.recipeName}
+                    </button>
+
+                    {/* Only a shortage is coloured here. Not made, cooked and ingredients-ready are
+                        states to read, not results of what the reader just did, so they are plain
+                        (Rajeev, 2026-09-18, T-227). */}
+                    {dish.notMade ? (
+                      <Badge>Not made</Badge>
+                    ) : dish.status === "COOKED" ? (
+                      <Badge>Cooked</Badge>
+                    ) : sufficiency.get(dish.id)?.status === "SHORT" ? (
+                      shortBadge(sufficiency.get(dish.id)!)
+                    ) : sufficiency.get(dish.id)?.status === "SUFFICIENT" ? (
+                      <Badge>Ingredients ready</Badge>
+                    ) : (
+                      <Badge>Planned</Badge>
+                    )}
+
+                    {dish.ekadashiAcknowledged && (
+                      <span className="text-xs text-ink-muted">
+                        Has grains · fasting day
+                      </span>
+                    )}
+                  </span>
+
+                  {/* What this preparation is for, on the right, in the name's own size and colour:
+                      the quantity is half of what the row says and was being whispered under it. */}
+                  {/* ml-auto: when a long name pushes the figure onto its own line on a phone, it stays
+                      at the right edge with every other row's figure instead of jumping to the left. */}
+                  <span className="ml-auto text-right font-medium text-ink">
+                    {cooksQuantity(dish.targetYield, yieldUnit(dish.recipeId))}
+                    {dish.actualServings != null && !dish.notMade && (
+                      <span className="block text-xs font-normal text-ink-muted">
+                        {/* Cooked and served used to be bare numbers — "248 cooked" against a target
+                            that carried a unit, so the two figures on one row did not read as the same
+                            kind of thing. */}
+                        {cooksQuantity(dish.actualServings, yieldUnit(dish.recipeId))} cooked
+                        {dish.consumedQuantity != null
+                          ? ` · ${cooksQuantity(dish.consumedQuantity, yieldUnit(dish.recipeId))} served`
+                          : ""}
+                      </span>
+                    )}
+
+                    {/* What this dish used to say, on the dish that says something else now (T-007).
+                        Beside the figure rather than in a footnote, because a number that changed and a
+                        number that never did look identical, and the only reader who can tell them
+                        apart is the one who remembers yesterday's screen. `originalActualServings` is
+                        non-null only on a dish a correction actually changed — restating an unchanged
+                        figure is not correcting it — so an untouched preparation of a corrected meal
+                        stays quiet rather than offering "640 cooked, corrected from 640". */}
+                    {dish.originalActualServings != null && (
+                      <span className="block text-xs font-normal text-ink-muted">
+                        corrected from{" "}
+                        {cooksQuantity(dish.originalActualServings, yieldUnit(dish.recipeId))}
+                        {meal.correctedByName ? ` by ${meal.correctedByName}` : ""}
+                        {meal.correctedAt ? ` on ${templeDay(meal.correctedAt)}` : ""}
+                      </span>
+                    )}
+                  </span>
+                </div>
+            ))}
+      </div>
+
+      {/* Who is cooking this part, and its own job card, on one row: the people on the left, the
+          card on the right. On a phone the card's controls wrap under the people. Marking off and
+          signing are paper — the card carries the sign-off boxes, and the app carries no checklist,
+          because a cook mid-service will not use one. */}
+      <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-3 border-t border-hairline pt-4">
+        <div className="grid min-w-[14rem] flex-1 gap-1 text-sm">
+          {required != null && (
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ink">
+              <span>
+                People needed <span className="font-semibold tabular-nums">{required}</span>
+              </span>
+              <span aria-hidden className="text-ink-muted">
+                ·
+              </span>
+              {/* Amber only when short: it is telling the kitchen something. Otherwise neutral —
+                  green is kept for the moment the reader's own action succeeds (T-227). */}
+              <span
+                className={[
+                  "inline-flex items-center gap-1.5 rounded-control px-2.5 py-1 text-xs font-semibold tabular-nums",
+                  short ? "bg-warning-bg text-warning" : "bg-sunken text-ink",
+                ].join(" ")}
+              >
+                <i aria-hidden="true" className="ti ti-users" />
+                {rostered} of {required} rostered
+              </span>
+            </p>
+          )}
+          {who.length > 0 && <p className="text-ink-secondary">{who.join(", ")}</p>}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex min-h-touch cursor-pointer items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={includeRecipes}
+              aria-label={`Include the recipes with the ${label} card`}
+              onChange={(e) => setIncludeRecipes(e.target.checked)}
+              // Matched to the composer's list of preparations (2026-09-05): `rounded-sm` and a
+              // border do nothing to a native checkbox, and without accent-color a ticked one is
+              // browser blue.
+              className="h-4 w-4 flex-none accent-accent"
+            />
+            Include the recipes
+          </label>
+          {includeRecipes && (
+            <select
+              aria-label={`Recipe language for ${label}`}
+              value={recipeLanguage}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="min-h-touch rounded-control border border-hairline px-3 text-sm"
+            >
+              {/* Every language, from the one list the application keeps. The server is asked only
+                  which one to open on — the offer itself does not depend on a round trip, so a slow
+                  or failed call cannot silently shrink a picker of 23 down to English. */}
+              {ALL_LANGUAGES.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label={`Download the ${label} job card`}
+            disabled={preparingPdf}
+            onClick={downloadPdf}
+            busy={preparingPdf}
+          >
+            {preparingPdf ? (
+              <span className="inline-flex items-center gap-2">
+                <BusyPot />
+                Preparing the card…
+              </span>
+            ) : (
+              "Download job card"
+            )}
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }
 
-/**
- * Whether a meal has fewer hands rostered than it takes — the warning tone on the crew pebble and the
- * condition for offering "Ask for volunteers" (T-155), in one place so the two cannot disagree.
- *
- * <p>False where nobody has said how many the meal takes, for the reason the pebble gives: null is
- * not zero. A crew row that is missing — nothing counted yet, or the count refused — reads as nobody
- * rostered, which is what the pebble has always drawn.
- */
-function shortOfCrew(required: number | null, crew: MealCrewView | null): boolean {
-  return required != null && (crew?.rostered ?? 0) < required;
+/** "Sweets kitchen" → "sweets-kitchen", for a file name. */
+function fileSafe(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, "-")
+      .replace(/^-+|-+$/g, "") || "kitchen"
+  );
 }
 
 /**
@@ -1639,8 +1746,19 @@ export function seriesLine(series: MealSeries): string {
  * {@link seriesLine}, drawn: a repeat icon, then the sentence, with the date and "event 3 of 8" each
  * held together so a phone never breaks "event 1" from "of 7" or "31 Dec" from "2026" (measured at
  * 390px, T-308). `note` follows on the same line where a screen has something to add.
+ *
+ * <p><b>One occurrence is not a series, so nothing is drawn.</b> Found on staging 2026-09-19: an event
+ * repeated to four dates, then "this and all later ones" cancelled on the second, left the survivor
+ * reading *"Repeats every 2 weeks until 7 Oct 2026 · event 1 of 1"* — a sentence about a repeat that
+ * no longer happens, with an until date that is its own date. `count` is how many occurrences still
+ * stand (cancelled ones are never in it), so `count <= 1` is exactly "there is nothing else left",
+ * whether the copies were cancelled or the repeat only ever made one. Guarded here rather than at the
+ * two call sites — the meal block and the meal's own page — so neither can be fixed and the other
+ * forgotten. The cancel below already asks nothing in this state: it offers "this and all later ones"
+ * only while `position < count`, which one occurrence can never satisfy.
  */
 export function SeriesLine({ series, note }: { series: MealSeries; note?: string }) {
+  if (series.count <= 1) return null;
   const every = series.everyWeeks === 1 ? "every week" : `every ${series.everyWeeks} weeks`;
   return (
     <p className="flex items-baseline gap-1.5 text-sm text-ink-secondary">

@@ -82,6 +82,9 @@ class StaffLeaveIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM staff_schedule_exceptions");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// A hire puts the person in the temple's planner kitchen, seeding one where there is none (V150,
+		// T-350); it holds its temple and creator, so it goes after the staff and before the users.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM notification_attempts");
 		admin.execute("DELETE FROM notifications");
 		admin.execute("DELETE FROM users");
@@ -303,7 +306,9 @@ class StaffLeaveIT extends AbstractIntegrationTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"existingUserId\":\"" + userId + "\",\"fullName\":\"Hired Person\","
 								+ "\"jobTitle\":\"COOK\",\"employmentType\":\"FULL_TIME\","
-								+ "\"dateOfJoining\":\"2026-01-05\",\"systemAccess\":\"KITCHEN_STAFF\"}"))
+								+ "\"dateOfJoining\":\"2026-01-05\",\"systemAccess\":\"KITCHEN_STAFF\","
+								// Every staff member belongs to a kitchen (Epic 12, KMS-400184 without one).
+								+ "\"kitchenId\":\"" + org.iskcon.kms.meal.MealFixture.plannerKitchen(admin, tenant, null) + "\"}"))
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		UUID profile = UUID.fromString(JSON.readTree(created).get("id").asText());
@@ -329,7 +334,8 @@ class StaffLeaveIT extends AbstractIntegrationTest {
 		String created = mvc.perform(authed(post("/api/v1/staff/members"))
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"fullName\":\"Ganesh the janitor\",\"jobTitle\":\"HOUSEKEEPING\","
-								+ "\"employmentType\":\"FULL_TIME\",\"dateOfJoining\":\"2026-02-01\"}"))
+								+ "\"employmentType\":\"FULL_TIME\",\"dateOfJoining\":\"2026-02-01\","
+								+ "\"kitchenId\":\"" + org.iskcon.kms.meal.MealFixture.plannerKitchen(admin, tenant, null) + "\"}"))
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		return UUID.fromString(JSON.readTree(created).get("id").asText());

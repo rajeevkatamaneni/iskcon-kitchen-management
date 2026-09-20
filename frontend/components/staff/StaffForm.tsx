@@ -10,6 +10,7 @@ import type {
   JobTitle,
   JobTitleGroup,
   JobTitleOption,
+  Kitchen,
   StaffPayView,
   StaffProfileView,
   SystemAccess,
@@ -33,6 +34,14 @@ import type {
  * be merged: the title is what somebody is called and grants nothing, access is what they may do.
  * The title only pre-selects the access, so the common case is one choice and the unusual one is
  * still possible — a head cook who is also an administrator, a driver with no login at all.
+ *
+ * <p><b>Kitchen</b> (Epic 12). Rajeev, 2026-09-19: "every staff member belongs to exactly one kitchen
+ * — required on add and edit." So it is a required select on both, refused in red under the box by
+ * {@link Form} like every other required field, and by the server as `KMS-400184` if it is ever sent
+ * without one. It offers active kitchens only, in the order Settings lists them. A temple with one
+ * kitchen has nothing to choose, so that kitchen is already chosen; with more, a hire starts on
+ * "Choose a kitchen" rather than on whichever kitchen happens to be first, because a default there
+ * is a guess that looks like an answer. An edit starts on the person's saved kitchen.
  */
 
 /** What the header's submit button points at. */
@@ -44,6 +53,7 @@ export function StaffForm({
   staff,
   pay,
   options,
+  kitchens,
   devotees,
   revealedPan,
   onRevealPan,
@@ -54,6 +64,8 @@ export function StaffForm({
   /** Null while hiring, and null for a moment on an edit until the pay request lands. */
   pay: StaffPayView | null;
   options: JobTitleOption[];
+  /** The temple's kitchens as `listKitchens(false)` returns them. Archived ones are never offered. */
+  kitchens: Kitchen[];
   devotees: UserSummary[];
   /** The PAN in clear, once somebody has asked for it. Null until then, and never fetched eagerly. */
   revealedPan?: string | null;
@@ -65,6 +77,24 @@ export function StaffForm({
   const [jobTitle, setJobTitle] = useState<JobTitle>(staff?.jobTitle ?? "COOK");
   const [access, setAccess] = useState<SystemAccess | "">(staff?.systemAccess ?? "");
   const [accessTouched, setAccessTouched] = useState(false);
+
+  // Null until somebody picks one. The starting value is derived on every render instead of copied
+  // into state once, because the kitchens arrive after the form first draws: copied on mount, a
+  // one-kitchen temple would start on the placeholder and stay there.
+  const [kitchenChoice, setKitchenChoice] = useState<string | null>(null);
+  const activeKitchens = useMemo(() => kitchens.filter((k) => k.status === "ACTIVE"), [kitchens]);
+  const startingKitchen = staff?.kitchenId
+    ? staff.kitchenId
+    : activeKitchens.length === 1
+      ? activeKitchens[0].id
+      : "";
+  const kitchenId = kitchenChoice ?? startingKitchen;
+  // The saved kitchen is offered even when it is not among the active ones — archived since, or the
+  // list not yet arrived — so the select shows where the person really is rather than falling back to
+  // whichever option happens to be first. The server refuses a save into an archived kitchen
+  // (`KMS-400109`), and says so; a guess here would have hidden the question.
+  const savedElsewhere =
+    !!staff?.kitchenId && kitchenId === staff.kitchenId && !activeKitchens.some((k) => k.id === staff.kitchenId);
 
   const grouped = useMemo(() => {
     const by = new Map<JobTitleGroup, JobTitleOption[]>();
@@ -152,6 +182,30 @@ export function StaffForm({
           />
         </label>
       )}
+
+      {/* Beside the job title's row rather than at the end: where somebody works is read with what
+          they are called. It also evens the half-width fields to ten, so no box sits alone on a row
+          with an empty space beside it. */}
+      <label className="flex flex-col gap-1 text-sm text-ink-secondary">
+        <span className="pl-field-inset font-medium text-ink">Kitchen</span>
+        <select
+          name="kitchenId"
+          required
+          value={kitchenId}
+          onChange={(e) => setKitchenChoice(e.target.value)}
+          className={FIELD}
+        >
+          {/* Only while there is something to choose between. Not disabled: an empty value on a
+              required select is what makes the form say "Kitchen is required". */}
+          {kitchenId === "" && <option value="">Choose a kitchen</option>}
+          {savedElsewhere && staff && <option value={staff.kitchenId}>{staff.kitchenName}</option>}
+          {activeKitchens.map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.name}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Phone</span>
@@ -352,6 +406,9 @@ export function readStaffForm(f: FormData): HireStaffInput {
     // recorded is what the termination screen has to be able to say.
     monthlySalary: salary === "" ? null : Number(salary),
     notes: emptyToNull(String(f.get("notes") ?? "")),
+    // Sent on a hire and on every edit alike (Epic 12). The form refuses a blank one before it gets
+    // here; the server's KMS-400184 is the twin guard.
+    kitchenId: String(f.get("kitchenId") ?? ""),
   };
 }
 

@@ -367,6 +367,35 @@ final class TempleScaleFixture {
 	}
 
 	/**
+	 * Every meal's one kitchen (Epic 12, V150), for the meals just written. A dish names a kitchen on its
+	 * own meal (a composite foreign key onto meal_kitchens), so the section must exist before the dishes.
+	 * The temple's planner kitchen is made the way provisioning makes it, main and using the planner,
+	 * where the fixture's temple has none.
+	 */
+	private void sections(Connection connection, UUID tenantId, UUID actorUserId) throws SQLException {
+		try (PreparedStatement ps = connection.prepareStatement("""
+				INSERT INTO kitchens (tenant_id, name, is_main, uses_meal_planner, status, created_by)
+				SELECT ?::uuid, 'Main kitchen', true, true, 'ACTIVE', ?::uuid
+				WHERE NOT EXISTS (SELECT 1 FROM kitchens WHERE status = 'ACTIVE' AND uses_meal_planner)
+				""")) {
+			ps.setString(1, tenantId.toString());
+			ps.setString(2, actorUserId.toString());
+			ps.executeUpdate();
+		}
+		try (PreparedStatement ps = connection.prepareStatement("""
+				INSERT INTO meal_kitchens (tenant_id, meal_id, kitchen_id)
+				SELECT ?::uuid, m.id,
+				       (SELECT k.id FROM kitchens k WHERE k.status = 'ACTIVE' AND k.uses_meal_planner
+				        ORDER BY k.is_main DESC, lower(k.name), k.id LIMIT 1)
+				FROM meals m
+				WHERE NOT EXISTS (SELECT 1 FROM meal_kitchens mk WHERE mk.meal_id = m.id)
+				""")) {
+			ps.setString(1, tenantId.toString());
+			ps.executeUpdate();
+		}
+	}
+
+	/**
 	 * The kinds a meal points at (D-27). A meal row names its kind by id, so they have to exist before
 	 * a single meal can; the seeded names and times, and nothing else.
 	 */
@@ -423,18 +452,20 @@ final class TempleScaleFixture {
 			ps.setInt(2, days);
 			ps.executeUpdate();
 		}
+		sections(connection, tenantId, actorUserId);
 		String sql = """
 				WITH numbered_recipes AS (
 				    SELECT id, (row_number() OVER (ORDER BY name)) - 1 AS rn, count(*) OVER () AS total
 				    FROM recipes
 				)
-				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by)
+				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by, kitchen_id)
 				SELECT ?::uuid,
 				       m.id,
 				       r.id,
 				       120 + (s.k %% 4) * 60,
 				       '%s',
-				       ?::uuid
+				       ?::uuid,
+				       (SELECT mk.kitchen_id FROM meal_kitchens mk WHERE mk.meal_id = m.id LIMIT 1)
 				FROM generate_series(1, ?) AS d(n)
 				CROSS JOIN generate_series(0, ? - 1) AS s(k)
 				JOIN meal_plan_days pd ON pd.plan_date = CURRENT_DATE %s d.n
@@ -493,13 +524,15 @@ final class TempleScaleFixture {
 			ps.setInt(3, scale.eventEveryDays());
 			ps.executeUpdate();
 		}
+		sections(connection, tenantId, actorUserId);
 		String sql = """
 				WITH numbered_recipes AS (
 				    SELECT id, (row_number() OVER (ORDER BY name)) - 1 AS rn, count(*) OVER () AS total
 				    FROM recipes
 				)
-				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by)
-				SELECT ?::uuid, m.id, r.id, 400, '%s', ?::uuid
+				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by, kitchen_id)
+				SELECT ?::uuid, m.id, r.id, 400, '%s', ?::uuid,
+				       (SELECT mk.kitchen_id FROM meal_kitchens mk WHERE mk.meal_id = m.id LIMIT 1)
 				FROM generate_series(1, ?) AS g(n)
 				JOIN meal_plan_days pd ON pd.plan_date = CURRENT_DATE %s (g.n * ?)
 				JOIN meals m ON m.meal_plan_day_id = pd.id

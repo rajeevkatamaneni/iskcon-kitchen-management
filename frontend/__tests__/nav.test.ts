@@ -9,12 +9,76 @@ import type { PrincipalRole } from "@/lib/api";
  *
  * <p>The menu is grouped now (design system, 2026-08-14), so these read through the groups: what a
  * role can reach, and how it is arranged, are separate questions and both are asserted.
+ *
+ * <p><b>The order and the grouping are Rajeev's, settled 2026-09-19</b> and written down in
+ * `docs/work/MENU-LAYOUT-2026-09-19.md`. The first test below spells out the whole temple-admin menu
+ * heading by heading and label by label, so a reorder is a failing test rather than a thing somebody
+ * notices on staging. The tests after it say *why* each neighbour sits where it does, which is what
+ * a reader needs when a future change makes one of them fail.
  */
 
 /** Every destination a role is offered, flattened out of its groups. */
 const hrefsFor = (role: PrincipalRole) => navForRole(role).flatMap((g) => g.items.map((i) => i.href));
 
+/** A role's menu as a person reads it: `[heading | null, ...labels]` per group, in order. */
+const menuFor = (role: PrincipalRole, person?: { canPlanMeals?: boolean } | null) =>
+  navForRole(role, person).map((g) => [g.title ?? null, ...g.items.map((i) => i.label)]);
+
 describe("navForRole", () => {
+  it("is the menu Rajeev settled on 2026-09-19, in his order and his words", () => {
+    // The standard menu, read top to bottom as a temple admin — who is the only role that sees every
+    // group, so this is the whole specification in one assertion. Sentence case throughout; the
+    // first group carries no heading because Today and the planner are where people live.
+    expect(menuFor("TEMPLE_ADMIN")).toEqual([
+      [null, "Today", "Vaishnava calendar", "Meal planner", "Reuse a plan", "Cost per serving"],
+      ["Ordering", "Shopping list", "Purchase orders", "Deliveries", "Invoices", "Vendors", "Vendor performance"],
+      ["Inventory & Recipes", "Inventory", "Recipes", "Ingredients", "Supplies", "Equipment"],
+      ["Kitchens", "Ingredient requests", "Issued to kitchens", "All kitchens"],
+      ["People", "My schedule", "Staff", "Staff schedule", "Leave", "Devotees", "Volunteer shifts"],
+      ["Giving & Outreach", "Donations", "Wish list", "Communications"],
+      ["Temple", "Notices", "Festival occasions", "Meal kinds", "Audit log", "Settings"],
+    ]);
+  });
+
+  it("gives a kitchen manager the same menu less the admin's own screens, and no empty heading", () => {
+    // Every group survives for them, because each one holds something of theirs — which is what
+    // makes the next test (kitchen staff, whose Temple group goes entirely) the real one.
+    expect(menuFor("KITCHEN_MANAGER")).toEqual([
+      [null, "Today", "Vaishnava calendar", "Meal planner", "Reuse a plan", "Cost per serving"],
+      ["Ordering", "Shopping list", "Purchase orders", "Deliveries", "Invoices", "Vendors", "Vendor performance"],
+      ["Inventory & Recipes", "Inventory", "Recipes", "Ingredients", "Supplies", "Equipment"],
+      ["Kitchens", "Ingredient requests", "Issued to kitchens"],
+      ["People", "My schedule", "Staff schedule", "Leave", "Volunteer shifts"],
+      ["Giving & Outreach", "Donations"],
+    ]);
+  });
+
+  it("drops the Temple group for a kitchen cook rather than heading an empty list", () => {
+    // Every destination under Temple is the admin's, so for a cook the heading would stand over
+    // nothing. It is dropped, and the groups above it keep their order and their words.
+    expect(menuFor("KITCHEN_STAFF")).toEqual([
+      [null, "Today", "Vaishnava calendar", "Meal planner", "Reuse a plan", "Cost per serving"],
+      ["Ordering", "Shopping list", "Purchase orders", "Deliveries", "Invoices", "Vendors", "Vendor performance"],
+      ["Inventory & Recipes", "Inventory", "Recipes", "Ingredients", "Supplies", "Equipment"],
+      ["Kitchens", "Ingredient requests", "Issued to kitchens"],
+      ["People", "My schedule", "Volunteer shifts"],
+      ["Giving & Outreach", "Donations"],
+    ]);
+    expect(menuFor("KITCHEN_STAFF").map((g) => g[0])).not.toContain("Temple");
+    // And "All kitchens" goes with it: which kitchens the temple runs is the admin's to change.
+    expect(hrefsFor("KITCHEN_STAFF")).not.toContain("/kitchens");
+  });
+
+  it("renames Issued from store to Issued to kitchens, keeping the address (2026-09-19)", () => {
+    // Rajeev chose the words over "Out of the store". The route is untouched on purpose — renaming
+    // it would break every link and bookmark already pointing at the screen — so the item is the
+    // one place the two can disagree, and this pins them together.
+    for (const role of ["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"] as const) {
+      const items = navForRole(role).flatMap((g) => g.items);
+      expect(items.find((i) => i.href === "/issued-from-store")?.label).toBe("Issued to kitchens");
+      expect(items.map((i) => i.label)).not.toContain("Issued from store");
+    }
+  });
   it("gives the platform operator only platform destinations", () => {
     // Notices joins them: posting a downtime or maintenance notice is an operations act, and the
     // operator's takedown of somebody else's notice is what stands in for pre-moderation (E9-S1).
@@ -92,37 +156,49 @@ describe("navForRole", () => {
     expect(hrefsFor("VOLUNTEER")).toContain("/my-shifts");
   });
 
-  it("groups the community and the payroll apart, and never repeats a word between them", () => {
+  it("never uses one word as a heading and as a destination under it", () => {
     // "Devotees" was once a group of money screens *and* an item inside People, one screen apart.
+    // The same trap caught the kitchens group on 2026-09-19, which is why the list of them is
+    // "All kitchens" under the heading "Kitchens" rather than "Kitchens" under "Kitchens".
     const groups = navForRole("TEMPLE_ADMIN");
-    const people = groups.find((g) => g.title === "People");
-    const giving = groups.find((g) => g.title === "Giving");
-
-    expect(people?.items.map((i) => i.label)).toEqual([
-      "Devotees",
-      "Staff",
-      "Staff schedule",
-      "Leave",
-      "Volunteer shifts",
-      "Communications",
-    ]);
-    expect(giving?.items.map((i) => i.label)).toEqual(["Donations", "Wish list"]);
-
     const titles = groups.map((g) => g.title).filter(Boolean);
     const labels = groups.flatMap((g) => g.items.map((i) => i.label));
     expect(titles.filter((t) => labels.includes(t!))).toEqual([]);
   });
 
-  it("puts Equipment straight after Inventory, and offers it to nobody else", () => {
-    // The two halves of one word: what flows through the store room, and what the temple owns and
-    // maintains. And the rule at nav.ts:12 — the roles here are the page's own RequireRole set, so
-    // a menu entry can never lead somebody to a refusal.
-    const kitchen = navForRole("TEMPLE_ADMIN").find((g) => g.title === "Kitchen");
-    const labels = kitchen?.items.map((i) => i.label) ?? [];
-    expect(labels[labels.indexOf("Inventory") + 1]).toBe("Equipment");
+  it("keeps Equipment in the catalogue group, and offers it to nobody else", () => {
+    // What the temple owns and maintains is catalogued like what it consumes, so it sits at the end
+    // of the same group — after the three things that are used up. And the rule at the head of
+    // nav.ts: the roles here are the page's own RequireRole set, so a menu entry can never lead
+    // somebody to a refusal.
+    const catalogue = navForRole("TEMPLE_ADMIN").find((g) => g.title === "Inventory & Recipes");
+    const labels = catalogue?.items.map((i) => i.label) ?? [];
+    expect(labels[labels.length - 1]).toBe("Equipment");
+    expect(labels[labels.indexOf("Ingredients") + 1]).toBe("Supplies");
 
     expect(hrefsFor("VOLUNTEER")).not.toContain("/equipment");
     expect(hrefsFor("SUPER_ADMIN")).not.toContain("/equipment");
+  });
+
+  it("keeps Cost per serving with the daily screens, not under Kitchens (2026-09-19)", () => {
+    // Rajeev: it measures what the meal planner planned, not what a kitchen took from the store, and
+    // the admin checks it often to watch the budget. When billing the sister kitchens arrives, the
+    // kitchen's bill goes under Kitchens and these two money screens stay apart on purpose.
+    const groups = navForRole("TEMPLE_ADMIN");
+    expect(groups[0].title).toBeUndefined();
+    expect(groups[0].items[groups[0].items.length - 1].href).toBe("/cost-per-serving");
+    const kitchens = groups.find((g) => g.title === "Kitchens");
+    expect(kitchens?.items.map((i) => i.href)).not.toContain("/cost-per-serving");
+  });
+
+  it("keeps Cost per serving for a kitchen the planner is shut to", () => {
+    // It is not a planner destination: the report reads recorded meals and issues, and a kitchen
+    // that does not plan here still has both. So it must survive the filter that takes /planner away.
+    const hrefs = navForRole("KITCHEN_MANAGER", { canPlanMeals: false }).flatMap((g) =>
+      g.items.map((i) => i.href),
+    );
+    expect(hrefs).toContain("/cost-per-serving");
+    expect(hrefs).not.toContain("/planner");
   });
 
   it("puts Meal kinds beside Festival occasions, and offers both to the admin alone", () => {
@@ -177,6 +253,28 @@ describe("navForRole", () => {
     for (const role of ["SUPER_ADMIN", "TEMPLE_ADMIN", "KITCHEN_STAFF", "VOLUNTEER"] as const) {
       expect(hrefsFor(role)).not.toContain("/dashboard");
     }
+  });
+
+  it("hides every meal-planner destination from somebody the planner is shut to (Epic 12)", () => {
+    // Rajeev, 2026-09-19: only people whose kitchen plans its meals here can open the planner,
+    // "server-enforced, and hidden from the menu". The server's answer is WhoAmI.canPlanMeals.
+    for (const role of ["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"] as const) {
+      const hrefs = navForRole(role, { canPlanMeals: false }).flatMap((g) => g.items.map((i) => i.href));
+      expect(hrefs.filter((h) => h === "/planner" || h.startsWith("/planner/"))).toEqual([]);
+      // Nothing else goes with it.
+      expect(hrefs).toContain("/today");
+      expect(hrefs).toContain("/recipes");
+    }
+  });
+
+  it("keeps the planner when it is open to them, and when the session never said", () => {
+    // Only an explicit false shuts it: an older session shape must not quietly lose the planner.
+    for (const person of [{ canPlanMeals: true }, {}, null, undefined]) {
+      const hrefs = navForRole("KITCHEN_STAFF", person).flatMap((g) => g.items.map((i) => i.href));
+      expect(hrefs).toContain("/planner");
+      expect(hrefs).toContain("/planner/reuse");
+    }
+    expect(hrefsFor("KITCHEN_STAFF")).toContain("/planner");
   });
 
   it("shows nothing until a role is known", () => {

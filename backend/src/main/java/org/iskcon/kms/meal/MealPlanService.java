@@ -30,6 +30,8 @@ import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.geo.GeocodingProvider;
 import org.iskcon.kms.geo.PlaceSuggestionProvider;
 import org.iskcon.kms.geo.TravelTimeProvider;
+import org.iskcon.kms.kitchen.KitchenOrder;
+import org.iskcon.kms.kitchen.KitchenOrder.KitchenRef;
 import org.iskcon.kms.occasion.OccasionService;
 import org.iskcon.kms.occasion.ResolvedOccasion;
 import org.iskcon.kms.shift.MealShiftDraft;
@@ -91,6 +93,7 @@ public class MealPlanService {
 	private final PlaceSuggestionProvider placeSuggestionProvider;
 	private final ServedMealService servedMealService;
 	private final ShiftService shiftService;
+	private final KitchenOrder kitchenOrder;
 
 	/**
 	 * How long a geocoded coordinate may be kept before it is looked up again (E4-S16 D4). Maps
@@ -126,7 +129,8 @@ public class MealPlanService {
 			MealKindService mealKindService, EkadashiPolicy ekadashiPolicy,
 			GeocodingProvider geocodingProvider, TravelTimeProvider travelTimeProvider,
 			PlaceSuggestionProvider placeSuggestionProvider, TempleClock clock,
-			ServedMealService servedMealService, @Lazy ShiftService shiftService) {
+			ServedMealService servedMealService, @Lazy ShiftService shiftService, KitchenOrder kitchenOrder) {
+		this.kitchenOrder = kitchenOrder;
 		this.clock = clock;
 		this.placeSuggestionProvider = placeSuggestionProvider;
 		this.jdbc = jdbc;
@@ -217,6 +221,22 @@ public class MealPlanService {
 		return meal.withVolunteerShift(shiftService.findForMeal(mealId).orElse(null));
 	}
 
+	/**
+	 * {@link #meals(LocalDate, LocalDate)} with each meal's kitchens in the order this person sees them
+	 * (Epic 12): their own kitchen first when it is on the meal, else the main kitchen, then Settings
+	 * order. What the planner's endpoints answer with.
+	 */
+	@Transactional(readOnly = true)
+	public List<ServedMeal> meals(LocalDate from, LocalDate to, AuthenticatedUser viewer) {
+		return servedMealService.forViewer(meals(from, to), viewer.getUserId());
+	}
+
+	/** {@link #meal(UUID)} with its kitchens ordered for this person, as {@link #meals(LocalDate, LocalDate, AuthenticatedUser)}. */
+	@Transactional(readOnly = true)
+	public ServedMeal meal(UUID mealId, AuthenticatedUser viewer) {
+		return servedMealService.forViewer(meal(mealId), viewer.getUserId());
+	}
+
 	// ---- Reusing a plan (2026-09-05) -------------------------------------
 
 	/**
@@ -239,6 +259,10 @@ public class MealPlanService {
 	 * find-or-create that makes pressing it twice harmless. The occasion is the one thing deliberately
 	 * not carried, for the reason a feast is not offered at all. No volunteer shift is carried either:
 	 * a shift is somebody asking for help with one meal, and nobody has asked for this one yet.
+	 *
+	 * <p>The kitchens carry (Epic 12): each copy has its source's kitchens with their People needed, and
+	 * each dish its own kitchen. A dish of a kitchen that no longer plans meals is left behind, and the
+	 * preview says so beside it.
 	 */
 	@Transactional
 	public ReusePlanResult reusePlan(AuthenticatedUser actor, ReusePlanRequest request) {
@@ -248,8 +272,9 @@ public class MealPlanService {
 			return new ReusePlanResult(0, 0, 0, 0, true);
 		}
 		int copied = 0;
+		Set<UUID> planning = plannerKitchens(kitchenOrder.settingsOrder());
 		for (ReuseCopy copy : walk.copies()) {
-			create(actor, copyOf(copy.source(), copy.dishes(), copy.target()));
+			create(actor, copyOf(copy.source(), copy.dishes(), copy.target(), planning));
 			copied += copy.dishes().size();
 		}
 		ReusePlanPreview.Totals t = preview.totals();
@@ -323,6 +348,12 @@ public class MealPlanService {
 		Set<String> wantedEvents = request.eventNames() == null
 				? Set.of() : new LinkedHashSet<>(request.eventNames());
 
+		// Which kitchens can still take a meal (Epic 12). A copy goes to the same kitchens as its source,
+		// and a kitchen archived or taken off the planner since then cannot be given one — so a dish of
+		// that kitchen is left behind and the screen says why, exactly as a dish the fast forbids is,
+		// rather than the whole reuse being refused over one old kitchen.
+		Set<UUID> planning = plannerKitchens(kitchenOrder.settingsOrder());
+
 		List<ReusePlanPreview.TargetDay> days = new ArrayList<>();
 		List<ReuseCopy> copies = new ArrayList<>();
 		int dishesCopied = 0;
@@ -355,7 +386,9 @@ public class MealPlanService {
 				List<MealDishView> copyable = new ArrayList<>();
 				for (MealDishView dish : live(meal)) {
 					EkadashiCheck check = ekadashiCheck(target, dish.recipeId());
-					boolean refused = check.isEkadashi() && !check.compatible();
+					boolean fasting = check.isEkadashi() && !check.compatible();
+					boolean kitchenGone = !planning.contains(dish.kitchenId());
+					boolean refused = fasting || kitchenGone;
 					if (check.isEkadashi()) {
 						// The fast's own name comes from the calendar rather than from the check, which
 						// only answers whether a recipe suits it.
@@ -363,7 +396,8 @@ public class MealPlanService {
 					}
 					landing.add(new ReusePlanPreview.PlannedMeal(
 							meal.mealKind(), meal.eventName(), dish.recipeName(), !refused,
-							refused ? refusedBecause(dish, check) : null));
+							fasting ? refusedBecause(dish, check)
+									: kitchenGone ? kitchenGoneBecause(meal, dish) : null));
 					if (refused) {
 						notCopied++;
 					} else {
@@ -408,6 +442,21 @@ public class MealPlanService {
 						+ String.join(", ", check.offendingIngredients()) + ", which the fast forbids.";
 	}
 
+	/** Why a dish of a kitchen that no longer plans meals was left behind, in the screen's words. */
+	private static String kitchenGoneBecause(ServedMeal meal, MealDishView dish) {
+		String kitchen = meal.kitchens().stream()
+				.filter(k -> k.kitchenId().equals(dish.kitchenId()))
+				.map(MealKitchenView::kitchenName)
+				.findFirst().orElse("Its kitchen");
+		return kitchen + " no longer plans its meals here, so " + dish.recipeName() + " has no kitchen to cook it.";
+	}
+
+	/** The kitchens a meal may be planned for today: ACTIVE and using the planner. */
+	private static Set<UUID> plannerKitchens(List<KitchenRef> settingsOrder) {
+		return settingsOrder.stream().filter(KitchenRef::plansMeals).map(KitchenRef::id)
+				.collect(Collectors.toSet());
+	}
+
 	/** The dishes of a meal that are still meant to be, or were, cooked. */
 	private static List<MealDishView> live(ServedMeal meal) {
 		return meal.dishes().stream().filter(d -> d.status() != MealStatus.CANCELLED).toList();
@@ -430,6 +479,11 @@ public class MealPlanService {
 	 * <p><strong>The shift is last, and inside.</strong> {@link ShiftService#saveForMeal} is called
 	 * only once the meal row exists, because the shift takes its date from that row, and it runs in
 	 * this transaction, so a shift that is refused takes the meal and its dishes with it.
+	 *
+	 * <p><strong>Which kitchens (Epic 12).</strong> The meal's kitchens and every dish's kitchen are
+	 * checked before anything is written ({@link #resolveSections}, {@link #dishKitchen}), each with its
+	 * People needed, and written before the dishes. See {@link SaveMealRequest#kitchens()} for what an
+	 * absent list means.
 	 */
 	@Transactional
 	public SavedMeal create(AuthenticatedUser actor, SaveMealRequest request) {
@@ -453,7 +507,9 @@ public class MealPlanService {
 						Map.of("field", "dishes", "dishId", dish.id()));
 			}
 		}
-		List<NewDish> dishes = checkDishes(date, request.dishes(), request.ekadashiAcknowledged());
+		List<Section> sections = resolveSections(actor, request.kitchens());
+		List<NewDish> dishes = checkDishes(date, request.dishes(), request.ekadashiAcknowledged(),
+				d -> dishKitchen(d, sections, null));
 
 		UUID dayId = dayFor(date, dayType);
 		MealRow existing = findMeal(dayId, kind.id(), event.name()).orElse(null);
@@ -469,8 +525,11 @@ public class MealPlanService {
 
 		UUID mealId = existing != null ? existing.id() : insertMeal(dayId, kind.id(), event.name(), readyBy);
 		writeMealFacts(mealId, event, located, occasionName, readyBy, request.purpose(), request.adults(),
-				request.children(), request.seniors(), request.crewRequired(), request.kitchenNotes(),
-				request.serverNotes());
+				request.children(), request.seniors(), request.kitchenNotes(), request.serverNotes());
+		// Sections before dishes: a dish's kitchen must already be on its meal (the composite key). A
+		// meal that already existed keeps any kitchen this save does not name — planning onto it adds,
+		// as it always has for dishes, and taking a kitchen off is an update's decision.
+		writeSections(mealId, sections);
 		for (NewDish dish : dishes) {
 			insertDish(actor, mealId, dish);
 		}
@@ -502,6 +561,10 @@ public class MealPlanService {
 	 * the point.
 	 *
 	 * <p>A null {@code volunteerShift} leaves the meal's shift exactly as it is.
+	 *
+	 * <p><strong>The kitchens are the whole list too (Epic 12).</strong> A kitchen named is added or has
+	 * its People needed replaced; a kitchen on the meal and not named is taken off, once none of the
+	 * dishes sent is under it ({@link #removeSectionsLeftOut}). A null list leaves them as they are.
 	 */
 	@Transactional
 	public SavedMeal update(AuthenticatedUser actor, UUID mealId, UpdateMealRequest request) {
@@ -550,16 +613,31 @@ public class MealPlanService {
 			}
 			kept.add(draft);
 		}
-		List<NewDish> keptChecked = checkDishes(date, kept, request.ekadashiAcknowledged());
-		List<NewDish> addedChecked = checkDishes(date, added, request.ekadashiAcknowledged());
+
+		// The kitchens are the whole list, like the dishes (Epic 12). Absent — a caller from before
+		// kitchens — leaves the meal's own exactly as they are, and a kept dish sent without a kitchen
+		// stays in the one it is in: an old-shaped edit of the head count must not move the meal to the
+		// editor's kitchen. With a list, every dish's kitchen is checked against that list.
+		boolean keepSections = request.kitchens() == null;
+		List<Section> sections = keepSections
+				? meal.kitchens().stream().map(k -> new Section(k.kitchenId(), k.crewRequired())).toList()
+				: resolveSections(actor, request.kitchens());
+		List<NewDish> keptChecked = checkDishes(date, kept, request.ekadashiAcknowledged(),
+				d -> dishKitchen(d, sections, keepSections ? current.get(d.id()).kitchenId() : null));
+		List<NewDish> addedChecked = checkDishes(date, added, request.ekadashiAcknowledged(),
+				d -> dishKitchen(d, sections, null));
 
 		Map<String, Object> before = snapshot(mealId);
 		Located located = place(event, row.deliveryAddress(), row.deliveryLatitude(),
 				row.deliveryLongitude(), row.geocodedAt());
 
 		writeMealFacts(mealId, event, located, occasionName, readyBy, request.purpose(), request.adults(),
-				request.children(), request.seniors(), request.crewRequired(), request.kitchenNotes(),
-				request.serverNotes());
+				request.children(), request.seniors(), request.kitchenNotes(), request.serverNotes());
+		if (!keepSections) {
+			// Added and re-figured first, so a dish moved into a kitchen new to this meal has somewhere
+			// to go. The ones left out are taken off at the end, once no dish is still under them.
+			writeSections(mealId, sections);
+		}
 
 		// Dropped first, so the meal never holds both the old list and the new one mid-statement.
 		Set<UUID> keptIds = kept.stream().map(SaveMealRequest.DishDraft::id).collect(Collectors.toSet());
@@ -575,15 +653,19 @@ public class MealPlanService {
 			NewDish dish = keptChecked.get(i);
 			jdbc.update("""
 					UPDATE meal_dishes
-					SET recipe_id = ?, target_yield = ?, ekadashi_ack_by = ?, ekadashi_ack_at = ?, updated_at = now()
+					SET recipe_id = ?, target_yield = ?, ekadashi_ack_by = ?, ekadashi_ack_at = ?,
+						kitchen_id = ?, updated_at = now()
 					WHERE id = ?
 					""", dish.recipeId(), dish.targetYield(),
 					dish.acknowledged() ? actor.getUserId() : null,
 					dish.acknowledged() ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
-					kept.get(i).id());
+					dish.kitchenId(), kept.get(i).id());
 		}
 		for (NewDish dish : addedChecked) {
 			insertDish(actor, mealId, dish);
+		}
+		if (!keepSections) {
+			removeSectionsLeftOut(mealId, meal.kitchens(), sections);
 		}
 
 		saveShift(actor, mealId, request.volunteerShift());
@@ -817,19 +899,166 @@ public class MealPlanService {
 
 	// ---------------------------------------------------------------------
 
-	/** A dish checked and ready to write: its recipe exists here, and the fast has been answered. */
-	private record NewDish(UUID recipeId, BigDecimal targetYield, boolean acknowledged) {
+	/**
+	 * A dish checked and ready to write: its recipe exists here, the fast has been answered, and it is
+	 * under one of the meal's kitchens.
+	 */
+	private record NewDish(UUID recipeId, BigDecimal targetYield, boolean acknowledged, UUID kitchenId) {
 	}
 
 	private List<NewDish> checkDishes(
-			LocalDate date, List<SaveMealRequest.DishDraft> drafts, boolean acknowledged) {
+			LocalDate date, List<SaveMealRequest.DishDraft> drafts, boolean acknowledged,
+			java.util.function.Function<SaveMealRequest.DishDraft, UUID> kitchenOf) {
 		List<NewDish> out = new ArrayList<>(drafts.size());
 		for (SaveMealRequest.DishDraft draft : drafts) {
+			UUID kitchen = kitchenOf.apply(draft);
 			findRecipe(draft.recipeId());
 			out.add(new NewDish(draft.recipeId(), draft.targetYield(),
-					resolveEkadashiAck(date, draft.recipeId(), acknowledged)));
+					resolveEkadashiAck(date, draft.recipeId(), acknowledged), kitchen));
 		}
 		return out;
+	}
+
+	// ---- Which kitchen is cooking (Epic 12) ------------------------------
+
+	/**
+	 * One kitchen's section of the meal as it will be stored: the kitchen, and its People needed with
+	 * a 0 already turned into "not said".
+	 */
+	private record Section(UUID kitchenId, Integer crewRequired) {
+	}
+
+	/**
+	 * The kitchens a save names, checked, in the order it named them (T-354).
+	 *
+	 * <p><strong>The rules</strong> (docs/work/DISPATCH.md, Epic 12, "API default"):
+	 * <ul>
+	 *   <li>None named at all ({@code null}) is a caller from before kitchens: one section, in the
+	 *       saver's default planning kitchen — their own if it plans meals here, else the main kitchen,
+	 *       else the first planner kitchen in Settings order ({@link KitchenOrder#defaultPlanningKitchen}).
+	 *   <li>An empty list is KMS-400180. Somebody said nobody is cooking this meal, which is not a plan.
+	 *   <li>A kitchen this temple does not have — including another temple's, which row-level security
+	 *       hides from {@link KitchenOrder#settingsOrder} — is KMS-400108, as anywhere else a kitchen is
+	 *       named.
+	 *   <li>One that is archived or does not use the planner is KMS-400181: its meals are not planned
+	 *       here, so it cannot be given one.
+	 *   <li>The same kitchen twice is KMS-400182. Two sections for one kitchen would be two People
+	 *       needed figures for the same hands, and the table's unique key refuses it anyway.
+	 * </ul>
+	 *
+	 * <p><strong>No kitchen is ever created here.</strong> Until this task a save at a temple with no
+	 * planner kitchen seeded one (T-350's interim code). That was scaffolding for test temples: a real
+	 * temple is given a main kitchen when it is provisioned, and V150 gave one to every temple that
+	 * existed before. A temple with none has had its kitchens archived or taken off the planner by its
+	 * own Temple Admin, and quietly making a new one behind their back would undo that — so it is
+	 * KMS-400180, whose next step is to add a kitchen.
+	 */
+	private List<Section> resolveSections(AuthenticatedUser actor, List<MealKitchenDraft> drafts) {
+		List<KitchenRef> order = kitchenOrder.settingsOrder();
+		if (drafts == null) {
+			return List.of(new Section(defaultKitchen(actor, order), null));
+		}
+		if (drafts.isEmpty()) {
+			throw new ApplicationException(ErrorCode.MEAL_NEEDS_A_KITCHEN, Map.of("field", "kitchens"));
+		}
+		Map<UUID, KitchenRef> byId = new HashMap<>();
+		order.forEach(k -> byId.put(k.id(), k));
+		Map<UUID, Section> out = new LinkedHashMap<>();
+		for (MealKitchenDraft draft : drafts) {
+			// A draft with no kitchen comes only from SaveMealRequest's legacy constructor, and means the
+			// saver's default kitchen; bean validation refuses one from a client.
+			UUID id = draft.kitchenId() != null ? draft.kitchenId() : defaultKitchen(actor, order);
+			KitchenRef kitchen = byId.get(id);
+			if (kitchen == null) {
+				throw new ApplicationException(ErrorCode.KITCHEN_NOT_FOUND, Map.of("kitchenId", id));
+			}
+			if (!kitchen.plansMeals()) {
+				throw new ApplicationException(ErrorCode.KITCHEN_DOES_NOT_PLAN_MEALS,
+						Map.of("kitchenId", id, "kitchen", kitchen.name()));
+			}
+			if (out.containsKey(id)) {
+				throw new ApplicationException(ErrorCode.DISH_KITCHEN_NOT_ON_MEAL,
+						Map.of("kitchenId", id, "reason", "kitchen named twice"));
+			}
+			out.put(id, new Section(id, draft.storedCrew()));
+		}
+		return List.copyOf(out.values());
+	}
+
+	/** The saver's default planning kitchen, or KMS-400180 where the temple has no kitchen planning meals. */
+	private UUID defaultKitchen(AuthenticatedUser actor, List<KitchenRef> order) {
+		UUID own = kitchenOrder.kitchenOf(actor.getUserId()).orElse(null);
+		return KitchenOrder.defaultPlanningKitchen(own, order)
+				.orElseThrow(() -> new ApplicationException(ErrorCode.MEAL_NEEDS_A_KITCHEN,
+						Map.of("reason", "no kitchen plans its meals here")));
+	}
+
+	/**
+	 * Which of the meal's kitchens a dish goes under. Named, it must be one of them. Unnamed, it goes to
+	 * {@code fallback} where there is one (a kept dish on an edit that named no kitchens stays where it
+	 * is), else to the meal's only kitchen; with two or more there is no honest guess, and it is
+	 * KMS-400182.
+	 */
+	private static UUID dishKitchen(SaveMealRequest.DishDraft dish, List<Section> sections, UUID fallback) {
+		if (dish.kitchenId() != null) {
+			if (sections.stream().noneMatch(s -> s.kitchenId().equals(dish.kitchenId()))) {
+				throw new ApplicationException(ErrorCode.DISH_KITCHEN_NOT_ON_MEAL,
+						Map.of("recipeId", dish.recipeId(), "kitchenId", dish.kitchenId()));
+			}
+			return dish.kitchenId();
+		}
+		if (fallback != null) {
+			return fallback;
+		}
+		if (sections.size() == 1) {
+			return sections.get(0).kitchenId();
+		}
+		throw new ApplicationException(ErrorCode.DISH_KITCHEN_NOT_ON_MEAL,
+				Map.of("recipeId", dish.recipeId(), "reason", "no kitchen named on a meal with several"));
+	}
+
+	/**
+	 * Puts each section on the meal with its People needed: added where the kitchen is new to the meal,
+	 * its figure replaced where it is already there. The job-card version and fingerprint of a section
+	 * already there are left alone — they belong to the card (T-356), not to the plan.
+	 */
+	private void writeSections(UUID mealId, List<Section> sections) {
+		for (Section section : sections) {
+			jdbc.update("""
+					INSERT INTO meal_kitchens (tenant_id, meal_id, kitchen_id, crew_required)
+					VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?)
+					ON CONFLICT (meal_id, kitchen_id)
+					DO UPDATE SET crew_required = EXCLUDED.crew_required, updated_at = now()
+					""", mealId, section.kitchenId(), section.crewRequired());
+		}
+	}
+
+	/**
+	 * Takes off the meal every kitchen an edit left out (T-354).
+	 *
+	 * <p>By the time this runs no dish that was sent is under one of them — {@link #dishKitchen} refused
+	 * that — and every planned dish of theirs that was not sent has been cancelled like any dish left
+	 * out. What can still be under one is history: dishes cancelled earlier, or just now. The database
+	 * will not let a section go while a dish points at it (V150's composite key, RESTRICT, and its
+	 * comment leaves this decision here), so those cancelled dishes are moved to the first kitchen the
+	 * edit kept. A cancelled dish is part of the record of what was decided and must not be deleted;
+	 * which kitchen would have cooked a dish nobody cooked is the least important thing about it, and the
+	 * alternative — keeping a section the planner took off, to hold dishes nobody is cooking — would put
+	 * the kitchen back on the screen they just removed it from.
+	 */
+	private void removeSectionsLeftOut(UUID mealId, List<MealKitchenView> before, List<Section> after) {
+		Set<UUID> kept = after.stream().map(Section::kitchenId).collect(Collectors.toSet());
+		UUID home = after.get(0).kitchenId();
+		for (MealKitchenView old : before) {
+			if (kept.contains(old.kitchenId())) {
+				continue;
+			}
+			jdbc.update("""
+					UPDATE meal_dishes SET kitchen_id = ?, updated_at = now()
+					WHERE meal_id = ? AND kitchen_id = ? AND status = 'CANCELLED'
+					""", home, mealId, old.kitchenId());
+			jdbc.update("DELETE FROM meal_kitchens WHERE meal_id = ? AND kitchen_id = ?", mealId, old.kitchenId());
+		}
 	}
 
 	/**
@@ -878,15 +1107,17 @@ public class MealPlanService {
 
 	private void writeMealFacts(
 			UUID mealId, Event event, Located located, String occasionName, LocalTime readyBy,
-			String purpose, Integer adults, Integer children, Integer seniors, Integer crewRequired,
+			String purpose, Integer adults, Integer children, Integer seniors,
 			String kitchenNotes, String serverNotes) {
+		// No crew figure here since Epic 12: People needed is each kitchen's, on meal_kitchens, and the
+		// meal's column is gone (V151). writeSections writes it.
 		jdbc.update("""
 				UPDATE meals
 				SET event_name = ?, occasion_name = ?, ready_by = ?, is_outside = ?, handover = ?,
 					contact_name = ?, contact_phone = ?, delivery_address = ?, delivery_sub_location = ?,
 					delivery_place_id = ?, guests_eat_at = ?, travel_minutes = ?, travel_minutes_source = ?,
 					delivery_latitude = ?, delivery_longitude = ?, geocoded_at = ?,
-					purpose = ?, adults = ?, children = ?, seniors = ?, crew_required = ?,
+					purpose = ?, adults = ?, children = ?, seniors = ?,
 					kitchen_notes = ?, server_notes = ?, updated_at = now()
 				WHERE id = ?
 				""",
@@ -895,7 +1126,7 @@ public class MealPlanService {
 				event.contactName(), event.contactPhone(), event.deliveryAddress(), event.subLocation(),
 				event.placeId(), event.guestsEatAt(), event.travelMinutes(), event.travelSource(),
 				located.latitude(), located.longitude(), located.at(),
-				trimToNull(purpose), adults, children, seniors, crewRequired,
+				trimToNull(purpose), adults, children, seniors,
 				trimToNull(kitchenNotes), trimToNull(serverNotes),
 				mealId);
 	}
@@ -903,13 +1134,13 @@ public class MealPlanService {
 	private void insertDish(AuthenticatedUser actor, UUID mealId, NewDish dish) {
 		jdbc.update("""
 				INSERT INTO meal_dishes (id, tenant_id, meal_id, recipe_id, target_yield, status,
-					ekadashi_ack_by, ekadashi_ack_at, created_by)
-				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, 'PLANNED', ?, ?, ?)
+					ekadashi_ack_by, ekadashi_ack_at, created_by, kitchen_id)
+				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, 'PLANNED', ?, ?, ?, ?)
 				""",
 				UUID.randomUUID(), mealId, dish.recipeId(), dish.targetYield(),
 				dish.acknowledged() ? actor.getUserId() : null,
 				dish.acknowledged() ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : null,
-				actor.getUserId());
+				actor.getUserId(), dish.kitchenId());
 	}
 
 	/** The meal row, locked, or a refusal. Read before anything about it is decided. */
@@ -937,9 +1168,28 @@ public class MealPlanService {
 		s.put("status", meal.status().name());
 		s.put("dishes", meal.dishes().stream()
 				.filter(d -> d.status() != MealStatus.CANCELLED)
-				.map(d -> d.recipeName() + " " + d.targetYield().stripTrailingZeros().toPlainString())
+				.map(MealPlanService::dishLabel)
 				.toList());
+		// Which kitchens, with their People needed and what each is cooking (Epic 12) — read back from
+		// meal_kitchens and meal_dishes like everything above, so a kitchen moved, added or taken off
+		// shows in the trail as what the rows now say, not as what the request asked for.
+		List<Map<String, Object>> kitchens = new ArrayList<>();
+		for (MealKitchenView k : meal.kitchens()) {
+			Map<String, Object> section = new LinkedHashMap<>();
+			section.put("kitchen", k.kitchenName());
+			section.put("crewRequired", k.crewRequired());
+			section.put("dishes", meal.dishes().stream()
+					.filter(d -> d.status() != MealStatus.CANCELLED && k.kitchenId().equals(d.kitchenId()))
+					.map(MealPlanService::dishLabel)
+					.toList());
+			kitchens.add(section);
+		}
+		s.put("kitchens", kitchens);
 		return s;
+	}
+
+	private static String dishLabel(MealDishView d) {
+		return d.recipeName() + " " + d.targetYield().stripTrailingZeros().toPlainString();
 	}
 
 	/**
@@ -1228,6 +1478,18 @@ public class MealPlanService {
 			// nothing is not something to confirm, so it is refused with the meal's own state.
 			throw new ApplicationException(ErrorCode.MEAL_PLAN_NOT_OPEN, Map.of("mealId", mealId));
 		}
+		// Every copy goes to the source's kitchens (Epic 12). A dish of a kitchen archived or taken off the
+		// planner since has no kitchen to go to on any date, so — unlike a fast, which falls on some dates
+		// and not others — it is not a date to skip but the whole repeat that cannot be made as asked.
+		// Refused, naming the kitchen, before the preview promises anything; the planner moves the dish
+		// to another kitchen on this meal and repeats that.
+		Set<UUID> planning = plannerKitchens(kitchenOrder.settingsOrder());
+		for (MealDishView dish : dishes) {
+			if (!planning.contains(dish.kitchenId())) {
+				throw new ApplicationException(ErrorCode.KITCHEN_DOES_NOT_PLAN_MEALS,
+						Map.of("mealId", mealId, "kitchenId", dish.kitchenId()));
+			}
+		}
 
 		// Never a copy in the past (T-310). Repeating last month's event would otherwise plan meals on
 		// days already gone — meals nobody can cook, which then sit in the history as if they had been
@@ -1292,7 +1554,7 @@ public class MealPlanService {
 						""", everyWeeks, until, seriesId);
 			}
 			for (LocalDate target : dates) {
-				UUID copy = create(actor, copyOf(source, dishes, target)).id();
+				UUID copy = create(actor, copyOf(source, dishes, target, planning)).id();
 				// A cancelled meal brought back is a fresh copy, whatever series it was in before and
 				// whatever was done to it there.
 				jdbc.update("""
@@ -1338,7 +1600,15 @@ public class MealPlanService {
 	 * coordinates: a copy carries the place id and the save resolves the pin from that, because the
 	 * pin's thirty-day licence belongs to the lookup that produced it, not to the copy.
 	 */
-	private static SaveMealRequest copyOf(ServedMeal meal, List<MealDishView> dishes, LocalDate target) {
+	private static SaveMealRequest copyOf(
+			ServedMeal meal, List<MealDishView> dishes, LocalDate target, Set<UUID> planning) {
+		// The same kitchens, each with its People needed, and each dish under its own kitchen (Epic 12).
+		// A section whose kitchen no longer plans meals is not carried: the reuse left its dishes behind
+		// and said why, and the repeat refused before getting here.
+		List<MealKitchenDraft> kitchens = meal.kitchens().stream()
+				.filter(k -> planning.contains(k.kitchenId()))
+				.map(k -> new MealKitchenDraft(k.kitchenId(), k.crewRequired()))
+				.toList();
 		return new SaveMealRequest(
 				target, meal.mealKindId(), meal.readyBy(),
 				meal.eventName(), meal.isOutside(), meal.handover(), meal.contactName(),
@@ -1350,10 +1620,10 @@ public class MealPlanService {
 				meal.travelMinutes(), "MANUAL".equals(meal.travelMinutesSource()),
 				meal.guestsEatAt(),
 				meal.purpose(), null,
-				meal.adults(), meal.children(), meal.seniors(), meal.crewRequired(),
+				meal.adults(), meal.children(), meal.seniors(), kitchens,
 				meal.kitchenNotes(), meal.serverNotes(), false,
 				dishes.stream()
-						.map(d -> new SaveMealRequest.DishDraft(null, d.recipeId(), d.targetYield()))
+						.map(d -> new SaveMealRequest.DishDraft(null, d.recipeId(), d.targetYield(), d.kitchenId()))
 						.toList(),
 				null);
 	}

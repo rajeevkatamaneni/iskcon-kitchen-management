@@ -346,7 +346,9 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
   }
 
   const { appUser } = useAuth();
-  const groups = navForRole(appUser?.role);
+  // The person as well as the role (Epic 12): a cook whose kitchen does not plan its meals here is
+  // not offered the planner, because its page would only refuse them.
+  const groups = navForRole(appUser?.role, appUser);
   // The temple's own name, from whoami. A platform operator belongs to no temple and runs the
   // platform itself, so they are told so rather than shown an empty line.
   const subtitle =

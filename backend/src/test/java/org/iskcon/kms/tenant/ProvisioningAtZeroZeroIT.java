@@ -72,6 +72,8 @@ class ProvisioningAtZeroZeroIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM audit_events");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// Provisioning seeds a main kitchen (V150, T-350), and a staff record names it; after the staff.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM recipe_categories");

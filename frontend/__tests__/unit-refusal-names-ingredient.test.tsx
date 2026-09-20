@@ -136,6 +136,7 @@ function kitchen(): Kitchen {
     usesMealPlanner: false,
     inChargeUserId: null,
     inChargeName: null,
+    staffCount: 0,
     contactPhone: null,
     status: "ACTIVE",
     createdAt: "2026-08-01T00:00:00Z",

@@ -22,6 +22,7 @@ import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.inventory.ConsumeRequest;
 import org.iskcon.kms.inventory.InventoryConsumptionService;
+import org.iskcon.kms.kitchen.KitchenOrder;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -64,15 +65,18 @@ public class ServedMealService {
 	private final JdbcTemplate jdbc;
 	private final InventoryConsumptionService consumptionService;
 	private final AuditService auditService;
+	private final KitchenOrder kitchenOrder;
 
 	// No MealPlanService here any more, and that is deliberate rather than incidental. This service
 	// used to read dish rows through the planner; the planner now reads meals through this one
 	// (reuse, repeat, travel), so the dependency points one way and there is no circle to break.
 	public ServedMealService(
-			JdbcTemplate jdbc, InventoryConsumptionService consumptionService, AuditService auditService) {
+			JdbcTemplate jdbc, InventoryConsumptionService consumptionService, AuditService auditService,
+			KitchenOrder kitchenOrder) {
 		this.jdbc = jdbc;
 		this.consumptionService = consumptionService;
 		this.auditService = auditService;
+		this.kitchenOrder = kitchenOrder;
 	}
 
 	// ---- Read -----------------------------------------------------------
@@ -96,11 +100,15 @@ public class ServedMealService {
 			args.add(to);
 		}
 		List<MealRow> meals = jdbc.query(MEAL_SELECT + where + MEAL_ORDER, MEAL_MAPPER, args.toArray());
+		if (meals.isEmpty()) {
+			return new ArrayList<>();
+		}
+		String joinMeal = " JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id" + where;
 		Map<UUID, List<MealDishView>> dishes = dishesIn(
-				DISH_SELECT + " JOIN meals m ON m.id = d.meal_id"
-						+ " JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id" + where + DISH_ORDER,
-				args.toArray());
-		return assembleAll(meals, dishes);
+				DISH_SELECT + " JOIN meals m ON m.id = d.meal_id" + joinMeal + DISH_ORDER, args.toArray());
+		Map<UUID, List<MealKitchenView>> kitchens = kitchensIn(
+				KITCHEN_SELECT + " JOIN meals m ON m.id = mk.meal_id" + joinMeal, args.toArray());
+		return assembleAll(meals, dishes, kitchens);
 	}
 
 	/** One meal by its id, or empty where this temple has no such meal. */
@@ -112,7 +120,41 @@ public class ServedMealService {
 		}
 		Map<UUID, List<MealDishView>> dishes = dishesIn(
 				DISH_SELECT + " WHERE d.meal_id = ?" + DISH_ORDER, new Object[] {mealId});
-		return Optional.of(assembleAll(meals, dishes).get(0));
+		Map<UUID, List<MealKitchenView>> kitchens = kitchensIn(
+				KITCHEN_SELECT + " WHERE mk.meal_id = ?", new Object[] {mealId});
+		return Optional.of(assembleAll(meals, dishes, kitchens).get(0));
+	}
+
+	/**
+	 * The same meals with each one's kitchens in the order this person should see them (Epic 12): their
+	 * own kitchen first when it is on the meal, otherwise the main kitchen first when it is, then the
+	 * order Settings lists kitchens. Rajeev's rule of 2026-09-19, decided once in
+	 * {@link KitchenOrder#forViewer} so that the planner, the job card, the crew readout and Today cannot
+	 * each order sections their own way.
+	 *
+	 * <p>A separate step from reading, rather than a parameter on {@link #list}, because most readers of
+	 * a meal have no viewer — a job card is printed for a kitchen, not for whoever pressed print — and
+	 * {@link #list}'s signature is what they are written against. What they get without it is the same
+	 * rule with nobody's own kitchen: main first, then Settings order.
+	 *
+	 * @param userId the person asking; one with no current staff record has no kitchen of their own
+	 */
+	@Transactional(readOnly = true)
+	public List<ServedMeal> forViewer(List<ServedMeal> meals, UUID userId) {
+		if (meals.isEmpty()) {
+			return meals;
+		}
+		UUID own = kitchenOrder.kitchenOf(userId).orElse(null);
+		List<KitchenOrder.KitchenRef> order = kitchenOrder.settingsOrder();
+		return meals.stream()
+				.map(m -> m.withKitchens(KitchenOrder.forViewer(m.kitchens(), MealKitchenView::kitchenId, own, order)))
+				.toList();
+	}
+
+	/** {@link #forViewer(List, UUID)} for one meal. */
+	@Transactional(readOnly = true)
+	public ServedMeal forViewer(ServedMeal meal, UUID userId) {
+		return forViewer(List.of(meal), userId).get(0);
 	}
 
 	/**
@@ -609,23 +651,50 @@ public class ServedMealService {
 		return consumed;
 	}
 
-	private List<ServedMeal> assembleAll(List<MealRow> meals, Map<UUID, List<MealDishView>> dishes) {
+	/**
+	 * Every meal assembled, its kitchens in the order a viewer with no kitchen of their own sees them —
+	 * main first, then Settings order — which is what a reader without a viewer gets and what
+	 * {@link #forViewer} starts from. Settings order is read once for the whole batch.
+	 */
+	private List<ServedMeal> assembleAll(
+			List<MealRow> meals, Map<UUID, List<MealDishView>> dishes, Map<UUID, List<MealKitchenView>> kitchens) {
+		List<KitchenOrder.KitchenRef> order = kitchenOrder.settingsOrder();
 		List<ServedMeal> out = new ArrayList<>(meals.size());
 		for (MealRow meal : meals) {
-			out.add(assemble(meal, dishes.getOrDefault(meal.id(), List.of())));
+			List<MealKitchenView> sections = KitchenOrder.forViewer(
+					kitchens.getOrDefault(meal.id(), List.of()), MealKitchenView::kitchenId, null, order);
+			out.add(assemble(meal, dishes.getOrDefault(meal.id(), List.of()), sections));
 		}
 		return out;
 	}
 
 	/**
-	 * One meal from its row and its dishes. The head count, the notes and every other whole-meal fact
-	 * come from the one row; before D-27 they were copied onto every dish and read back from "the
-	 * largest" or "the first non-blank", which is a rule nobody should have to write twice.
+	 * The meal's People needed: the sum of its kitchens' figures (Epic 12), null only where no kitchen
+	 * has said. A kitchen that has not said adds nothing rather than making the whole unknown — the
+	 * dal kitchen's 4 is still 4 while the sweets kitchen is deciding.
 	 */
-	private static ServedMeal assemble(MealRow m, List<MealDishView> dishes) {
+	static Integer crewOf(List<MealKitchenView> kitchens) {
+		Integer sum = null;
+		for (MealKitchenView k : kitchens) {
+			if (k.crewRequired() != null) {
+				sum = (sum == null ? 0 : sum) + k.crewRequired();
+			}
+		}
+		return sum;
+	}
+
+	/**
+	 * One meal from its row, its dishes and its kitchens. The head count, the notes and every other
+	 * whole-meal fact come from the one row; before D-27 they were copied onto every dish and read back
+	 * from "the largest" or "the first non-blank", which is a rule nobody should have to write twice.
+	 * People needed is the one whole-meal figure that is now a sum, because since Epic 12 each kitchen
+	 * sets its own and the meal's column is gone (V151).
+	 */
+	private static ServedMeal assemble(MealRow m, List<MealDishView> dishes, List<MealKitchenView> kitchens) {
 		return new ServedMeal(
 				m.id(), m.mealKindId(), m.planDate(), m.mealKind(), m.readyBy(),
-				m.adults(), m.children(), m.seniors(), platesOf(m, dishes), m.crewRequired(),
+				m.adults(), m.children(), m.seniors(), platesOf(m, dishes), crewOf(kitchens),
+				List.copyOf(kitchens),
 				m.dayType(), m.occasionName(), m.eventName(), m.isOutside(), m.handover(),
 				m.contactName(), m.contactPhone(), m.deliveryAddress(), m.deliverySubLocation(),
 				m.deliveryPlaceId(), m.deliveryLatitude(), m.deliveryLongitude(), m.guestsEatAt(),
@@ -691,6 +760,20 @@ public class ServedMealService {
 		return byMeal;
 	}
 
+	/** Each meal's kitchens, by meal, in no particular order — {@link #assembleAll} orders them. */
+	private Map<UUID, List<MealKitchenView>> kitchensIn(String sql, Object[] args) {
+		Map<UUID, List<MealKitchenView>> byMeal = new LinkedHashMap<>();
+		jdbc.query(sql, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+			byMeal.computeIfAbsent(rs.getObject("meal_id", UUID.class), k -> new ArrayList<>())
+					.add(new MealKitchenView(
+							rs.getObject("kitchen_id", UUID.class),
+							rs.getString("kitchen_name"),
+							rs.getBoolean("is_main"),
+							(Integer) rs.getObject("crew_required")));
+		}, args);
+		return byMeal;
+	}
+
 	private static String trimToNull(String s) {
 		if (s == null) {
 			return null;
@@ -712,7 +795,7 @@ public class ServedMealService {
 
 	private record MealRow(
 			UUID id, UUID mealKindId, LocalDate planDate, String mealKind, DayType dayType,
-			LocalTime readyBy, Integer adults, Integer children, Integer seniors, Integer crewRequired,
+			LocalTime readyBy, Integer adults, Integer children, Integer seniors,
 			String occasionName, String eventName, boolean isOutside, Handover handover,
 			String contactName, String contactPhone, String deliveryAddress, String deliverySubLocation,
 			String deliveryPlaceId, BigDecimal deliveryLatitude, BigDecimal deliveryLongitude,
@@ -744,7 +827,7 @@ public class ServedMealService {
 	 */
 	private static final String MEAL_SELECT = """
 			SELECT m.id, m.meal_kind_id, pd.plan_date, k.name AS meal_kind, pd.day_type, m.ready_by,
-				   m.adults, m.children, m.seniors, m.crew_required, m.occasion_name, m.event_name,
+				   m.adults, m.children, m.seniors, m.occasion_name, m.event_name,
 				   m.is_outside, m.handover, m.contact_name, m.contact_phone, m.delivery_address,
 				   m.delivery_sub_location, m.delivery_place_id, m.delivery_latitude, m.delivery_longitude,
 				   m.guests_eat_at, m.travel_minutes, m.travel_minutes_source, m.purpose,
@@ -779,7 +862,7 @@ public class ServedMealService {
 			" ORDER BY pd.plan_date, m.ready_by, k.sort_order, lower(COALESCE(m.event_name, '')), m.id";
 
 	private static final String DISH_SELECT = """
-			SELECT d.id, d.meal_id, d.recipe_id, r.name AS recipe_name,
+			SELECT d.id, d.meal_id, d.kitchen_id, d.recipe_id, r.name AS recipe_name,
 				   r.base_yield_unit AS target_yield_unit, d.target_yield, d.status,
 				   d.actual_servings, d.consumed_quantity, d.not_made,
 				   d.original_actual_servings, d.original_consumed_quantity,
@@ -791,6 +874,17 @@ public class ServedMealService {
 	/** The order the planner added them in; the id breaks a tie inside one statement's now(). */
 	private static final String DISH_ORDER = " ORDER BY d.created_at, d.id";
 
+	/**
+	 * A meal's kitchens (Epic 12, V150), with each kitchen's name and whether it is the main one read
+	 * through the key. No ORDER BY: the order a person sees them in is {@link KitchenOrder}'s to decide,
+	 * not this statement's. No tenant predicate, for the same reason as {@link #MEAL_SELECT}.
+	 */
+	private static final String KITCHEN_SELECT = """
+			SELECT mk.meal_id, mk.kitchen_id, k.name AS kitchen_name, k.is_main, mk.crew_required
+			FROM meal_kitchens mk
+			JOIN kitchens k ON k.id = mk.kitchen_id
+			""";
+
 	private static final RowMapper<MealRow> MEAL_MAPPER = (rs, n) -> new MealRow(
 			rs.getObject("id", UUID.class),
 			rs.getObject("meal_kind_id", UUID.class),
@@ -801,7 +895,6 @@ public class ServedMealService {
 			(Integer) rs.getObject("adults"),
 			(Integer) rs.getObject("children"),
 			(Integer) rs.getObject("seniors"),
-			(Integer) rs.getObject("crew_required"),
 			rs.getString("occasion_name"),
 			rs.getString("event_name"),
 			rs.getBoolean("is_outside"),
@@ -836,6 +929,7 @@ public class ServedMealService {
 	private static final RowMapper<MealDishView> DISH_MAPPER = (rs, n) -> new MealDishView(
 			rs.getObject("id", UUID.class),
 			rs.getObject("meal_id", UUID.class),
+			rs.getObject("kitchen_id", UUID.class),
 			rs.getObject("recipe_id", UUID.class),
 			rs.getString("recipe_name"),
 			rs.getBigDecimal("target_yield"),

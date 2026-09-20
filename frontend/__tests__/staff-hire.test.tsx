@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { JobTitleOption, UserSummary } from "@/lib/api";
-import { TITLES } from "./staff-fixtures";
+import type { JobTitleOption, Kitchen, UserSummary } from "@/lib/api";
+import { TITLES, kitchen } from "./staff-fixtures";
 
 /**
  * Hiring somebody (E6-S8), on the screen it moved to on 2026-08-21.
@@ -15,7 +15,7 @@ import { TITLES } from "./staff-fixtures";
  * place to commit, in the header, beside the name of what is being committed.
  */
 
-const { authRef, titlesRef, devoteesRef, pushMock, hireMock } = vi.hoisted(() => ({
+const { authRef, titlesRef, devoteesRef, kitchensRef, pushMock, hireMock } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } } as {
       status: string;
@@ -24,6 +24,8 @@ const { authRef, titlesRef, devoteesRef, pushMock, hireMock } = vi.hoisted(() =>
   },
   titlesRef: { current: { data: [] as JobTitleOption[], error: null, loading: false } },
   devoteesRef: { current: { data: [] as UserSummary[], error: null, loading: false } },
+  // One kitchen, so the form has already chosen it (Epic 12) and these tests are about what they say.
+  kitchensRef: { current: { data: [] as Kitchen[], error: null, loading: false } },
   pushMock: vi.fn(),
   hireMock: vi.fn(),
 }));
@@ -36,7 +38,8 @@ vi.mock("@/lib/auth-context", () => ({
 }));
 vi.mock("@/lib/use-authed-query", () => ({
   useAuthedQuery: (fn: (t: string | undefined) => Promise<unknown>) => {
-    const ref = fn.toString().includes("jobTitles") ? titlesRef : devoteesRef;
+    const source = fn.toString();
+    const ref = source.includes("jobTitles") ? titlesRef : source.includes("listKitchens") ? kitchensRef : devoteesRef;
     return { ...ref.current, reload: vi.fn() };
   },
 }));
@@ -52,6 +55,7 @@ describe("hiring somebody", () => {
     authRef.current = { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", userId: "me" } };
     titlesRef.current = { data: TITLES, error: null, loading: false };
     devoteesRef.current = { data: [], error: null, loading: false };
+    kitchensRef.current = { data: [kitchen()], error: null, loading: false };
     pushMock.mockReset();
     hireMock.mockReset().mockResolvedValue({ id: "new" });
   });

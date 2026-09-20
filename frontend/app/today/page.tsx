@@ -329,6 +329,9 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
                   <span className="text-xs text-ink-muted">
                     {meal.plates.toLocaleString("en-IN")} servings
                     {meal.occasionName ? ` · ${meal.occasionName}` : ""}
+                    {/* Who is cooking it (Epic 12), in the planner's order for this person and in
+                        the same quiet words as the occasion: a fact about the meal, not an alert. */}
+                    {meal.kitchenNames?.length ? ` · ${meal.kitchenNames.join(" and ")}` : ""}
                   </span>
                 </span>
                 {/* The truth, not a badge (§2): a meal nobody has recorded is stock that never

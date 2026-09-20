@@ -3,6 +3,8 @@ import type {
   EmploymentBanView,
   FormerStaffView,
   JobTitleOption,
+  Kitchen,
+  StaffKitchenCheckView,
   StaffAdvanceView,
   StaffPaymentView,
   StaffPayView,
@@ -41,6 +43,9 @@ export function member(o: Partial<StaffProfileView> = {}): StaffProfileView {
     lastWorkingDay: null,
     endReason: null,
     notes: null,
+    kitchenId: "k1",
+    kitchenName: "Main kitchen",
+    kitchenNeedsCheck: false,
     createdAt: "2026-02-01T00:00:00Z",
     ...o,
   };
@@ -147,3 +152,34 @@ export const CATEGORIES: BanCategoryOption[] = [
   { value: "THEFT", label: "Theft or misappropriation" },
   { value: "HARASSMENT", label: "Harassment or abuse" },
 ];
+
+/** A kitchen (Epic 12). The main one by default, which is where every existing record was put. */
+export function kitchen(o: Partial<Kitchen> = {}): Kitchen {
+  return {
+    id: "k1",
+    name: "Main kitchen",
+    description: null,
+    location: null,
+    isMain: true,
+    usesMealPlanner: true,
+    inChargeUserId: null,
+    inChargeName: null,
+    staffCount: 1,
+    contactPhone: null,
+    status: "ACTIVE",
+    createdAt: "2026-01-01T00:00:00Z",
+    ...o,
+  };
+}
+
+/** A row of the Temple Admin's "Check these kitchen assignments" list. */
+export function kitchenCheck(o: Partial<StaffKitchenCheckView> = {}): StaffKitchenCheckView {
+  return {
+    staffId: "s1",
+    fullName: "Gopal Das",
+    jobTitleLabel: "Head Cook",
+    kitchenId: "k1",
+    kitchenName: "Main kitchen",
+    ...o,
+  };
+}

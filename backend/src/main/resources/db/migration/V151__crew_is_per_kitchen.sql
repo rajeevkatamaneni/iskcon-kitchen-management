@@ -1,0 +1,30 @@
+-- =====================================================================
+-- V151 — A meal's People needed lives on its kitchens, and only there (Epic 12, T-354)
+--
+-- WHAT THIS DROPS
+--
+--   meals.crew_required, and with it the CHECK meals_crew_positive (V136), which is a single-column
+--   constraint and goes with its column.
+--
+-- WHY
+--
+-- V67 set the rule when it first gave a meal a crew figure: "Moving one of the five on its own would
+-- leave a meal's facts in two places, which is how two screens come to disagree about the same
+-- lunch." A meal's facts live in one place. Since Epic 12 a meal is cooked by one or more kitchens,
+-- each with its own People needed, and V150 copied every meal's figure onto its one section
+-- (meal_kitchens.crew_required) while deliberately leaving this column standing, so that the code
+-- reading it could move first. It has moved: the planner saves People needed per kitchen and reads
+-- the meal's figure as the sum of its kitchens' (MealPlanService, ServedMealService, T-354). Keeping
+-- the column now would be the two places V67 warned about — a meal whose card says 6 and whose
+-- kitchens say 4 and 3.
+--
+-- Nothing to copy first. V150 copied every value into meal_kitchens, and from V150 until this
+-- migration the only writer of this column (MealPlanService's interim save) wrote the same figure to
+-- the meal's section in the same statement sequence. The other readers of the meal's crew figure —
+-- the crew readout and Today (T-358) — move to meal_kitchens in the same wave, Epic 12's E12-2, and
+-- this ships with them.
+--
+-- No per-tenant loop, unlike V150: this is DDL only, and DDL is not filtered by a row policy.
+-- =====================================================================
+
+ALTER TABLE meals DROP COLUMN crew_required;

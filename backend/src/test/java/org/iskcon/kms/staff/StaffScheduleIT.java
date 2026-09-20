@@ -46,6 +46,7 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 	private UUID tenant;
 	private UUID staffA;
 	private UUID staffB;
+	private UUID kitchen;
 
 	@BeforeEach
 	void setUp() {
@@ -59,6 +60,7 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 				INSERT INTO users (tenant_id, firebase_uid, full_name, email, phone, role, status)
 				VALUES (?, 'uid-admin', 'Temple Admin', 'admin@example.com', '+919876500001', 'TEMPLE_ADMIN', 'ACTIVE')
 				""", tenant);
+		kitchen = insertKitchen(tenant);
 		staffA = staff("uid-staff-a", "Head Cook A", "+919876500081");
 		staffB = staff("uid-staff-b", "Prep B", "+919876500082");
 		admin.update("""
@@ -79,6 +81,9 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM staff_schedule_exceptions");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// A hire puts the person in the temple's planner kitchen, seeding one where there is none (V150,
+		// T-350); it holds its temple and creator, so it goes after the staff and before the users.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM notification_attempts");
 		admin.execute("DELETE FROM notifications");
 		admin.execute("DELETE FROM users");
@@ -308,9 +313,9 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 	private MockHttpServletRequestBuilder hire(UUID userId, String jobTitle) {
 		return authed(post("/api/v1/staff/members"))
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"existingUserId\":\"" + userId + "\",\"fullName\":\"Hired Person\","
+				.content(withKitchen("{\"existingUserId\":\"" + userId + "\",\"fullName\":\"Hired Person\","
 						+ "\"jobTitle\":\"" + jobTitle + "\",\"employmentType\":\"FULL_TIME\","
-						+ "\"dateOfJoining\":\"2026-01-05\",\"systemAccess\":\"KITCHEN_STAFF\"}");
+						+ "\"dateOfJoining\":\"2026-01-05\",\"systemAccess\":\"KITCHEN_STAFF\"}"));
 	}
 
 	private UUID createProfileId(UUID userId, String jobTitle) throws Exception {
@@ -333,6 +338,35 @@ class StaffScheduleIT extends AbstractIntegrationTest {
 
 	private void signIn(String uid) {
 		stubVerifier.accept(uid);
+	}
+
+	/**
+	 * Adds the temple's kitchen to a hire or edit body that names none. Since Epic 12 (T-357) every
+	 * staff record names its kitchen and the hire and edit forms always send one; the tests in this
+	 * class are about other things, so the body they were written with gets the one kitchen here
+	 * rather than each of them spelling it out. A body that names a kitchen keeps its own.
+	 */
+	private String withKitchen(String json) {
+		try {
+			com.fasterxml.jackson.databind.node.ObjectNode node =
+					(com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(json);
+			if (!node.has("kitchenId")) {
+				node.put("kitchenId", kitchen.toString());
+			}
+			return JSON.writeValueAsString(node);
+		} catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/** The temple's one kitchen, main and planning its meals, created by its first user. */
+	private UUID insertKitchen(UUID temple) {
+		return admin.queryForObject("""
+				INSERT INTO kitchens (tenant_id, name, is_main, uses_meal_planner, status, created_by)
+				SELECT ?, 'Main kitchen', true, true, 'ACTIVE', id FROM users WHERE tenant_id = ?
+				ORDER BY created_at, id LIMIT 1
+				RETURNING id
+				""", UUID.class, temple, temple);
 	}
 
 }

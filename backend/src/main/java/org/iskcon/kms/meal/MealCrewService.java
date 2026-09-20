@@ -3,10 +3,14 @@ package org.iskcon.kms.meal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import org.iskcon.kms.kitchen.KitchenOrder;
 import org.iskcon.kms.staff.MealMoment;
 import org.iskcon.kms.staff.WorkforceCount;
 import org.iskcon.kms.staff.WorkforceService;
@@ -30,6 +34,15 @@ import org.springframework.transaction.annotation.Transactional;
  * a shift 06:00–10:00 to cut vegetables for lunch was landing on breakfast, so lunch was short of
  * hands that were coming and breakfast was credited with hands that were not.
  *
+ * <p><strong>Per kitchen since Epic 12.</strong> Rajeev, 2026-09-19: <em>"'People needed' is answered
+ * per kitchen; the rostered staff shown are that kitchen's staff."</em> A meal is cooked by one or more
+ * kitchens ({@code meal_kitchens}, V150), each with its own People needed, and each is held against
+ * the staff whose record is in that kitchen. The meal-level figures are the kitchens' added up, and the
+ * meal is short when any kitchen is. The meal's volunteers are counted once, in the main kitchen's
+ * section when it is on the meal, else in the first section this person sees: see
+ * {@link KitchenCrewView}. People needed is read from {@code meal_kitchens}, never from
+ * {@code meals.crew_required}, which V151 drops.
+ *
  * <p>Nothing here refuses anything. A meal short of hands takes a quiet warning tone on the screen
  * and saves exactly as it would otherwise — a meal is planned weeks before anybody is rostered, and
  * a planner blocked in August by a roster nobody has written for September would simply stop using
@@ -42,33 +55,57 @@ public class MealCrewService {
 	private final MealKindService mealKindService;
 	private final ServedMealService servedMealService;
 	private final WorkforceService workforceService;
+	private final KitchenOrder kitchenOrder;
 
 	public MealCrewService(
 			JdbcTemplate jdbc, MealKindService mealKindService, ServedMealService servedMealService,
-			WorkforceService workforceService) {
+			WorkforceService workforceService, KitchenOrder kitchenOrder) {
 		this.jdbc = jdbc;
 		this.mealKindService = mealKindService;
 		this.servedMealService = servedMealService;
 		this.workforceService = workforceService;
+		this.kitchenOrder = kitchenOrder;
+	}
+
+	/**
+	 * One kitchen on one meal, as much as the crew figures need: which kitchen, what it is called,
+	 * whether it is the temple's main kitchen, and its People needed.
+	 */
+	private record Section(UUID kitchenId, String kitchenName, boolean isMain, Integer crewRequired) {
 	}
 
 	// ---- The readout ----------------------------------------------------
 
+	/** {@link #crewFor(LocalDate, LocalDate, UUID)} for nobody in particular: the main kitchen first. */
+	@Transactional(readOnly = true)
+	public List<MealCrewView> crewFor(LocalDate from, LocalDate to) {
+		return crewFor(from, to, null);
+	}
+
 	/**
 	 * Every meal in the range with the hands it needs and the hands it has, in the order the kitchen
-	 * works.
+	 * works, each with its kitchens in the order this person sees them.
 	 *
 	 * <p>A meal every dish of which was called off is left out. It is not work the kitchen has to do,
 	 * so it is not a crew it has to find either, and a cancelled lunch drawn in warning colours would
 	 * be the screen worrying on the temple's behalf about nothing.
+	 *
+	 * @param viewerUserId the signed-in person, whose own kitchen reads first; null for nobody
 	 */
 	@Transactional(readOnly = true)
-	public List<MealCrewView> crewFor(LocalDate from, LocalDate to) {
+	public List<MealCrewView> crewFor(LocalDate from, LocalDate to, UUID viewerUserId) {
 		List<ServedMeal> meals = mealsIn(from, to);
-		Map<MealMoment, WorkforceCount> counts = workforceService.countAt(momentsOf(meals));
+		if (meals.isEmpty()) {
+			return List.of();
+		}
+		Map<UUID, List<Section>> sections = sectionsFor(meals, viewerUserId);
+		Map<MealMoment, WorkforceService.RosterAt> rosters = workforceService.rosterAt(momentsOf(meals), null);
 		List<MealCrewView> readouts = new ArrayList<>();
 		for (ServedMeal meal : meals) {
-			readouts.add(readout(meal, counts.get(momentOf(meal))));
+			List<KitchenCrewView> kitchens = kitchensOf(
+					sections.getOrDefault(meal.mealId(), List.of()), rosters.get(momentOf(meal)));
+			// Every section of the meal is in this readout, so the two counts are the same here.
+			readouts.add(readout(meal, kitchens.size(), kitchens));
 		}
 		return readouts;
 	}
@@ -81,6 +118,14 @@ public class MealCrewService {
 	 * costs breakfast and lunch nothing that dinner also loses, and listing dinner at the figure it
 	 * already had would be three lines of noise around the one that matters.
 	 *
+	 * <p><strong>Only their own kitchen's section (Epic 12).</strong> A person on leave takes a pair of
+	 * hands out of the kitchen their staff record is in, and nowhere else. So each line is that one
+	 * section — its People needed against its rostered with them away — and its {@code kitchens} holds
+	 * that section alone. The meal-level figures are therefore that section's, which keeps the record's
+	 * rule (the meal-level figures are its kitchens' added up) and says the true thing: <em>Lunch (Main
+	 * kitchen) at 4 of 6</em>, not the whole lunch at 7 of 8, which would hide a Main kitchen four short
+	 * behind a Sweets kitchen with hands to spare.
+	 *
 	 * <p>The counts are the ones the approver would be left with, not the ones they have now. Told,
 	 * never enforced: the decision is the approver's and this is only what it is going to cost.
 	 */
@@ -91,18 +136,23 @@ public class MealCrewService {
 			return List.of();
 		}
 		List<MealMoment> moments = momentsOf(meals);
-		Map<MealMoment, WorkforceCount> asItStands = workforceService.countAt(moments);
-		Map<MealMoment, WorkforceCount> withoutThem = workforceService.countAt(moments, staffProfileId);
+		Map<UUID, List<Section>> sections = sectionsFor(meals, null);
+		Map<MealMoment, WorkforceService.RosterAt> asItStands = workforceService.rosterAt(moments, null);
+		Map<MealMoment, WorkforceService.RosterAt> withoutThem = workforceService.rosterAt(moments, staffProfileId);
 
 		List<MealCrewView> affected = new ArrayList<>();
 		for (ServedMeal meal : meals) {
 			MealMoment moment = momentOf(meal);
-			WorkforceCount before = asItStands.get(moment);
-			WorkforceCount after = withoutThem.get(moment);
-			if (before == null || after == null || before.staffIn() == after.staffIn()) {
-				continue;
+			List<Section> onMeal = sections.getOrDefault(meal.mealId(), List.of());
+			List<KitchenCrewView> before = kitchensOf(onMeal, asItStands.get(moment));
+			List<KitchenCrewView> after = kitchensOf(onMeal, withoutThem.get(moment));
+			for (int i = 0; i < after.size(); i++) {
+				if (before.get(i).staffIn() != after.get(i).staffIn()) {
+					// One section, but the whole meal's count beside it: the line names the kitchen
+					// only where naming it distinguishes this section from another on the same meal.
+					affected.add(readout(meal, onMeal.size(), List.of(after.get(i))));
+				}
 			}
-			affected.add(readout(meal, after));
 		}
 		return affected;
 	}
@@ -144,11 +194,90 @@ public class MealCrewService {
 		return count != null ? count : new WorkforceCount(date, 0, 0);
 	}
 
+	/**
+	 * {@link #crewAt(LocalDate, LocalTime)} for one kitchen's section of a meal not saved yet, and by
+	 * name (Epic 12).
+	 *
+	 * <p>The composer asks it once per kitchen band. With a kitchen, only staff whose record is in that
+	 * kitchen count, exactly as a saved meal's section counts them. Volunteers belong to no kitchen, so
+	 * the composer says whether this band is the one the meal's volunteers fall to (the main kitchen's,
+	 * else the first) and {@code countVolunteers} false leaves them out, so the bands add up to the
+	 * meal the way a saved meal's sections do.
+	 *
+	 * <p>A kitchen id from another temple, or one that does not exist, is not refused: row-level
+	 * security hides every staff record in it, so it answers 0 staff — which is true of it here.
+	 *
+	 * @param kitchenId       the section's kitchen; null counts every staff member, as before Epic 12,
+	 *                        and then volunteers always count
+	 * @param countVolunteers with a kitchen, whether this section carries the meal's volunteers
+	 */
+	@Transactional(readOnly = true)
+	public CrewAtCount crewAt(LocalDate date, LocalTime readyBy, UUID kitchenId, boolean countVolunteers) {
+		MealMoment moment = new MealMoment(null, date, readyBy, null, null);
+		WorkforceService.RosterAt roster = workforceService.rosterAt(List.of(moment), null).get(moment);
+		if (roster == null) {
+			return new CrewAtCount(List.of(), 0);
+		}
+		if (kitchenId == null) {
+			return new CrewAtCount(roster.names(), roster.volunteers());
+		}
+		return new CrewAtCount(roster.namesIn(kitchenId), countVolunteers ? roster.volunteers() : 0);
+	}
+
+	/**
+	 * The staff by name and the volunteers as a count, for a moment with no meal behind it.
+	 *
+	 * @param staffNames in the roster's order; its size is the staff figure
+	 */
+	public record CrewAtCount(List<String> staffNames, int volunteers) {
+
+		public int staffIn() {
+			return staffNames.size();
+		}
+
+		/** Added through {@link WorkforceCount#rostered()}, the one place that sum is made. */
+		public int rostered() {
+			return new WorkforceCount(null, staffIn(), volunteers).rostered();
+		}
+	}
+
+	// ---- Which kitchens, for Today ----------------------------------------
+
+	/**
+	 * The names of the kitchens cooking each of these meals, in the order this person sees them —
+	 * their own kitchen first when it is on the meal, else the main kitchen, then Settings order
+	 * ({@link KitchenOrder#forViewer}). Today names them beside each meal (Epic 12).
+	 *
+	 * <p>A meal always has at least one kitchen (V150 gave every meal one, and a save cannot leave it
+	 * with none), so every id asked about comes back with a non-empty list.
+	 */
+	@Transactional(readOnly = true)
+	public Map<UUID, List<String>> kitchenNamesOf(Collection<UUID> mealIds, UUID viewerUserId) {
+		Map<UUID, List<String>> names = new LinkedHashMap<>();
+		sectionsOf(mealIds, viewerUserId).forEach((mealId, sections) ->
+				names.put(mealId, sections.stream().map(Section::kitchenName).toList()));
+		return names;
+	}
+
 	// ---- The default the composer opens with ----------------------------
+
+	/** {@link #suggestedCrew(String, UUID)} for nobody in particular: the temple's default kitchen. */
+	@Transactional(readOnly = true)
+	public Integer suggestedCrew(String mealKind) {
+		return suggestedCrew(mealKind, null);
+	}
 
 	/**
 	 * What to pre-fill for a new meal of this kind: the median of the last three ordinary meals of it
 	 * (Q11).
+	 *
+	 * <p><strong>Per kitchen since Epic 12</strong>, and the kitchen is the one the composer opens its
+	 * first band on: {@link KitchenOrder#defaultPlanningKitchen(UUID)} — the person's own kitchen if it
+	 * plans meals, else the main kitchen, else the first planner kitchen. The composer puts this figure
+	 * in that band, and People needed is answered per kitchen, so the history it learns from is that
+	 * kitchen's People needed on the meals it cooked. The whole meal's sum would put a Sweets kitchen's
+	 * two pastry cooks into the Main kitchen's default every time the two cooked together. A temple with
+	 * one kitchen sees exactly what it saw before.
 	 *
 	 * <p>Nothing for the temple to maintain — no Settings field, no ratio to keep up to date. It
 	 * learns the kitchen's real practice instead of asking for it. And deliberately not a formula off
@@ -173,26 +302,34 @@ public class MealCrewService {
 	 * <p>The thin cases, in order: two meals give their mean rounded <em>up</em>, because being short
 	 * is worse than being over; one meal gives itself; none gives null, and the field opens empty.
 	 * Empty is honest. A made-up number would not be.
+	 *
+	 * @param viewerUserId the person composing; null (or a temple with no planner kitchen) falls back to
+	 *                     the temple's default planning kitchen, and to nothing when there is none
 	 */
 	@Transactional(readOnly = true)
-	public Integer suggestedCrew(String mealKind) {
+	public Integer suggestedCrew(String mealKind, UUID viewerUserId) {
 		// Through the kind service so an unknown kind is refused by name (KMS-400071) rather than
 		// quietly matching no meals and reading as "this temple has never cooked one".
 		UUID kindId = mealKindService.require(mealKind).id();
-		// Since D-27 the crew figure is on the meal row and the day type on its day, and a meal is
-		// "called off" when every dish of it is — the same test mealsIn() applies below. Matched on the
-		// kind's id, never its name: a kind renamed in Settings keeps its history.
+		UUID kitchenId = kitchenOrder.defaultPlanningKitchen(viewerUserId).orElse(null);
+		if (kitchenId == null) {
+			return null;
+		}
+		// The day type is on the meal's day, and a meal is "called off" when every dish of it is — the
+		// same test mealsIn() applies below. Matched on the kind's id, never its name: a kind renamed in
+		// Settings keeps its history. People needed is this kitchen's, on meal_kitchens (Epic 12).
 		List<Integer> recent = jdbc.queryForList("""
-				SELECT m.crew_required
+				SELECT mk.crew_required
 				FROM meals m
 				JOIN meal_plan_days d ON d.id = m.meal_plan_day_id
+				JOIN meal_kitchens mk ON mk.meal_id = m.id AND mk.kitchen_id = ?
 				WHERE m.meal_kind_id = ?
 				  AND d.day_type IN ('REGULAR', 'WEEKEND')
-				  AND m.crew_required IS NOT NULL
+				  AND mk.crew_required IS NOT NULL
 				  AND EXISTS (SELECT 1 FROM meal_dishes md WHERE md.meal_id = m.id AND md.status <> 'CANCELLED')
 				ORDER BY d.plan_date DESC, m.ready_by DESC
 				LIMIT 3
-				""", Integer.class, kindId);
+				""", Integer.class, kitchenId, kindId);
 
 		return median(recent);
 	}
@@ -229,6 +366,78 @@ public class MealCrewService {
 		return meals;
 	}
 
+	private Map<UUID, List<Section>> sectionsFor(List<ServedMeal> meals, UUID viewerUserId) {
+		return sectionsOf(meals.stream().map(ServedMeal::mealId).toList(), viewerUserId);
+	}
+
+	/**
+	 * Each meal's kitchens with their People needed, from {@code meal_kitchens}, in the order this
+	 * person sees them. One query for the lot; row-level security keeps it to the temple.
+	 */
+	private Map<UUID, List<Section>> sectionsOf(Collection<UUID> mealIds, UUID viewerUserId) {
+		if (mealIds.isEmpty()) {
+			return Map.of();
+		}
+		List<UUID> ids = List.copyOf(new java.util.LinkedHashSet<>(mealIds));
+		Map<UUID, List<Section>> byMeal = new LinkedHashMap<>();
+		for (UUID id : ids) {
+			byMeal.put(id, new ArrayList<>());
+		}
+		jdbc.query("""
+				SELECT mk.meal_id, mk.kitchen_id, k.name, k.is_main, mk.crew_required
+				FROM meal_kitchens mk
+				JOIN kitchens k ON k.id = mk.kitchen_id
+				WHERE mk.meal_id IN (%s)
+				""".formatted(String.join(", ", Collections.nCopies(ids.size(), "?"))), rs -> {
+			byMeal.get(rs.getObject("meal_id", UUID.class)).add(new Section(
+					rs.getObject("kitchen_id", UUID.class),
+					rs.getString("name"),
+					rs.getBoolean("is_main"),
+					(Integer) rs.getObject("crew_required")));
+		}, ids.toArray());
+
+		UUID viewerKitchen = viewerUserId == null ? null : kitchenOrder.kitchenOf(viewerUserId).orElse(null);
+		List<KitchenOrder.KitchenRef> settingsOrder = kitchenOrder.settingsOrder();
+		Map<UUID, List<Section>> ordered = new LinkedHashMap<>();
+		byMeal.forEach((mealId, sections) -> ordered.put(mealId,
+				KitchenOrder.forViewer(sections, Section::kitchenId, viewerKitchen, settingsOrder)));
+		return ordered;
+	}
+
+	/**
+	 * Each section's readout against one reading of the roster, in the order given.
+	 *
+	 * <p>The staff are that kitchen's; the meal's volunteers go to one section only — the main
+	 * kitchen's where it is on the meal, else the first — and every other section reads 0, so the
+	 * sections add up to the meal and no volunteer is counted twice.
+	 */
+	private static List<KitchenCrewView> kitchensOf(List<Section> sections, WorkforceService.RosterAt roster) {
+		if (sections.isEmpty()) {
+			return List.of();
+		}
+		WorkforceService.RosterAt in = roster != null ? roster : new WorkforceService.RosterAt(List.of(), 0);
+		UUID volunteersIn = sections.stream().filter(Section::isMain).map(Section::kitchenId).findFirst()
+				.orElse(sections.get(0).kitchenId());
+
+		List<KitchenCrewView> kitchens = new ArrayList<>();
+		for (Section section : sections) {
+			List<String> names = in.namesIn(section.kitchenId());
+			int volunteers = Objects.equals(section.kitchenId(), volunteersIn) ? in.volunteers() : 0;
+			// Added through WorkforceCount.rostered(), the one place a cook and a volunteer are added.
+			int rostered = new WorkforceCount(null, names.size(), volunteers).rostered();
+			kitchens.add(new KitchenCrewView(
+					section.kitchenId(),
+					section.kitchenName(),
+					section.crewRequired(),
+					names.size(),
+					names,
+					volunteers,
+					rostered,
+					section.crewRequired() != null && rostered < section.crewRequired()));
+		}
+		return kitchens;
+	}
+
 	/**
 	 * The moments to ask the roster about, without duplicates — the same meal asked about twice is one
 	 * question, and the roster should be asked it once.
@@ -253,22 +462,42 @@ public class MealCrewService {
 	}
 
 	/**
-	 * One meal beside one reading of the roster.
+	 * One meal beside its kitchens' readouts, the meal-level figures being theirs added up.
 	 *
-	 * <p>The two are added through {@link WorkforceCount#rostered()} rather than here, so that the one
-	 * place in the product where a cook and a volunteer become interchangeable stays one place.
+	 * <p>People needed is the sum of the kitchens that have a figure, and null only when none has —
+	 * null is not zero. The meal is short when any kitchen is, never by comparing the sums: surplus
+	 * hands in one kitchen are not hands in another.
+	 *
+	 * <p>{@code mealKitchenCount} is passed in rather than taken from {@code kitchens}, because the
+	 * two are not the same number wherever a readout carries one section of a several-kitchen meal —
+	 * which is exactly what {@link #crewIfAway} sends.
 	 */
-	private static MealCrewView readout(ServedMeal meal, WorkforceCount count) {
-		WorkforceCount roster = count != null ? count : new WorkforceCount(meal.planDate(), 0, 0);
+	private static MealCrewView readout(ServedMeal meal, int mealKitchenCount, List<KitchenCrewView> kitchens) {
+		Integer crewRequired = null;
+		int staffIn = 0;
+		int volunteers = 0;
+		int rostered = 0;
+		boolean anyShort = false;
+		for (KitchenCrewView kitchen : kitchens) {
+			if (kitchen.crewRequired() != null) {
+				crewRequired = (crewRequired == null ? 0 : crewRequired) + kitchen.crewRequired();
+			}
+			staffIn += kitchen.staffIn();
+			volunteers += kitchen.volunteers();
+			rostered += kitchen.rostered();
+			anyShort |= kitchen.shortOfCrew();
+		}
 		return new MealCrewView(
 				meal.mealId(),
 				meal.planDate(),
 				meal.mealKind(),
 				meal.readyBy(),
-				meal.crewRequired(),
-				roster.staffIn(),
-				roster.volunteers(),
-				roster.rostered(),
-				meal.crewRequired() != null && roster.rostered() < meal.crewRequired());
+				crewRequired,
+				staffIn,
+				volunteers,
+				rostered,
+				anyShort,
+				mealKitchenCount,
+				List.copyOf(kitchens));
 	}
 }

@@ -175,6 +175,16 @@ public final class JobCardTemplate {
 			String mealKindLabel,
 			/** What this event is called, where the meal is one. Null for the three main meals. */
 			String eventName,
+
+			/**
+			 * Whose card this is: the one kitchen whose dishes it lists (Epic 12). Printed in the
+			 * corner beside the meal and on the head of every later sheet, because a cook picking a
+			 * sheet off a shared printer has to know it is theirs before reading a word of it — and a
+			 * sheet for the sweets kitchen that the main kitchen picked up is the mistake a
+			 * per-kitchen card exists to prevent. Printed on a one-kitchen meal too, so that a cook
+			 * never has to work out from the absence of a name whose sheet this is.
+			 */
+			String kitchenName,
 			String dateText,
 
 			String readyByText,
@@ -208,11 +218,12 @@ public final class JobCardTemplate {
 			List<Preparation> preparations,
 
 			/**
-			 * How many people the meal was planned to take, already worded for print. Null until that
-			 * column exists, and the line simply does not appear — the card is not the right place to
-			 * learn that a field has not been built yet.
+			 * How many people this kitchen needs, already worded for print — "People needed · 6 people",
+			 * the planner screen's own label for the same figure. Null where the section has none, and
+			 * the line simply does not appear: the card is not the right place to learn that a decision
+			 * has not been taken yet.
 			 */
-			String plannedCrewText,
+			String peopleNeededText,
 			List<Person> staff,
 			List<Person> volunteers,
 
@@ -284,7 +295,13 @@ public final class JobCardTemplate {
 		Labels l = labels(m.labels());
 		StringBuilder h = new StringBuilder();
 		h.append("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">");
-		h.append("<title>").append(esc(m.cardNumber())).append("</title>");
+		// The kitchen is in the title too, because the title is what a browser offers as the file name
+		// when the print view is saved, and two kitchens' cards for one meal share a card number.
+		h.append("<title>").append(esc(m.cardNumber()));
+		if (notBlank(m.kitchenName())) {
+			h.append(" · ").append(esc(m.kitchenName()));
+		}
+		h.append("</title>");
 		style(h);
 		h.append("</head><body>");
 
@@ -326,12 +343,13 @@ public final class JobCardTemplate {
 	private static void worksheet(StringBuilder h, CardModel m) {
 		h.append("<section class=\"sheet\">");
 
-		// The corner answers "which meal is this?" and nothing else. Two lines, because one line of
-		// "Outside Event: Bhagavad Gita Parayanam · Saturday 5 September 2026" is a line nobody reads
-		// the end of.
+		// The corner answers "which meal is this, and whose sheet?" and nothing else. Two lines,
+		// because one line of "Outside Event: Bhagavad Gita Parayanam · Saturday 5 September 2026" is a
+		// line nobody reads the end of. The kitchen joins the first line (Epic 12 design §4): "Lunch ·
+		// Sweets kitchen" over the date, set in the corner's largest type.
 		h.append("<header><div class=\"mark\">").append(EMBLEM)
 				.append("<div class=\"temple\">").append(esc(m.templeName())).append("</div></div>")
-				.append("<div class=\"when\"><div class=\"meal\">").append(esc(heading(m)))
+				.append("<div class=\"when\"><div class=\"meal\">").append(esc(identity(m)))
 				.append("</div><div class=\"date\">").append(esc(m.dateText()))
 				.append("</div></div></header>");
 
@@ -400,8 +418,8 @@ public final class JobCardTemplate {
 	 */
 	private static void crew(StringBuilder h, CardModel m) {
 		h.append("<h2>People working on this job card</h2>");
-		if (notBlank(m.plannedCrewText())) {
-			h.append("<p class=\"crew\">").append(esc(m.plannedCrewText())).append("</p>");
+		if (notBlank(m.peopleNeededText())) {
+			h.append("<p class=\"crew\">").append(esc(m.peopleNeededText())).append("</p>");
 		}
 		roll(h, "Staff", m.staff(), false);
 		roll(h, "Volunteers", m.volunteers(), true);
@@ -578,10 +596,14 @@ public final class JobCardTemplate {
 
 	// ---- Shared pieces --------------------------------------------------
 
-	/** A quiet band at the head of every sheet but the first: which meal, and which sheet. */
+	/**
+	 * A quiet band at the head of every sheet but the first: which meal, whose, and which sheet —
+	 * "Lunch · Sweets kitchen · Friday 25 September 2026". The appendix and the serving sheet are
+	 * separated from the worksheet in use, and a loose page has to say whose it is on its own.
+	 */
 	private static void sheetHead(StringBuilder h, CardModel m, String title) {
 		h.append("<div class=\"sheet-head\"><span class=\"sheet-title\">").append(title)
-				.append("</span><span class=\"sheet-meal\">").append(esc(heading(m)))
+				.append("</span><span class=\"sheet-meal\">").append(esc(identity(m)))
 				.append(" · ").append(esc(m.dateText())).append("</span></div>");
 	}
 
@@ -628,6 +650,11 @@ public final class JobCardTemplate {
 		return notBlank(m.eventName())
 				? m.mealKindLabel() + ": " + m.eventName()
 				: m.mealKindLabel();
+	}
+
+	/** The heading and whose card it is: "Lunch · Sweets kitchen". */
+	private static String identity(CardModel m) {
+		return notBlank(m.kitchenName()) ? heading(m) + " · " + m.kitchenName() : heading(m);
 	}
 
 	// ---- Style ----------------------------------------------------------

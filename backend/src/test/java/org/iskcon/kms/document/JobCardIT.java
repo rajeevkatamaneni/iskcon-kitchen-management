@@ -88,6 +88,12 @@ class JobCardIT extends AbstractIntegrationTest {
 		insertUser("uid-staff-a", "staff-a@example.com", "KITCHEN_STAFF");
 		insertUser("uid-vol-a", "vol-a@example.com", "VOLUNTEER");
 		insertUser("uid-admin-a", "admin-a@example.com", "TEMPLE_ADMIN");
+		// The temple's kitchen, seeded here rather than appearing with the first meal. Every real temple
+		// has one from the moment it is provisioned, and the cook this class signs in as needs one to
+		// belong to: the planner and its job cards are refused to somebody whose kitchen does not plan
+		// meals here (Epic 12, KMS-400183), and "a meal nobody planned has no card" is a test with no
+		// meal in it and so, until now, no kitchen either.
+		MealFixture.plannerKitchen(admin, tenant, null);
 
 		rice = admin.queryForObject("""
 				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
@@ -141,6 +147,8 @@ class JobCardIT extends AbstractIntegrationTest {
 		MealFixture.deleteAll(admin);
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// The kitchen a staff record or a meal names (V150) holds its temple and creator; after both.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM equipment_items");
 		admin.execute("DELETE FROM calendar_days");
 		admin.execute("DELETE FROM meal_kinds");
@@ -305,7 +313,9 @@ class JobCardIT extends AbstractIntegrationTest {
 
 		// Two lines, because one line of "Outside Event: Bhagavad Gita Parayanam · Saturday 5
 		// September 2026" is a line nobody reads the end of (Rajeev, 2026-09-05).
-		assertThat(html).contains("<div class=\"meal\">Dinner</div>");
+		// The kitchen joins the meal on the first line (Epic 12): a cook picking the sheet off the
+		// printer has to know it is theirs. The fixture's one kitchen is the temple's "Main kitchen".
+		assertThat(html).contains("<div class=\"meal\">Dinner · Main kitchen</div>");
 		assertThat(html).contains("<div class=\"date\">Monday 17 March 2025</div>");
 
 		// The number left the corner entirely: "It is taking up prime real estate and it does not
@@ -330,7 +340,8 @@ class JobCardIT extends AbstractIntegrationTest {
 
 		// Rajeev asked for exactly this shape on 2026-09-05: the kind says what shape of thing this
 		// is, the name says which one, and a folder of Saturdays needs both to tell them apart.
-		assertThat(html).contains("<div class=\"meal\">Outside Event: Bhagavad Gita Parayanam</div>");
+		assertThat(html).contains(
+				"<div class=\"meal\">Outside Event: Bhagavad Gita Parayanam · Main kitchen</div>");
 	}
 
 	@Test
@@ -405,18 +416,19 @@ class JobCardIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("the planned crew prints above the names, and leaves no gap when nobody set one")
-	void thePlannedCrewPrintsAboveTheNames() throws Exception {
+	@DisplayName("People needed prints above the names, and leaves no gap when nobody set one")
+	void thePeopleNeededPrintsAboveTheNames() throws Exception {
 		plan("Lunch", 100, 100, 0, 0);
 
 		// A meal is planned weeks before anybody is rostered, so having no figure is ordinary. The
 		// card is not the place to print a blank where a decision has not been taken.
-		assertThat(print(null)).doesNotContain("Planned crew");
+		assertThat(print(null)).doesNotContain("People needed");
 
-		admin.update("UPDATE meals SET crew_required = 8 WHERE tenant_id = ?", tenant);
+		// The kitchen's own People needed (Epic 12), which is what the card prints now.
+		admin.update("UPDATE meal_kitchens SET crew_required = 8 WHERE tenant_id = ?", tenant);
 		String html = print(null);
-		assertThat(html).contains("Planned crew · 8 people");
-		assertThat(html.indexOf("Planned crew")).isLessThan(html.indexOf("<h3>Staff"));
+		assertThat(html).contains("People needed · 8 people");
+		assertThat(html.indexOf("People needed")).isLessThan(html.indexOf("<h3>Staff"));
 	}
 
 	@Test
@@ -747,7 +759,7 @@ class JobCardIT extends AbstractIntegrationTest {
 		// number can only come from the renderer's own footer — which means the document leaves its
 		// footer out and hands the words over instead.
 		JobCardService.RenderedCard card = asTenant(() ->
-				jobCardService.renderForPdf(mealIdFor("Lunch"), null));
+				jobCardService.renderForPdf(mealIdFor("Lunch"), null, null));
 		assertThat(card.html()).doesNotContain("footer class=\"running\"");
 		assertThat(card.footer().left()).startsWith("v1 · printed");
 		assertThat(card.footer().right()).isEqualTo("LC-2025-0001");
@@ -787,7 +799,7 @@ class JobCardIT extends AbstractIntegrationTest {
 		// The PDF is rendered from the same template by a different entry point, so it is asserted on
 		// its own rather than taken on trust.
 		JobCardService.RenderedCard card = asTenant(() ->
-				jobCardService.renderForPdf(mealIdFor("Lunch"), null));
+				jobCardService.renderForPdf(mealIdFor("Lunch"), null, null));
 		assertThat(card.html())
 				.doesNotContain("Equipment")
 				.doesNotContain("Wet grinder")
@@ -806,10 +818,12 @@ class JobCardIT extends AbstractIntegrationTest {
 		// The list is spelled out rather than read from the service, because the old wording and
 		// order — broken first, condition in brackets — is exactly what the legacy match has to agree
 		// with.
+		// Without the kitchen too: a card printed before 2026-09-14 was also printed before the kitchen
+		// went on the sheet (T-356), and it is the section's copy that is compared since V152.
 		String legacy = JobCardService.fingerprint(
-				asTenant(() -> jobCardService.build(meal, null, true)),
-				List.of("Wet grinder (needs repair)", "Steam cauldron"));
-		admin.update("UPDATE meals SET card_fingerprint = ? WHERE id = ?", legacy, meal);
+				asTenant(() -> jobCardService.build(meal, null, null, true)),
+				List.of("Wet grinder (needs repair)", "Steam cauldron"), false);
+		admin.update("UPDATE meal_kitchens SET card_fingerprint = ? WHERE meal_id = ?", legacy, meal);
 
 		// Nothing about the meal changed, only how its fingerprint is worked out, so the kitchen's v1
 		// sheet is still the current one.
@@ -818,15 +832,16 @@ class JobCardIT extends AbstractIntegrationTest {
 		// And the stored value was moved to the new format as it was matched, so the legacy path is
 		// not taken again for this meal.
 		String stored = admin.queryForObject(
-				"SELECT card_fingerprint FROM meals WHERE id = ?", String.class, meal);
+				"SELECT card_fingerprint FROM meal_kitchens WHERE meal_id = ?", String.class, meal);
 		assertThat(stored).isNotEqualTo(legacy);
-		assertThat(admin.queryForObject("SELECT card_version FROM meals WHERE id = ?", Integer.class, meal))
+		assertThat(admin.queryForObject(
+				"SELECT card_version FROM meal_kitchens WHERE meal_id = ?", Integer.class, meal))
 				.isEqualTo(1);
 		assertThat(print(null)).contains("v1 · printed");
 
 		// A meal that really changed while its card was in the old format still moves on: the legacy
 		// fingerprint is taken of the meal as it is now, so it no longer matches either.
-		admin.update("UPDATE meals SET card_fingerprint = ? WHERE id = ?", legacy, meal);
+		admin.update("UPDATE meal_kitchens SET card_fingerprint = ? WHERE meal_id = ?", legacy, meal);
 		admin.update("UPDATE meals SET kitchen_notes = 'Less chilli' WHERE id = ?", meal);
 		assertThat(print(null)).contains("v2 · printed");
 	}
@@ -950,13 +965,21 @@ class JobCardIT extends AbstractIntegrationTest {
 	 * grid reads — the card must agree with the grid rather than hold a second opinion of the roster.
 	 */
 	private void rosterStaffOnTheDay() {
+		// Upserted, not inserted. This cook is also the account the tests sign in as, and the suite
+		// completes a signed-in cook's fixture with a bare employment record the first time they make a
+		// request (TestStaffRecords) — which for the tests that print a card before rostering anybody is
+		// before this line runs. The temple has one employment record for Gopal Das either way; this
+		// says what it holds.
 		UUID profile = admin.queryForObject("""
 				INSERT INTO staff_profiles (tenant_id, user_id, full_name, phone, job_title,
-						employment_type, employment_status, date_of_joining)
+						employment_type, employment_status, date_of_joining, kitchen_id)
 				VALUES (?, (SELECT id FROM users WHERE firebase_uid = 'uid-staff-a'), 'Gopal Das',
-						'+919876500081', 'HEAD_COOK', 'FULL_TIME', 'ACTIVE', DATE '2024-01-01')
+						'+919876500081', 'HEAD_COOK', 'FULL_TIME', 'ACTIVE', DATE '2024-01-01', ?)
+				ON CONFLICT (tenant_id, user_id) WHERE user_id IS NOT NULL DO UPDATE SET
+					full_name = EXCLUDED.full_name, phone = EXCLUDED.phone, job_title = EXCLUDED.job_title,
+					kitchen_id = EXCLUDED.kitchen_id
 				RETURNING id
-				""", UUID.class, tenant);
+				""", UUID.class, tenant, MealFixture.plannerKitchen(admin, tenant, null));
 		// 2025-03-17 is a Monday.
 		admin.update("""
 				INSERT INTO staff_schedule_template (tenant_id, staff_profile_id, day_of_week, working,

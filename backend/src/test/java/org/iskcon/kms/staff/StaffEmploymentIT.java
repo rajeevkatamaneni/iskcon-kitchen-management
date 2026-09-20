@@ -52,6 +52,7 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 	private JdbcTemplate admin;
 	private UUID tenant;
 	private UUID devotee;
+	private UUID kitchen;
 
 	@BeforeEach
 	void setUp() {
@@ -70,6 +71,7 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 				VALUES (?, 'uid-devotee', 'Gopal Das', 'gopal@example.com', '+919876500071', 'VOLUNTEER', 'ACTIVE')
 				RETURNING id
 				""", UUID.class, tenant);
+		kitchen = insertKitchen(tenant);
 		signIn("uid-admin");
 	}
 
@@ -82,6 +84,9 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM staff_schedule_exceptions");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// A hire puts the person in the temple's planner kitchen, seeding one where there is none (V150,
+		// T-350); it holds its temple and creator, so it goes after the staff and before the users.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM notification_attempts");
 		admin.execute("DELETE FROM notifications");
 		admin.execute("DELETE FROM users");
@@ -160,11 +165,11 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 				Integer.class)).isZero();
 
 		mvc.perform(authed(put("/api/v1/staff/members/{id}", id))
-						.contentType(MediaType.APPLICATION_JSON).content("""
+						.contentType(MediaType.APPLICATION_JSON).content(withKitchen("""
 						{"fullName":"Lakshmi Devi","phone":"+919876500062","email":"lakshmi@example.com",
 						 "jobTitle":"KITCHEN_MANAGER","employmentType":"FULL_TIME","dateOfJoining":"2026-01-10",
 						 "systemAccess":"KITCHEN_STAFF"}
-						"""))
+						""")))
 				.andExpect(status().isNoContent());
 
 		Map<String, Object> user = admin.queryForMap(
@@ -216,10 +221,10 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 
 		// A past record is readable and not editable.
 		mvc.perform(authed(put("/api/v1/staff/members/{id}", id))
-						.contentType(MediaType.APPLICATION_JSON).content("""
+						.contentType(MediaType.APPLICATION_JSON).content(withKitchen("""
 						{"fullName":"Gopal Das","jobTitle":"HEAD_COOK","employmentType":"FULL_TIME",
 						 "dateOfJoining":"2026-02-01"}
-						"""))
+						""")))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("KMS-400085"));
 	}
@@ -358,11 +363,11 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 		// systemAccess omitted — the admin withdrawing their own access, which would leave the temple
 		// with nobody holding MANAGE_STAFF to put it back.
 		mvc.perform(authed(put("/api/v1/staff/members/{id}", ownRecord))
-						.contentType(MediaType.APPLICATION_JSON).content("""
+						.contentType(MediaType.APPLICATION_JSON).content(withKitchen("""
 						{"fullName":"Temple Admin","phone":"+919876500001","email":"admin@example.com",
 						 "jobTitle":"TEMPLE_ADMINISTRATOR","employmentType":"FULL_TIME",
 						 "dateOfJoining":"2026-01-01"}
-						"""))
+						""")))
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.code").value("KMS-400022"));
 
@@ -410,11 +415,11 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 				""".formatted(devotee));
 
 		mvc.perform(authed(put("/api/v1/staff/members/{id}", id))
-						.contentType(MediaType.APPLICATION_JSON).content("""
+						.contentType(MediaType.APPLICATION_JSON).content(withKitchen("""
 						{"fullName":"Gopal Das","phone":"+919876500071","email":"gopal@example.com",
 						 "jobTitle":"KITCHEN_MANAGER","employmentType":"FULL_TIME","dateOfJoining":"2026-02-01",
 						 "systemAccess":"KITCHEN_MANAGER"}
-						"""))
+						""")))
 				.andExpect(status().isNoContent());
 
 		assertThat(admin.queryForObject("SELECT role FROM users WHERE id = ?", String.class, devotee))
@@ -449,11 +454,11 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 				""".formatted(devotee));
 
 		mvc.perform(authed(put("/api/v1/staff/members/{id}", id))
-						.contentType(MediaType.APPLICATION_JSON).content("""
+						.contentType(MediaType.APPLICATION_JSON).content(withKitchen("""
 						{"fullName":"Gopal Das","phone":"+919876500072","email":"gopal@example.com",
 						 "jobTitle":"COOK","employmentType":"FULL_TIME","dateOfJoining":"2026-02-01",
 						 "systemAccess":"KITCHEN_STAFF"}
-						"""))
+						""")))
 				.andExpect(status().isNoContent());
 
 		assertThat(countOf("STAFF_UPDATED")).isEqualTo(1);
@@ -507,11 +512,11 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 				.containsEntry("emergency_contact_phone", "+919876500062");
 
 		mvc.perform(authed(put("/api/v1/staff/members/{id}", id))
-						.contentType(MediaType.APPLICATION_JSON).content("""
+						.contentType(MediaType.APPLICATION_JSON).content(withKitchen("""
 						{"fullName":"Ramesh Kumar","phone":"+91-98765-00063","jobTitle":"HOUSEKEEPING",
 						 "employmentType":"PART_TIME","dateOfJoining":"2026-03-01",
 						 "emergencyContactName":"Sita Devi","emergencyContactPhone":"+91 98765 00064"}
-						"""))
+						""")))
 				.andExpect(status().isNoContent());
 		assertThat(admin.queryForMap(
 				"SELECT phone, emergency_contact_phone FROM staff_profiles WHERE id = ?::uuid", id))
@@ -561,7 +566,8 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 	// ---------------------------------------------------------------------
 
 	private MockHttpServletRequestBuilder hire(String json) {
-		return authed(post("/api/v1/staff/members")).contentType(MediaType.APPLICATION_JSON).content(json);
+		return authed(post("/api/v1/staff/members")).contentType(MediaType.APPLICATION_JSON)
+				.content(withKitchen(json));
 	}
 
 	private String hireId(String json) throws Exception {
@@ -583,6 +589,35 @@ class StaffEmploymentIT extends AbstractIntegrationTest {
 
 	private void signIn(String uid) {
 		stubVerifier.accept(uid);
+	}
+
+	/**
+	 * Adds the temple's kitchen to a hire or edit body that names none. Since Epic 12 (T-357) every
+	 * staff record names its kitchen and the hire and edit forms always send one; the tests in this
+	 * class are about other things, so the body they were written with gets the one kitchen here
+	 * rather than each of them spelling it out. A body that names a kitchen keeps its own.
+	 */
+	private String withKitchen(String json) {
+		try {
+			com.fasterxml.jackson.databind.node.ObjectNode node =
+					(com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(json);
+			if (!node.has("kitchenId")) {
+				node.put("kitchenId", kitchen.toString());
+			}
+			return JSON.writeValueAsString(node);
+		} catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/** The temple's one kitchen, main and planning its meals, created by its first user. */
+	private UUID insertKitchen(UUID temple) {
+		return admin.queryForObject("""
+				INSERT INTO kitchens (tenant_id, name, is_main, uses_meal_planner, status, created_by)
+				SELECT ?, 'Main kitchen', true, true, 'ACTIVE', id FROM users WHERE tenant_id = ?
+				ORDER BY created_at, id LIMIT 1
+				RETURNING id
+				""", UUID.class, temple, temple);
 	}
 
 }

@@ -119,9 +119,15 @@ public class DocumentService {
 	 * (item 17). No explicit choice means the temple's own where this meal's recipes are actually
 	 * translated into it, so a queued PDF and a browser print of the same meal come out the same.
 	 * Print it twice if the head cook wants English and the line cooks do not.
+	 *
+	 * <p>{@code kitchenId} is whose card this is (Epic 12), already resolved by
+	 * {@link JobCardService#kitchenFor} — named or not — so the worker renders exactly the kitchen
+	 * that was checked here rather than working it out again later, when the meal may have gained a
+	 * second kitchen. The document's version stays one sequence per meal: it numbers the PDFs made
+	 * for the meal, and the per-kitchen card version is the one printed on the sheet.
 	 */
 	@Transactional
-	public UUID requestJobCardPdf(UUID mealId, String language) {
+	public UUID requestJobCardPdf(UUID mealId, UUID kitchenId, String language) {
 		String lang = (language == null || language.isBlank())
 				? jobCardService.appendixLanguages(mealId).defaultLanguage() : language;
 
@@ -132,10 +138,11 @@ public class DocumentService {
 		UUID id = UUID.randomUUID();
 		UUID createdBy = requesterHere();
 		jdbc.update("""
-				INSERT INTO documents (id, tenant_id, kind, meal_id, version, language, status, created_by)
+				INSERT INTO documents (id, tenant_id, kind, meal_id, kitchen_id, version, language, status,
+						created_by)
 				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-						'JOB_CARD_PDF', ?, ?, ?, 'PENDING', ?)
-				""", id, mealId, version, lang, createdBy);
+						'JOB_CARD_PDF', ?, ?, ?, ?, 'PENDING', ?)
+				""", id, mealId, kitchenId, version, lang, createdBy);
 
 		enqueue(id);
 		return id;

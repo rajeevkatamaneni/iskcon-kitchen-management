@@ -3,7 +3,11 @@ package org.iskcon.kms.auth;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import org.iskcon.kms.kitchen.KitchenOrder;
 import org.iskcon.kms.shift.TenantSettingsService;
+import org.iskcon.kms.user.User;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -24,10 +28,12 @@ public class WhoAmIController {
 
 	private final JdbcTemplate jdbc;
 	private final TenantSettingsService settings;
+	private final KitchenOrder kitchenOrder;
 
-	public WhoAmIController(JdbcTemplate jdbc, TenantSettingsService settings) {
+	public WhoAmIController(JdbcTemplate jdbc, TenantSettingsService settings, KitchenOrder kitchenOrder) {
 		this.jdbc = jdbc;
 		this.settings = settings;
+		this.kitchenOrder = kitchenOrder;
 	}
 
 	@GetMapping("/whoami")
@@ -77,8 +83,45 @@ public class WhoAmIController {
 		// falls back to the platform's own zone rather than to the reader's, because an operator
 		// comparing two temples wants one clock, not their laptop's.
 		body.put("timezone", templeTimezone(user));
+		// Which kitchen this person works in, and whether the meal planner is open to them (Epic 12).
+		//
+		// The kitchen is the one on their current staff record: null for somebody with none — a Temple
+		// Admin usually, a devotee, a former employee, and a platform operator always, whose missing
+		// app.tenant_id makes the row policy match nothing. The planner opens a new meal with this
+		// kitchen's section and lists it first on every meal.
+		//
+		// canPlanMeals is the very rule PlannerKitchenGuard enforces on the server — the permission,
+		// then KitchenOrder.mayPlan — asked through the same method so the menu and the guard cannot
+		// disagree. It exists so the menu does not offer a door that answers KMS-400183; it is not the
+		// protection, the guard is.
+		Optional<UUID> kitchen = user.getTenantId() == null
+				? Optional.empty() : kitchenOrder.kitchenOf(user.getUserId());
+		body.put("kitchenId", kitchen.orElse(null));
+		body.put("kitchenName", kitchen.map(this::kitchenName).orElse(null));
+		body.put("canPlanMeals", canPlanMeals(user));
 
 		return ResponseEntity.ok(body);
+	}
+
+	/**
+	 * Whether the meal planner is open to this person: {@code MANAGE_MEAL_PLANS}, and then the kitchen
+	 * rule — the Temple Admin plans for every kitchen; anybody else only while their current staff
+	 * record is in a kitchen that is open and plans its meals here. Asked of the authorities the request
+	 * was authenticated with, which are the ones {@code RolePermissions} gives the role.
+	 */
+	private boolean canPlanMeals(AuthenticatedUser user) {
+		if (user.getTenantId() == null || user.getUserId() == null) {
+			return false;
+		}
+		boolean holdsPermission = user.getAuthorities().stream()
+				.anyMatch(a -> Permission.MANAGE_MEAL_PLANS.name().equals(a.getAuthority()));
+		return holdsPermission
+				&& kitchenOrder.mayPlan(user.getUserId(), user.getRole() == User.Role.TEMPLE_ADMIN);
+	}
+
+	private String kitchenName(UUID kitchenId) {
+		return jdbc.query("SELECT name FROM kitchens WHERE id = ?",
+				rs -> rs.next() ? rs.getString(1) : null, kitchenId);
 	}
 
 	/**

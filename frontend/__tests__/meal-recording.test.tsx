@@ -9,11 +9,13 @@ const { meals, recordMeal, requestJobCard, jobCardLanguages } = vi.hoisted(
     recordMeal: vi.fn(
       async (_mealId: string, _input: Record<string, unknown>, _token?: string) => ({})
     ),
-    requestJobCard: vi.fn(async (_mealId: string, _language?: string, _token?: string) => ({
-      documentId: "d1",
-      cardNumber: "LC-2026-0142",
-      status: "PENDING",
-    })),
+    requestJobCard: vi.fn(
+      async (_mealId: string, _language?: string, _token?: string, _kitchenId?: string) => ({
+        documentId: "d1",
+        cardNumber: "LC-2026-0142",
+        status: "PENDING",
+      })
+    ),
     // The temple works in Kannada and its recipes are translated into it, so the picker opens there.
     jobCardLanguages: vi.fn(async (_mealId: string, _token?: string) => ({
       languages: ["en", "kn"],
@@ -75,6 +77,8 @@ function dish(id: string, recipeId: string, recipeName: string, servings: number
   return {
     id,
     mealId: "meal-lunch",
+    // Epic 12: every dish is cooked by one of its meal's kitchens.
+    kitchenId: "kit-main",
     recipeId,
     recipeName,
     targetYield: servings,
@@ -104,6 +108,7 @@ function lunch(overrides: Record<string, unknown> = {}) {
     seniors: 30,
     plates: 248,
     crewRequired: null,
+    kitchens: [{ kitchenId: "kit-main", kitchenName: "Main kitchen", isMain: true, crewRequired: null }],
     dayType: "REGULAR",
     occasionName: null,
     eventName: null,
@@ -347,20 +352,20 @@ describe("the day's meals", () => {
     expect(screen.queryByRole("button", { name: /swap or edit/i })).not.toBeInTheDocument();
 
     // The card is still available — a signed sheet is filed against it long after the meal.
-    expect(screen.getByRole("button", { name: /download job card/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Download the .* job card$/ })).toBeInTheDocument();
     // Nor is there anything to edit: the whole meal is as fixed as its preparations.
     expect(screen.queryByRole("link", { name: /^edit$/i })).not.toBeInTheDocument();
   });
 
   it("offers every language, because which one a cook reads is not a fact about the temple", async () => {
     await open([lunch()]);
-    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch card"));
+    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch, Main kitchen card"));
 
     // This list used to be narrowed to the languages a translation already existed for, which made
     // a fresh temple's picker hold one entry and look broken. There is no rule that a cook in a
     // Kannada temple reads Kannada (Rajeev, 2026-08-23), so the choice is offered in full and the
     // translation is produced when the card is asked for.
-    const picker = await screen.findByLabelText("Recipe language for Lunch");
+    const picker = await screen.findByLabelText("Recipe language for Lunch, Main kitchen");
     const offered = Array.from(picker.querySelectorAll("option")).map((o) => o.textContent);
     expect(offered).toContain("English");
     expect(offered).toContain("Kannada");
@@ -370,14 +375,14 @@ describe("the day's meals", () => {
 
   it("prints the recipes in the temple's language by default, and in another when asked", async () => {
     await open([lunch()]);
-    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch card"));
+    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch, Main kitchen card"));
 
     // Nobody picked, so the picker opens on the temple's own language — the default, not the rule.
-    const picker = await screen.findByLabelText("Recipe language for Lunch");
+    const picker = await screen.findByLabelText("Recipe language for Lunch, Main kitchen");
     expect(picker).toHaveValue("kn");
 
     fireEvent.change(picker, { target: { value: "en" } });
-    fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Download the .* job card$/ }));
 
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
     // The meal's id, then the language (D-27). The card used to be keyed on the date, the kind and
@@ -400,7 +405,7 @@ describe("the day's meals", () => {
       }),
     ], "School Bhagavad-gita Reading Prasadam");
 
-    fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Download the .* job card$/ }));
 
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
     expect(requestJobCard.mock.calls[0][0]).toBe("meal-school-reading");
@@ -411,23 +416,25 @@ describe("the day's meals", () => {
 
     // Unchecked by default since 2026-09-05. The recipes are pages a cook works from and throws
     // away; attaching five of them to every card by default wastes paper on most of them.
-    expect(screen.getByLabelText("Include the recipes with the Lunch card")).not.toBeChecked();
+    expect(screen.getByLabelText("Include the recipes with the Lunch, Main kitchen card")).not.toBeChecked();
     // And the language picker is not there either: there is nothing for it to choose the language of.
-    expect(screen.queryByLabelText("Recipe language for Lunch")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Recipe language for Lunch, Main kitchen")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Download the .* job card$/ }));
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
     expect(requestJobCard.mock.calls[0].slice(0, 2)).toEqual(["meal-lunch", "none"]);
+    // And the kitchen whose card it is (Epic 12), a one-kitchen meal's included.
+    expect(requestJobCard.mock.calls[0][3]).toBe("kit-main");
   });
 
   it("asks for the recipes, in a language, once somebody ticks the box", async () => {
     await open([lunch()]);
-    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch card"));
+    fireEvent.click(screen.getByLabelText("Include the recipes with the Lunch, Main kitchen card"));
 
     // The picker appears with them, opening on the temple's own language.
-    expect(await screen.findByLabelText("Recipe language for Lunch")).toHaveValue("kn");
+    expect(await screen.findByLabelText("Recipe language for Lunch, Main kitchen")).toHaveValue("kn");
 
-    fireEvent.click(screen.getByRole("button", { name: /download job card/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Download the .* job card$/ }));
     await vi.waitFor(() => expect(requestJobCard).toHaveBeenCalledTimes(1));
     expect(requestJobCard.mock.calls[0].slice(0, 2)).toEqual(["meal-lunch", "kn"]);
   });
@@ -440,6 +447,6 @@ describe("the day's meals", () => {
     // only one of them. One control now. The fast HTML rendering is still there on the server and
     // is where the outstanding performance question lives.
     expect(screen.queryByRole("button", { name: /^job card$/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /download job card/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Download the .* job card$/ })).toBeInTheDocument();
   });
 });

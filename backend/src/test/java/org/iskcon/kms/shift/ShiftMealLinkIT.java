@@ -149,6 +149,8 @@ class ShiftMealLinkIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM meals");
 		admin.execute("DELETE FROM meal_plan_days");
 		admin.execute("DELETE FROM meal_kinds");
+		// The kitchen a meal names (V150) holds its temple and creator; after the meals.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM audit_events");
@@ -730,16 +732,18 @@ class ShiftMealLinkIT extends AbstractIntegrationTest {
 		UUID kindId = admin.queryForObject(
 				"SELECT id FROM meal_kinds WHERE tenant_id = ? AND lower(name) = lower(?)", UUID.class, tenant, kind);
 		UUID meal = admin.queryForObject("""
-				INSERT INTO meals (tenant_id, meal_plan_day_id, meal_kind_id, event_name, ready_by, adults,
-						crew_required)
+				INSERT INTO meals (tenant_id, meal_plan_day_id, meal_kind_id, event_name, ready_by, adults)
 				VALUES (?, ?, ?, ?, COALESCE(?::time, (SELECT default_ready_time FROM meal_kinds WHERE id = ?)),
-						200, ?)
+						200)
 				RETURNING id
-				""", UUID.class, tenant, day, kindId, eventName, readyBy, kindId, crew);
+				""", UUID.class, tenant, day, kindId, eventName, readyBy, kindId);
+		// The meal's one kitchen (V150), carrying its People needed: the meal's own column is gone (V151).
+		UUID kitchen = org.iskcon.kms.meal.MealFixture.section(admin, tenant, meal, null);
+		admin.update("UPDATE meal_kitchens SET crew_required = ? WHERE meal_id = ?", crew, meal);
 		admin.update("""
-				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by)
-				VALUES (?, ?, ?, 200, 'PLANNED', (SELECT id FROM users WHERE firebase_uid = 'uid-admin'))
-				""", tenant, meal, khichdi);
+				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by, kitchen_id)
+				VALUES (?, ?, ?, 200, 'PLANNED', (SELECT id FROM users WHERE firebase_uid = 'uid-admin'), ?)
+				""", tenant, meal, khichdi, kitchen);
 		return meal;
 	}
 

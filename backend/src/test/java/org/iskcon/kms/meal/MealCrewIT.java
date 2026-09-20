@@ -102,6 +102,8 @@ class MealCrewIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM staff_leave");
 		admin.execute("DELETE FROM staff_schedule_template");
 		admin.execute("DELETE FROM staff_profiles");
+		// The kitchen a staff record or a meal names (V150) holds its temple and creator; after both.
+		admin.execute("DELETE FROM kitchens");
 		admin.execute("DELETE FROM recipes");
 		admin.execute("DELETE FROM recipe_categories");
 		admin.execute("DELETE FROM audit_events");
@@ -339,11 +341,16 @@ class MealCrewIT extends AbstractIntegrationTest {
 		// Now saved at that date and ready-by, through the planner's own endpoint, as a new event — the
 		// case the browser test found reading "Not counted yet" before the save and "2 of 5" after it.
 		UUID eventKind = MealFixture.kindId(admin, tenant, "Event");
+		// People needed is sent both ways: per kitchen, as the composer sends it since Epic 12, and at
+		// the top, as the save read it before T-354. Jackson ignores whichever the save does not know,
+		// so this test does not depend on which side of that change it runs.
+		UUID kitchen = MealFixture.plannerKitchen(admin, tenant, null);
 		String body = mvc.perform(authed(post("/api/v1/meals")).contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{"planDate":"%s","mealKindId":"%s","readyBy":"12:00","eventName":"Bhajan prasadam",
-								 "adults":100,"crewRequired":5,"dishes":[{"recipeId":"%s","targetYield":100}]}
-								""".formatted(DATE, eventKind, khichdi)))
+								 "adults":100,"crewRequired":5,"kitchens":[{"kitchenId":"%s","crewRequired":5}],
+								 "dishes":[{"recipeId":"%s","targetYield":100,"kitchenId":"%s"}]}
+								""".formatted(DATE, eventKind, kitchen, khichdi, kitchen)))
 				.andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
 		UUID saved = MealRequests.idOf(body);
@@ -448,11 +455,11 @@ class MealCrewIT extends AbstractIntegrationTest {
 				""", other);
 		UUID profile = admin.queryForObject("""
 				INSERT INTO staff_profiles (
-					tenant_id, user_id, full_name, job_title, employment_type, date_of_joining)
+					tenant_id, user_id, full_name, job_title, employment_type, date_of_joining, kitchen_id)
 				VALUES (?, (SELECT id FROM users WHERE firebase_uid = 'uid-other-cook'), 'Other Cook', 'COOK',
-						'FULL_TIME', '2026-01-01')
+						'FULL_TIME', '2026-01-01', ?)
 				RETURNING id
-				""", UUID.class, other);
+				""", UUID.class, other, MealFixture.plannerKitchen(admin, other, null));
 		for (int day = 1; day <= 7; day++) {
 			admin.update("""
 					INSERT INTO staff_schedule_template (
@@ -485,16 +492,19 @@ class MealCrewIT extends AbstractIntegrationTest {
 		UUID kindId = admin.queryForObject(
 				"SELECT id FROM meal_kinds WHERE tenant_id = ? AND lower(name) = lower(?)", UUID.class, tenant, kind);
 		UUID meal = admin.queryForObject("""
-				INSERT INTO meals (tenant_id, meal_plan_day_id, meal_kind_id, event_name, ready_by, adults,
-						crew_required)
+				INSERT INTO meals (tenant_id, meal_plan_day_id, meal_kind_id, event_name, ready_by, adults)
 				VALUES (?, ?, ?, ?, COALESCE(?::time, (SELECT default_ready_time FROM meal_kinds WHERE id = ?)),
-						200, ?)
+						200)
 				RETURNING id
-				""", UUID.class, tenant, day, kindId, eventName, readyBy, kindId, crew);
+				""", UUID.class, tenant, day, kindId, eventName, readyBy, kindId);
+		// The meal's one kitchen (V150). People needed is the kitchen's since Epic 12 and is read from
+		// meal_kitchens only; the meal row's copy goes in V151, so it is not written here at all.
+		UUID kitchen = MealFixture.section(admin, tenant, meal, null);
+		admin.update("UPDATE meal_kitchens SET crew_required = ? WHERE meal_id = ?", crew, meal);
 		admin.update("""
-				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by)
-				VALUES (?, ?, ?, 200, 'PLANNED', (SELECT id FROM users WHERE firebase_uid = 'uid-admin'))
-				""", tenant, meal, khichdi);
+				INSERT INTO meal_dishes (tenant_id, meal_id, recipe_id, target_yield, status, created_by, kitchen_id)
+				VALUES (?, ?, ?, 200, 'PLANNED', (SELECT id FROM users WHERE firebase_uid = 'uid-admin'), ?)
+				""", tenant, meal, khichdi, kitchen);
 		return meal;
 	}
 
@@ -506,10 +516,10 @@ class MealCrewIT extends AbstractIntegrationTest {
 	private UUID hire(String uid, String name, String start, String end) {
 		UUID profile = admin.queryForObject("""
 				INSERT INTO staff_profiles (
-					tenant_id, user_id, full_name, job_title, employment_type, date_of_joining)
-				VALUES (?, (SELECT id FROM users WHERE firebase_uid = ?), ?, 'COOK', 'FULL_TIME', '2026-01-01')
+					tenant_id, user_id, full_name, job_title, employment_type, date_of_joining, kitchen_id)
+				VALUES (?, (SELECT id FROM users WHERE firebase_uid = ?), ?, 'COOK', 'FULL_TIME', '2026-01-01', ?)
 				RETURNING id
-				""", UUID.class, tenant, uid, name);
+				""", UUID.class, tenant, uid, name, org.iskcon.kms.meal.MealFixture.plannerKitchen(admin, tenant, null));
 		for (int day = 1; day <= 7; day++) {
 			admin.update("""
 					INSERT INTO staff_schedule_template (

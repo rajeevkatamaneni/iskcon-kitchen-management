@@ -72,6 +72,7 @@ function reading(overrides: Record<string, unknown> = {}) {
   return {
     mealId: "meal-3", mealKindId: "k2", planDate: DATE, mealKind: "Event", readyBy: "17:00:00",
     adults: 0, children: 0, seniors: 0, plates: 30, crewRequired: null,
+    kitchens: [{ kitchenId: "kit-main", kitchenName: "Main kitchen", isMain: true, crewRequired: null }],
     dayType: "REGULAR", occasionName: null, eventName: NAME, isOutside: false, handover: null,
     contactName: null, contactPhone: null, deliveryAddress: null, deliverySubLocation: null,
     deliveryPlaceId: null, deliveryLatitude: null, deliveryLongitude: null, guestsEatAt: null,
@@ -80,7 +81,7 @@ function reading(overrides: Record<string, unknown> = {}) {
     recorded: false, recordedAt: null, recordedByName: null, recordingNote: null,
     corrected: false, correctedAt: null, correctedByName: null, correctionNote: null,
     dishes: [
-      { id: "d1", mealId: "meal-3", recipeId: "r1", recipeName: "Kesari Bath", targetYield: 30,
+      { id: "d1", mealId: "meal-3", kitchenId: "kit-main", recipeId: "r1", recipeName: "Kesari Bath", targetYield: 30,
         targetYieldUnit: "KG", status: "PLANNED", actualServings: null, consumedQuantity: null,
         notMade: false, originalActualServings: null, originalConsumedQuantity: null, cookedAt: null,
         ekadashiAcknowledged: false, createdAt: "2026-09-01T10:00:00Z" },
@@ -383,6 +384,20 @@ describe("the series line", () => {
     await screen.findByText(NAME);
     expect(screen.queryByText((_, el) => el?.tagName === "P" && /^Repeats every/.test(el.textContent ?? ""))).toBeNull();
   });
+
+  /**
+   * Staging, 2026-09-19: an event repeated to four dates, then "this and all later ones" cancelled on
+   * the second, left the survivor reading "Repeats every 2 weeks until 7 Oct 2026 · event 1 of 1".
+   * `count` is the occurrences still standing, so this is the shape the server sends afterwards.
+   */
+  it("is absent once every other occurrence has been cancelled — one event is not a series", async () => {
+    api.meals.mockResolvedValue([
+      reading({ series: { ...SERIES, until: DATE, position: 1, count: 1 } }),
+    ]);
+    openTheDay();
+    await screen.findByText(NAME);
+    expect(screen.queryByText((_, el) => el?.tagName === "P" && /^Repeats every/.test(el.textContent ?? ""))).toBeNull();
+  });
 });
 
 describe("cancelling a meal in a series", () => {
@@ -422,6 +437,23 @@ describe("cancelling a meal in a series", () => {
     const dialog = await pressCancel();
     expect(api.laterInSeries).not.toHaveBeenCalled();
     expect(within(dialog).queryByRole("radio")).toBeNull();
+  });
+
+  /** The other half of the staging defect: the survivor is cancelled plainly, with no choice offered. */
+  it("asks nothing extra of the one occurrence left after the rest were cancelled", async () => {
+    api.meals.mockResolvedValue([
+      reading({ series: { ...SERIES, until: DATE, position: 1, count: 1 } }),
+    ]);
+    api.cancelMeal.mockResolvedValue({ volunteersTold: 0, mealsCancelled: 1, lastDate: null });
+    openTheDay();
+    const dialog = await pressCancel();
+
+    expect(api.laterInSeries).not.toHaveBeenCalled();
+    expect(within(dialog).queryByRole("radio")).toBeNull();
+    expect(dialog).not.toHaveTextContent("This event repeats.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel this meal" }));
+    await waitFor(() => expect(api.cancelMeal).toHaveBeenCalledTimes(1));
+    expect(api.cancelMeal.mock.calls[0]).toEqual(["meal-3", null, "t"]);
   });
 
   it("asks nothing extra when none of the later ones is still to cook", async () => {

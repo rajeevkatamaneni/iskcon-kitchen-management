@@ -5,7 +5,9 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.staff.LeaveService;
 import org.iskcon.kms.ingredientrequest.IngredientRequestService;
@@ -102,7 +104,7 @@ public class TodayService {
 		LocalDate today = LocalDate.now(clock.zone());
 		LocalDate tomorrow = today.plusDays(1);
 
-		List<TodayView.Meal> meals = mealsOf(today);
+		List<TodayView.Meal> meals = mealsOf(today, actor);
 		List<StockItemView> stock = inventoryItemService.list(null, null, null);
 
 		return new TodayView(
@@ -112,7 +114,7 @@ public class TodayService {
 				plates(meals),
 				(int) stock.stream().filter(StockItemView::belowThreshold).count(),
 				stock.size(),
-				workforce(today),
+				workforce(today, actor),
 				materialsCost(today),
 				servedMealService.unrecordedCount(today.minusDays(NUDGE_DAYS), today.minusDays(1)),
 				approvals(actor, tomorrow),
@@ -130,11 +132,16 @@ public class TodayService {
 	 * today and does not appear. A meal with one dish called off keeps its place: the rest of it is
 	 * still being cooked.
 	 */
-	private List<TodayView.Meal> mealsOf(LocalDate today) {
-		return servedMealService.list(today, today).stream()
+	private List<TodayView.Meal> mealsOf(LocalDate today, AuthenticatedUser actor) {
+		List<ServedMeal> served = servedMealService.list(today, today).stream()
 				.filter(meal -> meal.dishes().stream()
 						.anyMatch(dish -> dish.status() != MealStatus.CANCELLED))
 				.sorted(Comparator.comparing(ServedMeal::readyBy))
+				.toList();
+		// Which kitchens cook each meal, in the order the planner shows them to this person (Epic 12).
+		Map<UUID, List<String>> kitchens = mealCrewService.kitchenNamesOf(
+				served.stream().map(ServedMeal::mealId).toList(), actor.getUserId());
+		return served.stream()
 				.map(meal -> new TodayView.Meal(
 						meal.mealId(),
 						meal.mealKind(),
@@ -144,6 +151,7 @@ public class TodayService {
 						meal.recorded(),
 						meal.awaitingRecord(),
 						meal.occasionName(),
+						kitchens.getOrDefault(meal.mealId(), List.of()),
 						meal.dishes().stream().map(TodayService::dish).toList()))
 				.toList();
 	}
@@ -185,10 +193,10 @@ public class TodayService {
 	 * Seven people working today says nothing about whether lunch has enough hands: they are not all
 	 * there at midday, and lunch may take eight. Each meal is read at the moment its food is due.
 	 */
-	private TodayView.Workforce workforce(LocalDate today) {
+	private TodayView.Workforce workforce(LocalDate today, AuthenticatedUser actor) {
 		WorkforceCount count = workforceService.countFor(today);
 		return new TodayView.Workforce(
-				count.staffIn(), count.volunteers(), mealCrewService.crewFor(today, today));
+				count.staffIn(), count.volunteers(), mealCrewService.crewFor(today, today, actor.getUserId()));
 	}
 
 	// ---- What today's food costs ----------------------------------------

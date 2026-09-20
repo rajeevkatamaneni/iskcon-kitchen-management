@@ -19,6 +19,8 @@ import java.util.UUID;
  *                         because stock movements with reference {@code MEAL_PLAN} point at it
  *                         without a foreign key (V136's header).
  * @param mealId           the meal this dish is part of.
+ * @param kitchenId        the kitchen cooking this dish (Epic 12) — always one of its meal's
+ *                         {@link ServedMeal#kitchens()}; the database's composite key refuses any other.
  * @param targetYieldUnit  what {@code targetYield} is measured in: the recipe's own yield unit,
  *                         carried here so a screen showing a dish does not need the recipe list to
  *                         say what its number means (E11-S4).
@@ -34,6 +36,7 @@ import java.util.UUID;
 public record MealDishView(
 		UUID id,
 		UUID mealId,
+		UUID kitchenId,
 		UUID recipeId,
 		String recipeName,
 		BigDecimal targetYield,

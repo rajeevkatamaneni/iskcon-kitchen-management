@@ -6,6 +6,7 @@ import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { FocusScreen } from "@/components/ds/FocusScreen";
+import { ErrorNotice } from "@/components/ErrorNotice";
 import { Loading } from "@/components/Loading";
 import { RequireRole } from "@/components/RequireRole";
 import { MealComposer, type ComposerStatus } from "@/components/planner/MealComposer";
@@ -62,6 +63,9 @@ function ComposeMealScreen() {
   const calQ = useAuthedQuery(
     useCallback((t?: string) => api.calendarRange(date, date, t), [date])
   );
+  // The temple's kitchens (Epic 12): which one a new meal starts in, and what "+ Add another kitchen"
+  // offers. Archived ones are not asked for; a meal is never planned in a kitchen that has closed.
+  const kitchensQ = useAuthedQuery(useCallback((t?: string) => api.listKitchens(false, t), []));
 
   const [status, setStatus] = useState<ComposerStatus>({ busy: false, blocked: true, hint: null });
   const onStatus = useCallback((next: ComposerStatus) => setStatus(next), []);
@@ -84,10 +88,27 @@ function ComposeMealScreen() {
     );
   }
 
-  if (recipesQ.loading && !recipesQ.data) {
+  // The kitchens are waited for as well as the recipes: a new meal opens on its first kitchen's
+  // band, and drawing the composer before they land would flash "no kitchen" at everybody.
+  if ((recipesQ.loading && !recipesQ.data) || (kitchensQ.loading && !kitchensQ.data)) {
     return (
       <FocusScreen task="Plan a meal" who={longDate(date)} activeHref="/planner">
         <Loading label="Loading the recipes…" />
+      </FocusScreen>
+    );
+  }
+
+  // Without its kitchens a meal has nowhere to be cooked, so there is nothing to plan: said in the
+  // server's own words, with its code, rather than a form with no kitchen to put a dish in.
+  if (kitchensQ.error) {
+    return (
+      <FocusScreen
+        task="Plan a meal"
+        who={longDate(date)}
+        activeHref="/planner"
+        actions={<ButtonLink href={backToDay} variant="secondary">Back to the day</ButtonLink>}
+      >
+        <ErrorNotice error={kitchensQ.error} />
       </FocusScreen>
     );
   }
@@ -116,6 +137,7 @@ function ComposeMealScreen() {
         date={date}
         recipes={recipesQ.data ?? []}
         mealKinds={mealKinds ?? []}
+        kitchens={kitchensQ.data ?? []}
         isEkadashi={Boolean(calQ.data?.[0]?.isEkadashi)}
         ekadashiName={calQ.data?.[0]?.ekadashiName}
         formId={FORM}

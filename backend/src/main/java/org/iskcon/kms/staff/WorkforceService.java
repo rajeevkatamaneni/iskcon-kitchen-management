@@ -1,13 +1,17 @@
 package org.iskcon.kms.staff;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.iskcon.kms.shift.ShiftService;
 import org.iskcon.kms.shift.ShiftView;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,10 +61,12 @@ public class WorkforceService {
 
 	private final ScheduleResolver resolver;
 	private final ShiftService shiftService;
+	private final JdbcTemplate jdbc;
 
-	public WorkforceService(ScheduleResolver resolver, ShiftService shiftService) {
+	public WorkforceService(ScheduleResolver resolver, ShiftService shiftService, JdbcTemplate jdbc) {
 		this.resolver = resolver;
 		this.shiftService = shiftService;
+		this.jdbc = jdbc;
 	}
 
 	@Transactional(readOnly = true)
@@ -170,6 +176,99 @@ public class WorkforceService {
 					volunteersAt(shifts, moment)));
 		}
 		return counts;
+	}
+
+	// ---- Per kitchen, and by name (Epic 12) ------------------------------
+
+	/**
+	 * One member of staff who is in for a meal: who they are and which kitchen they work in.
+	 *
+	 * @param staffProfileId their staff record
+	 * @param kitchenId      the kitchen on that record ({@code staff_profiles.kitchen_id}, V150); every
+	 *                       staff member belongs to exactly one
+	 * @param name           their name as the staff record spells it, which is what the planner prints
+	 */
+	public record RosteredPerson(UUID staffProfileId, UUID kitchenId, String name) {
+	}
+
+	/**
+	 * Everybody in for one meal: the staff by name, in the roster's order, and the volunteers as a count.
+	 *
+	 * <p>The staff come as people rather than as a number because since Epic 12 the question is asked
+	 * per kitchen. Rajeev, 2026-09-19: <em>"'People needed' is answered per kitchen; the rostered staff
+	 * shown are that kitchen's staff."</em> The planner prints the names under each kitchen. Reading one
+	 * list two ways (all of it, or one kitchen's slice) keeps the whole-meal figure and the kitchens'
+	 * figures the same arithmetic on the same resolution, so they cannot drift apart.
+	 *
+	 * <p>Volunteers have no kitchen. A shift is posted for a meal or for a stretch of the day, never for
+	 * a kitchen, so the count stays whole here and the caller decides which section it falls to.
+	 *
+	 * @param staff      in the roster's order, which is {@link ScheduleResolver}'s: by name
+	 * @param volunteers counted exactly as {@link #countAt} counts them
+	 */
+	public record RosterAt(List<RosteredPerson> staff, int volunteers) {
+
+		/** Every rostered name, in the roster's order. */
+		public List<String> names() {
+			return staff.stream().map(RosteredPerson::name).toList();
+		}
+
+		/** The names of the staff whose record is in this kitchen, in the roster's order. */
+		public List<String> namesIn(UUID kitchenId) {
+			return staff.stream().filter(p -> Objects.equals(p.kitchenId(), kitchenId))
+					.map(RosteredPerson::name).toList();
+		}
+	}
+
+	/**
+	 * Who is in for each of these meals, by name and kitchen: the same rule as {@link #countAt} on the
+	 * same resolution, answered as people instead of a head count (Epic 12).
+	 *
+	 * <p>A person is in for a meal exactly when {@link #countAt} would count them: an active staff
+	 * record, a working day that is not half-day leave, and a window that covers the ready-by, both ends
+	 * inclusive. Kitchens change nothing about that rule. What is added is only which kitchen the
+	 * person's record is in, so the caller can slice the answer per kitchen.
+	 *
+	 * <p>The kitchen is read from {@code staff_profiles} here rather than from the resolved staff view,
+	 * so this does not depend on how the employment screens choose to show it. It is one query over the
+	 * temple's own staff; row-level security keeps another temple's out, as it does every other read.
+	 *
+	 * @param staffAway one staff record to leave out, as {@link #countAt(Collection, UUID)} does; null
+	 *                  leaves nobody out
+	 */
+	@Transactional(readOnly = true)
+	public Map<MealMoment, RosterAt> rosterAt(Collection<MealMoment> moments, UUID staffAway) {
+		if (moments.isEmpty()) {
+			return Map.of();
+		}
+		LocalDate from = moments.stream().map(MealMoment::date).min(LocalDate::compareTo).orElseThrow();
+		LocalDate to = moments.stream().map(MealMoment::date).max(LocalDate::compareTo).orElseThrow();
+
+		ScheduleResolver.Resolution resolution = resolver.resolve(from, to);
+		List<ShiftView> shifts = shiftService.listCountingTowardMeals(from, to);
+		Map<UUID, UUID> kitchenOf = new HashMap<>();
+		jdbc.query("SELECT id, kitchen_id FROM staff_profiles WHERE employment_status = 'ACTIVE'", rs -> {
+			kitchenOf.put(rs.getObject("id", UUID.class), rs.getObject("kitchen_id", UUID.class));
+		});
+
+		Map<MealMoment, RosterAt> rosters = new LinkedHashMap<>();
+		for (MealMoment moment : moments) {
+			List<RosteredPerson> in = new ArrayList<>();
+			for (StaffProfileView person : resolution.staff()) {
+				if (staffAway != null && staffAway.equals(person.id())) {
+					continue;
+				}
+				ScheduleResolver.ResolvedShift shift =
+						resolution.days().getOrDefault(person.id(), Map.of()).get(moment.date());
+				// The same test Resolution.staffIn applies, person by person, so the names and the count
+				// can never disagree about who is there.
+				if (shift != null && shift.countsAsIn() && shift.covers(moment.readyBy())) {
+					in.add(new RosteredPerson(person.id(), kitchenOf.get(person.id()), person.fullName()));
+				}
+			}
+			rosters.put(moment, new RosterAt(List.copyOf(in), volunteersAt(shifts, moment)));
+		}
+		return rosters;
 	}
 
 	/**

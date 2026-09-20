@@ -111,6 +111,10 @@ class MealSeriesIT extends AbstractIntegrationTest {
 		khichdi = recipe(tenant, "Khichdi", category, rice);
 		kheer = recipe(tenant, "Kheer", category, milk);
 
+		// Every meal is cooked by one of the temple's kitchens (Epic 12), and saving one no longer makes a
+		// kitchen: a real temple is given its main kitchen when it is provisioned. This temple is made by
+		// hand, so it is given one here, as provisioning would (T-354).
+		MealFixture.plannerKitchen(admin, tenant, null);
 		TenantContext.set(tenant);
 		try {
 			mealKindService.seedForCurrentTenant();
@@ -622,6 +626,7 @@ class MealSeriesIT extends AbstractIntegrationTest {
 
 		UUID otherTemple = tenant("t307-other-temple", "Mysuru Temple");
 		insertUser(otherTemple, "uid-t307-other", "t307-other@example.com", "TEMPLE_ADMIN", "+919876530709");
+		MealFixture.plannerKitchen(admin, otherTemple, null);
 		TenantContext.set(otherTemple);
 		try {
 			mealKindService.seedForCurrentTenant();

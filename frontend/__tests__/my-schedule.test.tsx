@@ -119,6 +119,9 @@ const PROFILE: StaffProfileView = {
   lastWorkingDay: null,
   endReason: null,
   notes: null,
+  kitchenId: "k1",
+  kitchenName: "Main kitchen",
+  kitchenNeedsCheck: false,
   createdAt: "2024-04-01T00:00:00Z",
 };
 
