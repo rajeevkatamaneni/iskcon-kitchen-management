@@ -87,6 +87,32 @@ CASH_GIFTS = [
     ("Padmavathi Bai", "+919845041006", 15000, 3, "In memory of her husband"),
 ]
 
+# Gifts from the two devotees who have an account on the site.
+#
+# **Why these are written out separately.** A gift is "mine" to the person who gave it if the
+# donation carries their account id, or a phone or email the application has verified for them —
+# never their name, because a name is not an identity and two devotees are called Govind Das. Every
+# other gift in this file is recorded at the counter with a name and a phone typed by a volunteer,
+# which is exactly right for somebody who walks in, and means nothing to any account. So both donor
+# accounts signed in and saw an empty page under their own giving, which is a poor showing for a
+# feature whose whole point is that people can see what they gave.
+#
+# These carry the account's **email**, the address Firebase has verified, so the gift reaches the
+# person who gave it. Keeping it to a handful is deliberate: most of a temple's book is people with
+# no login, and making every gift belong to an account would be the less truthful picture.
+#
+# Name, email, phone, amount, days ago, what it was for.
+ACCOUNT_GIFTS = [
+    ("Anantha Rao", "ikms.donor.1@trading4good.org", "+919845041007",
+     11000, 21, "Monthly gift, standing since last year"),
+    ("Anantha Rao", "ikms.donor.1@trading4good.org", "+919845041007",
+     2100, 7, "Towards the Radhastami feast"),
+    ("Kamala Iyer", "ikms.donor.2@trading4good.org", "+919845041008",
+     5000, 16, "For the free kitchen"),
+    ("Kamala Iyer", "ikms.donor.2@trading4good.org", "+919845041008",
+     1116, 4, "Birthday offering for her grandson"),
+]
+
 # Goods handed in at the gate. Ingredient name, how much, unit.
 GOODS = [
     ("Vidyashankar Bhat", "+919845042001", [("Rice", 100, "KG")], 5800, 23,
@@ -111,12 +137,39 @@ def main() -> int:
 
     # ---- the wish list -----------------------------------------------------
     step("what the temple is asking for")
-    existing = {w["title"]: w for w in admin.get("/api/v1/wishlist?includeArchived=true")}
+    every = admin.get("/api/v1/wishlist?includeArchived=true")
+    existing = {w["title"]: w for w in every}
     info(f"{len(existing)} item(s) already on the list")
+
+    # Do not ask for something the temple is already asking for. Matching on the exact title is
+    # not enough: staging wanted a "Steam cooker, 100 litre" and this list wanted a "Steam cooking
+    # vessel, 100 litre", so the page ended up asking for the same cooker twice. Two items are
+    # taken to be the same thing when the words that carry the meaning match — the make and the
+    # size — ignoring the ones that do not.
+    NOISE = {"a", "an", "the", "of", "set", "litre", "liter", "l", "kg", "for", "and", "steel",
+             "stainless", "commercial", "industrial", "month", "vessel", "vessels", "unit"}
+
+    def stem(word: str) -> str:
+        # Crude on purpose. It only has to make "cooker" and "cooking" the same word, which is
+        # what separated the temple's "Steam cooker, 100 litre" from this list's "Steam cooking
+        # vessel, 100 litre" — the same cooker, asked for twice on one page.
+        for suffix in ("ing", "ers", "er", "es", "s"):
+            if len(word) > len(suffix) + 2 and word.endswith(suffix):
+                return word[: -len(suffix)]
+        return word
+
+    def shape(title: str) -> frozenset:
+        words = "".join(c.lower() if c.isalnum() else " " for c in title).split()
+        return frozenset(stem(w) for w in words if w not in NOISE and not w.isdigit())
+
+    taken = {shape(w["title"]): w for w in every}
 
     for wanted in WISHLIST:
         key = f"{PHASE}.wish.{wanted['title']}"
-        found = existing.get(wanted["title"])
+        found = existing.get(wanted["title"]) or taken.get(shape(wanted["title"]))
+        if found and found["title"] != wanted["title"]:
+            note(f"the temple already asks for \"{found['title']}\", so \"{wanted['title']}\" "
+                 f"is not added as well")
         if found:
             args.state.put(key, found["id"])
             tally.kept("wish-list item", wanted["title"])
@@ -156,6 +209,17 @@ def main() -> int:
         if item.get("status") != "ACTIVE":
             tally.skip("sponsorship", f"{item['title']} is {item.get('status')}")
             continue
+
+        # Never give more than the thing costs. The amounts here were written against this
+        # script's own prices, and the temple's own item can cost something else: a gift of
+        # Rs 85,000 landed on a counter priced at Rs 46,500 and the page then read
+        # "Rs 85,000 of Rs 46,500", which looks like a fault rather than generosity.
+        outstanding = (float(item["priceInr"]) * int(item["quantityWanted"])
+                       - float(item.get("paidInr") or 0))
+        if outstanding <= 0:
+            tally.skip("sponsorship", f"{item['title']} is already paid for")
+            continue
+        amount = min(amount, round(outstanding))
 
         anonymous = who == "Anonymous"
         payload = {
@@ -201,6 +265,30 @@ def main() -> int:
                        f"{'someone anonymous' if anonymous else who} — Rs {amount:,}, {why}")
         except ApiError as e:
             tally.problem(f"cash gift from {who}: {e}")
+
+    # ---- the two devotees who have an account -------------------------------
+    step("gifts from devotees with an account on the site")
+    for index, (who, email, phone, amount, days_ago, why) in enumerate(ACCOUNT_GIFTS):
+        key = f"{PHASE}.account.{index}"
+        if args.state.has(key):
+            tally.kept("gift from an account holder")
+            continue
+        payload = {
+            "anonymous": False,
+            "donorName": who,
+            "donorPhone": phone,
+            # The one field that makes the gift theirs. Without it the row is a name on a page.
+            "donorEmail": email,
+            "cashAmountInr": amount,
+            "donatedOn": (today - timedelta(days=days_ago)).isoformat(),
+            "notes": why,
+        }
+        try:
+            made = counter.post("/api/v1/donations", payload)
+            args.state.put(key, made["id"])
+            tally.made("gift from an account holder", f"{who} — Rs {amount:,}, {why}")
+        except ApiError as e:
+            tally.problem(f"gift from {who}: {e}")
 
     # ---- goods handed in ----------------------------------------------------
     step("goods handed in at the gate")
