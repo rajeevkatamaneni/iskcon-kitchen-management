@@ -1233,6 +1233,62 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-20 — The temple's own approved recipes are the library (tasks T-404, T-405, T-406)
+
+**No migration** and **no new error code**; the next free remain V154 and KMS-400189. **Deployed to
+staging; not seen working by Rajeev.** The catalogue ships inside the jar, so it reaches staging with
+the deploy — but **it is not loaded into any temple by this release.** Loading is a separate,
+deliberate act (`POST /api/v1/library/recipes/load` as the super admin), and until somebody runs it
+the library table still holds the old 5,376 vendored rows that the load replaces.
+
+**What changes.** The recipe library was 32 state books vendored from `kranthimj23/ikms` — 5,376
+recipes, 46,337 ingredient lines, none of them read by anyone here. Rajeev's decision on 2026-09-19
+was that the mass import was a bad idea and that his hand-curated recipes are the master catalogue.
+The 32 books are gone. In their place are two books generated from his curated files by
+`tools/seed/02b-build-catalogue.mjs`: **karnataka (42 recipes) and andhra_pradesh (2)** — 44 recipes,
+454 ingredient lines, 83 preparation notes, 15 ingredients the temple never buys. Halubai is held
+back because he marked it `needs-work`; it is the one curated recipe not here.
+
+**A loaded row is stamped with where it came from, and the stamp was wrong.** `LibraryLoader.SOURCE`
+still read `kranthimj23/ikms@41cf173`. Loading the new catalogue with that in place would have filed
+all 44 of his recipes in the database as somebody else's. It now reads
+`tools/seed/02b-build-catalogue.mjs@2026-09-19`.
+
+**A plural no longer sends an ingredient to the wrong shelf.** `IngredientCategories` matches whole
+words, and a trailing `s` sits inside the word boundary, so *Cloves* went to Other while *Clove* went
+to Spices. When no rule matches the name as written, the rules now run again over the singular form
+produced by `IngredientNameMatcher.normalise` — the same normalisation that decides "Tomatoes" and
+"tomato" are one ingredient, reused rather than reinvented so one ingredient cannot end up on two
+shelves. Written name first, singular second: several rules are plural on purpose (*beans*, *greens*,
+*leaves*, *peas*, *dates*) and singularising first would break them, and trying the written name
+first means nothing filed correctly today can move. Coverage of the catalogue goes from **423 of 454
+ingredient lines to 430**, and from 88 of 99 distinct ingredients to 92. The 24 lines left are water
+and the temple's own spice blends, which belong on Other. `IngredientCategoriesTest` now measures
+this over the real books on every build and holds it to a floor, so the figures in the javadoc are
+checked rather than remembered.
+
+**On the library screen**, the empty state no longer says "Press Load the books to read the vendored
+recipe books in" — there are none — but "to bring in the approved catalogue".
+
+**The prose across eleven backend files and two story documents** described the 5,376-recipe library
+in counts and examples that are now false. Every replacement figure was re-measured from the two
+catalogue files. Where an old measurement is still the *reason* the code is what it is, it is kept
+and labelled rather than deleted: the duplicate-ingredient thresholds were chosen against 2,238
+distinct vendored names, which test them far harder than today's 99, and the parser's rules were
+derived from all 46,337 vendored lines.
+
+**The tests were rewritten, not retuned.** Whole classes had no data left. The disambiguation ladder
+lost its natural fixture — no name in the curated catalogue repeats — so it now runs against two
+small books under `backend/src/test/resources/ladder-book` that do repeat one, rather than quietly
+becoming dead code.
+
+**`tools/seed/` is committed**, having lived outside the repository while it was used against
+staging: sixteen phase scripts that drive the product's own API to fill a temple with three months of
+work, the curation fix-ups, the catalogue converter, and the SQL to reset a temple to day one, count
+it, and backdate it. No credential is in it — passwords come from the environment and the scripts
+refuse to run without them. `02b-build-catalogue.mjs` being here is what makes the catalogue swap
+reproducible.
+
 ### 2026-09-19 — A recipe line keeps its preparation, and an ingredient the temple never buys stays off the shopping list (tasks T-401, T-402, T-403)
 
 **Migration V153**; the next free is V154. **Error code KMS-400188** (`NOT_BOUGHT_INGREDIENT`); the

@@ -19448,3 +19448,56 @@ Committed to `main` and deployed to staging on 2026-09-19 as two commits — the
 merged suite figures read out of the logs, the CI run, the revisions and the Flyway version, is
 `docs/work/proof/RELEASE-2026-09-20.md`. Next free migration **V154**, next free error code
 **KMS-400189**. Not yet seen working by Rajeev.
+
+## 2026-09-20 — The curated catalogue replaces the vendored books (T-404, T-405, T-406)
+
+**Released to staging.** Five commits to `main`, no migration, no new error code; next free remain
+V154 and KMS-400189. Record: `docs/work/proof/RELEASE-2026-09-20-catalogue.md`.
+
+`backend/src/main/resources/recipe-library/` held 32 state books vendored from `kranthimj23/ikms`,
+5,376 recipes nobody here had read. It now holds two books generated from Rajeev's curated files by
+`tools/seed/02b-build-catalogue.mjs` — karnataka (42) and andhra_pradesh (2), 44 recipes, 454
+ingredient lines, 83 preparations, 15 not-bought marks. Halubai is held back: he marked it
+`needs-work`.
+
+### Three things worth reading cold
+
+**A stamp that would have lied about authorship.** Every row the loader writes carries `source_ref`.
+It still said `kranthimj23/ikms@41cf173`, so loading the new catalogue would have recorded all 44 of
+Rajeev's own recipes as taken from somebody else's repository — invisible at load time and very hard
+to unpick months later, when the question "where did this recipe come from?" is asked for a real
+reason. Now `tools/seed/02b-build-catalogue.mjs@2026-09-19`. This is the class of defect that only
+shows up when data changes underneath a constant nobody re-reads.
+
+**Deleting the data deleted the test.** The disambiguation ladder in `LibraryLoader` was exercised
+only because two vendored books happened to repeat a recipe name. No name in the curated catalogue
+repeats, so the swap would have left the ladder running on every load and tested by nothing — dead
+code that is not dead, the worst kind. The fixture is now explicit:
+`backend/src/test/resources/ladder-book`, two small books that repeat one name on purpose. Worth
+generalising: when you replace a corpus, ask which tests were relying on an accident of the old one.
+
+**A measurement in a comment rots; a measurement in a test does not.** `IngredientCategories`
+carried carefully measured coverage figures in its javadoc, measured once by a script somebody ran
+and then never again. They were false the moment the books changed. `IngredientCategoriesTest` now
+runs the rules over the real books on every build, prints what it could not name, and holds coverage
+to a floor. The javadoc figures are now checked. The same fix found the plural bug: `\b` against a
+trailing `s` meant *Cloves* went to Other while *Clove* went to Spices, seven lines of the catalogue.
+The second pass reuses `IngredientNameMatcher.normalise` rather than writing a second idea of what a
+plural is — two of those would eventually file one ingredient on two shelves — and runs only after
+the written name fails, so nothing filed correctly today can move.
+
+### What is deliberately NOT done
+
+**The catalogue is not loaded into any temple.** The books ship inside the jar and are on staging,
+but the `master_recipes` table still holds the old 5,376 vendored rows. The load is
+`POST /api/v1/library/recipes/load` as the super admin and it is the seeding team's act, run after
+this release, not part of it. Staging was reset to day one beforehand (backup 1789885048166), so the
+temple itself is empty.
+
+**Also here:** `tools/seed/` is committed at last — sixteen phase scripts driving the product's own
+API, the curation fix-ups, the catalogue converter, `day1-reset.sql`, `day1-counts.sql`,
+`backdate.sql`. It had been run against staging repeatedly while existing on one laptop only. Scanned
+for credentials before committing: none. Passwords come from the environment and the scripts refuse
+to run without them; the Firebase web API key is read from `frontend/.env.local.example`, where it
+already is, because a web API key is not a secret. `.state/` and `__pycache__/` are gitignored by
+`tools/seed/.gitignore`, verified with `git check-ignore` before the add.
