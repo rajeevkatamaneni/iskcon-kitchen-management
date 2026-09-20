@@ -2,7 +2,9 @@ package org.iskcon.kms.ingredient;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import org.iskcon.kms.document.IndianNumbers;
 
 /**
@@ -32,6 +34,13 @@ import org.iskcon.kms.document.IndianNumbers;
  *       rounded the way a person rounds. Recipe lines, scaled recipes, planner targets, job cards,
  *       work orders, shopping lists, shortfalls.
  * </ul>
+ *
+ * <p><strong>Each form has a second entry point for a set of figures read together</strong> —
+ * {@link #oneUnitFor} and {@link #cooksOneUnitFor} (T-364). {@link #exact} and {@link #cooks} decide
+ * on one number knowing nothing about the numbers beside it, which is right for a figure standing on
+ * its own and wrong for a work order line that says "800 gm / 12 Kg". Where two figures of one family
+ * are read in a single act — a shortfall pair, a row's lots against its total, a scaled yield beside
+ * its base — the set is what chooses the unit, and these are how to ask for that.
  *
  * <p>The mirror of this class in TypeScript is {@code frontend/lib/format.ts}. Two implementations
  * of one rule drift silently, so both are held to the same table of vectors — {@code QuantitiesTest}
@@ -88,6 +97,159 @@ public final class Quantities {
 		} catch (IllegalArgumentException e) {
 			return null;
 		}
+	}
+
+	/**
+	 * Several figures about one thing, all said in <strong>one</strong> unit — the set's unit rather
+	 * than each figure's own (T-364). The ledger form; {@link #cooksOneUnitFor} is the other one.
+	 *
+	 * <p>This is the twin of {@code oneUnitFor} in {@code frontend/lib/format.ts}, added in the same
+	 * week for the same defect on the screens: Rajeev, reviewing the inventory list on staging, found
+	 * one row reading <em>2.06 Kg on hand, 2.04 Kg committed, 20 gm available</em>. Nothing in it was
+	 * wrong. {@link #exact} promotes from 1,000 up, it is asked separately for each figure, and 0.02
+	 * Kg genuinely is 20 gm. That is exactly the defect — the choice is made per call, on one number,
+	 * knowing nothing about the numbers beside it, so a row meant to be read as a subtraction changes
+	 * scale in the middle of itself and stops visibly adding up. The printed documents had the same
+	 * fault in their own places: a work order line short of 0.8 Kg out of 12 printed
+	 * <em>"800 gm / 12 Kg"</em>, and a recipe card scaled from half a litre printed
+	 * <em>"Scaled to 2 L (base 500 ml)"</em>.
+	 *
+	 * <p><strong>This does not change {@link #exact} or {@link #cooks}, deliberately.</strong> Those
+	 * have callers all over the application and their behaviour is pinned by the vector table in
+	 * {@code QuantitiesTest} and its twin in {@code __tests__/quantities.test.ts}; a figure standing
+	 * on its own should still be said the way a person would say it. What was missing is a way to say
+	 * a <em>set</em> of them together, so this is a second entry point rather than a new rule for the
+	 * old one.
+	 *
+	 * <p><strong>Which unit wins: the biggest figure's.</strong> Reading 1.96, 2.04 and -0.08 Kg is
+	 * reading one scale; reading 1,960, 2,040 and -80 gm is the same numbers with three noughts on
+	 * each. The largest figure is the one that says how big the quantities in this set are, so it is
+	 * the one that chooses. A set whose figures are all zero keeps the unit the thing is held in, as
+	 * a lone zero already does.
+	 *
+	 * <p><strong>Nothing is rounded away.</strong> This is the ledger form, where the figures have to
+	 * go on adding up: three decimals is a gram of a kilo, and 418.2 gm restated in kilograms is
+	 * 0.4182, which three would quietly turn into 0.418. So the decimals are however many the set
+	 * needs to say every figure in it exactly, up to six — six because a ledger quantity is stored to
+	 * three decimal places in its own unit and a conversion can push that three further. It fixes the
+	 * other end of the same problem at the same time: 0.4 gm in kilograms is 0.0004, and "0 Kg" would
+	 * say the shelf is empty when it is not.
+	 *
+	 * <p>Pieces, and any unit outside the convertible families, have nothing to convert into: what
+	 * comes back is {@link #exact} itself.
+	 *
+	 * <p>The backend has no caller of this ledger form today — every printed document is the cook's
+	 * form below. It is here because the TypeScript table of vectors is the only thing standing
+	 * between these two files and a silent disagreement, and that table is written against the ledger
+	 * form, whose unit <em>is</em> the chosen unit because it rounds nothing. {@code QuantitiesTest}
+	 * runs it against this method, line for line.
+	 *
+	 * @param unit the unit every figure is stored in — one ingredient's canonical unit
+	 * @param figures every figure that will be printed in the set, nulls included: what is
+	 *     <em>shown</em> decides the unit, so leaving one out can change the answer
+	 * @return a renderer for one figure, to be used for every figure in that set
+	 */
+	public static Function<BigDecimal, String> oneUnitFor(Unit unit, List<BigDecimal> figures) {
+		return oneUnitFor(unit, figures, false);
+	}
+
+	/**
+	 * The cook's form of {@link #oneUnitFor} — one unit for the whole set, each figure rounded the
+	 * way a person rounds it. This is what the job card, the work order and the recipe card use.
+	 *
+	 * <p><strong>Where it differs from the TypeScript twin, and why a printed page needs the
+	 * difference.</strong> {@code format.ts} has only the ledger form, because the screens that
+	 * needed it are ledger screens — a stock row is a subtraction somebody reconciles. A printed
+	 * document is weighed against instead, so its figures go through
+	 * {@link #roundAsAPersonWould} exactly as {@link #cooks} already rounds them. The unit choice is
+	 * the same rule, from the same biggest figure; only the rounding is added.
+	 *
+	 * <p><strong>Each figure is rounded at its own scale, then restated in the set's unit.</strong>
+	 * This is the one thing that is not simply "cooks() with a fixed unit", and it is what stops the
+	 * fix making the page worse. A work order line for 12 Kg of rice drawn from a lot of 11.992 Kg
+	 * and a lot of 8 gm is said in kilograms, because 12 is what says how big the row is. Rounding
+	 * the 8 gm figure <em>as kilograms</em> would round it to a tenth of a kilo and print "0 Kg" —
+	 * a lot the storekeeper is being sent to, reported as nothing. Rounded as the 8 grams it is and
+	 * then written in the row's unit, it prints "0.008 Kg", which adds up with the line above it and
+	 * is still true. So the set decides the unit and the figure decides its own precision.
+	 *
+	 * <p>The second promotion {@link #cooks} does — 999.6 gm rounds to 1,000 gm, which is a kilo and
+	 * says so — needs nothing here. It happens in the family's base unit, and moving a figure between
+	 * gm and Kg does not change how much of it there is; the set's unit is chosen once and stands.
+	 */
+	public static Function<BigDecimal, String> cooksOneUnitFor(Unit unit, List<BigDecimal> figures) {
+		return oneUnitFor(unit, figures, true);
+	}
+
+	/** The cook's form of {@link #oneUnitFor}, for a unit that arrives as its stored name. */
+	public static Function<BigDecimal, String> cooksOneUnitFor(String unit, List<BigDecimal> figures) {
+		return cooksOneUnitFor(parse(unit), figures);
+	}
+
+	private static Function<BigDecimal, String> oneUnitFor(
+			Unit unit, List<BigDecimal> figures, boolean forCooking) {
+
+		Unit[] family = unit == null ? null : FAMILY.get(unit);
+
+		// A count has no sibling to be moved into, so there is no set-wide choice to make and every
+		// figure is said exactly as it would be on its own. The same answer as format.ts gives.
+		if (family == null) {
+			return value -> render(value, unit, forCooking);
+		}
+
+		BigDecimal factor = BigDecimal.valueOf(unit.baseFactor());
+
+		// The biggest figure chooses, and a set of nothing keeps the unit the thing is kept in —
+		// displayUnit() already answers that for a zero, so it is asked rather than second-guessed.
+		BigDecimal biggest = BigDecimal.ZERO;
+		for (BigDecimal figure : figures) {
+			if (figure != null) {
+				BigDecimal base = figure.abs().multiply(factor);
+				if (base.compareTo(biggest) > 0) {
+					biggest = base;
+				}
+			}
+		}
+		Unit display = displayUnit(unit, biggest);
+		BigDecimal displayFactor = BigDecimal.valueOf(display.baseFactor());
+
+		// However many places the set needs to say each of its figures exactly, never fewer than the
+		// single-figure form gives and never more than six. Asked of the figure as it will be shown,
+		// after any rounding, so the cook's form is not given decimals it has already thrown away.
+		int decimals = forCooking ? 2 : 3;
+		for (BigDecimal figure : figures) {
+			if (figure == null) {
+				continue;
+			}
+			int needed = shown(figure, unit, factor, displayFactor, forCooking)
+					.stripTrailingZeros().scale();
+			decimals = Math.max(decimals, Math.min(6, Math.max(0, needed)));
+		}
+
+		int maxDecimals = decimals;
+		return value -> value == null
+				? "—"
+				: say(shown(value, unit, factor, displayFactor, forCooking), display, maxDecimals);
+	}
+
+	/** One figure of a set, in the set's chosen unit, rounded for whoever is going to read it. */
+	private static BigDecimal shown(
+			BigDecimal value, Unit unit, BigDecimal factor, BigDecimal displayFactor,
+			boolean forCooking) {
+
+		BigDecimal base = value.multiply(factor);
+
+		if (forCooking) {
+			// Rounded at the figure's own scale — see the note on cooksOneUnitFor about the 8 gm lot
+			// in a row said in kilograms. displayUnit() is what "its own scale" means everywhere else
+			// in this file, so it is what it means here.
+			Unit own = displayUnit(unit, base);
+			BigDecimal ownFactor = BigDecimal.valueOf(own.baseFactor());
+			base = roundAsAPersonWould(base.divide(ownFactor, 6, RoundingMode.HALF_UP))
+					.multiply(ownFactor);
+		}
+
+		return base.divide(displayFactor, 6, RoundingMode.HALF_UP);
 	}
 
 	/**

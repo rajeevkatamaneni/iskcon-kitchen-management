@@ -5,9 +5,11 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import org.iskcon.kms.ingredient.Quantities;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.purchaseorder.PurchaseOrderService;
@@ -452,14 +454,26 @@ public class DocumentGenerationService {
 			}
 		}
 
-		// The base yield carries its unit even though the target has just said it: scaling can move
-		// the two into different units of the one family — 2 L made from a base of 500 ml — and a
-		// bare "(base 500)" would read as half a litre.
-		String yieldText = targetYield == null
-				? "Yields %s".formatted(Quantities.cooks(recipe.baseYieldQty(), recipe.baseYieldUnit()))
-				: "Scaled to %s (base %s)".formatted(
-						Quantities.cooks(targetYield, recipe.baseYieldUnit()),
-						Quantities.cooks(recipe.baseYieldQty(), recipe.baseYieldUnit()));
+		// The base yield carries its unit even though the target has just said it, and both figures
+		// are said in one unit (T-364).
+		//
+		// Two numbers of one family in one sentence, read in one glance, and they used to be asked
+		// for one at a time: a card scaled from a base of half a litre printed "Scaled to 2 L (base
+		// 500 ml)", which makes the reader convert before they can see that this is four times the
+		// recipe. The comment that stood here admitted the pair could differ and took that as the
+		// reason to print the unit twice. Printing it twice is right; printing two different units
+		// was the defect. Now the larger figure — the one that says how big this batch is — chooses
+		// for both, and the sentence reads "Scaled to 2 L (base 0.5 L)".
+		String yieldText;
+		if (targetYield == null) {
+			yieldText = "Yields %s"
+					.formatted(Quantities.cooks(recipe.baseYieldQty(), recipe.baseYieldUnit()));
+		} else {
+			Function<BigDecimal, String> say = Quantities.cooksOneUnitFor(
+					recipe.baseYieldUnit(), Arrays.asList(targetYield, recipe.baseYieldQty()));
+			yieldText = "Scaled to %s (base %s)"
+					.formatted(say.apply(targetYield), say.apply(recipe.baseYieldQty()));
+		}
 
 		return new RecipeCardTemplate.CardModel(templeName, recipeName, categoryName,
 				yieldText, rows, method, recipe.notes(), generatedOn);

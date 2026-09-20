@@ -276,6 +276,52 @@ class WorkOrderIT extends AbstractIntegrationTest {
 				.doesNotContain("0.1344");
 	}
 
+	/**
+	 * One row, one unit (T-364).
+	 *
+	 * <p>A picking row is a single act of reading and it is arithmetic: the total to fetch and the
+	 * amount to take out of each lot it comes from, which are meant to add up. They were asked for
+	 * one at a time, so each chose its own word, and a row totalling 3 Kg listed a lot as "500 gm" —
+	 * true, and unreadable beside the figure it is half of. Three kilos out of a lot of two and a
+	 * half plus a lot of a half now says so on the page without anybody converting anything.
+	 */
+	@Test
+	@DisplayName("a row's lots are said in the unit its total is said in: 2.5 Kg + 0.5 Kg, not 500 gm")
+	void aRowSaysItsLotsInItsOwnUnit() throws Exception {
+		// Nearest expiry first, so the big lot is emptied before the small one — the order the sheet
+		// prints and the order the ledger would draw them in.
+		seedBatch(rice, "2.5", LocalDate.of(2026, 11, 30));
+		seedBatch(rice, "0.5", LocalDate.of(2026, 12, 31));
+		String id = approvedRequest(lines(line(rice, "3", "KG")), dishes(dish("Khichdi", "200", "KG")));
+
+		String html = print(id, null);
+
+		assertThat(betweenLots(html)).containsExactly("2.5 Kg", "0.5 Kg");
+		assertThat(html)
+				.contains("<td class=\"num\">3 Kg</td>")
+				// The old answer, and the whole of the defect: half a kilogram said in grams beside a
+				// total said in kilograms, on one line of one table.
+				.doesNotContain("500 gm");
+	}
+
+	@Test
+	@DisplayName("a shortfall pair is one unit: 0.8 Kg / 12 Kg, never 800 gm / 12 Kg")
+	void aShortfallPairIsSaidInOneUnit() throws Exception {
+		// Straddles the thousand: 0.8 Kg is 800 gm and 12 Kg is not, so the two halves of the pair
+		// used to be printed in different units inside one string in one cell.
+		seedBatch(rice, "0.8", LocalDate.of(2026, 12, 31));
+		String id = approvedRequest(lines(line(rice, "12", "KG")), dishes(dish("Khichdi", "200", "KG")));
+
+		String html = print(id, null);
+
+		assertThat(html)
+				.contains("Rice &middot; Not enough on the shelf &middot; 0.8 Kg / 12 Kg")
+				.contains("<div class=\"shortfall\">Not enough on the shelf &middot; 0.8 Kg / 12 Kg</div>")
+				// The lot the sheet sends the storekeeper to is on the same row and the same scale.
+				.contains("<span class=\"take\">0.8 Kg</span>")
+				.doesNotContain("800 gm");
+	}
+
 	@Test
 	@DisplayName("a request nobody has approved has no work order — draft, submitted and denied alike")
 	void onlyAnApprovedRequestHasAWorkOrder() throws Exception {

@@ -370,4 +370,213 @@ class QuantitiesTest {
 		assertThat(Quantities.cooks(n(lines[0]), Unit.KG)).isEqualTo("135 gm");
 		assertThat(Quantities.cooks(n(lines[2]), Unit.KG)).isEqualTo("5 gm");
 	}
+
+	/**
+	 * Several figures about one thing, said in one unit (T-364) — the ledger form.
+	 *
+	 * <p>Every assertion in this class has a twin in {@code frontend/__tests__/quantities.test.ts},
+	 * under "several figures about one thing, said in one unit", with the same inputs and the same
+	 * expected strings. That is the standing arrangement for this file and it is the only thing
+	 * standing between the two implementations and a silent disagreement: the copies drifted over
+	 * zero in September with both suites green, because no table on either side held a zero. A vector
+	 * added to one of these tables is not optional in the other.
+	 *
+	 * <p>The backend has no production caller of the ledger form — the printed documents all use the
+	 * cook's form in {@link SetOfFiguresCooks}. It exists so this table can be run here at all: the
+	 * TypeScript table is written against the ledger form, whose unit <em>is</em> the chosen unit
+	 * because it rounds nothing.
+	 */
+	@Nested
+	@DisplayName("several figures about one thing, said in one unit — the ledger form")
+	class SetOfFigures {
+
+		private List<BigDecimal> figures(String... values) {
+			List<BigDecimal> out = new java.util.ArrayList<>();
+			for (String value : values) {
+				out.add(value == null ? null : n(value));
+			}
+			return out;
+		}
+
+		@Test
+		@DisplayName("leaves exact() alone — a figure on its own is still promoted and demoted as before")
+		void leavesTheSingleFigureFormAlone() {
+			assertThat(Quantities.exact(n("0.02"), Unit.KG)).isEqualTo("20 gm");
+			assertThat(Quantities.exact(n("2.06"), Unit.KG)).isEqualTo("2.06 Kg");
+		}
+
+		@Test
+		@DisplayName("says the row Rajeev found in one unit, and available no longer switches to grams")
+		void theRowRajeevFound() {
+			var say = Quantities.oneUnitFor(Unit.KG, figures("2.06", "2.04", "0.02"));
+			assertThat(say.apply(n("2.06"))).isEqualTo("2.06 Kg");
+			assertThat(say.apply(n("2.04"))).isEqualTo("2.04 Kg");
+			assertThat(say.apply(n("0.02"))).isEqualTo("0.02 Kg");
+		}
+
+		@Test
+		@DisplayName("takes its unit from the biggest figure, so a small set stays in the small unit")
+		void theBiggestFigureChooses() {
+			// Nothing here is a kilogram's worth, so kilograms would print three leading zeroes on
+			// every figure. The largest figure is what says how big the quantities in this set are.
+			var say = Quantities.oneUnitFor(Unit.KG, figures("0.85", "0.35", "0.02"));
+			assertThat(say.apply(n("0.85"))).isEqualTo("850 gm");
+			assertThat(say.apply(n("0.02"))).isEqualTo("20 gm");
+		}
+
+		@Test
+		@DisplayName("promotes the whole set as soon as one figure is a kilogram")
+		void oneWholeKilogramPromotesTheSet() {
+			var say = Quantities.oneUnitFor(Unit.KG, figures("1.2", "0.85", "0.35"));
+			assertThat(say.apply(n("1.2"))).isEqualTo("1.2 Kg");
+			assertThat(say.apply(n("0.85"))).isEqualTo("0.85 Kg");
+		}
+
+		@Test
+		@DisplayName("keeps the stored unit when every figure is nothing, as a lone zero already does")
+		void allZeroKeepsTheStoredUnit() {
+			assertThat(Quantities.oneUnitFor(Unit.L, figures("0", "0", "0")).apply(n("0")))
+					.isEqualTo("0 L");
+			assertThat(Quantities.exact(n("0"), Unit.L)).isEqualTo("0 L");
+		}
+
+		@Test
+		@DisplayName("never prints a figure that exists as a zero, however small it is beside the others")
+		void aSmallFigureDoesNotVanish() {
+			// 0.4 gm forced into kilograms is 0.0004, which does not fit the three decimals a ledger
+			// figure is given — and "0 Kg" would say the shelf is empty when it is not.
+			var say = Quantities.oneUnitFor(Unit.KG, figures("500", "0.0004"));
+			assertThat(say.apply(n("0.0004"))).isEqualTo("0.0004 Kg");
+			assertThat(say.apply(n("500"))).isEqualTo("500 Kg");
+		}
+
+		@Test
+		@DisplayName("rounds nothing away — this is the ledger form and the figures have to add up")
+		void roundsNothingAway() {
+			// Found by measuring the real item screen: a draw of 418.2 gm beside a lot of 4.664 Kg.
+			// Three decimals is a gram of a kilo, so it would have printed 0.418 Kg and lost two
+			// hundred milligrams out of a figure somebody reconciles against.
+			var say = Quantities.oneUnitFor(Unit.GM, figures("4664", "418.2"));
+			assertThat(say.apply(n("418.2"))).isEqualTo("0.4182 Kg");
+			assertThat(say.apply(n("4664"))).isEqualTo("4.664 Kg");
+		}
+
+		@Test
+		@DisplayName("carries a negative through on the set's scale — available may be less than nothing")
+		void negativesRideTheSameScale() {
+			var say = Quantities.oneUnitFor(Unit.KG, figures("1.96", "2.04", "-0.08"));
+			assertThat(say.apply(n("-0.08"))).isEqualTo("-0.08 Kg");
+		}
+
+		@Test
+		@DisplayName("has nothing to convert for a count, and hands back what exact() would say")
+		void countsHaveNothingToConvert() {
+			var say = Quantities.oneUnitFor(Unit.PIECES, figures("1200", "1"));
+			assertThat(say.apply(n("1200"))).isEqualTo("1,200 pieces");
+			assertThat(say.apply(n("1"))).isEqualTo("1 piece");
+		}
+
+		@Test
+		@DisplayName("says a figure nobody has with a dash, as exact() does")
+		void aMissingFigureIsADash() {
+			assertThat(Quantities.oneUnitFor(Unit.KG, figures("5")).apply(null)).isEqualTo("—");
+		}
+
+		@Test
+		@DisplayName("is not thrown by a set where every figure is missing")
+		void everyFigureMissing() {
+			assertThat(Quantities.oneUnitFor(Unit.KG, figures(null, null)).apply(n("2")))
+					.isEqualTo("2 Kg");
+		}
+	}
+
+	/**
+	 * The same rule in the cook's form — what the job card, work order and recipe card print (T-364).
+	 *
+	 * <p>There is no twin for this class in TypeScript, and that is deliberate rather than drift:
+	 * {@code format.ts} has only the ledger form, because the screens that needed one unit are ledger
+	 * screens. A printed document is weighed against instead. The unit choice is the same rule from
+	 * the same biggest figure — {@link SetOfFigures} above is what pins that — and only the rounding
+	 * is added, exactly as {@link Quantities#cooks} adds it to {@link Quantities#exact}.
+	 */
+	@Nested
+	@DisplayName("several figures about one thing, said in one unit — the cook's form")
+	class SetOfFiguresCooks {
+
+		private List<BigDecimal> figures(String... values) {
+			List<BigDecimal> out = new java.util.ArrayList<>();
+			for (String value : values) {
+				out.add(n(value));
+			}
+			return out;
+		}
+
+		@Test
+		@DisplayName("a work order line and the lots it comes from add up on the page: 2.5 Kg + 0.5 Kg")
+		void aLineAndItsLotsAddUp() {
+			// Before this, the half-kilo lot printed "500 gm" beside a total of "3 Kg", so the one
+			// row that exists to be checked against itself had to be converted first.
+			var say = Quantities.cooksOneUnitFor(Unit.KG, figures("3", "2.5", "0.5"));
+			assertThat(say.apply(n("3"))).isEqualTo("3 Kg");
+			assertThat(say.apply(n("2.5"))).isEqualTo("2.5 Kg");
+			assertThat(say.apply(n("0.5"))).isEqualTo("0.5 Kg");
+		}
+
+		@Test
+		@DisplayName("a shortfall pair is one unit: 0.8 Kg / 12 Kg, never 800 gm / 12 Kg")
+		void aShortfallPairIsOneUnit() {
+			var say = Quantities.cooksOneUnitFor(Unit.KG, figures("0.8", "12"));
+			assertThat("%s / %s".formatted(say.apply(n("0.8")), say.apply(n("12"))))
+					.isEqualTo("0.8 Kg / 12 Kg");
+		}
+
+		@Test
+		@DisplayName("a scaled yield and its base are one unit: 2 L made from 0.5 L, not from 500 ml")
+		void aScaledYieldAndItsBase() {
+			var say = Quantities.cooksOneUnitFor(Unit.L, figures("2", "0.5"));
+			assertThat("Scaled to %s (base %s)".formatted(say.apply(n("2")), say.apply(n("0.5"))))
+					.isEqualTo("Scaled to 2 L (base 0.5 L)");
+		}
+
+		@Test
+		@DisplayName("a figure is rounded at its own scale, so 8 gm in a kilogram row is not lost")
+		void eachFigureIsRoundedAtItsOwnScale() {
+			// The trap this rule exists to avoid. The set is said in kilograms because 12 is what
+			// says how big it is; rounding 0.008 as a kilogram figure would round it to a tenth of a
+			// kilo and print "0 Kg" — a lot somebody is being sent to fetch, reported as nothing.
+			var say = Quantities.cooksOneUnitFor(Unit.KG, figures("12", "0.008"));
+			assertThat(say.apply(n("12"))).isEqualTo("12 Kg");
+			assertThat(say.apply(n("0.008"))).isEqualTo("0.008 Kg");
+		}
+
+		@Test
+		@DisplayName("a set of one is said exactly as cooks() says it: a 0.1344 Kg line is still 135 gm")
+		void aSetOfOneIsJustTheCooksForm() {
+			// The one-line work order sheet. The set does not stop the rounding; it only fixes which
+			// word the figures share, and one figure shares it with nobody.
+			assertThat(Quantities.cooksOneUnitFor(Unit.KG, figures("0.1344")).apply(n("0.1344")))
+					.isEqualTo("135 gm");
+			assertThat(Quantities.cooks(n("0.1344"), Unit.KG)).isEqualTo("135 gm");
+		}
+
+		@Test
+		@DisplayName("rounding that carries over a thousand does not move the set's unit")
+		void theCarryDoesNotMoveTheSetsUnit() {
+			// cooks() promotes a lone 999.6 gm to "1 Kg" after rounding. In a set said in grams the
+			// word is already chosen, and the carry is only arithmetic: 1,000 gm, and the figure
+			// beside it stays comparable.
+			var say = Quantities.cooksOneUnitFor(Unit.GM, figures("999.6", "400"));
+			assertThat(say.apply(n("999.6"))).isEqualTo("1,000 gm");
+			assertThat(say.apply(n("400"))).isEqualTo("400 gm");
+			assertThat(Quantities.cooks(n("999.6"), Unit.GM)).isEqualTo("1 Kg");
+		}
+
+		@Test
+		@DisplayName("a unit that is not a unit falls back to a dash, as cooks() does")
+		void anUnknownStoredUnitNameIsADash() {
+			assertThat(Quantities.cooksOneUnitFor("NOT_A_UNIT", figures("2")).apply(n("2")))
+					.isEqualTo("—");
+			assertThat(Quantities.cooks(n("2"), "NOT_A_UNIT")).isEqualTo("—");
+		}
+	}
 }

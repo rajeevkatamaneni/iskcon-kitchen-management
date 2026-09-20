@@ -163,6 +163,82 @@ class DocumentGenerationIT extends AbstractIntegrationTest {
 	}
 
 	/**
+	 * One unit for the scaled yield and the base it was scaled from (T-364).
+	 *
+	 * <p>The two figures are one sentence, read in one glance, and they were asked for one at a time,
+	 * so a card made from a base of half a litre printed "Scaled to 2 L (base 500 ml)" — four times
+	 * the recipe, written so that nobody can see it is four times the recipe without converting
+	 * first. The unit is still printed twice, which was always right; what was wrong was printing two
+	 * different ones.
+	 */
+	@Test
+	@DisplayName("the recipe card says a scaled yield and its base in one unit: 2 L from 0.5 L, not from 500 ml")
+	void theScaledYieldAndItsBaseShareAUnit() {
+		UUID jaggery = insertIngredient("Jaggery water");
+		UUID panakam = admin.queryForObject("""
+				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit, method)
+				VALUES (?, 'Panakam', (SELECT id FROM recipe_categories WHERE tenant_id = ?), 0.5, 'L', 'Stir.')
+				RETURNING id
+				""", UUID.class, temple, temple);
+		admin.update("""
+				INSERT INTO recipe_ingredients (tenant_id, recipe_id, ingredient_id, quantity, unit, line_order)
+				VALUES (?, ?, ?, 0.4, 'L', 0)
+				""", temple, panakam, jaggery);
+
+		TenantContext.set(temple);
+		try {
+			String scaled = RecipeCardTemplate.render(
+					generationService.buildModel(panakam, new java.math.BigDecimal("2"), "en"));
+			String base = RecipeCardTemplate.render(generationService.buildModel(panakam, null, "en"));
+
+			assertThat(scaled)
+					.contains("<div class=\"yield\">Scaled to 2 L (base 0.5 L)</div>")
+					.doesNotContain("500 ml");
+			// An unscaled card says one figure and has no pair to agree with, so it is unchanged: a
+			// lone half-litre is still said the way a person says it.
+			assertThat(base).contains("<div class=\"yield\">Yields 500 ml</div>");
+		} finally {
+			TenantContext.clear();
+		}
+	}
+
+	/**
+	 * The ingredient column is deliberately <em>not</em> given one unit (T-364), and this is the test
+	 * that says so out loud rather than leaving it to be "fixed" by the next person who reads the
+	 * one-row-one-unit rule and applies it everywhere.
+	 *
+	 * <p>The rule is about figures read <em>together</em>: a total against the lots it is drawn from,
+	 * a shortfall pair, a yield against its base. An ingredient column is not that. Nobody sums it,
+	 * nobody subtracts within it, and its rows are not even of one family — a card can hold
+	 * kilograms, litres and pieces in the same column. Each row is a separate instruction to weigh
+	 * one thing, and the unit that makes that instruction easiest to carry out is the one the thing
+	 * is weighed in.
+	 *
+	 * <p>The cost of the other choice, measured rather than argued: with rice at 10 Kg and cardamom
+	 * at 0.008 Kg, one unit for the column prints the cardamom as "0.008 Kg". Three leading zeroes
+	 * on a spice that a cook reads as eight grams, in exchange for an alignment nobody is reading
+	 * down. The rendered comparison is in {@code docs/work/proof/T-364.md}.
+	 */
+	@Test
+	@DisplayName("an ingredient column keeps each line in its own unit: 10 Kg of rice beside 8 gm of cardamom")
+	void anIngredientColumnKeepsEachLineInItsOwnUnit() {
+		UUID cardamom = insertIngredient("Cardamom");
+		insertLine(cardamom, "0.008", "KG", 3);
+
+		TenantContext.set(temple);
+		try {
+			String card = RecipeCardTemplate.render(generationService.buildModel(recipe, null, "en"));
+
+			assertThat(card)
+					.contains("<td>Rice</td><td class=\"amt\">2 Kg</td>")
+					.contains("<td>Cardamom</td><td class=\"amt\">8 gm</td>")
+					.doesNotContain("0.008 Kg");
+		} finally {
+			TenantContext.clear();
+		}
+	}
+
+	/**
 	 * F6 (T-279): a figure of a lakh or more on the PO sheet is grouped the Indian way. The sheet's
 	 * rupees were already right (T-268 grouped them by hand); its quantities were not, because
 	 * {@code Quantities} used the JDK's en-IN formatter, which groups in threes — so a bulk order of

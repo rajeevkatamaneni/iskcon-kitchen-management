@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.ingredient.Quantities;
@@ -273,35 +274,57 @@ public class WorkOrderService {
 		List<WorkOrderTemplate.Line> lines = new ArrayList<>();
 		for (AllocatedLine allocated : allocation.lines()) {
 			Unit canonical = allocated.canonicalUnit();
+			StockShortfall shortfall = shortfalls.get(allocated.ingredientId());
+
+			// One row, one unit (T-364).
+			//
+			// A picking row is a single act of reading and it is arithmetic: the total to fetch, the
+			// amount to take out of each lot it comes from, and — where the shelf is short — what is
+			// there against what is wanted. The lots are meant to add up to the total, and they
+			// visibly did not, because every figure was asked for on its own and chose its own word.
+			// A line short of 0.8 Kg out of 12 printed "800 gm / 12 Kg", and WorkOrderTemplate's own
+			// javadoc has always documented that field as "3 Kg / 12 Kg" — one unit was the intent
+			// from the start.
+			//
+			// So the whole row's figures are gathered first and the biggest of them chooses the word
+			// for all of them. They are gathered in the canonical unit rather than the base, because
+			// the shortfall arrives from FefoAllocator already converted and the other two do not,
+			// and one convention for the set is what makes it a set.
+			BigDecimal required = InventoryUnits.fromBase(allocated.requiredBase(), canonical);
+			List<BigDecimal> figures = new ArrayList<>();
+			figures.add(required);
+			for (BatchDraw draw : allocated.draws()) {
+				figures.add(InventoryUnits.fromBase(draw.takeBase(), canonical));
+			}
+			if (shortfall != null) {
+				figures.add(shortfall.available());
+				figures.add(shortfall.required());
+			}
+			// A work order is weighed against, never reconciled against, so every quantity on it is
+			// the cook's form: a 0.1344 Kg line reads "135 gm" and not "0.1344 Kg".
+			Function<BigDecimal, String> say = Quantities.cooksOneUnitFor(canonical, figures);
 
 			List<WorkOrderTemplate.Batch> batches = new ArrayList<>();
 			for (BatchDraw draw : allocated.draws()) {
 				batches.add(new WorkOrderTemplate.Batch(
-						cooks(draw.takeBase(), canonical),
+						say.apply(InventoryUnits.fromBase(draw.takeBase(), canonical)),
 						draw.expiry() == null ? null : DATE_SHORT.format(draw.expiry()),
 						arrivals.get(draw.batchId()) == null
 								? null : DATE_SHORT.format(arrivals.get(draw.batchId()))));
 			}
 
-			String shortfallText = null;
-			StockShortfall shortfall = shortfalls.get(allocated.ingredientId());
-			if (shortfall != null) {
-				// What is there against what is wanted, both in the cook's form: they are read beside
-				// the quantity on the same row, and two forms of one number on a line is how a sheet
-				// gets misread. The words in front of them are the template's, because they translate.
-				shortfallText = "%s / %s".formatted(
-						Quantities.cooks(shortfall.available(), canonical),
-						Quantities.cooks(shortfall.required(), canonical));
-			}
+			// What is there against what is wanted. The words in front of them are the template's,
+			// because they translate and the figures do not.
+			String shortfallText = shortfall == null ? null
+					: "%s / %s".formatted(
+							say.apply(shortfall.available()), say.apply(shortfall.required()));
 
 			String localName = localNames.get(allocated.ingredientId());
 			lines.add(new WorkOrderTemplate.Line(
 					allocated.ingredientName(),
 					translating && localName != null && !localName.equals(allocated.ingredientName())
 							? localName : null,
-					// A work order is weighed against, never reconciled against, so every quantity on
-					// it is the cook's form: a 0.1344 Kg line reads "135 gm" and not "0.1344 Kg".
-					cooks(allocated.requiredBase(), canonical),
+					say.apply(required),
 					batches,
 					shortfallText));
 		}
@@ -432,10 +455,9 @@ public class WorkOrderService {
 
 	// ---------------------------------------------------------------------
 
-	/** A base-unit figure written the way somebody at a scale reads it. */
-	private static String cooks(BigDecimal base, Unit canonical) {
-		return Quantities.cooks(InventoryUnits.fromBase(base, canonical), canonical);
-	}
+	// A private cooks(base, canonical) helper used to live here, wrapping one base-unit figure for
+	// the picking list. It is gone with T-364: a picking row's figures are no longer written one at
+	// a time, so the renderer is built once per row in picking() and knows the whole row.
 
 	private String stampDate(Instant instant) {
 		return instant == null ? null : DATE_SHORT.format(instant.atZone(clock.zone()));
