@@ -214,16 +214,35 @@ class JobCardIT extends AbstractIntegrationTest {
 				.contains("3 pieces");
 	}
 
+	/**
+	 * <strong>Rewritten by T-425, and the change of intent is the whole of it.</strong>
+	 *
+	 * <p>This used to be called <em>"…because the card rounds first"</em> and it asserted
+	 * <strong>"2 pieces"</strong> for the cardamom. It was pinning a real behaviour: the card printed
+	 * the scaled figure through {@code Quantities.cooks}, which rounds a count to <em>nearest</em> for
+	 * display, so 2.1 pods were printed as 2 — while the stock draw, the cost estimate and the
+	 * planner's badge all read the raw 2.1 underneath. The sheet in the cook's hand and the ledger
+	 * said different numbers about the same spice, and this test pinned the sheet's half of it.
+	 *
+	 * <p>Nothing about the card changed. What changed is that a counted requirement now arrives whole:
+	 * {@code RecipeScaler} rounds it <em>up</em>, once, where it is produced, so {@code Quantities.cooks}
+	 * has nothing left to do to it and every reader gets the same figure.
+	 *
+	 * <p><strong>2.1 pods is 3 pods, and that is the point rather than a side effect.</strong> A cook
+	 * cannot fetch a tenth of a cardamom pod, so the honest answer is the next whole one; rounding to
+	 * nearest tells the kitchen to take 2 while the store gives up 2.1. The banana is the case that
+	 * would hide the change — 0.7 becomes 1 either way — which is why both are asserted here.
+	 *
+	 * <p>The singular is still the thing this file exists to protect (T-144). One banana reads
+	 * <strong>"1 piece"</strong>, and the negative beside it is load-bearing because "1 piece" is a
+	 * substring of "1 pieces".
+	 */
 	@Test
-	@DisplayName("a counted line that scales down to one is singular too, because the card rounds first")
-	void aCountedLineThatRoundsToOneIsSingular() throws Exception {
+	@DisplayName("a scaled counted line is printed as a whole thing, rounded up, and the word agrees")
+	void aCountedLineIsPrintedWholeAndRoundedUp() throws Exception {
 		countedIngredients();
 
-		// 70 of a 100-serving recipe: the single banana becomes 0.7 of one and the three become 2.1.
-		// A cook cannot fetch 0.7 of a banana, so the card rounds a count to a whole thing before it
-		// prints it — and the word has to be chosen from the figure that is actually printed, not
-		// from the one that was scaled. This is the non-integer case, and it is the reason the word
-		// is picked inside Quantities.say() rather than by any of its callers.
+		// 70 of a 100-serving recipe: the single banana becomes 0.7 of one, the three pods 2.1.
 		plan("Lunch", 70, 70, 0, 0);
 
 		String html = print(null);
@@ -231,7 +250,11 @@ class JobCardIT extends AbstractIntegrationTest {
 		assertThat(html)
 				.contains("1 piece")
 				.doesNotContain("1 pieces")
-				.contains("2 pieces");
+				// 2.1 pods is three pods. This read "2 pieces" until T-425, against a draw of 2.1.
+				.contains("3 pieces")
+				.doesNotContain("2 pieces")
+				// And the fraction never reaches the sheet at all.
+				.doesNotContain("2.1");
 	}
 
 	@Test

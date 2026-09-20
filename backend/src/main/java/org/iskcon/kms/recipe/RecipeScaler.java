@@ -11,10 +11,18 @@ import org.iskcon.kms.ingredient.Unit;
  * multiplied by the ratio of target yield to base yield. Non-linear culinary judgement (spice
  * curves) is deliberately out of scope; a recipe's notes carry that.
  *
- * <p>Two values come out of each line. The <strong>raw</strong> quantity is unrounded, in the line's
- * own unit, and is what downstream consumers (sufficiency in E4, orders in E5) compute against. The
+ * <p>Two values come out of each line. The <strong>raw</strong> quantity is in the line's own unit
+ * and is what downstream consumers (sufficiency in E4, orders in E5) compute against. The
  * <strong>display</strong> quantity is rounded and unit-promoted for a human — 24,000 gm shown as
  * 24 Kg — without the raw value ever losing precision.
+ *
+ * <p><strong>For a counted unit the two are one number, and that number is whole (T-425).</strong> A
+ * mass or a volume divides and the split above is right for it: 2.4 Kg of rice is a real quantity of
+ * rice and 0.4 of a kilo is 400 gm. A piece does not divide. So a counted line is rounded <em>up</em>
+ * to a whole thing here, once, at the moment the figure is produced, and both fields carry it — see
+ * the comment in {@link #scale}. Everything downstream reads {@code rawQuantity}, so that is the only
+ * way the printed job card, the stock draw and the cost estimate can be made to agree; it is also why
+ * nothing else in the application needed changing for the rule to hold everywhere.
  *
  * <p><strong>Which unit that display quantity is said in is not decided here.</strong> It was, once:
  * this class is where the rule was written, {@link Quantities} was lifted out of it on 2026-08-30 to
@@ -44,9 +52,10 @@ public final class RecipeScaler {
 	}
 
 	/**
-	 * Scales one line. The raw quantity stays in {@code unit}, unrounded; the display quantity is
-	 * promoted within its metric family (gm↔Kg, ml↔L) so the number a cook reads is sensible, and
-	 * rounded to two decimal places.
+	 * Scales one line. The raw quantity stays in {@code unit}; the display quantity is promoted
+	 * within its metric family (gm↔Kg, ml↔L) so the number a cook reads is sensible, and rounded to
+	 * two decimal places. A counted line is whole and rounded up in both fields, for the reasons
+	 * written out in the branch below.
 	 */
 	public static ScaledQuantity scale(BigDecimal quantity, Unit unit, BigDecimal ratio) {
 		BigDecimal raw = quantity.multiply(ratio, PRECISION);
@@ -54,15 +63,44 @@ public final class RecipeScaler {
 		// A count is a whole thing measured in itself — three idlis is three idlis. It has no larger
 		// or smaller sibling to be promoted into.
 		//
-		// The word is chosen from the ROUNDED figure, because that is the figure the recipe page
-		// prints in front of it (app/recipes/[id]/page.tsx renders displayQuantity and displayUnit
-		// side by side with no formatter between them). A line that scales to 0.999 pieces is shown
-		// "1", so it must say "1 piece"; choosing from the raw 0.999 would say "1 pieces", which is
-		// the defect this line used to have for every count of exactly one (T-148). Rounding once
-		// and handing the same value to both fields keeps the two from ever disagreeing.
+		// **And the scaled figure is whole, rounded UP, and is the same number in both fields
+		// (T-425).** This is the one place in the application that a counted requirement is
+		// produced, and until now it produced fractions: the screen showed the rounded figure while
+		// every consumer — the stock draw, the job card, sufficiency, the cost estimate — read
+		// rawQuantity and used the fraction underneath it. Seeding staging left the stock screen
+		// reading Banana 16.78 and Coconut 400.98 on hand, and nobody had typed either; a dish for
+		// 140 people scaled from a recipe written for 200 drew 0.78 of a banana out of the store.
+		// A real temple would see the same thing on its first day.
+		//
+		// CEILING, never HALF_UP. You cannot cook with 0.78 of a banana; you take a whole one, and
+		// the remainder is the temple's business rather than the arithmetic's. Rounding to nearest
+		// would have a recipe ask for nothing at all where it needs part of one thing — a scaled 0.4
+		// coconut printed "0 pieces" on the recipe card, because DocumentGenerationService renders
+		// this raw figure through Quantities.cooks, which rounds a count HALF_UP for display.
+		// CEILING is also the choice BuyingAmount.stepped already makes for a counted line on the
+		// shopping list, so what the temple is told to buy and what the kitchen is told to take now
+		// round the same way.
+		//
+		// **Scale first, round once, at the end.** `raw` is already quantity x ratio, so a quarter
+		// of a coconut a head across 800 heads is 200 coconuts and not 800. Rounding a per-head
+		// share before the multiply is the mistake this ordering exists to prevent, and
+		// RecipeScalerTest pins those exact numbers.
+		//
+		// **Rounded per line, not per ingredient and not per meal.** Every consumer reads
+		// ScaledLine.rawQuantity and merges it under a key of its own — the job card by ingredient,
+		// unit and preparation note; the stock draw and the cost basket by ingredient alone. Round
+		// here and each of those sums is a sum of whole things, so the printed card, the ledger and
+		// the money cannot disagree. Round after each consumer's merge instead and three merge keys
+		// would give three different whole numbers for one dish, which is exactly the disagreement
+		// this work exists to close. Measured before choosing: across the 458 ingredient lines in
+		// the three recipe books this product ships, no recipe names the same ingredient on two
+		// lines at all, so nothing the temple actually cooks pays for the choice.
+		//
+		// The word still agrees with the figure printed in front of it — "1 piece", "2 pieces"
+		// (T-148) — and now there is only one figure for it to agree with.
 		if (unit.family() == Unit.Family.COUNT) {
-			BigDecimal shown = round(raw);
-			return new ScaledQuantity(raw, unit.name(), shown, unit.label(shown));
+			BigDecimal whole = raw.setScale(0, RoundingMode.CEILING);
+			return new ScaledQuantity(whole, unit.name(), whole, unit.label(whole));
 		}
 
 		// Convert to the family's base unit (grams or millilitres), then ask the one place that knows
