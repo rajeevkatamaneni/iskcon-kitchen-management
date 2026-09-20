@@ -21148,3 +21148,22 @@ already said what T-363's refusal had to say.
 Chrome at 1280 and 390 with real CSS but fixture data; T-364's documents are server-rendered and
 nobody has looked at one on A4; T-365 adds no surface; T-366 ran end to end against its own
 database but must not be run against staging by anyone but Rajeev. The end-to-end pass is his.
+
+### Wave OE — released to staging, 2026-09-20
+
+Five commits straight to `main`, `1f023add` (T-363), `afaa1640` (T-364), `80926735` (T-365),
+`b54a040d` (T-366) and `5b1739e9` (docs), on top of `origin/main` `a5dd6d97` — which had not moved,
+so nothing had to be re-measured. CI run 35527095971: hygiene, backend and frontend all green. The
+committed tree was verified first, in a `git archive HEAD` clean directory: backend 3783 tests / 0
+failures / 0 errors / 7 skipped across 263 classes, all thirteen repo-wide guards read from their own
+XML, frontend 188 files / 2772 tests, tsc and eslint silent, `next build` 77/77 — every figure
+matching this ledger's merged-tree run exactly.
+
+Deployed in 8m26s: api `00176-m2n`, web `00164-lrl`, worker `00158-k6q`, all three digests changed.
+Flyway's own line from the new api revision: *"Current version of schema "public": 159 … Schema
+"public" is up to date. No migration necessary."* — **V160 still free.** The seeded temple is
+untouched at 111 inventory items, 31 purchase orders and 96 meals, counted before and after.
+
+Full record: `docs/work/proof/RELEASE-2026-09-20-outside-events.md`. **Nobody has driven the screens
+on staging signed in** — the first verification pass is still owed, and T-366's script has still not
+been run anywhere.
