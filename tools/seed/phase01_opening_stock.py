@@ -29,6 +29,7 @@ signature that a large adjustment would otherwise need. A refused count leaves n
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -53,11 +54,21 @@ LOCATION = {
 
 
 def reorder_threshold(row: dict) -> float:
-    """A quarter of the opening count, rounded to something a person would write."""
+    """
+    A quarter of the opening count, rounded to something a person would write.
+
+    **A counted thing gets a whole number, rounded up.** "Tell me when agarbatti drops below 7.5"
+    is not a sentence a storekeeper would write, and since the whole-counts rule shipped the
+    application will not save the row at all. Up rather than down on purpose: a reorder level is a
+    warning, and a warning that comes a packet early is useful where one that comes a packet late
+    is not.
+    """
     opening = float(row.get("opening") or 0)
     if opening <= 0:
         return 0
     rough = opening / 4
+    if (row.get("unit") or "").upper() == "PIECES":
+        return float(math.ceil(rough))
     if rough >= 100:
         return round(rough / 10) * 10
     if rough >= 10:
@@ -109,6 +120,17 @@ def main() -> int:
             "unit": row["unit"],
             "supply": row["supply"],
             "ekadashiProhibited": bool(row.get("ekadashi")),
+            # Water is the case. The catalogue marks it as something the temple never buys, and
+            # this is the only chance to say so: **copying a library recipe will not set the mark
+            # on an ingredient the temple already has.** That is deliberate — copying a recipe is
+            # MANAGE_RECIPES, which a Kitchen Manager holds, while the buying policy is the Temple
+            # Admin's alone, so the import refuses to flip a row it does not own and records
+            # "notBoughtNotApplied" in its audit entry instead.
+            #
+            # This phase runs before the recipes are imported, so every ingredient already exists
+            # by the time a recipe names it, and every mark would be refused. Leaving the key out
+            # here put water on the temple's shopping list and left fifteen audit rows saying so.
+            "notBought": bool(row.get("not_bought")),
             "aliases": row.get("aliases") or [],
         }
         try:

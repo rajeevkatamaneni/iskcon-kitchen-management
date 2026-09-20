@@ -29,7 +29,7 @@
       ],
       "ekadashi": true,
       "price": 58,
-      "opening": 1900.0,
+      "opening": 2500.0,
       "packs": [
         {
           "name": "Bag",
@@ -44,7 +44,7 @@
       "category": "Grains",
       "ekadashi": true,
       "price": 58,
-      "opening": 40,
+      "opening": 125.0,
       "packs": [
         {
           "name": "Bag",
@@ -88,7 +88,7 @@
       ],
       "ekadashi": true,
       "price": 48,
-      "opening": 850.0,
+      "opening": 1350.0,
       "packs": [
         {
           "name": "Bag",
@@ -103,7 +103,7 @@
       "category": "Grains",
       "ekadashi": true,
       "price": 46,
-      "opening": 185.0,
+      "opening": 245.0,
       "packs": [
         {
           "name": "Bag",
@@ -118,7 +118,7 @@
       "category": "Grains",
       "ekadashi": true,
       "price": 55,
-      "opening": 370.0,
+      "opening": 465.0,
       "packs": [
         {
           "name": "Bag",
@@ -133,7 +133,7 @@
       "category": "Grains",
       "ekadashi": true,
       "price": 60,
-      "opening": 345.0
+      "opening": 550.0
     },
     {
       "name": "Gram flour",
@@ -176,7 +176,7 @@
       ],
       "ekadashi": false,
       "price": 95,
-      "opening": 25,
+      "opening": 32.0,
       "packs": [
         {
           "name": "Bag",
@@ -195,7 +195,7 @@
       ],
       "ekadashi": true,
       "price": 165,
-      "opening": 385.0,
+      "opening": 550.0,
       "packs": [
         {
           "name": "Bag",
@@ -213,7 +213,7 @@
       ],
       "ekadashi": true,
       "price": 135,
-      "opening": 245.0,
+      "opening": 355.0,
       "packs": [
         {
           "name": "Bag",
@@ -231,7 +231,7 @@
       ],
       "ekadashi": true,
       "price": 95,
-      "opening": 125.0,
+      "opening": 145.0,
       "packs": [
         {
           "name": "Bag",
@@ -249,7 +249,7 @@
       ],
       "ekadashi": true,
       "price": 145,
-      "opening": 50.0,
+      "opening": 65.0,
       "packs": [
         {
           "name": "Bag",
@@ -263,7 +263,7 @@
       "unit": "KG",
       "category": "Sweeteners",
       "price": 48,
-      "opening": 100,
+      "opening": 115.0,
       "packs": [
         {
           "name": "Bag",
@@ -277,7 +277,7 @@
       "unit": "KG",
       "category": "Sweeteners",
       "price": 62,
-      "opening": 55.0
+      "opening": 80.0
     },
     {
       "name": "Jaggery",
@@ -287,7 +287,7 @@
         "Bella"
       ],
       "price": 70,
-      "opening": 185.0,
+      "opening": 225.0,
       "packs": [
         {
           "name": "Block",
@@ -305,7 +305,7 @@
         "Clarified butter"
       ],
       "price": 650,
-      "opening": 45,
+      "opening": 490.0,
       "packs": [
         {
           "name": "Tin",
@@ -339,7 +339,7 @@
       "unit": "L",
       "category": "Oils & fats",
       "price": 150,
-      "opening": 60,
+      "opening": 475.0,
       "packs": [
         {
           "name": "Tin",
@@ -357,7 +357,7 @@
         "Til oil"
       ],
       "price": 280,
-      "opening": 95.0,
+      "opening": 115.0,
       "packs": [
         {
           "name": "Can",
@@ -371,7 +371,7 @@
       "unit": "L",
       "category": "Oils & fats",
       "price": 260,
-      "opening": 55.0,
+      "opening": 85.0,
       "packs": [
         {
           "name": "Can",
@@ -385,7 +385,7 @@
       "unit": "L",
       "category": "Dairy",
       "price": 58,
-      "opening": 245.0,
+      "opening": 365.0,
       "packs": [
         {
           "name": "Crate",
@@ -403,7 +403,7 @@
         "Mosaru"
       ],
       "price": 75,
-      "opening": 80.0
+      "opening": 120.0
     },
     {
       "name": "Coconut",
@@ -414,7 +414,7 @@
         "Fresh coconut"
       ],
       "price": 45,
-      "opening": 250,
+      "opening": 5550.0,
       "packs": [
         {
           "name": "Sack",
@@ -432,7 +432,7 @@
         "Kobbari"
       ],
       "price": 320,
-      "opening": 12
+      "opening": 27.0
     },
     {
       "name": "Cashew",
@@ -443,7 +443,7 @@
         "Godambi"
       ],
       "price": 950,
-      "opening": 65.0,
+      "opening": 95.0,
       "packs": [
         {
           "name": "Box",
@@ -482,7 +482,7 @@
         "Kharjura"
       ],
       "price": 220,
-      "opening": 17.0
+      "opening": 35.0
     },
     {
       "name": "Groundnut",
@@ -494,7 +494,7 @@
       ],
       "ekadashi": false,
       "price": 140,
-      "opening": 140.0,
+      "opening": 170.0,
       "packs": [
         {
           "name": "Bag",
@@ -513,14 +513,14 @@
         "Til"
       ],
       "price": 220,
-      "opening": 31.0
+      "opening": 39.0
     },
     {
       "name": "Salt",
       "unit": "KG",
       "category": "Spices",
       "price": 22,
-      "opening": 305.0,
+      "opening": 410.0,
       "packs": [
         {
           "name": "Bag",
@@ -552,7 +552,7 @@
         "Turmeric powder"
       ],
       "price": 280,
-      "opening": 29.0
+      "opening": 37.0
     },
     {
       "name": "Chilli powder",
@@ -577,7 +577,7 @@
         "Kottambari beeja"
       ],
       "price": 220,
-      "opening": 60.0
+      "opening": 80.0
     },
     {
       "name": "Cumin seeds",
@@ -589,7 +589,7 @@
         "Jeerige"
       ],
       "price": 480,
-      "opening": 27.0
+      "opening": 37.0
     },
     {
       "name": "Mustard seeds",
@@ -601,7 +601,7 @@
         "Rai"
       ],
       "price": 160,
-      "opening": 49.0
+      "opening": 65.0
     },
     {
       "name": "Fenugreek",
@@ -624,7 +624,7 @@
         "Menasu"
       ],
       "price": 850,
-      "opening": 6.0
+      "opening": 10.0
     },
     {
       "name": "Green cardamom",
@@ -636,14 +636,14 @@
         "Elaichi"
       ],
       "price": 3200,
-      "opening": 2.5
+      "opening": 3.3
     },
     {
       "name": "Cardamom powder",
       "unit": "KG",
       "category": "Spices",
       "price": 3600,
-      "opening": 1.7
+      "opening": 1.9
     },
     {
       "name": "Cloves",
@@ -653,7 +653,7 @@
         "Lavanga"
       ],
       "price": 1100,
-      "opening": 1.7
+      "opening": 2.3
     },
     {
       "name": "Cinnamon",
@@ -664,7 +664,7 @@
         "Chakke"
       ],
       "price": 650,
-      "opening": 2.5
+      "opening": 3.8
     },
     {
       "name": "Nutmeg powder",
@@ -708,7 +708,7 @@
         "Ingu"
       ],
       "price": 1800,
-      "opening": 14.0
+      "opening": 18.0
     },
     {
       "name": "Dry red chilli",
@@ -719,7 +719,7 @@
         "Ona menasinakayi"
       ],
       "price": 320,
-      "opening": 55.0
+      "opening": 70.0
     },
     {
       "name": "Tamarind",
@@ -730,7 +730,7 @@
         "Imli"
       ],
       "price": 180,
-      "opening": 135.0
+      "opening": 175.0
     },
     {
       "name": "Eno",
@@ -741,7 +741,7 @@
         "Eno / soda"
       ],
       "price": 900,
-      "opening": 2.5
+      "opening": 3.5
     },
     {
       "name": "Sambar powder",
@@ -759,14 +759,14 @@
         "Huli pudi (see Masalas)"
       ],
       "price": 400,
-      "opening": 22.0
+      "opening": 36.0
     },
     {
       "name": "Bisi bele bath pudi",
       "unit": "KG",
       "category": "Spices",
       "price": 480,
-      "opening": 38.0,
+      "opening": 55.0,
       "aliases": [
         "Bisi bele bath pudi (see Masalas)"
       ]
@@ -776,14 +776,14 @@
       "unit": "KG",
       "category": "Spices",
       "price": 480,
-      "opening": 21.0
+      "opening": 24.0
     },
     {
       "name": "Chutney pudi",
       "unit": "KG",
       "category": "Spices",
       "price": 450,
-      "opening": 12.0
+      "opening": 17.0
     },
     {
       "name": "Potato",
@@ -810,14 +810,14 @@
       "category": "Vegetables",
       "ekadashi": false,
       "price": 45,
-      "opening": 25
+      "opening": 29.0
     },
     {
       "name": "Carrot",
       "unit": "KG",
       "category": "Vegetables",
       "price": 45,
-      "opening": 40
+      "opening": 55.0
     },
     {
       "name": "Beans",
@@ -838,7 +838,7 @@
         "Guvar"
       ],
       "price": 70,
-      "opening": 230.0
+      "opening": 280.0
     },
     {
       "name": "Field beans",
@@ -849,7 +849,7 @@
         "Hyacinth beans"
       ],
       "price": 90,
-      "opening": 215.0
+      "opening": 315.0
     },
     {
       "name": "Brinjal",
@@ -860,7 +860,7 @@
         "Aubergine"
       ],
       "price": 40,
-      "opening": 365.0
+      "opening": 430.0
     },
     {
       "name": "Okra",
@@ -871,7 +871,7 @@
         "Ladies finger"
       ],
       "price": 55,
-      "opening": 210.0
+      "opening": 290.0
     },
     {
       "name": "Ridge gourd",
@@ -882,7 +882,7 @@
         "Turai"
       ],
       "price": 45,
-      "opening": 225.0
+      "opening": 285.0
     },
     {
       "name": "Snake gourd",
@@ -892,7 +892,7 @@
         "Padavalakayi"
       ],
       "price": 40,
-      "opening": 140.0
+      "opening": 195.0
     },
     {
       "name": "Ivy gourd",
@@ -903,7 +903,7 @@
         "Tindora"
       ],
       "price": 50,
-      "opening": 320.0
+      "opening": 460.0
     },
     {
       "name": "Red pumpkin",
@@ -914,7 +914,7 @@
         "Kaddu"
       ],
       "price": 30,
-      "opening": 250.0
+      "opening": 340.0
     },
     {
       "name": "Drumstick",
@@ -925,7 +925,7 @@
         "Moringa"
       ],
       "price": 80,
-      "opening": 145.0
+      "opening": 170.0
     },
     {
       "name": "Elephant foot yam",
@@ -947,7 +947,7 @@
         "Plantain"
       ],
       "price": 35,
-      "opening": 180.0
+      "opening": 275.0
     },
     {
       "name": "Amaranth greens",
@@ -958,14 +958,14 @@
         "Harive soppu"
       ],
       "price": 40,
-      "opening": 85.0
+      "opening": 110.0
     },
     {
       "name": "Mixed vegetables",
       "unit": "KG",
       "category": "Vegetables",
       "price": 45,
-      "opening": 480.0
+      "opening": 750.0
     },
     {
       "name": "Ginger",
@@ -976,7 +976,7 @@
         "Adrak"
       ],
       "price": 120,
-      "opening": 38.0
+      "opening": 55.0
     },
     {
       "name": "Green chilli",
@@ -987,7 +987,7 @@
         "Hari mirch"
       ],
       "price": 60,
-      "opening": 70.0
+      "opening": 95.0
     },
     {
       "name": "Curry leaves",
@@ -998,7 +998,7 @@
         "Kadi patta"
       ],
       "price": 120,
-      "opening": 80.0
+      "opening": 105.0
     },
     {
       "name": "Coriander leaves",
@@ -1010,7 +1010,7 @@
         "Dhania patta"
       ],
       "price": 80,
-      "opening": 60.0
+      "opening": 80.0
     },
     {
       "name": "Mint leaves",
@@ -1020,7 +1020,7 @@
         "Pudina"
       ],
       "price": 120,
-      "opening": 7.0
+      "opening": 11.0
     },
     {
       "name": "Lemon",
@@ -1032,7 +1032,7 @@
         "Nimbe"
       ],
       "price": 6,
-      "opening": 1900.0
+      "opening": 3650.0
     },
     {
       "name": "Banana",
@@ -1042,7 +1042,7 @@
         "Bale hannu"
       ],
       "price": 8,
-      "opening": 355.0
+      "opening": 435.0
     },
     {
       "name": "Pineapple",
