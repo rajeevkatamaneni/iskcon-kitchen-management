@@ -47,7 +47,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from common import ApiError, Tally, parse_args, sign_in, step, info, note  # noqa: E402
-from common.config import DONORS, KITCHEN_MANAGER, TEMPLE_ADMIN, VOLUNTEERS  # noqa: E402
+from common.config import DONORS, TEMPLE_ADMIN, VOLUNTEERS, kitchen_manager  # noqa: E402
 
 PHASE = "phase13"
 
@@ -60,7 +60,9 @@ PHASE = "phase13"
 #
 # (days from today, title, start, end, capacity, where, what it is)
 UPCOMING = [
-    (1, "Morning prasadam service", "10:00:00", "14:00:00", 8, "Prasadam hall",
+    # Called "morning" until 2026-09-20, which read as a contradiction on the screen: the hours
+    # are the lunch sitting and the description says so in its first four words.
+    (1, "Lunch prasadam service", "10:00:00", "14:00:00", 8, "Prasadam hall",
      "Serving the lunch queue and clearing afterwards."),
     (2, "Vegetable cutting", "06:30:00", "09:30:00", 6, "Main Kitchen, prep bay",
      "Cutting for the day's sabjis. No cooking experience needed."),
@@ -83,7 +85,7 @@ def main() -> int:
     args = parse_args(PHASE)
     tally = Tally("phase 13 — volunteers")
 
-    manager = sign_in(args.api, KITCHEN_MANAGER, args.tenant)
+    manager = sign_in(args.api, kitchen_manager(args.api, args.tenant, needs_approval=False), args.tenant)
     admin = sign_in(args.api, TEMPLE_ADMIN, args.tenant)
 
     people = VOLUNTEERS + DONORS
