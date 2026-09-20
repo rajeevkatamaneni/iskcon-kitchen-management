@@ -15,7 +15,10 @@ import {
   quantity,
   readablePackRate,
   readableRate,
+  inputModeForUnit,
+  isCountedUnit,
   repeatsPack,
+  stepForUnit,
   unitLabel,
 } from "@/lib/format";
 
@@ -330,6 +333,17 @@ export function InvoiceItemsTable(props: InvoiceItemsTableProps) {
           const billed = num(l.qty) ?? 0;
           const amountMissing = billed > 0 && num(l.amount) == null;
           const pack = packIn(l, packs);
+          /*
+           * A bill billed in a counted unit counts whole things (T-424).
+           *
+           * A bill billed in a PACK does not, and this is the trap: a bill restates a delivery, and
+           * a delivery of part of a bag is a real thing this product supports on purpose ("2.8 bags
+           * (70 Kg)", `RecordDeliveryPanel`). Stepping a pack line by 1 here would make a bill for
+           * the delivery that actually happened impossible to type. What must be whole for a
+           * counted ingredient is the stock amount, which the box in packs cannot express as a
+           * step; the server's own refusal is the guard for that case.
+           */
+          const billedInCounted = isCountedUnit(l.billedIn);
           const stock = billedStock(l, packs);
           const units = l.oneOff
             ? FOOD_UNITS
@@ -379,9 +393,11 @@ export function InvoiceItemsTable(props: InvoiceItemsTableProps) {
                   <span className="flex items-center gap-2 max-lg:flex-wrap">
                     <input
                       type="number"
-                      inputMode="decimal"
+                      // Billed in whatever the "Billed in" select beside it says — a pack, or a
+                      // unit. Both can be counted, and a bill for 3.6 brooms is T-424.
+                      inputMode={billedInCounted ? "numeric" : "decimal"}
                       min="0"
-                      step="any"
+                      step={billedInCounted ? "1" : "any"}
                       required
                       value={l.qty}
                       onChange={(e) => onChange(l.key, { qty: e.target.value })}
@@ -559,9 +575,11 @@ function PackSizeRow({
             <span className="pl-field-inset font-medium text-ink">Size</span>
             <input
               type="number"
-              inputMode="decimal"
+              // How much is in one pack, in the unit chosen beside it. A pack of 12.5 pieces is
+              // not a pack of anything (T-424); a 2.5 Kg pack is ordinary.
+              inputMode={inputModeForUnit(unit)}
               min="0"
-              step="any"
+              step={stepForUnit(unit)}
               value={size}
               onChange={(e) => setSize(e.target.value)}
               aria-invalid={blank || undefined}

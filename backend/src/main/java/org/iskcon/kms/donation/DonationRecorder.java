@@ -71,12 +71,20 @@ public class DonationRecorder {
 		// obeys (BL-9): it refuses an ingredient this temple cannot see as not found, and a unit
 		// from another family as KMS-400013 naming the ingredient, which on a many-line gift is the
 		// difference between "fix Ghee" and "one of these is wrong".
+		//
+		// The second rule is asked over the whole gift in the same pass (T-423): half a coconut is
+		// not a gift of coconuts, and a donor's dozen lines should be told about every one that is
+		// wrong rather than made to fix them one at a time. Collected rather than thrown at the first
+		// bad line, which is the only difference between the two rules here.
 		List<Unit> units = new java.util.ArrayList<>(ingredients.size());
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers(ingredientUnits);
 		for (IngredientDonationLine line : ingredients) {
 			Unit unit = parseUnit(line.unit());
 			ingredientUnits.requireSameFamily(line.ingredientId(), unit);
+			whole.check(line.ingredientId(), line.quantity(), unit);
 			units.add(unit);
 		}
+		whole.refuseAnyPart();
 
 		String donorName = request.anonymous() ? null : request.donorName().trim();
 		// Saved in +91 form when what was typed can only be an Indian mobile, and as typed otherwise

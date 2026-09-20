@@ -10,7 +10,7 @@ import { api, toApiError, type ApiError, type CloseOutcome, type DeliveryPartVie
 import { generateAndDownload } from "@/lib/document-download";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { dateWithYear, quantity, repeatsPack, shortDate, unitLabel, templeDay, templeZone } from "@/lib/format";
+import { dateWithYear, quantity, repeatsPack, shortDate, stepForUnit, unitLabel, templeDay, templeZone } from "@/lib/format";
 import { ALL_LANGUAGES } from "@/lib/languages";
 import { statusChip } from "../po-status";
 import { BusyPot, Loading } from "@/components/Loading";
@@ -1303,7 +1303,8 @@ function PurchaseOrderDetailView() {
                             type="number"
                             min="0"
                             max={returnChoice.line.receivedQty - returnChoice.line.returnedQty}
-                            step="any"
+                            // 1.5 aprons cannot go back on the van (T-424).
+                            step={stepForUnit(returnChoice.line.unit)}
                             aria-label={`Quantity of ${returning.subject} to return`}
                             className="w-32 min-h-touch rounded-control border border-hairline px-2 tabular-nums"
                           />

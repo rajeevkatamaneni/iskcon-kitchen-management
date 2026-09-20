@@ -10,7 +10,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { api, toApiError, type ApiError, type BatchStock, type CommittedMeal, type StockMovement } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { FOOD_UNITS, dateWithYear, expiryWord, moment, quantity, unitLabel } from "@/lib/format";
+import { FOOD_UNITS, dateWithYear, expiryWord, moment, quantity, stepForUnit, unitLabel } from "@/lib/format";
 import { Loading } from "@/components/Loading";
 import { RULED_TABLE, RULED_TABLE_EVEN, THEAD, TR, ACTIONS_ROW, TH_LEAD, TD_LEAD, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
@@ -413,6 +413,13 @@ function AdjustForm({
   const opening = batches.length === 0;
   /** The change as typed. Read as it changes, because its sign decides whether the value is asked. */
   const [change, setChange] = useState("");
+  /*
+   * The unit picked below, held rather than left to the DOM, because the quantity box's `step`
+   * follows it: a correction typed in pieces must stop taking a fraction the moment the picker is
+   * moved to pieces, and an uncontrolled select cannot tell the box it moved (T-424). `name="unit"`
+   * stays on it, so `submit` still reads the value out of the FormData exactly as before.
+   */
+  const [adjustUnit, setAdjustUnit] = useState(unit);
 
   /*
    * "What it would cost to buy today" (R-ING-3). Asked whenever this adds stock, for any reason —
@@ -449,6 +456,9 @@ function AdjustForm({
     if (ok) {
       form.reset();
       setChange("");
+      // `form.reset()` restores the boxes the DOM owns; the unit picker is ours now, so it is put
+      // back to the item's own unit by hand rather than being left on the last one used.
+      setAdjustUnit(unit);
     }
   }
 
@@ -500,7 +510,11 @@ function AdjustForm({
           <input
             name="quantity"
             type="number"
-            step="any"
+            // The Unit select below is what this follows, not the item's stock unit: a
+            // correction may be typed in any of the five, and the box has to agree with the one
+            // showing (T-424). A negative whole number is still fine — step counts from 0 in
+            // both directions, so "-2" pieces passes and "-2.4" does not.
+            step={stepForUnit(adjustUnit)}
             min={opening ? 0 : undefined}
             required
             value={change}
@@ -510,7 +524,12 @@ function AdjustForm({
         </label>
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Unit</span>
-          <select name="unit" defaultValue={unit} className="min-h-touch rounded-control border border-hairline px-3">
+          <select
+            name="unit"
+            value={adjustUnit}
+            onChange={(e) => setAdjustUnit(e.target.value)}
+            className="min-h-touch rounded-control border border-hairline px-3"
+          >
             {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
           </select>
         </label>

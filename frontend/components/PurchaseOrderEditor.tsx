@@ -5,7 +5,7 @@ import { Button } from "@/components/ds/Button";
 import { Form } from "@/components/ds/Form";
 import { HintedField } from "@/components/ds/InfoHint";
 import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
-import { FOOD_UNITS, leadTimeWarning, quantity, unitLabel } from "@/lib/format";
+import { FOOD_UNITS, leadTimeWarning, quantity, stepForUnit, unitLabel } from "@/lib/format";
 import type { IngredientView, PoLineInput } from "@/lib/api";
 
 /**
@@ -412,7 +412,9 @@ export function PurchaseOrderEditor({
                   <input
                     type="number"
                     min="0"
-                    step={l.pack ? "1" : "any"}
+                    // Whole either way it can be whole: a pack line counts bags, and a plain
+                    // line in a counted unit counts the things themselves (T-424).
+                    step={l.pack ? "1" : stepForUnit(l.unit)}
                     value={l.quantity}
                     // A pack line's box holds a count, and there can be two lines for one ingredient
                     // when sizes are mixed, so its name says which pack it counts.

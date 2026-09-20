@@ -402,6 +402,13 @@ public class InventoryItemService {
 		if (request.quantity() == null || request.quantity().signum() == 0) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "quantity"));
 		}
+		// And the second rule, here for the same reason and in the same place (T-423): 88.5 aprons is
+		// the figure this whole task is named after, and it got there through this method — "Add to
+		// inventory" sends its opening count as exactly this request, through this code, so the first
+		// count of a new consumable and every later correction to it are held to one rule rather than
+		// two. Asked before the batch and large-adjustment guards below, so "half an apron" is
+		// answered as half an apron rather than as "that needs an admin".
+		IngredientUnits.requireWhole(item.ingredientName(), request.quantity(), unit);
 		if (request.reason() == AdjustmentReason.OTHER
 				&& (request.note() == null || request.note().isBlank())) {
 			throw new ApplicationException(ErrorCode.VALIDATION_FAILED, Map.of("field", "note"));

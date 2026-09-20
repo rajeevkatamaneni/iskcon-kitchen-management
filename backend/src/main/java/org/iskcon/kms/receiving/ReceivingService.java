@@ -13,6 +13,7 @@ import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.error.ErrorResponse;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.MovementReference;
 import org.iskcon.kms.inventory.MovementType;
@@ -190,6 +191,7 @@ public class ReceivingService {
 
 	private void validate(UUID poId, ReceiveDeliveryRequest request,
 			Map<UUID, PurchaseOrderLineView> poLines) {
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers();
 		for (ReceiptLineInput line : request.lines()) {
 			if (!poLines.containsKey(line.poLineId())) {
 				throw new ApplicationException(ErrorCode.RECEIPT_LINE_NOT_ON_PO,
@@ -228,7 +230,25 @@ public class ReceivingService {
 				throw new ApplicationException(ErrorCode.RECEIPT_LINE_EMPTY,
 						Map.of("poLineId", line.poLineId()));
 			}
+
+			// A counted thing cannot be a fraction (T-423). Both figures, because both are things
+			// the storekeeper counted at the gate: 7.2 cylinders did not arrive and 0.5 of a broom
+			// was not sent back off the lorry. The unit is the order line's own and is not on the
+			// request at all — the screen turns "4 bags" into 100 Kg before it sends — which is why
+			// this is here and not an annotation on ReceiptLineInput.
+			//
+			// This is the one gate for both doors into receiving. "Record a delivery" builds
+			// ReceiptLineInput from its own body in DeliveriesService and comes through here, the
+			// same argument the described-line check above makes for itself.
+			//
+			// Collected, not thrown at the first bad line: a lorry is many lines keyed in one pass,
+			// which is the whole reason this screen is multi-line, and the same reason the shortfall
+			// on an issue names every ingredient that is short.
+			Unit lineUnit = Unit.valueOf(subject.unit());
+			whole.check(subject.subject(), line.receivedQty(), lineUnit);
+			whole.check(subject.subject(), line.rejectedQty(), lineUnit);
 		}
+		whole.refuseAnyPart();
 	}
 
 	private UUID insertHeader(AuthenticatedUser actor, UUID poId, ReceiveDeliveryRequest request) {

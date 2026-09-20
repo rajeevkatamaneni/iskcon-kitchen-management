@@ -450,23 +450,43 @@ public class IngredientRequestService {
 			}
 			ingredientUnits.requireSameFamily(line.ingredientId(), line.unit());
 		}
+
+		// And a counted thing cannot be a fraction (T-423). Over the whole request at once, because
+		// a kitchen asking for twenty things and being told about one of them is a kitchen filling
+		// the form in twenty times. Asked after the loop above, so an ingredient this temple cannot
+		// see is still the refusal it always was rather than a rounding instruction about a line
+		// whose ingredient does not exist.
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers(ingredientUnits);
+		for (IngredientRequestLineInput line : lines) {
+			whole.check(line.ingredientId(), line.quantity(), line.unit());
+		}
+		whole.refuseAnyPart();
 	}
 
 	/**
 	 * A dish may be measured in anything food is genuinely made in, servings included — 200 servings
 	 * of khichdi, four litres of sweet rice, six kilos of pickle. There is nothing to check it
 	 * against, because a dish is a name and a number and points at no catalogue row.
+	 *
+	 * <p>Except for one thing, which needs no catalogue row: the number itself (T-423). Idlis are
+	 * counted one by one, so 200.5 of them is not a quantity of anything the kitchen can cook or the
+	 * approver can read. The dish's own name is what the refusal names — there is nothing else to
+	 * name it by, and it is what the person typed in the box beside the figure.
 	 */
 	private void validateDishes(List<IngredientRequestDishInput> dishes) {
 		if (dishes == null) {
 			return;
 		}
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers();
 		for (int i = 0; i < dishes.size(); i++) {
-			if (dishes.get(i).quantity().signum() <= 0) {
+			IngredientRequestDishInput dish = dishes.get(i);
+			if (dish.quantity().signum() <= 0) {
 				throw new ApplicationException(ErrorCode.VALIDATION_FAILED,
 						Map.of("field", "dishes[" + i + "].quantity"));
 			}
+			whole.check(dish.dishName(), dish.quantity(), dish.unit());
 		}
+		whole.refuseAnyPart();
 	}
 
 	/**

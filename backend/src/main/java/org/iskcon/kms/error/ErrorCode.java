@@ -1246,6 +1246,28 @@ public enum ErrorCode {
 			"A menu item can only be in one group.",
 			"Open Menu in Settings, take the repeated item out of one of the groups and save again."),
 
+	// A fraction of something counted one by one (T-423/T-424, the coordinator 2026-09-20).
+	//
+	// Seeding staging produced 7.2 LPG cylinders, 3.6 brooms, 2.4 mops and a return of 1.5 aprons,
+	// and every one of them was recorded without complaint; an apron ended up sitting at 88.5 in
+	// stock. The application knew the unit was PIECES. Nothing in it knew that a piece cannot be
+	// split. Every quantity column is NUMERIC(_, 3), so the schema was never going to say so either.
+	//
+	// Minted rather than folded into INCOMPATIBLE_UNIT (400013), which is the family question — "is
+	// this quantity even sayable about this ingredient". This one is about a unit that fits
+	// perfectly and a number that does not, and somebody told "that quantity is in a unit this
+	// ingredient can't be measured in" after typing 1.5 aprons would go looking for the wrong
+	// mistake. That is the argument NOT_BOUGHT_INGREDIENT above was minted on.
+	//
+	// The static words stay unit-neutral because PIECES is only the first counted unit — Unit.java
+	// says the next one somebody adds, crates or sacks or bundles, is one extra line. Which thing,
+	// which unit, and the whole numbers either side of what was typed all travel in `details`, the
+	// way IngredientUnits already names the ingredient for 400013 and IngredientIssueService already
+	// names a computed shortfall for 400118: the temple's own words about the temple's own data.
+	PART_OF_A_COUNTED_THING(400191, 400,
+			"Some of these are counted one by one, so a part of one can't be entered.",
+			"Round the amounts marked below to a whole number and try again."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

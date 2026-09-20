@@ -400,3 +400,60 @@ describe("the ingredient request record", () => {
     expect(screen.getByText(/not your page/i)).toBeInTheDocument();
   });
 });
+
+/**
+ * Issuing a counted ingredient (T-424). This form is outside the shared `<Form>`, so it says the
+ * sentence itself, from the same `formMessages.wholeNumberProblem` every other screen uses.
+ */
+describe("issuing a counted ingredient", () => {
+  const counted = () =>
+    detail("APPROVED", {
+      lines: [
+        { id: "l1", lineNo: 1, ingredientId: "i9", ingredientName: "Apron", quantity: 12,
+          unit: "PIECES", issuedQuantity: null, issuedUnit: null, note: null },
+      ],
+    });
+
+  it("steps the issued box by 1 for pieces and by any for kilos", async () => {
+    signedInAs("KITCHEN_MANAGER", "manager");
+    getMock.mockResolvedValue(counted());
+    render(<IngredientRequestPage />);
+    await screen.findByRole("heading", { name: /IR-2026-0041/ });
+    expect(screen.getByLabelText(/issued apron/i)).toHaveAttribute("step", "1");
+
+    getMock.mockResolvedValue(detail("APPROVED"));
+  });
+
+  it("refuses a fraction and issues nothing", async () => {
+    signedInAs("KITCHEN_MANAGER", "manager");
+    getMock.mockResolvedValue(counted());
+    render(<IngredientRequestPage />);
+    await screen.findByRole("heading", { name: /IR-2026-0041/ });
+
+    fireEvent.change(screen.getByLabelText(/issued apron/i), { target: { value: "1.5" } });
+    fireEvent.click(screen.getByRole("button", { name: /record the issue/i }));
+
+    expect(screen.getByText("Issued Apron must be a whole number")).toHaveClass("text-danger");
+    expect(issueMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/issued apron/i)).toHaveValue(1.5);
+  });
+
+  /*
+   * An approved line that already holds a fraction — the seeding defect's shape — opens showing it
+   * rather than being rounded to something nobody approved.
+   */
+  it("still shows a fractional approved quantity", async () => {
+    signedInAs("KITCHEN_MANAGER", "manager");
+    getMock.mockResolvedValue(
+      detail("APPROVED", {
+        lines: [
+          { id: "l1", lineNo: 1, ingredientId: "i9", ingredientName: "Apron", quantity: 88.5,
+            unit: "PIECES", issuedQuantity: null, issuedUnit: null, note: null },
+        ],
+      }),
+    );
+    render(<IngredientRequestPage />);
+    await screen.findByRole("heading", { name: /IR-2026-0041/ });
+    expect(screen.getByLabelText(/issued apron/i)).toHaveValue(88.5);
+  });
+});

@@ -62,6 +62,14 @@ class UnitLabelAgreementTest {
 			// two units and counts neither.
 			"ingredient/IngredientUnits.java|ref.name(), ref.canonical().label(), given.label(), ref.canonical().label())));",
 
+			// The refusal when somebody enters part of something counted one by one (T-423,
+			// KMS-400191) — "Apron is counted in whole pieces. Enter 88 or 89." The word names the
+			// unit generically, as "whole pieces", and is not agreeing with either figure printed
+			// after it: those two are the whole numbers either side of what was typed, and the
+			// sentence is about neither of them in particular. label(count) would have to pick one,
+			// and would then read "counted in whole piece" whenever the nearer whole number was 1.
+			"ingredient/IngredientUnits.java|thingName, unit.label(),",
+
 			// The recipe form's refusal when the portion unit is from another family (T-218) — "A
 			// recipe measured in Litres takes its portion in L or ml." It names the recipe's unit, with
 			// no count beside it.

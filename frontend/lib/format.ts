@@ -237,6 +237,98 @@ export function unitLabelFor(value: number, unit: string | null | undefined): st
  */
 export const FOOD_UNITS: readonly string[] = ["KG", "GM", "L", "ML", "PIECES"];
 
+/** What a unit measures. Mirrors `Unit.Family` in `backend/.../ingredient/Unit.java`. */
+export type UnitFamily = "MASS" | "VOLUME" | "COUNT";
+
+/**
+ * The family of every unit in the vocabulary — the frontend's copy of `Unit.Family`.
+ *
+ * <p>**Why this exists when {@link FAMILY} is three lines further down.** The two answer different
+ * questions and only one of them could answer this one. `FAMILY` is a table of *conversion pairs*:
+ * what the bigger and the smaller unit of a divisible measure are, so that 350 ml can be restated
+ * as 0.35 L. A count has no pair, so `PIECES` is deliberately absent from it — which meant that
+ * until T-424 the only way the frontend could tell a count from a weight was that it was **missing
+ * from a table**. That is a rule nobody can read, and nobody did: T-424 is the defect where seeding
+ * wrote 7.2 LPG cylinders, 3.6 brooms, 2.4 mops and a return of 1.5 aprons, and left an apron
+ * sitting at 88.5 in stock. The application knew the unit was `PIECES`. Nothing in it knew that a
+ * piece is indivisible.
+ *
+ * <p>So the rule is written down instead of inferred, in the same shape the server writes it, and
+ * `COUNT` is a member here rather than an absence. `__tests__/counted-units.test.ts` holds the two
+ * tables to each other — every `COUNT` unit absent from `FAMILY`, every other unit present in it —
+ * so they cannot drift apart, which is the one real cost of having both.
+ *
+ * <p>**The next counted unit inherits all of this.** `Unit.java` names crates, sacks and bundles as
+ * the ones it expects; adding one is this line plus {@link FOOD_UNITS} plus its label, and every
+ * box in the application starts refusing a fraction of it without another sweep of 17 files.
+ */
+const UNIT_FAMILY: Record<string, UnitFamily> = {
+  KG: "MASS",
+  GM: "MASS",
+  L: "VOLUME",
+  ML: "VOLUME",
+  PIECES: "COUNT",
+};
+
+/** What `unit` measures, or null for a unit this vocabulary does not know. */
+export function unitFamily(unit: string | null | undefined): UnitFamily | null {
+  return UNIT_FAMILY[(unit ?? "").toUpperCase()] ?? null;
+}
+
+/**
+ * Is `unit` a count of indivisible things — pieces, and whatever counted unit is added next?
+ *
+ * <p>**An unknown or missing unit is not counted.** A box on a form where no ingredient has been
+ * chosen yet has no unit at all, and a box that refused a fraction because its unit was blank would
+ * be a new defect in place of the old one. The permissive answer is also the one that matches what
+ * every box did before T-424, so nothing a person could already type stops being typeable except
+ * where the unit genuinely says it should.
+ */
+export function isCountedUnit(unit: string | null | undefined): boolean {
+  return unitFamily(unit) === "COUNT";
+}
+
+/**
+ * The `step` a number box holding a quantity in `unit` should carry: `"1"` for a count, `"any"`
+ * for everything else.
+ *
+ * <p>**Why the screens call this rather than testing the unit themselves.** There are 25 quantity
+ * boxes across 17 files and not one of them goes through a shared control, so the alternative was
+ * 25 copies of the same condition and 25 places for the next counted unit to be forgotten. One
+ * function means one place the rule is written and one anchor to break when proving a test suite
+ * actually exercises it.
+ *
+ * <p>**What `step="1"` buys.** It is what makes the browser set `stepMismatch`, which is what
+ * `components/ds/Form.tsx` turns into "… must be a whole number" beside the box; `step="any"` is
+ * precisely the value that suppresses it. A box outside `<Form>` reads the same flag itself and
+ * says the same sentence from the same source, `formMessages.wholeNumber`.
+ *
+ * <p>**It does not rewrite anything already stored.** A row holding 88.5 aprons from before this
+ * rule existed still renders 88.5: `step` governs what the browser will accept on a save, never
+ * what a box displays. A screen that quietly rounded a stored figure would be the same mistake in
+ * a different place.
+ *
+ * <p>A box that counts **packs** rather than a unit — "4 × Bag (25 Kg)" — is whole for a different
+ * reason, because a vendor sells whole bags, and its call site says `step="1"` on the pack directly
+ * rather than asking this.
+ */
+export function stepForUnit(unit: string | null | undefined): "1" | "any" {
+  return isCountedUnit(unit) ? "1" : "any";
+}
+
+/**
+ * The on-screen keypad a quantity box in `unit` should ask for: digits only for a count, digits
+ * and a decimal point for everything else.
+ *
+ * <p>Noticed while building T-424 rather than asked for: `step="1"` changes what the browser will
+ * accept but not what a phone offers to type with, so a counted box would have gone on presenting a
+ * decimal point that the same box then refuses. Offering a key whose only effect is a refusal is a
+ * small cruelty on a phone in a store room.
+ */
+export function inputModeForUnit(unit: string | null | undefined): "numeric" | "decimal" {
+  return isCountedUnit(unit) ? "numeric" : "decimal";
+}
+
 /**
  * What a recipe's yield may be measured in — the same five, because a yield is an amount of food.
  *
@@ -280,7 +372,13 @@ export function portionUnitsFor(yieldUnit: string | null | undefined): readonly 
 /** How many base-family units one of each unit is. Mirrors Unit.baseFactor() and to_base_qty(). */
 const BASE_FACTOR: Record<string, number> = { KG: 1000, GM: 1, L: 1000, ML: 1, PIECES: 1 };
 
-/** The bigger and smaller unit of each family. A count has neither. */
+/**
+ * The bigger and smaller unit of each family. A count has neither, so `PIECES` is absent.
+ *
+ * <p>Its absence here says "nothing to convert into", and that is all it says. Ask
+ * {@link isCountedUnit} whether a unit is a count; this table is the wrong question and answering
+ * it from here is what T-424 fixed.
+ */
 const FAMILY: Record<string, { large: string; small: string }> = {
   KG: { large: "KG", small: "GM" },
   GM: { large: "KG", small: "GM" },

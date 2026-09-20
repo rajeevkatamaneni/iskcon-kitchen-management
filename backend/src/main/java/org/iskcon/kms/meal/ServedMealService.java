@@ -20,6 +20,8 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientUnits;
+import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.ConsumeRequest;
 import org.iskcon.kms.inventory.InventoryConsumptionService;
 import org.iskcon.kms.kitchen.KitchenOrder;
@@ -626,6 +628,13 @@ public class ServedMealService {
 					Map.of("dishId", dish.id(), "recipe", dish.recipeName(),
 							"servings", String.valueOf(served)));
 		}
+		// And a counted thing cannot be a fraction (T-423). The figure is in the preparation's own
+		// yield unit, carried on the dish precisely so a screen does not need the recipe to say what
+		// the number means — so 300.5 idlis coming back on a job card is answerable here, and the
+		// office is told about the dish rather than about the form. Recording and correcting go
+		// through this one method, which is why the rule is stated once: a figure refused when
+		// recording is refused when correcting, as the two records' own comments promise.
+		IngredientUnits.requireWhole(dish.recipeName(), served, Unit.valueOf(dish.targetYieldUnit()));
 		return served;
 	}
 
@@ -648,6 +657,9 @@ public class ServedMealService {
 					Map.of("dishId", dish.id(), "recipe", dish.recipeName(),
 							"servings", String.valueOf(consumed)));
 		}
+		// Held to the same rule as the cooked figure above (T-423): the two sit in one row on the
+		// office's screen and are the same kind of thing, so 220 idlis went out and 220.5 did not.
+		IngredientUnits.requireWhole(dish.recipeName(), consumed, Unit.valueOf(dish.targetYieldUnit()));
 		return consumed;
 	}
 

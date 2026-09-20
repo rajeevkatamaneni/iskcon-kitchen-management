@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import { api, toApiError, type ApiError, type DeliveryLineView, type RecordDeliveryLineInput, type RejectReason } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { quantity, repeatsPack, shortDate, unitLabel } from "@/lib/format";
+import { quantity, repeatsPack, shortDate, stepForUnit, unitLabel } from "@/lib/format";
+import { wholeNumberProblem } from "@/components/ds/formMessages";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
 import { ErrorNotice } from "@/components/ErrorNotice";
@@ -122,6 +123,29 @@ const clean = (n: number, places = 6) => Number(n.toFixed(places));
 /** A line counted in packs, when it was ordered in one. Null means it is counted in its own unit. */
 function packOf(l: DeliveryLineView): { label: string; size: number } | null {
   return l.packLabel && l.packQuantity && l.packQuantity > 0 ? { label: l.packLabel, size: l.packQuantity } : null;
+}
+
+/**
+ * The `step` both of a line's boxes carry (T-424).
+ *
+ * <p><strong>A pack line is deliberately left free.</strong> Ordering is where a vendor sells whole
+ * bags; receiving is not. Part of a bag really does come off a van, and this screen has supported it
+ * on purpose since T-266 — "2.8 bags (70 Kg)" still to come, tested in `record-delivery-panel`. A
+ * `step` of 1 on the pack box would have made the gate unable to write down what actually arrived,
+ * which is a worse defect than the one T-424 is fixing.
+ *
+ * <p>What must be whole for a counted ingredient is therefore not the figure in the box but the
+ * amount it becomes in stock — 2.8 boxes of a dozen aprons is 33.6 aprons, and that is the number
+ * with no meaning. {@link RecordDeliveryPanel}'s `problems` checks exactly that, against the stock
+ * amount, so both shapes of line are covered and the box stays typeable.
+ */
+function stepOf(l: DeliveryLineView): "1" | "any" {
+  return packOf(l) ? "any" : stepForUnit(l.unit);
+}
+
+/** `"1"` when this line's ingredient is counted, whatever its boxes are counted in. */
+function stockStepOf(l: DeliveryLineView): "1" | "any" {
+  return stepForUnit(l.unit);
 }
 
 /** How many of the unit the boxes take one stock unit is: 1, or 1 ÷ the pack's size. */
@@ -295,12 +319,36 @@ export function RecordDeliveryPanel({
   }
 
   /** What is wrong with a line, if anything, in the words that go under its box. */
-  function problems(l: DeliveryLineView): { received?: string; reason?: string } {
+  function problems(l: DeliveryLineView): { received?: string; rejected?: string; reason?: string } {
     const e = get(l.poLineId);
-    const out: { received?: string; reason?: string } = {};
+    const out: { received?: string; rejected?: string; reason?: string } = {};
     const received = Number(e.received || 0);
     const rejected = Number(e.rejected || 0);
     const still = owed(l);
+    /*
+     * A fraction of a counted thing is said before anything about how much is owed (T-424).
+     * "2.4 mops is more than is still to come" answers the wrong question about a figure that is
+     * not a number of mops at all, so the whole-number sentence takes the slot and the arithmetic
+     * below is not reached for that box. The reason rule still runs: it is about the select, not
+     * about either figure.
+     *
+     * Judged on the STOCK amount and not on what is typed, because a pack line's box counts bags
+     * and part of a bag is a real delivery — see `stepOf` above. 2.8 bags of a dozen aprons is
+     * 33.6 aprons, and it is the aprons that cannot be fractional. For a line counted in its own
+     * unit the two figures are the same number, so this is one rule and not two.
+     *
+     * Named from the box's own accessible name up to its comma. The full name ends ", in Kg",
+     * which cannot take "must be a whole number" after it and still be a sentence.
+     */
+    const step = stockStepOf(l);
+    const wholeReceived = wholeNumberProblem(`${l.itemName} received now`, step, toStock(l, received));
+    const wholeRejected = wholeNumberProblem(`${l.itemName} rejected on delivery`, step, toStock(l, rejected));
+    if (wholeRejected) out.rejected = wholeRejected;
+    if (wholeReceived || wholeRejected) {
+      if (wholeReceived) out.received = wholeReceived;
+      if (rejected > 0 && !e.reason) out.reason = "Choose why it was rejected";
+      return out;
+    }
     // What came off the van is what was kept plus what was refused, and that cannot be more than
     // is owed. The usual way to hit this: press Everything arrived, then refuse 2 Kg of curd
     // without taking the 2 Kg off Received.
@@ -440,9 +488,9 @@ export function RecordDeliveryPanel({
                     <span className="flex items-center gap-2">
                       <input
                         type="number"
-                        inputMode="decimal"
+                        inputMode={stepOf(l) === "1" ? "numeric" : "decimal"}
                         min="0"
-                        step="any"
+                        step={stepOf(l)}
                         value={e.received}
                         onChange={(ev) => set(l.poLineId, { received: ev.target.value })}
                         aria-label={`${l.itemName} received now, in ${packOf(l)?.label ?? unitLabel(l.unit)}`}
@@ -472,16 +520,25 @@ export function RecordDeliveryPanel({
                   <span className="flex items-center gap-2">
                     <input
                       type="number"
-                      inputMode="decimal"
+                      inputMode={stepOf(l) === "1" ? "numeric" : "decimal"}
                       min="0"
-                      step="any"
+                      step={stepOf(l)}
                       value={e.rejected}
                       onChange={(ev) => set(l.poLineId, { rejected: ev.target.value })}
                       aria-label={`${l.itemName} rejected on delivery, in ${packOf(l)?.label ?? unitLabel(l.unit)}`}
-                      className={`${FIELD} min-w-24`}
+                      aria-invalid={p.rejected ? true : undefined}
+                      aria-describedby={p.rejected ? `rej-err-${l.poLineId}` : undefined}
+                      className={`${FIELD} min-w-24 ${p.rejected ? "border-danger" : ""}`}
                     />
                     <span className="whitespace-nowrap text-ink-secondary">{boxUnit(l, e.rejected)}</span>
                   </span>
+                  {/* This box had no sentence of its own until T-424, because nothing it could
+                      hold was refused on its own account; a fraction of a counted thing is. */}
+                  {p.rejected && (
+                    <span id={`rej-err-${l.poLineId}`} className="mt-1 block text-xs text-danger">
+                      {p.rejected}
+                    </span>
+                  )}
                 </td>
                 <td className={`${TD_TEXT} ${WRAP}`} data-label="Reason">
                   <select

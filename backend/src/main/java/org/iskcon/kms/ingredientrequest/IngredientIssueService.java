@@ -12,8 +12,9 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
-import org.iskcon.kms.ingredient.Quantities;
 import org.iskcon.kms.error.ErrorResponse;
+import org.iskcon.kms.ingredient.IngredientUnits;
+import org.iskcon.kms.ingredient.Quantities;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.AllocatedLine;
 import org.iskcon.kms.inventory.BatchDraw;
@@ -218,6 +219,7 @@ public class IngredientIssueService {
 		}
 
 		Map<UUID, Issued> resolved = new LinkedHashMap<>();
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers();
 		for (LineRow line : lines) {
 			IssuedLineInput entry = byLine.remove(line.id());
 			if (entry == null) {
@@ -233,8 +235,21 @@ public class IngredientIssueService {
 						"field", "lines.unit", "lineId", line.id(), "value", entry.unit().name(),
 						"expectedFamily", line.canonicalUnit().family().name()));
 			}
+			// Half an apron did not go over the counter (T-423). Collected across the form, like the
+			// shortfalls above and for the same reason: a storekeeper confirming twelve lines wants
+			// all of the bad ones at once.
+			//
+			// Only what the storekeeper actually typed. A line they did not touch defaults to the
+			// approved figure, and an approved figure written before this rule existed is exactly the
+			// one somebody has to be able to hand over and close — refusing it would strand the
+			// request with no way in the application to finish it. The movements this writes are not
+			// checked either, and deliberately: they are FEFO draws split across batches, so handing
+			// over five whole aprons out of a lot holding 2.5 posts a 2.5 movement. See the note on
+			// ENTERED_BY_A_PERSON in StockMovementService.
+			whole.check(line.ingredientName(), entry.quantity(), entry.unit());
 			resolved.put(line.id(), new Issued(entry.quantity(), entry.unit()));
 		}
+		whole.refuseAnyPart();
 
 		// Anything left over named a line that is not on this request — another request's, or another
 		// temple's. Said out loud rather than ignored, because the storekeeper typed a number against

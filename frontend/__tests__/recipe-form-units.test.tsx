@@ -204,3 +204,60 @@ describe("what the recipe feeds (T-218)", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * A counted box will not take a fraction, and follows the picker beside it (T-424).
+ *
+ * <p>This is the form where the unit genuinely changes under the person's hand: "Measured in" is a
+ * select, and a recipe switched from litres to pieces has to stop taking 1.5 from that keystroke on.
+ */
+describe("a recipe measured in pieces", () => {
+  beforeEach(() => submitMock.mockClear());
+
+  it("steps the yield box by 1 in pieces and by any in litres", () => {
+    renderForm();
+    fireEvent.change(measuredIn(), { target: { value: "L" } });
+    expect(amount()).toHaveAttribute("step", "any");
+    fireEvent.change(measuredIn(), { target: { value: "PIECES" } });
+    expect(amount()).toHaveAttribute("step", "1");
+  });
+
+  it("starts refusing 1.5 the moment Measured in becomes pieces", () => {
+    renderForm();
+    // Typed while the recipe is still in litres, where 1.5 is perfectly ordinary.
+    fireEvent.change(measuredIn(), { target: { value: "L" } });
+    fireEvent.change(amount(), { target: { value: "1.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.queryByText("How much this recipe makes must be a whole number")).toBeNull();
+
+    // The same figure, now a number of ladoos.
+    fireEvent.change(measuredIn(), { target: { value: "PIECES" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByText("How much this recipe makes must be a whole number")).toHaveClass("text-danger");
+  });
+
+  it("holds the portion box to the portion unit, which is not always the yield's", () => {
+    renderForm();
+    // A recipe in kilos with a portion in grams: the yield box is free, the portion box is free.
+    fireEvent.change(measuredIn(), { target: { value: "KG" } });
+    fireEvent.change(portionUnit(), { target: { value: "GM" } });
+    expect(amount()).toHaveAttribute("step", "any");
+    expect(eats()).toHaveAttribute("step", "any");
+
+    // A recipe in pieces: both are counted, and the portion follows its own picker, not the yield's.
+    fireEvent.change(measuredIn(), { target: { value: "PIECES" } });
+    fireEvent.change(portionUnit(), { target: { value: "PIECES" } });
+    expect(amount()).toHaveAttribute("step", "1");
+    expect(eats()).toHaveAttribute("step", "1");
+  });
+
+  /*
+   * Nothing stored is rewritten. A recipe saved in pieces with a fractional yield — the seeding
+   * defect's shape — opens showing the figure it holds, and is refused only when somebody saves.
+   */
+  it("still shows a fractional yield that is already on file", () => {
+    renderForm(recipe({ baseYieldQty: 88.5, baseYieldUnit: "PIECES", perHeadQty: 1, perHeadUnit: "PIECES" }));
+    expect(amount()).toHaveValue(88.5);
+    expect(amount()).toHaveAttribute("step", "1");
+  });
+});

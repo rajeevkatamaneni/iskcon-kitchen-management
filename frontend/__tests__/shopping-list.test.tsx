@@ -490,3 +490,71 @@ describe("shopping list", () => {
     });
   });
 });
+
+/**
+ * The two boxes on this screen are outside the shared `<Form>` (T-424).
+ *
+ * <p>The line's box is the awkward one: it commits on blur rather than on a button, so its refusal
+ * has to appear on blur too, and a fraction of a counted thing must not reach `setQty` at all.
+ */
+describe("a counted line on the shopping list", () => {
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    catalogueRef.current = [];
+  });
+
+  const qty = (name: string) => screen.getByRole("spinbutton", { name: `Quantity for ${name}` });
+
+  it("steps a counted line by 1 and a weighed line by any", () => {
+    queryRef.current = {
+      data: [line({ ingredientId: "a", ingredientName: "Apron", unit: "PIECES", suggestedQty: 12 }), line({})],
+      error: null, loading: false,
+    };
+    render(<ShoppingListPage />);
+    expect(qty("Apron")).toHaveAttribute("step", "1");
+    expect(qty("Apron")).toHaveAttribute("inputmode", "numeric");
+    expect(qty("Rice")).toHaveAttribute("step", "any");
+  });
+
+  it("refuses a fraction on blur and never sends it", async () => {
+    const setQty = vi.spyOn(api, "updateShoppingListLine").mockResolvedValue({} as never);
+    queryRef.current = {
+      data: [line({ ingredientId: "a", ingredientName: "Apron", unit: "PIECES", suggestedQty: 12 })],
+      error: null, loading: false,
+    };
+    render(<ShoppingListPage />);
+    fireEvent.change(qty("Apron"), { target: { value: "3.6" } });
+    fireEvent.blur(qty("Apron"));
+    expect(screen.getByText("Quantity for Apron must be a whole number")).toHaveClass("text-danger");
+    expect(setQty).not.toHaveBeenCalled();
+    // What was typed is still there to be corrected, not silently dropped or rounded.
+    expect(qty("Apron")).toHaveValue(3.6);
+  });
+
+  it("still commits a fraction on a weighed line", async () => {
+    const setQty = vi.spyOn(api, "updateShoppingListLine").mockResolvedValue({} as never);
+    queryRef.current = { data: [line({ suggestedQty: 9 })], error: null, loading: false };
+    render(<ShoppingListPage />);
+    fireEvent.change(qty("Rice"), { target: { value: "3.6" } });
+    fireEvent.blur(qty("Rice"));
+    expect(screen.queryByText(/must be a whole number/)).toBeNull();
+    await act(async () => {});
+    expect(setQty).toHaveBeenCalled();
+  });
+
+  it("says the same sentence under Quantity to add", () => {
+    catalogueRef.current = [
+      { id: "a", name: "Apron", category: "Consumables", unit: "PIECES", ekadashiProhibited: false,
+        supply: true, notBought: false, libraryDerived: false, aliases: [], createdAt: "",
+        packSizes: [], marketRate: null, marketRateOn: null, marketRateSource: null } as never,
+    ];
+    queryRef.current = { data: [], error: null, loading: false };
+    render(<ShoppingListPage />);
+    fireEvent.change(screen.getByLabelText(/^item$/i), { target: { value: "a" } });
+    const add = screen.getByRole("spinbutton", { name: "Quantity to add" });
+    expect(add).toHaveAttribute("step", "1");
+    fireEvent.change(add, { target: { value: "2.4" } });
+    expect(screen.getByText("Quantity to add must be a whole number")).toHaveClass("text-danger");
+    expect(screen.getByRole("button", { name: /add to list/i })).toBeDisabled();
+  });
+});

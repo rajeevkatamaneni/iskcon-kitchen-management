@@ -10,7 +10,7 @@ import { ButtonLink } from "@/components/ds/ButtonLink";
 import { FocusScreen } from "@/components/ds/FocusScreen";
 import { HintedField } from "@/components/ds/InfoHint";
 import { api, toApiError, type ApiError } from "@/lib/api";
-import { FOOD_UNITS, money, todayIso, unitLabel } from "@/lib/format";
+import { FOOD_UNITS, money, stepForUnit, todayIso, unitLabel } from "@/lib/format";
 import { normalizeIndianMobile } from "@/lib/phone";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -323,7 +323,8 @@ function NewDonationView() {
                   aria-label={`Quantity ${idx + 1}`}
                   type="number"
                   min="0"
-                  step="any"
+                  // Nobody donates 2.4 blankets (T-424). The two money boxes above are untouched.
+                  step={stepForUnit(line.unit)}
                   placeholder="Qty"
                   value={line.quantity}
                   onChange={(e) =>

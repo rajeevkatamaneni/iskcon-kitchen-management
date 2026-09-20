@@ -17,6 +17,7 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -149,6 +150,7 @@ public class MasterRecipeService {
 
 	@Transactional
 	public UUID create(AuthenticatedUser actor, MasterRecipeInput input) {
+		requireWholeCounts(input);
 		UUID id = UUID.randomUUID();
 		jdbc.update("""
 				INSERT INTO master_recipes (
@@ -173,6 +175,7 @@ public class MasterRecipeService {
 
 	@Transactional
 	public void update(AuthenticatedUser actor, UUID id, MasterRecipeInput input) {
+		requireWholeCounts(input);
 		MasterRecipeView before = get(id);
 		int rows = jdbc.update("""
 				UPDATE master_recipes SET
@@ -289,6 +292,40 @@ public class MasterRecipeService {
 					.append('"');
 		}
 		return out.append('}').toString();
+	}
+
+	/**
+	 * A counted thing cannot be a fraction, on a library recipe as on a temple's own (T-423).
+	 *
+	 * <p>Two figures here are in a unit: what the recipe makes, and each ingredient line's amount,
+	 * which arrives as a person writes it ("16 Pieces", "8 L") and is parsed the same way the loader
+	 * parses a book. A library row is copied verbatim into a temple's own recipes by
+	 * {@code RecipeImportService}, so a fraction admitted here is a fraction handed to every temple
+	 * that takes the recipe afterwards — which is why it is refused at the operator's door rather
+	 * than at each of theirs.
+	 *
+	 * <p>Nothing in the three books this product ships is refused by it: of their 458 quantity
+	 * strings, 35 are in a counted unit and every one of the 35 is already whole. Measured, not
+	 * assumed — T-423's proof has the count.
+	 *
+	 * <p>{@code perHeadQty} is left alone, as it is on a temple's own recipe form and for the same
+	 * reason: a portion is per one person, and two and a half idlis a head is an ordinary figure
+	 * nobody ever makes, buys or holds.
+	 *
+	 * <p>The recipe's own name is what the refusal names on the yield, and the ingredient's on a
+	 * line. A library recipe has no catalogue behind it — its ingredients are names on a page — so
+	 * there is nothing to look either of them up in, and nothing needs to be.
+	 */
+	private static void requireWholeCounts(MasterRecipeInput input) {
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers();
+		whole.check(input.name(), input.yieldQty(), IngredientUnits.parse(input.yieldUnit()));
+		for (MasterRecipeInput.Line line : input.ingredients()) {
+			BookParser.LineQuantity parsed = BookParser.ingredientQuantity(line.qty()).orElseThrow(
+					() -> new ApplicationException(ErrorCode.VALIDATION_FAILED,
+							Map.of("field", "ingredients", "value", String.valueOf(line.qty()))));
+			whole.check(line.name(), parsed.value(), IngredientUnits.parse(parsed.unit()));
+		}
+		whole.refuseAnyPart();
 	}
 
 	private static Map<String, Object> lineMap(MasterRecipeInput.Line line) {

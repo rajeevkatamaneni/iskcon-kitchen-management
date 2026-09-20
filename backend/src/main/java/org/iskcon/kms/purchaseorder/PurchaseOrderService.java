@@ -1038,6 +1038,7 @@ public class PurchaseOrderService {
 	 */
 	private void insertLines(UUID poId, List<LineDraft> lines) {
 		List<LineDraft> resolved = new ArrayList<>();
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers(ingredientUnits);
 		for (int i = 0; i < lines.size(); i++) {
 			LineDraft l = lines.get(i);
 			requireExactlyOneSubject(l, i);
@@ -1046,8 +1047,28 @@ public class PurchaseOrderService {
 			}
 			// Third, and only once the line is known to be a well-formed line of its ingredient: a
 			// pack is a fact about an ingredient, so it cannot be judged before there is one.
-			resolved.add(resolvePack(l, i));
+			LineDraft ready = resolvePack(l, i);
+			resolved.add(ready);
+
+			// Fourth: a counted thing cannot be a fraction (T-423). Asked of the resolved line and not
+			// of the one that arrived, because on a pack line the pack decides the amount and the
+			// quantity sent beside it is not what gets stored — 4 × "Tray = 30 pieces" is 120 whatever
+			// the screen's own arithmetic put in the box. Ordering 7.2 LPG cylinders is where the
+			// fractions on staging began, and the order is the earliest point anybody can be told.
+			//
+			// A described line is checked too, and is the one place this rule reaches something with
+			// no catalogue row behind it. Four plastic stools are still four things counted one by
+			// one; the line's own description is what names the refusal, since there is no ingredient
+			// to name. That is the same split requireSameFamily makes above and for the same reason —
+			// there is simply nothing to look the name up in.
+			Unit lineUnit = IngredientUnits.parse(ready.unit());
+			if (ready.ingredientId() != null) {
+				whole.check(ready.ingredientId(), ready.quantity(), lineUnit);
+			} else {
+				whole.check(ready.description(), ready.quantity(), lineUnit);
+			}
 		}
+		whole.refuseAnyPart();
 
 		int[] order = {0};
 		for (LineDraft l : resolved) {

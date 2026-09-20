@@ -35,7 +35,8 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { generateAndDownload } from "@/lib/document-download";
-import { cooksQuantity, dateWithYear, hhmm, shortDate, templeDay, todayIso, unitLabelFor } from "@/lib/format";
+import { cooksQuantity, dateWithYear, hhmm, shortDate, stepForUnit, templeDay, todayIso, unitLabelFor } from "@/lib/format";
+import { wholeNumberProblem } from "@/components/ds/formMessages";
 import { ALL_LANGUAGES } from "@/lib/languages";
 
 /**
@@ -767,7 +768,25 @@ function RecordMeal({
     setEntries((list) => list.map((e) => (e.dishId === id ? { ...e, ...patch } : e)));
   }
 
+  /*
+   * A dish measured in a counted unit is cooked and served as whole things (T-424). Both boxes
+   * open on the plan, so the only way to a fraction here is typing one — or a plan that already
+   * holds one, which shows as typed and is refused on the press.
+   */
+  function wholeProblems(entry: (typeof entries)[number]): { cooked?: string; consumed?: string } {
+    if (entry.notMade) return {};
+    const step = stepForUnit(unit(entry.dishId));
+    return {
+      cooked: wholeNumberProblem(`${entry.recipeName} cooked`, step, entry.cooked) ?? undefined,
+      consumed: wholeNumberProblem(`${entry.recipeName} served`, step, entry.consumed) ?? undefined,
+    };
+  }
+  /** Nothing is said under a box until Save actuals has been pressed. */
+  const [tried, setTried] = useState(false);
+
   async function save() {
+    setTried(true);
+    if (entries.some((e) => Object.values(wholeProblems(e)).some(Boolean))) return;
     setBusy(true);
     // A fresh attempt clears the last answer, so a refusal cannot outlive the thing it refused.
     setRefusal(null);
@@ -820,7 +839,9 @@ function RecordMeal({
         <span className="w-24" />
       </div>
 
-      {entries.map((entry) => (
+      {entries.map((entry) => {
+        const whole = tried ? wholeProblems(entry) : {};
+        return (
         <div key={entry.dishId} className="flex flex-wrap items-center gap-4">
           <span className="min-w-[12rem] flex-1 text-ink">{entry.recipeName}</span>
 
@@ -840,8 +861,10 @@ function RecordMeal({
             <input
               type="number"
               min={0}
-              step="any"
+              step={stepForUnit(unit(entry.dishId))}
+              inputMode={stepForUnit(unit(entry.dishId)) === "1" ? "numeric" : "decimal"}
               aria-label={`${entry.recipeName} cooked`}
+              aria-invalid={whole.cooked ? true : undefined}
               value={entry.notMade ? "" : entry.cooked}
               disabled={entry.notMade}
               onChange={(e) => {
@@ -853,7 +876,7 @@ function RecordMeal({
                   consumed: Math.min(entry.consumed, cooked),
                 });
               }}
-              className="min-h-touch w-28 rounded-control border border-hairline px-3 text-right tabular-nums disabled:opacity-50"
+              className={`min-h-touch w-28 rounded-control border px-3 text-right tabular-nums disabled:opacity-50 ${whole.cooked ? "border-danger" : "border-hairline"}`}
             />
           </label>
 
@@ -863,12 +886,14 @@ function RecordMeal({
               type="number"
               min={0}
               max={entry.cooked}
-              step="any"
+              step={stepForUnit(unit(entry.dishId))}
+              inputMode={stepForUnit(unit(entry.dishId)) === "1" ? "numeric" : "decimal"}
               aria-label={`${entry.recipeName} served`}
+              aria-invalid={whole.consumed ? true : undefined}
               value={entry.notMade ? "" : entry.consumed}
               disabled={entry.notMade}
               onChange={(e) => set(entry.dishId, { consumed: Number(e.target.value) })}
-              className="min-h-touch w-28 rounded-control border border-hairline px-3 text-right tabular-nums disabled:opacity-50"
+              className={`min-h-touch w-28 rounded-control border px-3 text-right tabular-nums disabled:opacity-50 ${whole.consumed ? "border-danger" : "border-hairline"}`}
             />
           </label>
 
@@ -882,8 +907,17 @@ function RecordMeal({
             />
             Not made
           </label>
+
+          {/* The sentence takes a line of its own under the row rather than becoming a fifth item
+              on it — the same shape the planner's band uses for `Form`'s error slot. */}
+          {(whole.cooked || whole.consumed) && (
+            <span className="basis-full text-xs text-danger">
+              {[whole.cooked, whole.consumed].filter(Boolean).join(" · ")}
+            </span>
+          )}
         </div>
-      ))}
+        );
+      })}
 
       {entries.some((e) => !e.notMade && e.consumed < e.cooked) && (
         <p className="text-sm text-ink-secondary">
@@ -1068,7 +1102,9 @@ function CorrectMeal({
             <input
               type="number"
               min={0}
-              step="any"
+              // Inside `<Form>`, so the sentence comes from `stepMismatch` with no help from here.
+              step={stepForUnit(unit(entry.dishId))}
+              inputMode={stepForUnit(unit(entry.dishId)) === "1" ? "numeric" : "decimal"}
               aria-label={`${entry.recipeName} cooked`}
               value={entry.notMade ? "" : entry.cooked}
               disabled={entry.notMade}
@@ -1092,7 +1128,8 @@ function CorrectMeal({
               type="number"
               min={0}
               max={entry.cooked}
-              step="any"
+              step={stepForUnit(unit(entry.dishId))}
+              inputMode={stepForUnit(unit(entry.dishId)) === "1" ? "numeric" : "decimal"}
               aria-label={`${entry.recipeName} served`}
               value={entry.notMade || entry.consumed == null ? "" : entry.consumed}
               disabled={entry.notMade}

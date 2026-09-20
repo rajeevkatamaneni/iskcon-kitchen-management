@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ApiError, StockItemView } from "@/lib/api";
 
 const { authRef, queryRef, reloadMock } = vi.hoisted(() => ({
@@ -181,5 +181,62 @@ describe("adding an item", () => {
     render(<InventoryPage />);
     expect(screen.getByText(/Toor Dal is now in your inventory/i)).toBeInTheDocument();
     expect(replaceMock).toHaveBeenCalledWith("/inventory");
+  });
+});
+
+/**
+ * The reorder level edited in place on the row (T-424).
+ *
+ * <p>This box is **outside** the shared `<Form>`, so nothing says a word about it on its behalf. It
+ * says the sentence itself, from `formMessages.wholeNumberProblem` — the same function `Form` words
+ * its own refusals with — so the two screens that ask for a reorder level say the same thing.
+ */
+describe("the reorder level of a counted ingredient", () => {
+  beforeEach(() => {
+    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
+    paramsRef.current = new URLSearchParams();
+  });
+
+  const edit = () => fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  const level = (name: string) => screen.getByRole("spinbutton", { name: `Tell me when ${name} drops below` });
+
+  it("steps by 1 for a counted ingredient and by any for a weighed one", () => {
+    queryRef.current = { data: [item({ ingredientName: "Apron", unit: "PIECES" })], error: null, loading: false };
+    render(<InventoryPage />);
+    edit();
+    expect(level("Apron")).toHaveAttribute("step", "1");
+    expect(level("Apron")).toHaveAttribute("inputmode", "numeric");
+  });
+
+  it("refuses a fractional level and does not save it", () => {
+    queryRef.current = { data: [item({ ingredientName: "Apron", unit: "PIECES" })], error: null, loading: false };
+    render(<InventoryPage />);
+    edit();
+    fireEvent.change(level("Apron"), { target: { value: "3.6" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByText("Tell me when Apron drops below must be a whole number")).toHaveClass("text-danger");
+    expect(level("Apron")).toHaveAttribute("aria-invalid", "true");
+    // Still on screen holding what was typed, to be corrected rather than retyped.
+    expect(level("Apron")).toHaveValue(3.6);
+  });
+
+  it("still takes a fractional level on a weighed ingredient", () => {
+    queryRef.current = { data: [item({ ingredientName: "Toor Dal", unit: "KG" })], error: null, loading: false };
+    render(<InventoryPage />);
+    edit();
+    expect(level("Toor Dal")).toHaveAttribute("step", "any");
+    fireEvent.change(level("Toor Dal"), { target: { value: "3.6" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.queryByText(/must be a whole number/)).toBeNull();
+  });
+
+  it("still shows a fractional level that is already on file", () => {
+    queryRef.current = {
+      data: [item({ ingredientName: "Apron", unit: "PIECES", reorderThreshold: 3.6 })],
+      error: null, loading: false,
+    };
+    render(<InventoryPage />);
+    edit();
+    expect(level("Apron")).toHaveValue(3.6);
   });
 });

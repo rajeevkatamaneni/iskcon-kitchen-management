@@ -134,6 +134,11 @@ public class PackSizeService {
 
 		String ingredientName = lockIngredient(ingredientId);
 		ingredientUnits.requireSameFamily(ingredientId, unit);
+		// A pack holds a whole number of things it counts one by one (T-423). "Tray = 30 pieces" is a
+		// pack; "Tray = 30.5 pieces" is a tray nobody could fill, and every order, delivery and bill
+		// that named it afterwards would carry the half through — the pack decides the amount on an
+		// order line, so a fractional pack manufactures a fractional order every time it is used.
+		IngredientUnits.requireWhole(ingredientName, request.quantity(), unit);
 
 		List<PackSizeView> before = forIngredient(ingredientId);
 		if (before.size() >= MAX_PACK_SIZES) {

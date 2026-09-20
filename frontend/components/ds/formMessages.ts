@@ -77,6 +77,48 @@ export const orLater = (name: string, min: string) => `${name} must be ${min} or
 export const orEarlier = (name: string, max: string) => `${name} must be ${max} or earlier`;
 /** `step="1"`, or a number box with no step at all, whose default step is 1. */
 export const wholeNumber = (name: string) => `${name} must be a whole number`;
+
+/**
+ * The same refusal, for a box that is **not** inside a `<Form>` — or null when there is nothing
+ * to say (T-424).
+ *
+ * <p>**Why this exists.** Five screens hold a quantity box outside the shared `<Form>`: recording a
+ * delivery, recording what was issued against a request, the reorder level edited in place on the
+ * Inventory row, the Shopping list's two boxes, and the meal recording form. They gather their own
+ * refusals and draw their own red sentence under the box, so nothing in `Form` reaches them and
+ * `stepMismatch` is never read on their behalf. Without this they would each have grown their own
+ * wording, and "Received now must be a whole number" on one screen beside "Enter a whole number" on
+ * the next is the inconsistency the one-vocabulary rule exists to stop. The sentence therefore comes
+ * from {@link wholeNumber} here exactly as it does for every box inside a `<Form>`, and there is
+ * still one place to change the words.
+ *
+ * <p>**It is given the box's own `step`, not the box's unit, on purpose.** The caller works out
+ * `step` once — usually `stepForUnit(someUnit)`, sometimes `"1"` outright because the box counts
+ * packs — and hands the same value to the `step` attribute and to this. So the attribute and the
+ * sentence cannot disagree about whether the box is counted, which they could if each worked it out
+ * from the unit separately. A `step` of anything but `"1"` is nothing to do with this rule and
+ * returns null.
+ *
+ * <p>**A blank or half-typed box is not this rule's business** and comes back null, matching the
+ * order `messageFor` checks things in: "must be a whole number" is no help to somebody whose box
+ * holds nothing, or "1e". Those screens already say their own thing about an empty box.
+ *
+ * <p>**A value already on file is judged, not rewritten.** A line that arrives holding 88.5 aprons
+ * renders 88.5 and is refused on the save, which is the point: the figure is wrong and saying so is
+ * the whole feature. Nothing here changes what the box shows.
+ */
+export function wholeNumberProblem(
+  name: string,
+  step: string,
+  value: string | number | null | undefined
+): string | null {
+  if (step.trim() !== "1") return null;
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Number.isInteger(n) ? null : wholeNumber(name);
+}
 /** `step="0.01"` and its kin. "2 decimal places" rather than "steps of 0.01", which is how people say it. */
 export const decimalPlaces = (name: string, places: number) =>
   `${name} can have at most ${places} decimal ${places === 1 ? "place" : "places"}`;

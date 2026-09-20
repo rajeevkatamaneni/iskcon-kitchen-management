@@ -17,7 +17,8 @@ import { api, toApiError, type ApiError, type VendorStatusChange } from "@/lib/a
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import {
-  FOOD_UNITS, contractWarning, convertQuantity, moment, ratePackWord, readableRate, unitLabel, unitLabelFor,
+  FOOD_UNITS, contractWarning, convertQuantity, inputModeForUnit, moment, ratePackWord, readableRate,
+  stepForUnit, unitLabel, unitLabelFor,
 } from "@/lib/format";
 import { listPriceText, previousPriceText } from "@/components/ingredient/supply";
 import { ALL_LANGUAGES, languageLabel } from "@/lib/languages";
@@ -847,9 +848,11 @@ function PackSizeRow({
             <span className="pl-field-inset font-medium text-ink">Size</span>
             <input
               type="number"
-              inputMode="decimal"
+              // The same pack size the ingredient screen asks for, asked here (T-424). The rate
+              // box above is money and keeps `step="any"`.
+              inputMode={inputModeForUnit(unit)}
               min="0"
-              step="any"
+              step={stepForUnit(unit)}
               value={size}
               onChange={(e) => { setSize(e.target.value); edited(); }}
               aria-invalid={blank || undefined}

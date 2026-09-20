@@ -20,7 +20,8 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { cooksQuantity, longDate, moment, unitLabel } from "@/lib/format";
+import { cooksQuantity, longDate, moment, stepForUnit, unitLabel } from "@/lib/format";
+import { wholeNumberProblem } from "@/components/ds/formMessages";
 import { ALL_LANGUAGES, ENGLISH } from "@/lib/languages";
 import { generateAndDownload } from "@/lib/document-download";
 import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
@@ -483,10 +484,24 @@ function RecordIssue({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  /** Nothing is said under a box until Record has been pressed, as every other form here behaves. */
+  const [tried, setTried] = useState(false);
+
+  /*
+   * A line issued in a counted unit goes out as whole things (T-424). A line already on file
+   * holding a fraction — an approved 1.5 aprons from before this rule — still opens showing 1.5,
+   * and is refused on the press rather than rounded behind the storekeeper's back.
+   */
+  function wholeProblem(line: IngredientRequestDetail["lines"][number]): string | null {
+    return wholeNumberProblem(`Issued ${line.ingredientName}`, stepForUnit(line.unit), amounts[line.id]);
+  }
+  const anyWholeProblem = detail.lines.some((l) => wholeProblem(l) !== null);
 
   const shortOfStock = error?.code === "KMS-400042";
 
   async function record() {
+    setTried(true);
+    if (anyWholeProblem) return;
     const lines = detail.lines.map((l) => ({
       lineId: l.id,
       quantity: Number(amounts[l.id]),
@@ -582,7 +597,8 @@ function RecordIssue({
                       aria-label={`Issued ${line.ingredientName}`}
                       type="number"
                       min="0"
-                      step="any"
+                      step={stepForUnit(line.unit)}
+                      aria-invalid={tried && wholeProblem(line) ? true : undefined}
                       value={amounts[line.id] ?? ""}
                       onChange={(e) =>
                         setAmounts((prev) => ({ ...prev, [line.id]: e.target.value }))
@@ -593,6 +609,9 @@ function RecordIssue({
                         labelling it grams would invite a thousandfold error. */}
                     <span className="text-ink-secondary">{unitLabel(line.unit)}</span>
                   </span>
+                  {tried && wholeProblem(line) && (
+                    <span className="mt-1 block text-xs text-danger">{wholeProblem(line)}</span>
+                  )}
                 </td>
               </tr>
             ))}

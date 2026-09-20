@@ -17,7 +17,7 @@ import {
   type IngredientRequestStatus,
 } from "@/lib/api";
 import { useAuthedQuery } from "@/lib/use-authed-query";
-import { FOOD_UNITS, YIELD_UNITS, unitLabel } from "@/lib/format";
+import { FOOD_UNITS, YIELD_UNITS, stepForUnit, unitLabel } from "@/lib/format";
 
 /**
  * Asking the store for ingredients (E10-S9), on the focus-screen shape recipes set.
@@ -340,7 +340,9 @@ export function IngredientRequestForm({
                 aria-label={`Quantity ${i + 1}`}
                 type="number"
                 min="0"
-                step="any"
+                // Follows the unit picker beside it: switch a line to pieces and the box stops
+                // taking a fraction from that keystroke on (T-424).
+                step={stepForUnit(line.unit)}
                 value={line.quantity}
                 onChange={(e) => setLine(i, { quantity: e.target.value })}
                 placeholder="Qty"
@@ -398,7 +400,7 @@ export function IngredientRequestForm({
                 aria-label={`Dish quantity ${i + 1}`}
                 type="number"
                 min="0"
-                step="any"
+                step={stepForUnit(dish.unit)}
                 value={dish.quantity}
                 onChange={(e) => setDish(i, { quantity: e.target.value })}
                 placeholder="Qty"

@@ -23,6 +23,7 @@ import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.error.ErrorResponse;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.ingredient.Quantities;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.InventoryUnits;
@@ -252,6 +253,10 @@ public class VendorInvoiceService {
 	}
 
 	/** A delivered line of a delivery being billed: what the bill's line must match. */
+	/** An ingredient's own two facts, as a bill line needs them: what to call it, and what it is in. */
+	private record Ingredient(String name, Unit canonicalUnit) {
+	}
+
 	private record DeliveredLine(UUID goodsReceiptLineId, UUID ingredientId, Unit unit, int order) {
 	}
 
@@ -297,6 +302,9 @@ public class VendorInvoiceService {
 	private List<ResolvedLine> resolveDeliveredLines(List<InvoiceLineInput> input, Map<UUID, DeliveredLine> delivered) {
 		Set<UUID> seen = new HashSet<>();
 		List<ResolvedLine> out = new ArrayList<>(input.size());
+		// Every fractional count on the bill in one refusal — a bill is a page of lines, and telling
+		// somebody keying it about one of them at a time is telling them to key it again.
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers();
 		for (int i = 0; i < input.size(); i++) {
 			InvoiceLineInput line = input.get(i);
 			DeliveredLine d = line.goodsReceiptLineId() == null ? null : delivered.get(line.goodsReceiptLineId());
@@ -305,7 +313,7 @@ public class VendorInvoiceService {
 					|| trimToNull(line.description()) != null) {
 				throw linesDontMatch(i);
 			}
-			out.add(resolve(line, i, d.goodsReceiptLineId(), d.ingredientId(), null));
+			out.add(resolve(line, i, d.goodsReceiptLineId(), d.ingredientId(), null, whole));
 		}
 		if (seen.size() != delivered.size()) {
 			throw new ApplicationException(ErrorCode.INVOICE_LINES_DONT_MATCH_DELIVERIES,
@@ -313,6 +321,7 @@ public class VendorInvoiceService {
 		}
 		// Stored in the delivery's own order, whatever order the lines came in, so the bill reads as
 		// the delivery did.
+		whole.refuseAnyPart();
 		out.sort(Comparator.comparingInt(l -> delivered.get(l.goodsReceiptLineId()).order()));
 		return out;
 	}
@@ -325,6 +334,7 @@ public class VendorInvoiceService {
 	 */
 	private List<ResolvedLine> resolveDirectLines(List<InvoiceLineInput> input) {
 		List<ResolvedLine> out = new ArrayList<>(input.size());
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers();
 		for (int i = 0; i < input.size(); i++) {
 			InvoiceLineInput line = input.get(i);
 			if (line.goodsReceiptLineId() != null) {
@@ -335,8 +345,9 @@ public class VendorInvoiceService {
 				throw fieldError("lines[" + i + "].ingredientId",
 						"Choose an ingredient, or describe the item instead.");
 			}
-			out.add(resolve(line, i, null, line.ingredientId(), description));
+			out.add(resolve(line, i, null, line.ingredientId(), description, whole));
 		}
+		whole.refuseAnyPart();
 		return out;
 	}
 
@@ -353,19 +364,38 @@ public class VendorInvoiceService {
 	 * quietly storing a different quantity from the one typed would put words in the vendor's mouth.
 	 */
 	private ResolvedLine resolve(InvoiceLineInput line, int i, UUID receiptLineId, UUID ingredientId,
-			String description) {
+			String description, IngredientUnits.Whole whole) {
 		Unit unit = parseUnit(line.unit(), i);
+		String billedThing = description;
 		if (ingredientId != null) {
-			List<String> canonical = jdbc.queryForList(
-					"SELECT canonical_unit FROM ingredients WHERE id = ?", String.class, ingredientId);
+			List<Ingredient> canonical = jdbc.query(
+					"SELECT name, canonical_unit FROM ingredients WHERE id = ?",
+					(rs, n) -> new Ingredient(rs.getString("name"), Unit.valueOf(rs.getString("canonical_unit"))),
+					ingredientId);
 			if (canonical.isEmpty()) {
 				throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("ingredientId", ingredientId));
 			}
-			if (Unit.valueOf(canonical.get(0)).family() != unit.family()) {
+			if (canonical.get(0).canonicalUnit().family() != unit.family()) {
 				throw new ApplicationException(ErrorCode.INCOMPATIBLE_UNIT,
 						Map.of("line", i, "ingredientId", ingredientId, "unit", unit.name()));
 			}
+			billedThing = canonical.get(0).name();
 		}
+
+		// A counted thing cannot be a fraction (T-423), on the billed quantity as on every other
+		// figure anybody enters. A one-off described item is held to it too — "Plastic stool", 4
+		// PIECES — because a bill for 2.5 stools is as unreadable as an order for them.
+		//
+		// <strong>This is the door with the sharpest cost, and it is worth stating plainly.</strong>
+		// The rate a vendor charged is derived, Amount / Billed qty, which is exactly why a fraction
+		// here is the one that does quiet damage: it produces a per-unit price for a fraction of a
+		// thing and writes it into the price history every later order reads. Against that: a bill
+		// records what somebody else asserted, and this file argues elsewhere that storing a
+		// different quantity from the one typed "would put words in the vendor's mouth". The reason
+		// it is still checked is that no delivery can be fractional from today, so the only bills
+		// this can refuse are those against the receipts written before the rule — and R-INV-4
+		// already allows a bill for more than was delivered, which is the way out of those.
+		whole.check(billedThing, line.billedQty(), unit);
 
 		if ((line.packSizeId() == null) != (line.packCount() == null)) {
 			throw fieldError("lines[" + i + "]." + (line.packSizeId() == null ? "packSizeId" : "packCount"),

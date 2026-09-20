@@ -7,7 +7,7 @@ import { InfoHint } from "@/components/ds/InfoHint";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { api, toApiError, type ApiError, type IngredientView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { unitLabel } from "@/lib/format";
+import { inputModeForUnit, stepForUnit, unitLabel } from "@/lib/format";
 import { BOX, emptyToNull, numberOrNull, sameFamilyUnits } from "@/components/ingredient/supply";
 
 /** R-ING-1's hint, word for word. */
@@ -161,10 +161,13 @@ export function PackSizes({
               */}
               <input
                 type="number"
-                inputMode="decimal"
+                // A pack holds a whole number of a counted thing (T-424). `data-more-than` stays
+                // the floor; this only adds "Size must be a whole number" above it, from the
+                // same `Form` and the same sentence.
+                inputMode={inputModeForUnit(unit)}
                 required
                 data-more-than="0"
-                step="any"
+                step={stepForUnit(unit)}
                 value={size}
                 onChange={(e) => { setSize(e.target.value); edited(); }}
                 className={`${BOX} w-28 tabular-nums`}

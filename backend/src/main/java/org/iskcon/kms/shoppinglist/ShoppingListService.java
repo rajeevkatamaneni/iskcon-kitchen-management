@@ -161,6 +161,13 @@ public class ShoppingListService {
 		// verified token by way of RLS, never from anything in this request body.
 		Unit unit = ingredientUnits.canonicalUnit(request.ingredientId());
 
+		// And a counted thing cannot be a fraction (T-423). Asked here rather than as an annotation
+		// for the reason the record's own comment gives about its missing unit: nothing on this body
+		// says what the number is in, because the line is written in the ingredient's own canonical
+		// unit. A cook who knows the temple needs three mops types three; 3.6 is what seeding did,
+		// and this list is the sheet somebody carries to the market.
+		ingredientUnits.requireWhole(request.ingredientId(), request.suggestedQty());
+
 		/*
 		  T-402. An ingredient the temple never buys cannot be typed onto the list either, and the
 		  refusal is here because a picker is not a guard — the screen leaves a marked ingredient out
@@ -249,6 +256,17 @@ public class ShoppingListService {
 				|| (computed != null && computed.compareTo(request.suggestedQty()) == 0)
 				? null
 				: request.suggestedQty();
+
+		// A counted thing cannot be a fraction (T-423) — of the override only, and that is not a
+		// loophole, it is the whole distinction. Only the override is a figure a person typed; a
+		// request carrying back the computed suggestion unchanged is the tick box saying "buy what
+		// you worked out", and the computed figure is the application's own arithmetic, which today
+		// can perfectly well be 16.78 bananas because a meal for 140 was scaled from a recipe for
+		// 200. Checking it here would put a refusal on the tick box of a line nobody typed a number
+		// into, and would say the person's own screen was wrong about a number it had shown them.
+		// The fraction in the suggestion is real and is somebody else's task; this one is about what
+		// the cook writes over it.
+		IngredientUnits.requireWhole(line.ingredientName(), override, Unit.valueOf(line.unit()));
 
 		jdbc.update("""
 				INSERT INTO shopping_list_lines (

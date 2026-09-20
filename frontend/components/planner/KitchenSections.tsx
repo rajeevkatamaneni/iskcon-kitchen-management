@@ -6,7 +6,7 @@ import { FieldRow } from "@/components/ds/FieldRow";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { FIELD_LABEL } from "@/components/Field";
 import type { RecipeSummary } from "@/lib/api";
-import { unitLabel } from "@/lib/format";
+import { stepForUnit, unitLabel } from "@/lib/format";
 
 /**
  * Step 3 of the meal composer since Epic 12: "What each kitchen cooks", one band per kitchen.
@@ -197,7 +197,10 @@ export function KitchenBand({
                 type="number"
                 min={0}
                 max={d.max}
-                step="any"
+                // The recipe's own unit, never chosen here: a dish measured in pieces is planned
+                // as whole pieces (T-424). Rendered inside MealComposer's `<Form>`, so the
+                // refusal lands in the error slot this row already styles.
+                step={stepForUnit(d.unit)}
                 aria-label={`Amount of ${d.name}`}
                 value={d.target ?? ""}
                 onChange={(e) => onAmount(d.recipeId, e.target.value)}

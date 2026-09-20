@@ -30,6 +30,8 @@ import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.geo.GeocodingProvider;
 import org.iskcon.kms.geo.PlaceSuggestionProvider;
 import org.iskcon.kms.geo.TravelTimeProvider;
+import org.iskcon.kms.ingredient.IngredientUnits;
+import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.kitchen.KitchenOrder;
 import org.iskcon.kms.kitchen.KitchenOrder.KitchenRef;
 import org.iskcon.kms.occasion.OccasionService;
@@ -910,12 +912,23 @@ public class MealPlanService {
 			LocalDate date, List<SaveMealRequest.DishDraft> drafts, boolean acknowledged,
 			java.util.function.Function<SaveMealRequest.DishDraft, UUID> kitchenOf) {
 		List<NewDish> out = new ArrayList<>(drafts.size());
+		// A counted thing cannot be a fraction (T-423). A dish's target is in the recipe's own yield
+		// unit, which is nowhere on the request — the composer sends a recipe id and a number — so
+		// this is the service's question and could not be an annotation on DishDraft. Planning 200.5
+		// idlis is planning something nobody can cook, and the figure is the one the job card, the
+		// stock forecast and the shopping list all scale from.
+		//
+		// Collected across the meal: the composer saves every dish in one press (D-27), so refusing
+		// one at a time would make the planner press it once per mistake.
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers();
 		for (SaveMealRequest.DishDraft draft : drafts) {
 			UUID kitchen = kitchenOf.apply(draft);
-			findRecipe(draft.recipeId());
+			PlannableRecipe recipe = findRecipe(draft.recipeId());
+			whole.check(recipe.name(), draft.targetYield(), recipe.yieldUnit());
 			out.add(new NewDish(draft.recipeId(), draft.targetYield(),
 					resolveEkadashiAck(date, draft.recipeId(), acknowledged), kitchen));
 		}
+		whole.refuseAnyPart();
 		return out;
 	}
 
@@ -1902,12 +1915,23 @@ public class MealPlanService {
 				}).stream().findFirst().orElse(null);
 	}
 
-	private void findRecipe(UUID recipeId) {
-		Integer found = jdbc.queryForObject(
-				"SELECT count(*) FROM recipes WHERE id = ? AND status = 'ACTIVE'", Integer.class, recipeId);
-		if (found == null || found == 0) {
-			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("recipeId", recipeId));
-		}
+	/**
+	 * The recipe, as a planned dish needs it: it is this temple's and it is active, plus the two facts
+	 * the whole-number rule reads. Counting rows was enough until T-423 needed the name and the unit
+	 * as well, and one read is the same cost as the count it replaces.
+	 */
+	private PlannableRecipe findRecipe(UUID recipeId) {
+		return jdbc.query("""
+				SELECT name, base_yield_unit FROM recipes WHERE id = ? AND status = 'ACTIVE'
+				""", (rs, n) -> new PlannableRecipe(
+						rs.getString("name"), Unit.valueOf(rs.getString("base_yield_unit"))), recipeId)
+				.stream().findFirst()
+				.orElseThrow(() -> new ApplicationException(
+						ErrorCode.RESOURCE_NOT_FOUND, Map.of("recipeId", recipeId)));
+	}
+
+	/** What a dish's target yield is a number of, and what to call the dish in a refusal. */
+	private record PlannableRecipe(String name, Unit yieldUnit) {
 	}
 
 	private static String trimToNull(String s) {

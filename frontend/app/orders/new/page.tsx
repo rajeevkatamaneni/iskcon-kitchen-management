@@ -41,6 +41,7 @@ import {
   pricePer,
   quantity as sayQuantity,
   readableRate,
+  stepForUnit,
   todayIso,
   unitLabel,
   unitLabelFor,
@@ -598,7 +599,9 @@ function CreatePurchaseOrderView() {
                         data-more-than="0"
                         // A vendor sells whole bags: a pack line's box counts packs, and `Form`
                         // names a part of one beside the box ("… must be a whole number").
-                        step={l.packId ? "1" : "any"}
+                        // And a line in a counted unit counts the things themselves, pack or
+                        // no pack — an order for 3.6 brooms is the T-424 defect.
+                        step={l.packId ? "1" : stepForUnit(l.unit)}
                         aria-label={`Quantity of ${l.name}`}
                         value={l.quantity}
                         onChange={(e) => update(l.key, { quantity: e.target.value })}

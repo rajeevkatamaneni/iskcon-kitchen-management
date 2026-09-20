@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { Form } from "@/components/ds/Form";
 import { HintedField } from "@/components/ds/InfoHint";
-import { unitLabel, unitLabelFor } from "@/lib/format";
+import { stepForUnit, unitLabel, unitLabelFor } from "@/lib/format";
 import type { ApiError, IngredientView, StockItemView } from "@/lib/api";
 
 /**
@@ -189,7 +189,9 @@ export function InventoryItemForm({
                 value={count}
                 onChange={(e) => setCount(e.target.value)}
                 min="0"
-                step="any"
+                // The unit picker sits in this same row, so the box follows whatever it is set
+                // to rather than the ingredient's stock unit (T-424).
+                step={stepForUnit(levelUnit)}
                 placeholder={chosen ? "e.g. 40" : "Choose an ingredient first"}
                 disabled={!chosen}
                 className={`${FIELD} min-w-0 flex-1 disabled:opacity-60`}
@@ -224,7 +226,11 @@ export function InventoryItemForm({
               name="reorderThreshold"
               type="number"
               min="0"
-              step="any"
+              // A threshold is compared against a stock level, so it is counted whenever the
+              // level is: "tell me when aprons drop below 3.6" can never be true or false in a
+              // way anybody could act on (T-424). Always the ingredient's stock unit — this box
+              // has no picker of its own and the hint names no unit.
+              step={stepForUnit(chosen?.unit)}
               placeholder={chosen ? "e.g. 5" : ""}
               disabled={!chosen}
               className={`${FIELD} disabled:opacity-60`}

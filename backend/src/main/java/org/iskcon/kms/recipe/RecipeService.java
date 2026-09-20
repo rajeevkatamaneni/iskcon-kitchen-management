@@ -15,6 +15,7 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.ingredient.Unit;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,10 +50,12 @@ public class RecipeService {
 
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
+	private final IngredientUnits ingredientUnits;
 
-	public RecipeService(JdbcTemplate jdbc, AuditService auditService) {
+	public RecipeService(JdbcTemplate jdbc, AuditService auditService, IngredientUnits ingredientUnits) {
 		this.jdbc = jdbc;
 		this.auditService = auditService;
+		this.ingredientUnits = ingredientUnits;
 	}
 
 	@Transactional(readOnly = true)
@@ -222,6 +225,7 @@ public class RecipeService {
 		Unit yieldUnit = parseYieldUnit(request.baseYieldUnit());
 		resolveCategory(request.categoryId());
 		resolveIngredients(request.ingredients());
+		requireWholeCounts(request.name().trim(), yieldUnit, request.baseYieldQty(), request.ingredients());
 
 		UUID id = UUID.randomUUID();
 		try {
@@ -259,6 +263,7 @@ public class RecipeService {
 		Unit yieldUnit = parseYieldUnit(request.baseYieldUnit());
 		resolveCategory(request.categoryId());
 		resolveIngredients(request.ingredients());
+		requireWholeCounts(request.name().trim(), yieldUnit, request.baseYieldQty(), request.ingredients());
 
 		RecipeView before = get(id);
 
@@ -505,6 +510,42 @@ public class RecipeService {
 					ErrorCode.NOT_A_FOOD_INGREDIENT,
 					Map.of("field", "ingredients", "supplies", String.join(", ", supplies)));
 		}
+	}
+
+	/**
+	 * A counted thing cannot be a fraction, on the two figures a recipe form holds in a unit (T-423):
+	 * what the recipe makes, and each ingredient line.
+	 *
+	 * <p><strong>The yield.</strong> "Makes 300 idlis" is a count of things that come out of a pot
+	 * one at a time, and 300.5 of them is not a batch anybody can cook or a figure the planner can
+	 * scale from. It is also the denominator of every scaled line downstream, so a fraction here
+	 * multiplies quietly into every job card the recipe ever produces.
+	 *
+	 * <p><strong>The ingredient lines, and this is the judgement worth reading.</strong> A recipe
+	 * line is a ratio — so many coconuts per the yield above — and half a coconut is a thing a cook
+	 * really does halve, which is the argument for leaving it alone. It is checked anyway, for two
+	 * reasons. A line is the one place a fraction of a counted thing is <em>authored</em> rather than
+	 * mistyped, and from there it reaches the job card, the shopping list and the stock draw for
+	 * every scale the recipe is ever cooked at. And a temple that genuinely halves a coconut writes
+	 * the recipe at the yield that makes it whole — one coconut per 20 L rather than half per 10 —
+	 * which the scaler then handles at any target. Measured before deciding: of 458 quantity strings
+	 * in the three recipe books this product ships, 35 are in a counted unit and every one of the 35
+	 * is already a whole number, so nothing the temple actually cooks is refused by this.
+	 *
+	 * <p><strong>What is deliberately not checked is {@code perHeadQty}</strong>, which is the same
+	 * shape and a different thing: a portion is explicitly per one person, and two and a half idlis
+	 * a head is an ordinary, useful figure that nobody ever makes, buys or holds. Multiply it by a
+	 * head count and the answer is what gets cooked; that answer is this rule's business and the
+	 * ratio is not.
+	 */
+	private void requireWholeCounts(
+			String recipeName, Unit yieldUnit, BigDecimal baseYieldQty, List<RecipeIngredientLine> lines) {
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers(ingredientUnits);
+		whole.check(recipeName, baseYieldQty, yieldUnit);
+		for (RecipeIngredientLine line : lines) {
+			whole.check(line.ingredientId(), line.quantity(), parseUnit(line.unit()));
+		}
+		whole.refuseAnyPart();
 	}
 
 	private Unit parseYieldUnit(String unit) {

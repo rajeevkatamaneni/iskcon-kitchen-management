@@ -14,6 +14,7 @@ import {
   convertQuantity,
   cooksQuantity,
   portionUnitsFor,
+  stepForUnit,
   unitLabel,
 } from "@/lib/format";
 
@@ -269,7 +270,9 @@ export function RecipeForm({
           */}
           <HintedField label="This recipe makes" hint="How much the ingredients below make. Planned amounts are scaled from this.">
             {(id) => (
-              <input id={id} aria-label="How much this recipe makes" type="number" min="0" step="any"
+              <input id={id} aria-label="How much this recipe makes" type="number" min="0"
+                // A recipe measured in pieces makes whole ladoos (T-424). Follows "Measured in".
+                step={stepForUnit(baseYieldUnit)}
                 value={baseYieldQty} onChange={(e) => setBaseYieldQty(e.target.value)} required
                 className="min-h-touch rounded-control border border-hairline px-3 text-base text-ink" />
             )}
@@ -288,7 +291,9 @@ export function RecipeForm({
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <label className="flex flex-col gap-1 text-sm text-ink-secondary">
             <span className="pl-field-inset font-medium text-ink">One person eats</span>
-            <input type="number" min="0" step="any" value={perHeadQty}
+            {/* A portion of a counted recipe is a whole thing: one person eats 2 ladoos, not 2.4.
+                Follows "Portion unit" beside it, which may differ from the yield's (T-424). */}
+            <input type="number" min="0" step={stepForUnit(perHeadUnit)} value={perHeadQty}
               onChange={(e) => setPerHeadQty(e.target.value)} placeholder="0.2"
               className="min-h-touch rounded-control border border-hairline px-3 text-base text-ink" />
           </label>
@@ -362,7 +367,7 @@ export function RecipeForm({
             <input aria-label={`Preparation ${i + 1}`} value={line.preparationNote} maxLength={200}
               onChange={(e) => setLine(i, { preparationNote: e.target.value })} placeholder="Preparation, e.g. slit"
               className="col-span-3 min-h-touch min-w-0 rounded-control border border-hairline px-3 text-base text-ink sm:col-span-2 xl:col-span-1" />
-            <input aria-label={`Quantity ${i + 1}`} type="number" min="0" step="any" value={line.quantity}
+            <input aria-label={`Quantity ${i + 1}`} type="number" min="0" step={stepForUnit(line.unit)} value={line.quantity}
               onChange={(e) => setLine(i, { quantity: e.target.value })} placeholder="Qty"
               className="min-h-touch rounded-control border border-hairline px-3 text-base text-ink" />
             <select aria-label={`Unit ${i + 1}`} value={line.unit} onChange={(e) => setLine(i, { unit: e.target.value })}

@@ -11,7 +11,8 @@ import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { api, toApiError, type ApiError, type StockItemView } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { expiryWord, quantity, unitLabel } from "@/lib/format";
+import { expiryWord, quantity, stepForUnit, unitLabel } from "@/lib/format";
+import { wholeNumberProblem } from "@/components/ds/formMessages";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
@@ -275,7 +276,16 @@ function EditRow({
   const [location, setLocation] = useState(item.storageLocation ?? "");
   const [threshold, setThreshold] = useState(item.reorderThreshold == null ? "" : String(item.reorderThreshold));
   const [notes, setNotes] = useState(item.notes ?? "");
+  const [tried, setTried] = useState(false);
   const FIELD = "min-h-touch w-full rounded-control border border-hairline px-2";
+
+  /*
+   * A level is compared against a stock figure, so it is whole whenever the stock figure is
+   * (T-424): "tell me when aprons drop below 3.6" is a rule that can never be read off a shelf.
+   * A level already on file holding a fraction still shows it, and is refused on Save.
+   */
+  const step = stepForUnit(item.unit);
+  const wholeProblem = wholeNumberProblem(`Tell me when ${item.ingredientName} drops below`, step, threshold);
 
   return (
     <tr className="border-t border-hairline bg-sunken align-top">
@@ -301,14 +311,19 @@ function EditRow({
             <input
               aria-label={`Tell me when ${item.ingredientName} drops below`}
               type="number"
+              inputMode={step === "1" ? "numeric" : "decimal"}
               min="0"
-              step="any"
+              step={step}
               value={threshold}
               onChange={(e) => setThreshold(e.target.value)}
-              className={`${FIELD} w-24`}
+              aria-invalid={tried && wholeProblem ? true : undefined}
+              className={`${FIELD} w-24 ${tried && wholeProblem ? "border-danger" : ""}`}
             />
             <span>{unitLabel(item.unit)}</span>
           </label>
+          {tried && wholeProblem && (
+            <span className="basis-full text-xs text-danger">{wholeProblem}</span>
+          )}
           <input aria-label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" className={`${FIELD} min-w-0 flex-1`} />
         </div>
       </td>
@@ -317,13 +332,15 @@ function EditRow({
           <Button
             size="sm"
             disabled={busy}
-            onClick={() =>
+            onClick={() => {
+              setTried(true);
+              if (wholeProblem) return;
               onSave({
                 storageLocation: emptyToNull(location),
                 reorderThreshold: threshold.trim() === "" ? null : Number(threshold),
                 notes: emptyToNull(notes),
-              })
-            }
+              });
+            }}
           >
             Save
           </Button>

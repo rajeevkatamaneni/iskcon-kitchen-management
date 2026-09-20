@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 // Typed like the real calls, so the assertions read what was sent rather than casting past an
 // untyped mock.
@@ -448,5 +448,70 @@ describe("the day's meals", () => {
     // is where the outstanding performance question lives.
     expect(screen.queryByRole("button", { name: /^job card$/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Download the .* job card$/ })).toBeInTheDocument();
+  });
+});
+
+/**
+ * A dish measured in pieces is cooked and served as whole things (T-424).
+ *
+ * <p>The recording form is **outside** the shared `<Form>` — the correction form beside it is inside
+ * one — so it says the sentence itself, from the same source. The unit comes from the recipe's own
+ * yield unit, which is why the fixture below is a recipe in `PIECES` rather than a dish in one.
+ */
+describe("recording a dish measured in pieces", () => {
+  const LADOO = {
+    id: "r9", name: "Ladoo", categoryName: "Sweets", fastingCompatible: false,
+    baseYieldQty: 100, baseYieldUnit: "PIECES", perHeadQty: 1, perHeadUnit: "PIECES", status: "ACTIVE",
+  };
+
+  async function openLadoo() {
+    meals.mockResolvedValue([
+      lunch({ dishes: [{ ...dish("m9", "r9", "Ladoo", 248), targetYieldUnit: "PIECES" }] }),
+    ]);
+    render(
+      <MealServices
+        date="2026-08-21"
+        sufficiency={new Map()}
+        recipes={[...RECIPES, LADOO] as never}
+        readOnly={false}
+        onChanged={vi.fn()}
+        onError={vi.fn()}
+      />
+    );
+    await screen.findByText("Lunch");
+    openTheRecordingForm();
+  }
+
+  it("steps both boxes by 1", async () => {
+    await openLadoo();
+    expect(screen.getByLabelText("Ladoo cooked")).toHaveAttribute("step", "1");
+    expect(screen.getByLabelText("Ladoo served")).toHaveAttribute("step", "1");
+    expect(screen.getByLabelText("Ladoo cooked")).toHaveAttribute("inputmode", "numeric");
+  });
+
+  it("refuses 1.5 ladoos cooked and records nothing", async () => {
+    await openLadoo();
+    fireEvent.change(screen.getByLabelText("Ladoo cooked"), { target: { value: "1.5" } });
+    fireEvent.click(screen.getByRole("button", { name: /save actuals/i }));
+
+    expect(screen.getByText(/Ladoo cooked must be a whole number/)).toBeInTheDocument();
+    expect(recordMeal).not.toHaveBeenCalled();
+  });
+
+  it("still records whole figures", async () => {
+    await openLadoo();
+    fireEvent.change(screen.getByLabelText("Ladoo cooked"), { target: { value: "240" } });
+    fireEvent.click(screen.getByRole("button", { name: /save actuals/i }));
+    expect(screen.queryByText(/must be a whole number/)).toBeNull();
+    await waitFor(() => expect(recordMeal).toHaveBeenCalled());
+  });
+
+  it("leaves a dish measured in kilos alone", async () => {
+    await open([lunch()]);
+    openTheRecordingForm();
+    expect(screen.getByLabelText("Bisi Bele Bath cooked")).toHaveAttribute("step", "any");
+    fireEvent.change(screen.getByLabelText("Bisi Bele Bath cooked"), { target: { value: "1.5" } });
+    fireEvent.click(screen.getByRole("button", { name: /save actuals/i }));
+    expect(screen.queryByText(/must be a whole number/)).toBeNull();
   });
 });

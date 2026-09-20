@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.MovementReference;
 import org.iskcon.kms.inventory.MovementType;
@@ -95,6 +96,23 @@ public class GoodsReturnService {
 		}
 
 		ReceiptLine line = loadLine(receiptId, request.receiptLineId());
+
+		// A counted thing cannot be a fraction (T-423), and the staging seed's "return of 1.5 aprons"
+		// came through exactly here. The unit is the received line's own, never on the request — a
+		// return is one line and says only how much of it goes back — so this is the service's
+		// question and could not be an annotation.
+		//
+		// Asked before the "more than was received" sum below, so half an apron is answered as half
+		// an apron rather than as arithmetic about a remainder.
+		//
+		// <strong>What this costs, and it is a real cost.</strong> A line already received at 7.2 on
+		// staging can now be returned at 7 but not at 7.2, so the 0.2 stays on the books. That is
+		// deliberate rather than overlooked: an exception admitting "exactly the fractional amount
+		// recorded" would be a carve-out every future reader has to learn, for a case with a route
+		// out of it already — StockMovementService.compensate reverses the receipt's own movement
+		// past validation, which is what that method exists for.
+		IngredientUnits.requireWhole(line.ingredientName(), request.quantity(), Unit.valueOf(line.unit()));
+
 		BigDecimal returnedSoFar = returnedSoFar(line.id());
 		BigDecimal remaining = line.receivedQty().subtract(returnedSoFar);
 		if (request.quantity().compareTo(remaining) > 0) {
@@ -160,15 +178,17 @@ public class GoodsReturnService {
 	 */
 	private ReceiptLine loadLine(UUID receiptId, UUID receiptLineId) {
 		List<ReceiptLine> lines = jdbc.query("""
-				SELECT l.id, l.ingredient_id, l.received_qty, l.unit, l.batch_id, r.po_id,
-					   po.po_number
+				SELECT l.id, l.ingredient_id, i.name AS ingredient_name, l.received_qty, l.unit,
+					   l.batch_id, r.po_id, po.po_number
 				FROM goods_receipt_lines l
 				JOIN goods_receipts r ON r.id = l.receipt_id
 				JOIN purchase_orders po ON po.id = r.po_id
+				JOIN ingredients i ON i.id = l.ingredient_id
 				WHERE l.id = ? AND l.receipt_id = ?
 				""", (rs, n) -> new ReceiptLine(
 				rs.getObject("id", UUID.class),
 				rs.getObject("ingredient_id", UUID.class),
+				rs.getString("ingredient_name"),
 				rs.getBigDecimal("received_qty"),
 				rs.getString("unit"),
 				rs.getObject("batch_id", UUID.class),
@@ -263,7 +283,7 @@ public class GoodsReturnService {
 	}
 
 	/** The receipt line a return is being made against, and the order it arrived on. */
-	private record ReceiptLine(UUID id, UUID ingredientId, BigDecimal receivedQty, String unit,
-			UUID batchId, UUID poId, String poNumber) {
+	private record ReceiptLine(UUID id, UUID ingredientId, String ingredientName,
+			BigDecimal receivedQty, String unit, UUID batchId, UUID poId, String poNumber) {
 	}
 }

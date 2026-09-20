@@ -11,8 +11,10 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import {
-  cooksQuantity, dateWithYear, entryQuantity, fromEntry, pricePer, quantity, readablePackRate, readableRate, todayIso, unitLabel,
+  cooksQuantity, dateWithYear, entryQuantity, fromEntry, pricePer, quantity, readablePackRate, readableRate,
+  stepForUnit, todayIso, unitLabel,
 } from "@/lib/format";
+import { wholeNumberProblem } from "@/components/ds/formMessages";
 import { Badge } from "@/components/ds/Badge";
 import { Loading } from "@/components/Loading";
 import { HintedField } from "@/components/ds/InfoHint";
@@ -673,6 +675,12 @@ function SuggestedCell({
   onQuantity: (line: ShoppingListLineView, qty: number) => void;
 }) {
   const vendorPack = line.packFromVendor && line.buyPacks.length === 1 ? line.buyPacks[0] : null;
+  /*
+   * This box commits on blur rather than on a button, so its refusal has to appear on blur too
+   * (T-424). A fraction of a counted thing is held, shown in red under the box and NOT sent — the
+   * typed figure stays on screen to be corrected rather than being silently dropped or rounded.
+   */
+  const [problem, setProblem] = useState<string | null>(null);
 
   if (vendorPack) {
     return (
@@ -699,17 +707,27 @@ function SuggestedCell({
     <>
       <input
         key={[line.suggestedQty, line.unit].join("-")}
-        type="number" min="0" step="any" defaultValue={shown.value} disabled={busy}
+        type="number" min="0" step={stepForUnit(shown.unit)} defaultValue={shown.value} disabled={busy}
+        inputMode={stepForUnit(shown.unit) === "1" ? "numeric" : "decimal"}
         aria-label={`Quantity for ${line.ingredientName}`}
+        aria-invalid={problem ? true : undefined}
         onBlur={(e) => {
           const n = Number(e.target.value);
           if (e.target.value.trim() === "" || !Number.isFinite(n)) return;
+          const whole = wholeNumberProblem(
+            `Quantity for ${line.ingredientName}`,
+            stepForUnit(shown.unit),
+            e.target.value,
+          );
+          setProblem(whole);
+          if (whole) return;
           const stored = fromEntry(n, shown.unit, line.unit);
           if (stored !== line.suggestedQty) onQuantity(line, stored);
         }}
-        className="w-20 rounded-control border border-hairline px-2 py-1 tabular-nums"
+        className={`w-20 rounded-control border px-2 py-1 tabular-nums ${problem ? "border-danger" : "border-hairline"}`}
       />{" "}
       <span className="text-xs text-ink-muted">{unitLabel(shown.unit)}</span>
+      {problem && <span className="block text-xs text-danger">{problem}</span>}
       {line.buyPacks.length > 0 && (
         <span className="block text-xs text-ink-muted">{packsText(line.buyPacks)}</span>
       )}
@@ -1051,7 +1069,12 @@ function AddLine({
   // A quantity of zero is refused by the server and by the column's own CHECK. The button is
   // disabled rather than the refusal being left to be discovered, but the server still decides.
   const quantity = Number(qty);
-  const ready = ingredient !== undefined && qty.trim() !== "" && Number.isFinite(quantity) && quantity > 0;
+  // A counted ingredient is added as whole things (T-424). Said out loud under the box rather
+  // than only greying the button, which leaves somebody pressing a dead control and guessing.
+  const step = stepForUnit(ingredient?.unit);
+  const wholeProblem = wholeNumberProblem("Quantity to add", step, qty);
+  const ready =
+    ingredient !== undefined && qty.trim() !== "" && Number.isFinite(quantity) && quantity > 0 && !wholeProblem;
 
   async function add() {
     if (!ingredient || !ready) return;
@@ -1089,16 +1112,19 @@ function AddLine({
           <span className="pl-field-inset font-medium text-ink">Quantity</span>
           <span className="flex items-center gap-2">
             <input
-              type="number" min="0" step="any" value={qty} disabled={busy}
+              type="number" min="0" step={step} value={qty} disabled={busy}
+              inputMode={step === "1" ? "numeric" : "decimal"}
               aria-label="Quantity to add"
+              aria-invalid={wholeProblem ? true : undefined}
               onChange={(e) => setQty(e.target.value)}
-              className="min-h-touch w-24 rounded-control border border-hairline px-2 tabular-nums"
+              className={`min-h-touch w-24 rounded-control border px-2 tabular-nums ${wholeProblem ? "border-danger" : "border-hairline"}`}
             />
             {/* The unit the line will actually be written in, stated and not offered. Blank until an
                 item is chosen, because there is nothing true to say yet — a placeholder unit beside
                 an empty box is a guess the cook would reasonably read as a fact. */}
             <span className="text-xs text-ink-muted">{ingredient ? unitLabel(ingredient.unit) : ""}</span>
           </span>
+          {wholeProblem && <span className="text-xs text-danger">{wholeProblem}</span>}
         </label>
 
         <button

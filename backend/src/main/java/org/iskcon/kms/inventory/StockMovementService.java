@@ -3,6 +3,7 @@ package org.iskcon.kms.inventory;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -326,7 +327,46 @@ public class StockMovementService {
 		// pass through. Same family, not same unit: issuing and cooking post in the family's base
 		// unit, and an order in kilos against a gram-held ingredient is ordinary.
 		ingredientUnits.requireSameFamily(cmd.ingredientId(), cmd.unit());
+
+		// The same last line of defence for the second rule — a counted thing cannot be a fraction
+		// (T-423) — asked only of the kinds whose figure is the one somebody typed. See the set.
+		if (ENTERED_BY_A_PERSON.contains(cmd.type())) {
+			ingredientUnits.requireWhole(cmd.ingredientId(), cmd.quantity());
+		}
 	}
+
+	/**
+	 * The movement kinds whose quantity is the figure a person entered, and therefore the only ones
+	 * the whole-number rule (T-423) is asked of here.
+	 *
+	 * <p><strong>The distinction is the whole reason this is a set rather than an unconditional
+	 * check</strong>, and getting it wrong would have broken cooking on the day it shipped. Four of
+	 * the seven kinds carry a number straight off a form: what the storekeeper says arrived, what a
+	 * donor gave, what is going back to the vendor, what somebody counted on the shelf. The other
+	 * three carry a number this application worked out — {@link MovementType#CONSUMPTION} and
+	 * {@link MovementType#USED_BEYOND_RECORDED_STOCK} from a recipe scaled to a target, and
+	 * {@link MovementType#ISSUE} from a FEFO draw split across batches — and both of those are
+	 * legitimately fractional against a counted ingredient. Issuing five whole aprons out of lots
+	 * holding 2.5 and 86 genuinely takes 2.5 from the first, which is the shape the fractional rows
+	 * already on staging leave behind for ever. A blanket check here would refuse that, and would
+	 * make the bad rows undrawable — the application unable to work around data it has to be able to
+	 * work around.
+	 *
+	 * <p>Those three are gated at their own doors instead, on the figure the person actually typed:
+	 * the issued amount in {@code IngredientIssueService}, the target yield in
+	 * {@code InventoryConsumptionService.consume}, and the cooked and consumed figures in
+	 * {@code ServedMealService}. That is the two-layer arrangement BL-9 already uses, with the two
+	 * layers asking about different numbers rather than the same one twice.
+	 *
+	 * <p>{@link #compensate} never reaches here at all: a reversal goes straight to the insert, past
+	 * validation, for the reason set out there — a movement written before a rule existed is exactly
+	 * the one somebody needs to undo, and it is how a fraction left on an old row comes off.
+	 */
+	private static final EnumSet<MovementType> ENTERED_BY_A_PERSON = EnumSet.of(
+			MovementType.PO_RECEIPT,
+			MovementType.DONATION_IN_KIND,
+			MovementType.RETURN_TO_VENDOR,
+			MovementType.ADJUSTMENT);
 
 	private boolean isAlreadyCorrected(UUID originalId) {
 		Integer count = jdbc.queryForObject(

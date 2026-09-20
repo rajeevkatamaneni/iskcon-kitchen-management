@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.recipe.RecipeService;
 import org.iskcon.kms.recipe.ScaledLine;
@@ -141,6 +142,22 @@ public class InventoryConsumptionService {
 	@Transactional
 	public ConsumptionPlan consume(AuthenticatedUser actor, ConsumeRequest request) {
 		Plan plan = computePlan(request.recipeId(), request.targetYield(), request.batchOverrides());
+
+		// A counted thing cannot be a fraction (T-423), on the target somebody typed. The unit is the
+		// recipe's own yield unit and is nowhere on the request, so this is the service's question;
+		// it is asked after the plan is computed because that is what resolves the recipe, its name
+		// and its unit, and nothing has been written yet.
+		//
+		// <strong>On the write, not on the preview.</strong> {@link #preview} answers the same
+		// question as a what-if and is deliberately left alone, for the reason IngredientUnits states
+		// as a rule: nothing there is consulted on a read, because a screen that throws is worse than
+		// one showing the figure somebody needs in order to correct it.
+		//
+		// <strong>And on the target only, never on the draws below.</strong> Those are what the
+		// application worked out — a recipe scaled to 12 L genuinely needs 2.4 coconuts, and FEFO
+		// splits whatever it needs across whatever the batches hold. Rounding them is a separate
+		// piece of work on the scaling path; refusing them here would simply stop the temple cooking.
+		IngredientUnits.requireWhole(plan.recipeName(), request.targetYield(), Unit.valueOf(plan.yieldUnit()));
 
 		MovementReference referenceType = request.mealPlanId() == null ? null : MovementReference.MEAL_PLAN;
 		String note = trimToNull(request.note());
