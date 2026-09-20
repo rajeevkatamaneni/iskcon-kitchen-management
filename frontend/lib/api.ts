@@ -5248,7 +5248,33 @@ export const api = {
    * Reserved by the work manager for T-287.
    */
   importRecipe: (masterRecipeId: string, token?: string, decisions?: ImportCloseMatchDecision[]) =>
-    request<{ id: string; name: string; ingredientsCreated: number; categoryCreated: boolean }>(
+    request<{
+      id: string;
+      name: string;
+      ingredientsCreated: number;
+      categoryCreated: boolean;
+      /**
+       * The ingredients the library marks "never bought" where the temple already had its own, so
+       * the copy left the temple's own setting alone. Empty when there was nothing to keep, which
+       * is the usual case — and the screen then says nothing at all.
+       *
+       * <p><strong>Not a failure.</strong> The copy worked, every line of it. Copying a recipe is
+       * `MANAGE_RECIPES`, which a Kitchen Manager holds; marking an ingredient never-bought is
+       * `MANAGE_BUYING_POLICY`, the Temple Admin's alone. So a copy must never quietly set a buying
+       * policy the person doing it could not set themselves, and this is the list of times it
+       * declined to.
+       *
+       * <p>Until now that refusal was recorded only as a raw key inside the audit entry's JSON blob
+       * and nothing on screen ever said it — so a Kitchen Manager copied a recipe whose water is
+       * marked never-bought, the temple's water stayed on the shopping list, and nobody was told.
+       * Fifteen times on staging in one week.
+       *
+       * <p>The name matches the key in the audit entry and the field in `RecipeImportService`
+       * deliberately, so one word finds all three. It is a poor sentence and a good identifier; the
+       * words a person reads are the screen's, not this.
+       */
+      notBoughtNotApplied: string[];
+    }>(
       `/api/v1/recipes/import/${masterRecipeId}`,
       decisions ? { method: "POST", body: JSON.stringify({ decisions }), token } : { method: "POST", token }
     ),

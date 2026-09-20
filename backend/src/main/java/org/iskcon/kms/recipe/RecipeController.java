@@ -76,7 +76,12 @@ public class RecipeController {
 				"id", imported.recipeId(),
 				"name", imported.name(),
 				"ingredientsCreated", imported.ingredientsCreated(),
-				"categoryCreated", imported.categoryCreated()));
+				"categoryCreated", imported.categoryCreated(),
+				// The temple's own ingredients the book says it never buys and this copy left alone
+				// (T-427). Always sent, `[]` when there is nothing to say, so the screen tests one
+				// list rather than a list that is sometimes absent. It is not a failure — the copy
+				// worked — and the screens show it as ordinary neutral context, never as an error.
+				"notBoughtNotApplied", imported.notBoughtNotApplied()));
 	}
 
 	/**

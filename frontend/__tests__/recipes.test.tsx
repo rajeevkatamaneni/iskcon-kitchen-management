@@ -117,9 +117,15 @@ describe("recipe browse", () => {
     paramsRef.current = new URLSearchParams();
     pushMock.mockReset();
     replaceMock.mockReset();
-    importMock
-      .mockReset()
-      .mockResolvedValue({ id: "new", name: "Majjige", ingredientsCreated: 8, categoryCreated: false });
+    // `notBoughtNotApplied` is always sent and is `[]` when the copy withheld nothing (T-427), so
+    // the default stub is the ordinary copy: nothing kept back, and no extra line on the screen.
+    importMock.mockReset().mockResolvedValue({
+      id: "new",
+      name: "Majjige",
+      ingredientsCreated: 8,
+      categoryCreated: false,
+      notBoughtNotApplied: [],
+    });
     searchMock.mockReset().mockResolvedValue([mine(), library()]);
     countMock.mockReset().mockResolvedValue({ count: 0 });
     closeMatchesMock.mockReset().mockResolvedValue([]);

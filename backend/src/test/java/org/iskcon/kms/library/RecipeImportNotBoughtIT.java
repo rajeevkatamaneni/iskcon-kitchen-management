@@ -406,6 +406,115 @@ class RecipeImportNotBoughtIT extends AbstractIntegrationTest {
 				.andExpect(status().isForbidden());
 	}
 
+	// ------------------------------------------------------------------ and the copier is told (T-427)
+
+	/*
+	 * The refusal above is right and stays. What was wrong until T-427 is that it was recorded and
+	 * never reported: the names went into the audit entry's JSON and stopped there, so the one person
+	 * who could act on it — the person who had just pressed the button — was the one person not told.
+	 * Fifteen such entries on staging in one week, every one silent.
+	 *
+	 * These four assert the wire, not the screen. The screens' own tests are in the frontend suite.
+	 */
+
+	@Test
+	@DisplayName("the copy's own response names what it left alone, not only the audit entry")
+	void theResponseNamesWhatItLeftAlone() throws Exception {
+		insertIngredient("Water", "L");
+		UUID master = curatedAkkiRotti();
+
+		String body = mvc.perform(authed(post("/api/v1/recipes/import/{id}", master)))
+				.andExpect(status().isCreated())
+				// The four fields the response always carried are untouched, asserted here so that
+				// adding a fifth cannot quietly drop one of them.
+				.andExpect(jsonPath("$.name").value("Akki Rotti Curated"))
+				.andExpect(jsonPath("$.ingredientsCreated").value(1))
+				.andExpect(jsonPath("$.categoryCreated").value(true))
+				.andReturn().getResponse().getContentAsString();
+
+		// Read off the body rather than matched with `jsonPath(...).value(List.of(...))`: that
+		// matcher re-evaluates the path as the expected value's own class and quietly yields null
+		// for an array, which passes nothing and fails everything.
+		assertThat(JsonPath.<List<String>>read(body, "$.notBoughtNotApplied")).containsExactly("Water");
+
+		// And it is the same list in both places, by the temple's name for the ingredient. A screen
+		// and an auditor reading the same copy must not be told two different things.
+		assertThat(JSON.readTree(body).at("/notBoughtNotApplied"))
+				.isEqualTo(importedAudit(JsonPath.read(body, "$.id")).at("/notBoughtNotApplied"));
+	}
+
+	@Test
+	@DisplayName("a copy that kept nothing sends an empty list, not a missing field")
+	void theResponseSendsAnEmptyListWhenNothingWasKept() throws Exception {
+		// The ordinary case: no Water of the temple's own, so the import creates it marked and there
+		// is no disagreement at all. The key is still there. A screen that had to tell "absent" from
+		// "empty" would get it wrong on the first recipe that has nothing to say, which is most of
+		// them — and the audit entry deliberately leaves the key out in this case, so the two shapes
+		// differ on purpose and this test is what records that.
+		UUID master = curatedAkkiRotti();
+
+		String body = mvc.perform(authed(post("/api/v1/recipes/import/{id}", master)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.notBoughtNotApplied").isArray())
+				.andExpect(jsonPath("$.notBoughtNotApplied").isEmpty())
+				.andReturn().getResponse().getContentAsString();
+
+		assertThat(JSON.readTree(body).has("notBoughtNotApplied")).isTrue();
+		assertThat(importedAudit(JsonPath.<String>read(body, "$.id")).has("notBoughtNotApplied"))
+				.as("the entry still says nothing when there is nothing to say")
+				.isFalse();
+	}
+
+	@Test
+	@DisplayName("three kept ingredients come back in name order, whatever order the recipe names them")
+	void threeKeptIngredientsComeBackInNameOrder() throws Exception {
+		// Written into the recipe in an order that is neither alphabetical nor its reverse, so a list
+		// that happened to come out sorted could not have come out sorted by accident.
+		insertIngredient("Water", "L");
+		insertIngredient("Ghee", "L");
+		insertIngredient("Rock salt", "KG");
+		UUID master = insertLibraryRecipe("Curated Payasa",
+				line("Water", "9 L", "9", "L", "Hot", true),
+				line("Rock salt", "50 gm", "50", "GM", null, true),
+				line("Ghee", "2 L", "2", "L", null, true));
+
+		String body = mvc.perform(authed(post("/api/v1/recipes/import/{id}", master)))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+
+		assertThat(JsonPath.<List<String>>read(body, "$.notBoughtNotApplied"))
+				.containsExactly("Ghee", "Rock salt", "Water");
+
+		// Not vacuous: none of the three moved, which is the refusal these names are reporting.
+		assertThat(isNotBought("Water")).isFalse();
+		assertThat(isNotBought("Ghee")).isFalse();
+		assertThat(isNotBought("Rock salt")).isFalse();
+	}
+
+	@Test
+	@DisplayName("a close match answered \"use ours\" is named in the response too, by the temple's name")
+	void aCloseMatchTheTempleUsesIsNamedInTheResponse() throws Exception {
+		// The other route into the list, and the one where the name the person reads differs from the
+		// name the book wrote: the book says "Water" and the response has to say "Water, filtered",
+		// because that is the row on the screen they would go and change.
+		UUID theirs = insertIngredient("Water, filtered", "L");
+		UUID master = insertLibraryRecipe("Curated Rasam",
+				line("Water", "9 L", "9", "L", "Hot", true));
+
+		String body = mvc.perform(authed(post("/api/v1/recipes/import/{id}", master))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"decisions": [
+						  {"libraryName": "Water", "useIngredientId": "%s", "confirmDifferent": false}
+						]}
+						""".formatted(theirs)))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+
+		assertThat(JsonPath.<List<String>>read(body, "$.notBoughtNotApplied"))
+				.containsExactly("Water, filtered");
+	}
+
 	// ------------------------------------------------------------------ and the point of all of it
 
 	@Test

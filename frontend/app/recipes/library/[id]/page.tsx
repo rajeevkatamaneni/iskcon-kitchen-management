@@ -9,6 +9,8 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { BackToRecipes } from "@/components/BackToRecipes";
 import { Tooltip } from "@/components/ds/Tooltip";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { BusyPot, Loading } from "@/components/Loading";
 import {
   api,
@@ -18,6 +20,7 @@ import {
   type ImportCloseMatchView,
 } from "@/lib/api";
 import { ImportCloseMatches, closeMatchesFrom } from "@/components/ImportCloseMatches";
+import { NOT_BOUGHT } from "@/components/ingredient/IngredientFacts";
 import { withPreparation } from "@/components/RecipePeek";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
@@ -61,9 +64,28 @@ function LibraryRecipeView() {
   const [askingError, setAskingError] = useState<ApiError | null>(null);
 
   /*
+    The copy that worked, and the one thing about it the person has to be told (T-427).
+
+    Null until a copy has withheld something, which is most copies. Set only when the copy came back
+    with names in `notBoughtNotApplied`: the temple's own ingredients the library marks "Not bought"
+    that this copy deliberately left exactly as the temple has them, because setting a buying policy
+    is the Temple Admin's alone and copying a recipe is not. It carries the new recipe's own id, so
+    the notice can hand back the navigation this screen is holding — see `add` below.
+  */
+  const [kept, setKept] = useState<{ recipeId: string; names: string[] } | null>(null);
+
+  /*
     The copy asks first: if any ingredient name here is only close to one the temple has, the dialog
     lists them all and nothing is copied until each is answered. With none it copies at once, as it
     always did, and opens the temple's new recipe.
+
+    Unless it withheld something (T-427), in which case it stops here instead of navigating and the
+    notice below says what, with the way on beside it. The reason for holding still: this screen's
+    success IS the navigation, so a message shown on the way out is a message nobody reads. The
+    alternative considered was carrying the names to `/recipes/[id]` and saying them there; that
+    needs a third screen this task does not own, and it would say them one step away from the button
+    that caused them. So the person reads it where they pressed, then chooses to move on. It costs
+    one click, and only on the copies that have something to say.
   */
   async function add() {
     setBusy(true);
@@ -77,8 +99,13 @@ function LibraryRecipeView() {
         setBusy(false);
         return;
       }
-      const { id: mine } = await api.importRecipe(id, token);
-      router.push(`/recipes/${mine}`);
+      const { id: mine, notBoughtNotApplied } = await api.importRecipe(id, token);
+      if (notBoughtNotApplied.length === 0) {
+        router.push(`/recipes/${mine}`);
+        return;
+      }
+      setKept({ recipeId: mine, names: notBoughtNotApplied });
+      setBusy(false);
     } catch (e) {
       // The catalogue can change between asking and copying; a refusal naming close matches opens
       // the dialog on them.
@@ -93,8 +120,15 @@ function LibraryRecipeView() {
     setBusy(true);
     setAskingError(null);
     try {
-      const { id: mine } = await api.importRecipe(id, await getToken(), decisions);
-      router.push(`/recipes/${mine}`);
+      const { id: mine, notBoughtNotApplied } = await api.importRecipe(id, await getToken(), decisions);
+      if (notBoughtNotApplied.length === 0) {
+        router.push(`/recipes/${mine}`);
+        return;
+      }
+      // The dialog is closed by hand here, where it used to be unmounted by the navigation.
+      setMatches(null);
+      setKept({ recipeId: mine, names: notBoughtNotApplied });
+      setBusy(false);
     } catch (e) {
       const close = closeMatchesFrom(e);
       if (close) setMatches(close);
@@ -113,7 +147,9 @@ function LibraryRecipeView() {
         <BackToRecipes />
 
         <div className="flex items-center gap-2">
-          {recipe.alreadyAdded ? (
+          {recipe.alreadyAdded || kept ? (
+            // `kept` means the copy went through and this screen stayed put to say something about
+            // it, so the button has to stop offering a copy the server would now refuse.
             <span className="text-sm text-ink-secondary">Already in your recipes</span>
           ) : (
             <button
@@ -149,6 +185,37 @@ function LibraryRecipeView() {
       {actionError && (
         <div className="mt-4">
           <ErrorNotice error={actionError} />
+        </div>
+      )}
+
+      {/*
+        What the copy left alone, said under the button that made the copy (T-427).
+
+        Neutral, not green and not amber. `InlineNotice`'s `info` is the neutral wash
+        (`bg-sunken`/`text-ink`), and the reasoning is the one `IngredientFacts` already writes
+        beside this very setting: a temple that buys its own water has nothing wrong with it. Green
+        is reserved for the success of the reader's own action and this is not the success, it is
+        the footnote to one; amber says take care and there is nothing here to take care about
+        today; red says act now and nothing is urgent. It does not auto-dismiss, because there is
+        still something in it for the reader to do.
+
+        The action gives back the navigation this screen normally does on a successful copy. It is
+        the only difference between this notice and the one on the Recipes list, which needs no such
+        button because that screen never navigates.
+      */}
+      {kept && (
+        <div className="mt-4">
+          <InlineNotice
+            tone="info"
+            title={keptTitle(kept.names)}
+            action={
+              <ButtonLink variant="secondary" size="sm" href={`/recipes/${kept.recipeId}`}>
+                Open the recipe
+              </ButtonLink>
+            }
+          >
+            {keptBody(kept.names)}
+          </InlineNotice>
         </div>
       )}
 
@@ -245,6 +312,40 @@ function LibraryRecipeView() {
       )}
     </Chrome>
   );
+}
+
+/*
+  The words for what a copy left alone (T-427), said the same way on both screens that copy a
+  recipe. The Recipes list carries a character-for-character duplicate of these three functions and
+  a test renders both screens and compares the two strings, because a shared module for them would
+  be a file outside this task's contract. If you are adding a third copy screen, lift them.
+
+  Why these words. The title leads with the consequence, because that is the only part the reader
+  has to act on: their water is still going to be bought. The body gives the cause and the next
+  step, and names the setting exactly as the Ingredients screen labels it — `NOT_BOUGHT` is that
+  screen's own constant, imported rather than retyped, so the two cannot drift. It names the role
+  rather than telling the reader to go and do it, because most people copying a recipe are Kitchen
+  Managers and cannot: copying is `MANAGE_RECIPES`, the buying policy is `MANAGE_BUYING_POLICY`.
+  One sentence that works whichever of the two is reading beats a sentence that is wrong for one.
+
+  There is no "Open Ingredients" button for the same reason: for the commonest reader it would be a
+  button to a screen where they cannot do the thing it seems to promise. "Ingredients" as a word is
+  enough to find it, and the standing rule is to name the screen, never a path through the menu —
+  a temple can rearrange its own menu now.
+*/
+function keptTitle(names: string[]): string {
+  return `${nameList(names)} ${names.length === 1 ? "stays" : "stay"} on your shopping list`;
+}
+
+function keptBody(names: string[]): string {
+  const it = names.length === 1 ? "it" : "them";
+  return `The library marks ${it} “${NOT_BOUGHT}”. A Temple Admin can change that in Ingredients.`;
+}
+
+/** "Water" · "Water and Ghee" · "Ghee, Rock salt and Water", in the order the server sent. */
+function nameList(names: string[]): string {
+  if (names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 function Fact({ label, value }: { label: string; value: string }) {

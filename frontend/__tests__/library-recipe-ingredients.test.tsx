@@ -123,7 +123,15 @@ describe("a library recipe's ingredients", () => {
     closeMatchesMock.mockReset().mockResolvedValue([
       { libraryName: "Toor dal", note: null, existingIngredientId: "ing-tur", existingIngredientName: "Tur dal" },
     ]);
-    importMock.mockReset().mockResolvedValue({ id: "mine-1", name: "Bisibele Bath", ingredientsCreated: 1, categoryCreated: false });
+    // `notBoughtNotApplied: []` — the ordinary copy, which withheld nothing and therefore still
+    // navigates straight to the temple's new recipe (T-427).
+    importMock.mockReset().mockResolvedValue({
+      id: "mine-1",
+      name: "Bisibele Bath",
+      ingredientsCreated: 1,
+      categoryCreated: false,
+      notBoughtNotApplied: [],
+    });
     pushMock.mockReset();
     render(<LibraryRecipePage />);
 

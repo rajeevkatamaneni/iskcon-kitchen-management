@@ -20,6 +20,7 @@ import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.error.ErrorResponse.FieldError;
 import org.iskcon.kms.ingredient.IngredientNameMatcher;
+import org.iskcon.kms.ingredient.IngredientUnits;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -84,8 +85,31 @@ public class RecipeImportService {
 		this.audit = audit;
 	}
 
-	/** What an import created, so the response can say more than "done". */
-	public record Imported(UUID recipeId, String name, int ingredientsCreated, boolean categoryCreated) {
+	/**
+	 * What an import created, so the response can say more than "done" — and the one thing it
+	 * deliberately did not do, so a screen can say that too.
+	 *
+	 * <p>{@code notBoughtNotApplied} carries the temple's own ingredients that the book marks "never
+	 * bought" and that this import left exactly as the temple has them, by the temple's name for
+	 * each, in name order (the ordering is {@link #stillBought}'s, one statement with
+	 * {@code ORDER BY name}, so two identical imports report identical lists). Empty in the ordinary
+	 * case and never null, so a caller has one shape to read whether or not there was anything to
+	 * keep.
+	 *
+	 * <p><strong>It is not a failure and must never be shown as one.</strong> The copy worked, every
+	 * line of it. {@link #resolveIngredients} gives the whole argument for the refusal; the short of
+	 * it is that copying a recipe is {@code MANAGE_RECIPES} and setting a buying policy is
+	 * {@code MANAGE_BUYING_POLICY}, so a copy may not set a flag the copier could not set themselves.
+	 *
+	 * <p>Until T-427 these names went into the import's audit entry and nowhere else, so a Kitchen
+	 * Manager copied a recipe whose water the book never buys, the temple's water stayed on the
+	 * shopping list, and nothing on screen ever said so — fifteen such entries on staging in one
+	 * week, every one silent. The field is named for the audit key and for the field it comes from,
+	 * so one word finds all three; it is not written to be read aloud, and the words a person sees
+	 * are the screen's.
+	 */
+	public record Imported(UUID recipeId, String name, int ingredientsCreated, boolean categoryCreated,
+			List<String> notBoughtNotApplied) {
 	}
 
 	/**
@@ -173,6 +197,22 @@ public class RecipeImportService {
 				master.noteStart(), master.noteVessel(), master.noteSeason(),
 				pgArray(master.tags()), pgArray(master.serveWith()), masterRecipeId);
 
+		// A counted thing cannot be a fraction, on the way into a temple's own recipe (T-423). This
+		// path has no bean validation on it at all — the quantity is parsed out of book text rather
+		// than typed into a box — and it is the one place a library row becomes rows the temple
+		// cooks, prints and draws stock against. MasterRecipeService refuses a fractional count at
+		// the operator's door, so nothing curated today can reach here; the 5,376 rows vendored
+		// before that door existed can, which is exactly why the check is at this end too.
+		//
+		// The yield goes with them: it is the denominator every scaled line is worked out from, so a
+		// fractional count there would put a fraction on lines that are themselves whole.
+		IngredientUnits.Whole whole = IngredientUnits.wholeNumbers();
+		whole.check(master.displayName(), master.yieldQty(), IngredientUnits.parse(master.yieldUnit()));
+		for (ResolvedIngredient ingredient : ingredients) {
+			whole.check(ingredient.name(), ingredient.quantity(), IngredientUnits.parse(ingredient.unit()));
+		}
+		whole.refuseAnyPart();
+
 		int order = 1;
 		for (ResolvedIngredient ingredient : ingredients) {
 			jdbc.update("""
@@ -217,7 +257,11 @@ public class RecipeImportService {
 		audit.record(actor, AuditAction.RECIPE_IMPORTED, AuditEntityType.RECIPE, recipeId,
 				null, after, null);
 
-		return new Imported(recipeId, master.displayName(), created, category.created());
+		// The same list the entry above carries, out to the caller as well. The entry is a record for
+		// afterwards; this is what lets the screen tell the person now, while they are still looking
+		// at the recipe they copied.
+		return new Imported(recipeId, master.displayName(), created, category.created(),
+				resolution.notBoughtNotApplied());
 	}
 
 	// ------------------------------------------------------------------ resolution
