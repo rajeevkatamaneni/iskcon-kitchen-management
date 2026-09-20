@@ -1233,6 +1233,36 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-19 — A recipe line keeps its preparation, and an ingredient the temple never buys stays off the shopping list (tasks T-401, T-402, T-403)
+
+**Migration V153**; the next free is V154. **Error code KMS-400188** (`NOT_BOUGHT_INGREDIENT`); the
+next free is KMS-400189. New permission **MANAGE_BUYING_POLICY** (Temple Admin alone) and new audit
+action **INGREDIENT_NOT_BOUGHT_CHANGED**. **Deployed to staging; not seen working by Rajeev.**
+
+**What changes for the kitchen.** A master recipe line carries the cook's preparation — "slit",
+"roasted", "soaked overnight" — as a field of its own instead of a comma in the name, and it survives
+the whole way: out of the book, onto both library screens, and through an import onto the temple's own
+recipe. Until now the import re-derived the preparation by splitting the name at its comma, so
+Rajeev's 45 curated recipes, which have no commas, would have imported all 84 of their notes empty.
+
+**An ingredient can be marked as one the temple never buys** — water, ice — and the suggested
+shopping list leaves it out entirely rather than listing it unticked. It still goes into the pot,
+still draws down stock, is still costed and still shows on Issued to kitchens. This replaces the only
+tool there was, an untick that decided one list and had to be repeated on the next. The mark also
+travels from a curated book onto the ingredient an import creates, so loading the catalogue no longer
+creates water as an ordinary bought ingredient. Adding a marked ingredient to a list by hand is
+refused with KMS-400188, which says where to take the mark off.
+
+**Not the same question as the supply flag** beside it: a supply (LPG, leaf plates) is bought,
+received and stored exactly as food is. A row can be any combination of the two. Setting or clearing
+the new mark is the Temple Admin's alone and is audited; it has an endpoint of its own rather than
+riding on the ingredient update, so renaming a mop on the supplies screen cannot un-set it.
+
+**Not done:** the import never overwrites an ingredient the temple already owns, so where a curated
+book disagrees with an existing row the disagreement is recorded on the import's audit entry and not
+applied — nothing on screen says so yet. Proofs: `docs/work/proof/T-401.md`, `T-402.md`, `T-403.md`;
+release record `docs/work/proof/RELEASE-2026-09-20.md`.
+
 ### 2026-09-19 — Procurement rebuilt end to end, events repeat as a series, and a permission is checked before a request is read (tasks T-242 to T-343)
 
 **Migrations V144 to V149**; the next free is V150. **Error codes KMS-400156 to KMS-400179**; the next

@@ -19054,3 +19054,397 @@ seven dead planner links for a non-planning cook, tests, and the browser measure
 
 **Open for Rajeev:** volunteers are counted in the main kitchen's section; turning a kitchen's planner flag off locks
 its staff out of the planner; next free migration V153, next free error code KMS-400188.
+
+---
+
+## ▶ CURATED RECIPES (2026-09-19): T-401 to T-403 — the preparation and "not bought" survive a load
+
+**Why now.** Rajeev hand-curated 45 master recipes (`docs/work/reference/curated-recipes/`, 44
+approved + 1 needs-work, written by the T-380 curation tool). Every ingredient line can now carry
+`prep` (a preparation note; **84 of them**) and `not_bought` (**15**, water and the like). A survey
+on 2026-09-19 established that **the library path drops both**:
+
+- `LibraryLoader.readRecipe` writes exactly `name`, `qty`, `qtyValue`, `qtyUnit`, `scaled` into
+  `master_recipes.ingredients` and nothing else.
+- `MasterRecipeView.MasterRecipeIngredient` has no field for either, so nothing downstream could
+  read them even if they were stored.
+- `RecipeImportService.plan` **re-derives** a preparation by calling `IngredientNameMatcher.split`
+  on the name — which works only because the book files names noun-first with a comma ("Green
+  chilli, slit"). **Rajeev's curation removed those commas**, so on a curated line the split finds
+  nothing and every one of his 84 notes would import empty.
+- There is no persistent "not bought" flag at all. The only thing that exists is a per-list
+  decision, `PATCH /api/v1/shopping-list/{ingredientId}` with `included: false`, which keeps water
+  off **one** list and has to be made again on the next one.
+
+Loading the curated books as the code stands would silently destroy his work. Nothing on any screen
+would say so.
+
+**Source:** the conductor's brief of 2026-09-19 (A and B), and
+`.claude/worktrees/agent-ad44cab0eee0a1c41/tools/seed/API-NOTES.md` — "'Not bought' — where it
+actually lives, and what it does not do".
+
+**State at reservation:** worktree `agent-a4dfeaaa94b306b14`, `HEAD` `7a5ec86`, fast-forwarded to
+`origin/main`. Highest migration on disk **`V152`**, so the next free is **`V153`** — confirmed by
+`ls` across every worktree, not from the ledger. Highest 4xx error code **`KMS-400187`**, confirmed
+by reading `ErrorCode.java` itself rather than the ledger.
+
+**Error codes — one minted, and the reservation's first answer was wrong.** This pass originally
+said *no new code*, on the grounds that the only new refusal was "you may not set this", which is
+`ErrorCode.NOT_PERMITTED` (`KMS-400021`), exactly as the Ekadashi flag already uses it. That was
+right about the permission refusal and **wrong about a second refusal nobody had counted**:
+hand-adding a marked ingredient to the shopping list. T-402 obeyed the brief, answered
+`RESOURCE_NOT_FOUND` (`KMS-400030`), and flagged it as needing a ruling. The conductor overruled the
+reservation on 2026-09-19. Minted by the work manager, wording checked against all five
+`ErrorCodeTest` guards before writing:
+
+- `NOT_BOUGHT_INGREDIENT` **KMS-400188** (409): *"The temple doesn't buy this, so it can't go on a
+  shopping list."* / *"Take the Not bought mark off it on the Ingredients page first."*
+
+*Why it was worth a code.* `KMS-400030` says "we couldn't find it", and that is not what happened —
+the ingredient is in the catalogue and the person picked it off a list. An error that describes the
+wrong thing sends somebody hunting for a spelling mistake, while the one fact they need (somebody
+marked this never-bought, and here is where to undo it) is the fact they are never told.
+
+**The general lesson for a reservation pass, and it is the one to carry forward: counting the new
+*endpoints* is not the same as counting the new *refusals*.** A feature that removes something from
+a list creates a refusal at every door that used to let it in, and those doors are in other
+packages than the one the feature lives in. The endpoint audit found one refusal; the feature had
+two.
+
+### Waves — two, not one, and the reason is honest rather than cautious
+
+A and B both want the same five files: the loader, the view record, the service that reads and
+writes the jsonb, the operator's input record, and the import. There is no split of A and B that
+leaves those disjoint. So B is cut where it actually separates — **the flag as a property of an
+ingredient** (its own column, its own permission, its own effect on the shopping list) has nothing
+to do with the library, and **carrying the flag through the library** is the same five files as A.
+
+- **CR-1:** **T-401** (preparation, end to end) and **T-402** (the flag, end to end) run together.
+  Their path sets are disjoint; checked file by file below, including the 24+ test files that build
+  an `IngredientView` fixture (all T-402's; none is T-401's).
+- **CR-2:** **T-403** alone, after both are proven. It needs T-401's field on the record and
+  T-402's column, and it edits T-401's five files.
+
+Three builders would not have fitted in one wave here. The verify lock is per-worktree and two is
+already the right number for it.
+
+### Reservations, made by the work manager in one pass before dispatch
+
+**1. Migration `V153`** — T-402's, and T-402's alone. T-401 and T-403 write no SQL. If T-402 finds
+it needs a second, it stops and asks; it does not take `V154` on its own authority, because another
+worktree may reach for it.
+
+**2. `frontend/lib/api.ts`** — the single most contended file in the repo (23 of the last 120
+commits). **The work manager has already edited it. No builder in either wave may touch it.** Five
+changes, all in place:
+
+- `MasterRecipeIngredient.prep: string | null` — required and nullable. Optional would let a
+  fixture omit it and read as "no preparation", which is the exact silence this task exists to end.
+- `MasterRecipeIngredient.notBought: boolean` — required, for the reason `supply` is required: the
+  Java field is a primitive, an absent key deserialises to `false`, and `false` is the answer that
+  puts water back on the order.
+- `IngredientView.notBought: boolean` — required.
+- `CreateIngredientInput.notBought: boolean` — required. **Deliberately not on
+  `UpdateIngredientInput`**; see reservation 4.
+- `api.setIngredientNotBought(id, notBought, token?)` → `PATCH /api/v1/ingredients/{id}/not-bought`.
+
+**3. `auth/Permission.java` and `auth/RolePermissions.java`** — **already edited by the work
+manager.** `MANAGE_BUYING_POLICY` is minted and granted to **`TEMPLE_ADMIN` only**. No builder
+edits either file; T-402 is told the constant exists and uses it.
+
+*Why a permission of its own rather than `MANAGE_RECIPES`, which governs the `supply` flag beside
+it.* The brief says Temple Admin. More to the point, the two mistakes do not cost the same: calling
+a mop a supply puts it on the other screen, and calling flour not-bought stops the temple ordering
+flour with **nothing on the shopping list to notice** — the line is not there. That is the same
+gravity split `MANAGE_DIETARY_POLICY` and `MANAGE_EQUIPMENT_SERVICING` already make, and D-4's
+reasoning for `VOID_DONATION` applies unchanged: widening to the Kitchen Manager later is one line
+here; narrowing after temples have built a habit is a conversation with every one of them.
+
+**4. `PUT /api/v1/ingredients/{id}` does not carry the flag, and that is a decision, not an
+omission.** `frontend/app/supplies/page.tsx` has an edit row of its own that sends a whole update
+payload built from the fields it knows about. Any boolean that rides on `PUT` and is missing from
+that payload gets un-set by somebody renaming a mop. The Ekadashi flag survives that only because
+`UpdateIngredientRequest.ekadashiProhibited` is a boxed `Boolean` whose null means "leave alone" —
+a subtlety it took T-121 to get right. This flag is set at creation and by its own audited PATCH,
+so there is nothing to get wrong. **Neither builder adds it to `UpdateIngredientRequest`.**
+
+**5. `nav.ts`, `Sidebar.tsx`, `routes.ts`** — untouched. No new screen; every control lands on a
+page that already exists.
+
+**6. `docs/CHANGELOG.md` and `docs/WORK_QUEUE.md`** — nobody's, as always. The release agent's.
+
+**7. `frontend/node_modules`** — installed by the work manager (`npm ci`, exit 0) before dispatch,
+so two builders do not race it.
+
+### T-401 — The book's preparation reaches the screen, and the import stops guessing at it
+- **id:** T-401 · **wave:** CR-1 · **state:** **proven** 2026-09-19 · **proof:** `docs/work/proof/T-401.md`
+- **result:** 46 backend tests pass across four library classes (`LibraryPreparationIT` new, 8 tests,
+  with a fixture book at `backend/src/test/resources/prep-book/curated.json`; `RecipeLibraryIT`'s
+  real 5,376-recipe load unaffected). Frontend `tsc` 0 errors whole project, eslint clean, vitest
+  3/3. Negative control `control-T-401.log`: 5 of 8 backend and 1 of 3 frontend failed, anchors
+  counted, patch proved with `cmp -s`, `--rerun-tasks`, trapped restore verified byte-identical.
+  Three things it found or decided differently, all correct:
+  - **This brief was wrong about the column.** `recipe_ingredients.preparation_note` is `TEXT` with
+    only a not-blank check — no 200 limit. The builder kept `@Size(max = 200)` but sourced it from
+    the real precedent, `MergeGroupInput.Member.preparationNote`, which writes onto the same lines
+    with the identical limit and message.
+  - **`leftOver` still runs on a curated line, deliberately.** It answers a different question from
+    `split` — which words are *not* the ingredient the person chose. "Rice, basmati" + prep "Soaked"
+    with "Use Rice" answered gives `basmati, Soaked`; suppressing it would drop a word the library
+    wrote. Tested.
+  - **The `· ` rule is at two copies, not one.** Its right home is a new module under
+    `frontend/lib/`, which nobody in this wave owns, and folding the third copy would also need
+    `frontend/app/recipes/[id]/page.tsx`. The builder exported `withPreparation` from
+    `RecipePeek.tsx` and imported it into the library page — odd for a page to import from a modal,
+    but two copies rather than three. **Open:** finish it when someone owns those two files.
+- **not done:** no hand smoke-test of the library recipe page. The only servers up were :8091 and
+  :8080, which it was told not to touch, and standing up its own meant booting through the shared
+  Flyway directory while T-402's `V153` was mid-edit. The vitest case asserts rendered DOM text
+  (`"Green chilli · slit"`), not a prop, which is the closest honest substitute. **Somebody must
+  look at the real screen before this ships.**
+- **source:** conductor's brief 2026-09-19, part A.
+- **what:** `LibraryLoader.readRecipe` writes `prep` onto every line it puts in
+  `master_recipes.ingredients`, reading the book's `prep` key and writing null where there is none.
+  `MasterRecipeView.MasterRecipeIngredient` gains `String prep`; `MasterRecipeService` reads it back
+  out of the jsonb and `lineMap` writes it, so an operator editing a curated recipe cannot erase it.
+  `MasterRecipeInput.Line` gains an optional `prep` for the operator's editor. The two library
+  screens print it the way the recipe's own page does — `"Green chilli · slit"` — reusing the
+  `withPreparation` rule, not a second copy of it. `RecipeImportService.plan` **prefers the line's
+  own `prep`** and falls back to `IngredientNameMatcher.split` only when the line has none, so a
+  curated line keeps Rajeev's words exactly and a legacy comma name behaves as it does today.
+- **paths (backend main):** `backend/src/main/java/org/iskcon/kms/library/LibraryLoader.java`,
+  `MasterRecipeView.java`, `MasterRecipeService.java`, `MasterRecipeInput.java`,
+  `RecipeImportService.java`.
+- **paths (backend test):** `backend/src/test/java/org/iskcon/kms/library/RecipeLibraryIT.java`,
+  `RecipeImportPreparationIT.java`, `RecipeImportCloseMatchIT.java`, and new classes under
+  `backend/src/test/java/org/iskcon/kms/library/`.
+- **paths (frontend):** `frontend/components/RecipePeek.tsx`,
+  `frontend/app/recipes/library/[id]/page.tsx`,
+  `frontend/__tests__/library-recipe-ingredients.test.tsx`.
+- **paths (fixtures, if added):** under `backend/src/test/resources/` only.
+- **reservations:** none of its own. `api.ts` is done for it (`MasterRecipeIngredient.prep`).
+- **forbidden:** `frontend/lib/api.ts`, anything under `ingredient/`, `shoppinglist/`, `auth/`, any
+  migration.
+
+### T-402 — "Not bought": a property of the ingredient, and the shopping list obeys it
+- **id:** T-402 · **wave:** CR-1 · **state:** **proven** 2026-09-19, after one send-back and one
+  reopen · **proof:** `docs/work/proof/T-402.md` (three passes, each appended, none rewritten)
+- **reopen closed — KMS-400188 wired:** `975/975`, `BUILD SUCCESSFUL in 37s`, covering
+  `ErrorCodeTest` (957), `FieldErrorMessageTest` (6), `NextStepPermissionTest` (6) and
+  `NotBoughtShoppingListIT` (6). `ShoppingListService.addLine` throws `NOT_BOUGHT_INGREDIENT` in
+  place of `RESOURCE_NOT_FOUND`; the test asserts **the code, not just the 409**, because a bare
+  status check passes just as happily against the old code and the number is what somebody quotes
+  off an old screenshot.
+  - **No frontend change, and the builder grepped rather than assumed.** Four hits for
+    `KMS-400030`/`400030` in the frontend, none this case: two comments and `my-schedule`'s
+    `NO_STAFF_RECORD` constant, which deliberately matches `RESOURCE_NOT_FOUND` because that is what
+    `/schedule/me` answers for a person with no staff profile. **That local name looks wrong at a
+    glance and is right** — worth knowing before somebody "fixes" it. The shopping list matches on
+    no code at all; it renders the server's sentence through `toApiError`/`ErrorNotice`.
+  - The other two `RESOURCE_NOT_FOUND` throws in that service were checked and left: the unreachable
+    backstop after the insert, and `updateLine`'s 404 for an ingredient not on the list at all.
+- **send-back closed:** one `Probe` row added to `PermissionBeforeValidationIT` — `93/93`, and
+  `151/151` across the six ingredient and shopping-list classes, `BUILD SUCCESSFUL in 2m 57s`,
+  `--rerun-tasks`. The builder used `Body.UNREADABLE_JSON` rather than `EMPTY_OBJECT` and the reason
+  is worth keeping: `SetNotBoughtRequest` is one primitive with no constraint, so an empty object is
+  a **valid** request answering 204 — it would have satisfied the list check while asserting nothing
+  about the order the permission is asked in. Unreadable JSON cannot be bound at all, so the 400 it
+  earns is exactly the answer a Volunteer must never be handed. The `ekadashi-flag` row beside it
+  already carried that reasoning. The Volunteer case is not vacuous: the parameterised test first
+  asserts the acting role does **not** hold the probe's permission, so it fails loudly if
+  `MANAGE_BUYING_POLICY` ever reaches a Volunteer.
+- **result of the first pass:** `V153__ingredients_the_temple_never_buys.sql` (no RLS change — a
+  policy is a row predicate, not a column list, and `ingredients` has had `enable_tenant_rls()`
+  since V10). Audited `PATCH /{id}/not-bought` behind `MANAGE_BUYING_POLICY`, checked again inside
+  `IngredientService.create` because `POST /ingredients` sits behind `MANAGE_RECIPES`. Not on `PUT`;
+  `UpdateIngredientRequest.java` never opened. Shopping list: one named predicate in
+  `suggestions()`, covering shortfall, threshold, a closed order's undelivered balance (dropped, and
+  the order keeps its own lines and history) and hand-add (refused at `addLine` before anything is
+  written). 312/312 backend across 18 classes; frontend 108/108 across five files; control
+  `control-T-402.log` 6 backend + 1 frontend red.
+  - **Costing and issuing proved, not asserted:** `NotBoughtShoppingListIT.stockAndCostingAreUntouched`
+    marks water, cooks a meal through the real recording endpoint, and pins `estimatedTotal 570.00`,
+    `consumed(water) 60000`, `onHand(water) 60000` with no water on the list. Water is half that
+    day's bill, so a leak moves the number visibly. All 52 readers of `ingredients` enumerated;
+    exactly one mentions the new column.
+- **sent back because:** the **merged-tree** run (work manager, both builders out of the tree) came
+  back `3594 tests completed, 1 failed` — `PermissionBeforeValidationIT > every write endpoint of
+  the procurement controllers is in the list above`. The new PATCH is a procurement write endpoint
+  and is not in that class's probe list. **No builder could have caught it**: the class asserts
+  against Spring's own request mappings, so it belongs to no package and no targeted run loads it.
+  `backend/src/test/java/org/iskcon/kms/auth/PermissionBeforeValidationIT.java` granted to T-402
+  after checking that no live contract held it. No negative control asked for — the failing merged
+  run is a stronger one. **`PermissionBeforeValidationIT` has been added to the repo-wide guard list
+  in `docs/work/README.md` lesson 3a**, which had missed it because the 2026-09-13 sweep looked only
+  for tests reading the source tree, the schema or an enum's `values()`.
+- **for Rajeev, from the builder:** the refused hand-add answers `KMS-400030` ("couldn't find it")
+  because the brief said mint no new code — if it should say "the temple doesn't buy this", that
+  needs a code and his say-so. The detail-page checkbox saves on the tick (his 2026-09-10 ruling was
+  against a one-click flag in a scanned table; this is a labelled checkbox on the ingredient's own
+  page). Wording, via the ux-writing skill: facts row `Buying` → **Not bought** / **Bought when
+  needed**; checkbox **"Not bought (water, ice — never on a shopping list)"**; neutral ink in both
+  states, not amber. **No hand smoke-test** — the screens were measured as DOM geometry from the
+  real components plus the project's own Tailwind build, not a screenshot of the running app, and
+  the proof says so.
+- **source:** conductor's brief 2026-09-19, part B; API-NOTES "'Not bought' — where it actually
+  lives"; Rajeev 2026-09-19.
+- **what:** `V153` adds `ingredients.is_not_bought BOOLEAN NOT NULL DEFAULT false` with a comment
+  quoting Rajeev. RLS is untouched — `ingredients` has called `enable_tenant_rls()` since V10 and a
+  column inherits it. `IngredientView` carries it; `CreateIngredientRequest` accepts it behind
+  `MANAGE_BUYING_POLICY`; a new audited `PATCH /{id}/not-bought` sets and clears it.
+  `ShoppingListService` leaves a marked ingredient **out of the list entirely** — not on it
+  unticked — and the add-a-line picker stops offering it. Costing, committed stock and "Issued to
+  kitchens" must go on counting it, and the proof must show that, not assert it.
+- **paths (backend main):** `backend/src/main/resources/db/migration/V153__*.sql`;
+  `backend/src/main/java/org/iskcon/kms/ingredient/IngredientView.java`,
+  `CreateIngredientRequest.java`, `IngredientService.java`, `IngredientController.java`, and a new
+  `SetNotBoughtRequest.java`; `backend/src/main/java/org/iskcon/kms/shoppinglist/ShoppingListService.java`;
+  `backend/src/main/java/org/iskcon/kms/audit/AuditAction.java`.
+- **paths (backend test):** `backend/src/test/java/org/iskcon/kms/ingredient/IngredientIT.java`,
+  `SupplyIngredientIT.java`, `backend/src/test/java/org/iskcon/kms/shoppinglist/ShoppingListIT.java`,
+  `HandAddedLineIT.java`, `ShoppingListPacksIT.java`,
+  `backend/src/test/java/org/iskcon/kms/auth/RolePermissionsTest.java`,
+  `AccessControlEnforcementIT.java`,
+  `backend/src/test/java/org/iskcon/kms/tenancy/RowLevelSecurityIT.java`,
+  `backend/src/test/java/org/iskcon/kms/TenantLoopMigrationIT.java`, and new classes under
+  `backend/src/test/java/org/iskcon/kms/ingredient/` or `…/shoppinglist/`.
+- **paths (frontend main):** `frontend/app/ingredients/page.tsx`,
+  `frontend/app/ingredients/[id]/page.tsx`, `frontend/app/ingredients/new/page.tsx`,
+  `frontend/components/IngredientForm.tsx`, `frontend/components/ingredient/IngredientFacts.tsx`,
+  `frontend/components/ingredient/access.tsx`, `frontend/app/shopping-list/page.tsx`.
+- **paths (frontend test) — every file that builds an `IngredientView` fixture, granted up front
+  because a required field breaks every one of them and none belongs to T-401:**
+  `frontend/__tests__/` `ingredients.test.tsx`, `ingredient-detail.test.tsx`,
+  `ingredient-page-verify2.test.tsx`, `ingredient-merge.test.tsx`, `ingredient-new.test.tsx`,
+  `ingredient-request-new.test.tsx`, `duplicate-ingredient.test.tsx`, `supplies.test.tsx`,
+  `unit-refusal-names-ingredient.test.tsx`, `shopping-list.test.tsx`, `shopping-list-add.test.tsx`,
+  `shopping-list-packs.test.tsx`, `shopping-list-no-vendor.test.tsx`, `po-create-form.test.tsx`,
+  `po-create-units-packs.test.tsx`, `manual-purchase-order.test.tsx`, `described-po-line.test.tsx`,
+  `order-detail.test.tsx`, `closing-a-part-delivered-order.test.tsx`, `goods-return.test.tsx`,
+  `lead-time-one-promise.test.tsx`, `inventory-new.test.tsx`, `donations.test.tsx`,
+  `recipe-batch-cost.test.tsx`, `recipe-form-units.test.tsx`, `recipe-new.test.tsx`,
+  `recipe-preparation-note.test.tsx`, `blank-submit-slice-a.test.tsx`.
+- **reservations:** `V153`; `MANAGE_BUYING_POLICY` (already minted and granted — do not edit
+  `Permission.java` or `RolePermissions.java`); the `api.ts` stubs above.
+- **forbidden:** `frontend/lib/api.ts`, `auth/Permission.java`, `auth/RolePermissions.java`,
+  anything under `library/`, `UpdateIngredientRequest.java`, `frontend/app/supplies/page.tsx`.
+
+### T-403 — A curated line's "not bought" reaches the ingredient it creates
+- **id:** T-403 · **wave:** CR-2 · **state:** **proven** 2026-09-19 ·
+  **proof:** `docs/work/proof/T-403.md`
+- **result:** 59/59 across five library classes (`RecipeImportNotBoughtIT` new, 13;
+  `RecipeLibraryIT`'s real 5,376-recipe load still green). Negative control: four whole-statement
+  anchors each counted `=1` before patching, `cmp -s` proof, trapped restore, `--rerun-tasks`,
+  **11 of 13 red**; the two passes explained (one asserts the *old* shape is unchanged, one asserts
+  an absence and passes vacuously while its presence-asserting companion goes red). **All 8 of
+  T-401's cases stayed green under the control**, which is the check that it stripped its own sites
+  and not the earlier task's — the wave-7b hazard, met and handled.
+- **the judgement call, decided by the builder and right:** *create marks, match does not, and the
+  disagreement is audited.* Import is `MANAGE_RECIPES` (three roles); the flag is
+  `MANAGE_BUYING_POLICY` (Temple Admin alone, audited endpoint). Flipping a row the temple already
+  owns would let a Kitchen Manager set, through an import, a flag they are refused at the endpoint —
+  silently stopping the temple buying something. Creating a new row marked overrules nobody. The
+  disagreement goes in `RECIPE_IMPORTED.after_state.notBoughtNotApplied`, **not** the response body:
+  `RecipeController.importFromLibrary` and `api.ts` were both outside its contract, and a field no
+  client can read is a surface that looks built and is not.
+- **the real load, against its own database `kms_t403` on port :8093** (never :8080, :8091 or
+  `kms_seed`): **44 recipes, 454 lines, 83 preparations, 15 not-bought marks**, `not_bought` present
+  on 454/454 lines. Akki Rotti imported over HTTP as a Temple Admin → 10 lines, 5 preparation notes,
+  `is_not_bought = t` on Water alone. A second recipe naming water matched the marked Water and
+  created nothing. Shopping list for a meal cooking it: **9 lines, no Water**; clearing the mark
+  through the real endpoint gave 10 lines **with** Water, setting it back gave 9 — so the absence is
+  the flag, not an empty plan. `DROP DATABASE kms_t403` when nobody needs to re-read the figures.
+- **83 preparations, not the 84 this brief predicted, and it is not a loss.**
+  `karnataka__halubai.json` is `"status": "needs-work"` and the converter skips it; that one recipe
+  holds exactly one prep and no mark. Approve it and the numbers are 45/460/84/15. **The builder
+  reported the measured number and found the cause rather than reconciling it quietly**, which is
+  the behaviour the brief asked for.
+- **⛔ BLOCKER FOR THE SEEDING TEAM, and it is Rajeev's to answer.**
+  `docs/work/reference/curated-recipes/karnataka__mavinakayi-uppinakayi.json` has
+  `"qty": "z gm"` (and `"qty_amount": "z"`) for Mustard. Verified in the canonical file by the work
+  manager — it is not converter damage. `LibraryLoader` **stops rather than skips** on a quantity it
+  cannot parse, by design, so **the catalogue cannot be loaded at all** until he supplies the real
+  quantity. The builder patched it to `20 gm` in its own scratchpad copy purely to get past it and
+  left his files untouched.
+- **the brief was wrong that no converter exists.** `tools/seed/02b-build-catalogue.mjs` is already
+  in the seeding worktree, round-trip checked, and carries both keys. The builder ran theirs
+  unmodified rather than writing a second one. The conductor's ruling that the permanent converter
+  belongs to the seeding team in `tools/seed` is therefore already satisfied.
+- **no frontend change, deliberately, and the argument is good.** `RecipePeek` flattens a library
+  recipe and the temple's own through one step, and `RecipeIngredientView` has no `notBought` — so a
+  mark would show before a dish is added and vanish after it, which is the exact fault Rajeev raised
+  on 2026-09-18. Doing it honestly needs a field on `RecipeIngredientView` in the reserved `api.ts`
+  plus the recipe page: a task, not a line. T-402 already shows "Not bought" in the three places the
+  flag acts.
+- **open for Rajeev:** nothing tells the person on the copy screen when the book and the catalogue
+  disagree (audit only); and a Kitchen Manager importing creates a marked ingredient they could not
+  have created by hand.
+- **source:** conductor's brief 2026-09-19, part B, the loader half.
+- **what:** the loader carries `not_bought` onto each stored line, the view record carries it, and
+  `RecipeImportService.create` marks the ingredient it creates. Then the proof that matters for the
+  whole batch: a **real load** of a curated book into `master_recipes` and a **real import** into a
+  temple, showing Rajeev's 84 preparations and 15 not-bought marks arriving intact at both ends.
+- **paths:** T-401's five backend main files; tests under
+  `backend/src/test/java/org/iskcon/kms/library/`; `frontend/components/RecipePeek.tsx` and
+  `frontend/app/recipes/library/[id]/page.tsx` only if the mark is shown there.
+- **reservations:** none new.
+
+### Merged-tree check over CR-1 — work manager, 2026-09-19, both builders out of the tree
+
+Run after the last shared-file edit, per lesson 3, and including the repo-wide guards per lesson 3a.
+
+- **Backend `./gradlew test` (whole suite): `3594 tests completed, 1 failed, 7 skipped`, BUILD FAILED
+  in 14m 4s.** The one failure is `PermissionBeforeValidationIT > every write endpoint of the
+  procurement controllers is in the list above`. Sent back to T-402; see its row.
+- Frontend `npx tsc --noEmit`: exit 0, whole project.
+- Frontend `npx eslint . --max-warnings=0`: exit 0.
+- Frontend `npx vitest run`: **182 files passed, 2603 tests passed**, 55.37s.
+- Logs: scratchpad `merged-CR1-{backend,tsc,eslint,vitest}-wm.log`.
+
+**One thing worth recording about the run itself.** The harness notification for the backend job
+reported **"exit code 0"** while the log said `BUILD FAILED`. The wrapper's exit status is not
+Gradle's. A green notification is not evidence of a green run — read the log. This is the same shape
+as every other lesson in the README: *do not accept evidence that would look identical if the thing
+were broken.*
+
+### Final merged-tree check over CR-1 + CR-2 — work manager, 2026-09-19, every builder out of the tree
+
+Run after the last shared-file edit (T-403's), per lesson 3, including every repo-wide guard in
+lesson 3a. All figures read out of the logs, never from a harness exit notification.
+
+- **Backend `./gradlew test` (whole suite): `BUILD SUCCESSFUL in 10m 34s`.** From the JUnit XML
+  across **248 classes: 3614 tests, 0 failures, 0 errors, 7 skipped.** (3594 before this wave; the
+  20 new are T-401's, T-402's and T-403's.)
+- Frontend `npx tsc --noEmit`: **exit 0**, empty log.
+- Frontend `npx eslint . --max-warnings=0`: **exit 0**, empty log.
+- Frontend `npx vitest run`: **182 files passed, 2603 tests passed**, 48.38s.
+- Frontend `npx next build`: **`✓ Compiled successfully`**, `✓ Generating static pages (76/76)`.
+- Logs: scratchpad `final-CR-{backend,tsc,eslint,vitest-build}-wm.log`.
+
+**Tree:** 65 modified, 10 untracked, all accounted for — `V153__ingredients_the_temple_never_buys.sql`,
+`SetNotBoughtRequest.java`, four new test classes, `prep-book/`, and the three proofs. One migration,
+no stray scratch files.
+
+### Two things this wave learned about *evidence*, both worth the README
+
+**1. A harness exit code is not a build result.** The first merged backend run was reported by the
+background-task notification as **"exit code 0"** while the log said `BUILD FAILED` on
+`PermissionBeforeValidationIT`. The wrapper's status is not Gradle's. Had the notification been
+believed, a red tree would have gone to the release agent described as green.
+
+**2. A wait-condition is a filter, and a loose filter lies in the same direction.** A loop written to
+wait for the frontend run to finish exited early because it matched the word `error` inside React
+`act(...)` warnings — noise, not failures — and reported a run complete that was still going. Both
+failures have the same shape as every lesson in the README: *do not accept evidence that would look
+identical if the thing were broken.* Wait on the summary line a tool prints when it is genuinely
+done (`Test Files`, `Compiled successfully`, `BUILD SUCCESSFUL`), never on a substring that noise can
+supply.
+
+### Released
+
+Committed to `main` and deployed to staging on 2026-09-19 as two commits — the flag
+(`feat: an ingredient the temple never buys stays off the shopping list`) and the library path
+(`feat: a library recipe keeps its preparation and its "never bought" mark`). The record, with the
+merged suite figures read out of the logs, the CI run, the revisions and the Flyway version, is
+`docs/work/proof/RELEASE-2026-09-20.md`. Next free migration **V154**, next free error code
+**KMS-400189**. Not yet seen working by Rajeev.
