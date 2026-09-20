@@ -356,6 +356,16 @@ again, on staging, on fresh data; its Part A must be done **before** the release
 Also amended for this release, so that none describes a removed screen: UAT-005, 022, 024, 025, 037, 041,
 043, 060, 061, 073, 075, 076, 077, 082 and 083.
 
+### Part 13 — Which kitchen is cooking (Epic 12, 2026-09-19)
+
+Built 2026-09-19 and **not yet deployed**, so it cannot be run until it is. Run it after UAT-067 and
+UAT-072, which set up the kitchens it uses. It moves staff between kitchens, so run it before any
+other test that relies on who can open the meal planner.
+
+| # | Test | Roles | Technical stories |
+|---|---|---|---|
+| [UAT-093](UAT-093-kitchens-in-the-meal-planner.md) | Kitchens in the meal planner | Temple admin, kitchen manager, kitchen staff, volunteer | E12-S1 to E12-S5, E12 staff kitchen, E12 planner access |
+
 **Not yet listed above:** UAT-067 to UAT-074 — the kitchens-and-issuing pack and the units-and-quantities
 test — are in this folder and are run from their own documents. This index has not caught up with
 them; [TRACEABILITY.md](TRACEABILITY.md) has them under their stories.

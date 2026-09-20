@@ -37,7 +37,7 @@ the filed sheets can see at a glance whether a kitchen has been drawing more tha
 ## Before you start
 
 - **Sign in as:** `ikms.kitchen-staff.1@trading4good.org` (Gopal Das, kitchen staff)
-- **Start at:** **/ingredient-requests** (menu: **Kitchen → Ingredient requests**)
+- **Start at:** **/ingredient-requests** (menu: **Kitchens → Ingredient requests**, first in the group)
 - **Check your ingredient list first.** You need **Rice**, **Toor Dal**, **Ghee**, **Sugar** and
   **Cardamom**. If Cardamom is not there, add it on **/ingredients** — category `Spices`, unit `gm`.
 - You will also need a second staff session at step 16: `ikms.kitchen-staff.2@trading4good.org`

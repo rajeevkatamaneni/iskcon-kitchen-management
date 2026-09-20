@@ -41,7 +41,7 @@ approved the `temple_announcement` template. Until then, test the WhatsApp half 
 ## Before you start
 
 - **Sign in as:** `ikms.temple-admin.1@trading4good.org`
-- **Start at:** **/communications** (menu: **People → Communications**)
+- **Start at:** **/communications** (menu: **Giving & Outreach → Communications**; it moved out of **People** in Rajeev's standard menu, 2026-09-19)
 - Have a newsletter ready to paste. A few paragraphs from a Google Doc with a heading, some **bold**,
   a bulleted list and a link is exactly the right test.
 

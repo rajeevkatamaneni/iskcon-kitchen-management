@@ -353,8 +353,10 @@ would have been a second opinion about what a kilo of rice is worth.
 - Rows sorted dearest serving first, so reading top to bottom is the answer.
 - `KMS-400122 COST_PERIOD_NOT_VALID` for a backwards period or one longer than a year; the report walks
   every dish in the range, and an unbounded one is a slow page rather than an answer.
-- Screen at `/cost-per-serving`, titled *Cost per serving*, in the kitchen group of the menu beside
-  *Issued from store*. Every figure carries *estimated, materials only* and the count of ingredients
+- Screen at `/cost-per-serving`, titled *Cost per serving*, last in the menu's top group under
+  *Reuse a plan* (Rajeev's standard menu, 2026-09-19: it measures what the planner planned, not what
+  a kitchen took from the store, so it did not follow *Issued to kitchens* into the *Kitchens*
+  group). Every figure carries *estimated, materials only* and the count of ingredients
   with no known price. The all-meals row deliberately leaves the per-serving cell blank: an average
   across every kind would read as a fact about none of them.
 
@@ -600,8 +602,8 @@ it, per E4-S14's rule.
 - `/equipment` list with filters for condition, location and service status, and a *Register
   equipment* action; `/equipment/new`; `/equipment/[id]` with the full record, the service history,
   the condition trail, *Record a service* and *Change condition*.
-- Menu entry in the Kitchen group after *Inventory*, `roles` matching the page's `RequireRole`
-  exactly — `TEMPLE_ADMIN`, `KITCHEN_MANAGER`, `KITCHEN_STAFF` — per the rule at `nav.ts:12`.
+- Menu entry last in the **Inventory & Recipes** group, after *Supplies* (Rajeev's standard menu,
+  2026-09-19), `roles` matching the page's `RequireRole` exactly — `TEMPLE_ADMIN`, `KITCHEN_MANAGER`, `KITCHEN_STAFF` — per the rule at `nav.ts:12`.
 - ~~Service providers are managed from the equipment form itself: pick an existing one or add one
   without leaving the screen. A separate settings page for four fields would be a trip nobody
   makes.~~ **Superseded 2026-09-04 (E3-S10 D7):** the service company is a text box and its phone

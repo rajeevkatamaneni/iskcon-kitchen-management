@@ -37,7 +37,7 @@ ingredients. This screen is where a temple writes down which kitchens it runs.
 ## Before you start
 
 - **Sign in as:** `ikms.temple-admin.1@trading4good.org` (temple admin)
-- **Start at:** **/kitchens** (menu: **Kitchen → Kitchens**, last in the group)
+- **Start at:** **/kitchens** (menu: **Kitchens → All kitchens**, last in the group)
 - **You will create these five kitchens.** UAT-068 to UAT-072 use them by name, so create all five:
 
 | Name | Location | In charge | Contact phone | Main? | Plans its own meals? |
@@ -57,8 +57,8 @@ ingredients. This screen is where a temple writes down which kitchens it runs.
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Look at the menu | Under **Kitchen**: Recipes, Ingredients, Inventory, **Ingredient requests**, **Kitchens**. Kitchens is last — it is setup, not daily work |
-| 2 | Open **Kitchens** | An empty state explaining what a kitchen is here for, and **Add a kitchen** at the **top right** — not a form sitting on the page |
+| 1 | Look at the menu | Under **Kitchens**: **Ingredient requests**, **Issued to kitchens**, **All kitchens**. All kitchens is last — it is setup, not daily work. (Rajeev's standard menu, 2026-09-19: the recipe and stock catalogues are their own **Inventory & Recipes** group above this one) |
+| 2 | Open **All kitchens** | An empty state explaining what a kitchen is here for, and **Add a kitchen** at the **top right** — not a form sitting on the page |
 | 3 | Press **Add a kitchen** | A screen of its own: the task is the heading, the menu is still on the left, and **Cancel** and **Add kitchen** sit together at the top right. No second button at the foot, no *← Back* |
 | 4 | Read the two checkboxes | **"This is the temple's main kitchen"** is **ticked and greyed out**, with a line saying why — this is the temple's first kitchen. **"Does this kitchen plan its meals here?"** is off and can be changed |
 | 5 | Fill in **Deity Kitchen** from the table and save | You land back on the **list**, with a green line confirming Deity Kitchen was added. It appears in the table, badged **Main** |

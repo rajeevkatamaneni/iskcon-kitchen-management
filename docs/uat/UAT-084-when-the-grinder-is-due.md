@@ -58,7 +58,7 @@ and works the fourth out for itself: **when it is next due**.
 
 - **Sign in as:** `ikms.temple-admin.1@trading4good.org` (temple admin). Steps 27–31 need
   `ikms.kitchen-staff.1@trading4good.org` (kitchen staff).
-- **Start at:** **/equipment** (menu: **Kitchen → Equipment**)
+- **Start at:** **/equipment** (menu: **Inventory & Recipes → Equipment**, last in the group)
 - **Set the scene:** UAT-027's three items should already be there — *Wet Grinder 10L*, *Steam
   Cauldron 200L* and the scrapped *Serving Trolley*. If they are not, register them first.
 - **Write down today's date.** Every date in this test is arithmetic against it, and every date on

@@ -42,7 +42,7 @@ breakfast *and* lunch, so their pay can only ever be split by guesswork.
 ## Before you start
 
 - **Sign in as:** `ikms.temple-admin.1@trading4good.org` (temple admin)
-- **Start at:** **/cost-per-serving** (menu: **Kitchen** → **Cost per serving**)
+- **Start at:** **/cost-per-serving** (menu: the top group, under **Reuse a plan**)
 - **Set the scene**, because a fresh temple has nothing to compare:
 
   1. On **/vendors** (UAT-037) make sure **Rice**, **Toor Dal** and **Ghee** each have a **List price**
@@ -65,7 +65,7 @@ breakfast *and* lunch, so their pay can only ever be split by guesswork.
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open the menu and find **Cost per serving** | It is in the **Kitchen** group, next to **Issued from store** |
+| 1 | Open the menu and find **Cost per serving** | It is the **last item in the top group**, under **Reuse a plan**, with no heading above it. Rajeev kept it there on 2026-09-19: it measures what the planner planned, not what a kitchen took from the store, so it does not sit under **Kitchens** |
 | 2 | Open it | Heading **Cost per serving**, and under it: *What a serving costs at each kind of meal, so a prasadam plate can be read against a feast plate* |
 | 3 | Look at the period control | **Week / Month / Year**, opening on **Month**, with arrows to step back and forward. It opens on this month |
 | 4 | Read the notice above the table | It begins **Estimated, materials only**, and goes on: *Labour, fuel and the rest of what a meal costs are not in these figures.* |

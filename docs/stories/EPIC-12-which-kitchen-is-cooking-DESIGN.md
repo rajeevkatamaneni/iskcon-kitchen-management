@@ -1,6 +1,8 @@
 # EPIC 12 — Which kitchen is cooking
 
-**Status: DESIGN, awaiting Rajeev's review. Nothing here is built.**
+**Status: BUILT 2026-09-19 in an unmerged worktree, awaiting Rajeev's test. Not committed, not deployed.**
+Rajeev approved the build on 2026-09-19 with amendments, recorded in §8. Where §8 and the sections above
+disagree, §8 wins; the rest is kept as the record of the design. Test: [UAT-093](../uat/UAT-093-kitchens-in-the-meal-planner.md).
 **Written:** 2026-08-30. Shape settled by Rajeev the same day (Option B).
 **Depends on:** E10-S2 (the `kitchens` table). **Blocks:** nothing.
 **Labels:** `epic:planner`
@@ -146,30 +148,73 @@ with real depth to it, and it gets its own story.
 
 ## 6. The stories
 
-| Story | What |
-|---|---|
-| **E12-S1** | `meal_plans.kitchen_id` — migration, backfill, `SET NOT NULL`, provisioning seed, reset keep-list |
-| **E12-S2** | The planner asks, and refuses to save without an answer — DTOs, service, validation, `duplicateWeek` |
-| **E12-S3** | The composer's kitchen picker, and the per-dish override |
-| **E12-S4** | Every surface says whose meal it is (§4) |
-| **E12-S5** | One job card per kitchen |
+| Story | What | Status (2026-09-19) |
+|---|---|---|
+| **E12-S1** | `meal_plans.kitchen_id` — migration, backfill, `SET NOT NULL`, provisioning seed, reset keep-list | Built, not deployed (T-350, V150). Built as a section per kitchen on each meal, with `meal_dishes.kitchen_id`, since the D-27 rebuild replaced `meal_plans` |
+| **E12-S2** | The planner asks, and refuses to save without an answer — DTOs, service, validation, `duplicateWeek` | Being built (T-354, V151) |
+| **E12-S3** | The composer's kitchen picker, and the per-dish override | Built, not deployed (T-351). Built as the approved mock's sections instead of a picker plus a per-dish override (§8) |
+| **E12-S4** | Every surface says whose meal it is (§4) | Frontend built, not deployed (T-352); per-kitchen crew and Today's names being built (T-358) |
+| **E12-S5** | One job card per kitchen | Frontend built, not deployed (T-352); the card itself being built (T-356, V152) |
+| *Added 2026-09-19* | Staff belong to one kitchen, and the Temple Admin's check list | Frontend built, not deployed (T-353); API being built (T-357) |
+| *Added 2026-09-19* | Only people whose kitchen plans its meals here can open the planner | Frontend built, not deployed (T-353); server rule being built (T-357) |
 
-**UAT-075 — Two kitchens, one lunch.** Plan a lunch whose sweets come from another kitchen, see both
+"Being built" means the task was in progress when this line was written; its proof in
+`docs/work/proof/` says whether it finished.
+
+**UAT-075 — Two kitchens, one lunch.** *(Written as UAT-093 on 2026-09-19; UAT-075 had been used for cost per serving.)* Plan a lunch whose sweets come from another kitchen, see both
 named on the planner and on Today, print both job cards, and check each carries only its own preparations.
 
 ---
 
 ## 7. Questions
 
-**Q1 — The picker's default.** I default it to the temple's main kitchen, since that is what most meals
+**Q1 — The picker's default.** *Answered 2026-09-19: the person's own kitchen; the main kitchen if they have none, or theirs doesn't plan meals here (§8).* I default it to the temple's main kitchen, since that is what most meals
 are. The alternative is no default and a forced choice every time, which is more honest and more friction.
 Recommend defaulting.
 
-**Q2 — Existing meals.** The backfill assigns every meal already planned to the main kitchen. For a
+**Q2 — Existing meals.** *Answered 2026-09-19: yes, backfill to the main kitchen, and the same for existing staff, with a check list for the Temple Admin (§8).* The backfill assigns every meal already planned to the main kitchen. For a
 temple that has been running the planner for months this is right by definition — there was only one
 kitchen. Flagging it because it is a silent bulk assignment, and it is the sort of thing worth knowing
 happened.
 
-**Q3 — Does the crew count split per kitchen?** `crew_required` is one number for the meal. If a lunch
+**Q3 — Does the crew count split per kitchen?** *Answered 2026-09-19: per kitchen (§8).* `crew_required` is one number for the meal. If a lunch
 spans two kitchens, "we need 6 people" no longer says where. Not built here, and worth an answer before
 somebody asks: leave it whole-meal for now, or make it per-kitchen alongside the dishes?
+
+---
+
+## 8. Decided 2026-09-19
+
+Rajeev said *"GO ahead, add the Which Kitchen is making this meal feature"* and approved these amendments
+the same day. The source is `docs/work/NEXT-MENU-LAYOUT.md`, "Also approved 2026-09-19: Epic 12", and the
+approved mock at `/dev-kitchen-meal`. The wording below is a summary of that note, not his words, except
+where quoted.
+
+- **The view is the mock's Option 1:** one Lunch card with a clear section per kitchen, not two Lunch cards.
+- **The composer is the mock's build tab** (*"looks AMAZING"*): one section to start; **+ Add another
+  kitchen**, a searchable list of kitchens that plan meals here and are not already on the meal; × on each
+  section, with an inline *"Remove <kitchen> and its N dishes?"*; no Move. This replaces §2's meal-level
+  picker with a per-dish override.
+- **Own kitchen first.** The signed-in person's own kitchen is the first section when building, after
+  saving, on every edit, and in the meal's card. Then the kitchens in Settings order. A person with no
+  kitchen, or whose kitchen isn't on the meal, sees the main kitchen first. He first asked for the main
+  kitchen always on top, then took it back: *"we have to go with the user's kitchen assignment"*.
+- **Staff belong to exactly one kitchen**, required on add and edit, so rostering works per kitchen,
+  including a sister kitchen with its own staff. A "home kitchen, can also cook in" idea only if it
+  proves common.
+- **Planner access.** The Temple Admin sees and plans for every kitchen. Anyone else can open the meal
+  planner only if their kitchen plans its meals here. Server-enforced (`KMS-400183`) and hidden from the
+  menu. A person with no staff record is refused.
+- **People needed and the job card are per kitchen.** Each kitchen's section has its own People needed,
+  shows that kitchen's rostered staff, and prints its own job card. The card number stays one per meal.
+- **The backfill.** Existing meals go to the main kitchen, and so do existing staff. The Temple Admin
+  gets a **Check these kitchen assignments** list to move anyone.
+
+**Two assumptions made while building, not yet put to Rajeev:**
+
+1. **Volunteers are counted in the main kitchen's section.** A meal's volunteers are counted once, in
+   the main kitchen's section if it is on the meal, otherwise in the first section. Nothing yet records
+   which kitchen a volunteer is helping.
+2. **Turning a kitchen's planner switch off locks its staff out of the planner.** By the access rule,
+   Kitchen Staff and Kitchen Managers in that kitchen lose the planner on their next page load, including
+   for meals they already planned.

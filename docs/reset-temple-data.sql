@@ -11,11 +11,12 @@
 --   Database   : kms
 --
 -- KEPT:    the temple itself, its settings (Razorpay, email), users (staff and
---          devotee profiles), staff profiles and schedules, vendors and what
---          they supply, the Vaishnava calendar, the shared recipe library, meal
+--          devotee profiles), staff profiles and schedules, the temple's
+--          kitchens, vendors and what they supply, the Vaishnava calendar, the shared recipe library, meal
 --          kinds, occasions, recipe categories and the translation glossary.
 -- CLEARED: everything else this temple owns — recipes, ingredients, inventory,
---          the stock ledger, meal plans and services, purchase orders, receipts,
+--          the stock ledger, meals with their dishes and kitchens (meal_kitchens),
+--          purchase orders, receipts,
 --          invoices and payments, donations, wish list, shifts and signups,
 --          leave, staff payments and advances, notices, communications,
 --          documents, and the audit trail.
@@ -54,6 +55,12 @@ DECLARE
         'tenants', 'tenant_settings', 'users', 'communication_preferences',
         'staff_profiles', 'staff_schedule_template', 'staff_schedule_exceptions',
         'vendors', 'vendor_supplies',
+        -- Kitchens are configuration, not operational data (Epic 12, V150): every
+        -- staff profile kept above names one (staff_profiles.kitchen_id is NOT NULL),
+        -- so wiping them would fail on that key — and a temple reset to plan again
+        -- still needs the kitchens it plans in. meal_kitchens is NOT kept: it is a
+        -- meal's sections and goes with the meals (its meal_id cascades).
+        'kitchens',
         'recipe_categories', 'occasions', 'meal_slots', 'translation_glossary',
         'calendar_days', 'calendar_overrides', 'calendar_precompute_state',
         'meal_card_sequence', 'po_sequence'

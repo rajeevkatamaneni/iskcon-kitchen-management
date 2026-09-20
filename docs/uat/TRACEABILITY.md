@@ -137,7 +137,13 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E11-S4 | Every screen says it the same way | **UAT-074** (steps 28–34) |
 | E11-S5 | Documents and emails say it the same way | **UAT-074** (steps 35–41) |
 | E11-S6 | Every dropdown offers the one list | **UAT-074** (steps 42–51) |
-| E12 | Which kitchen is cooking | *Design only, awaiting Rajeev — nothing built, no stories numbered* |
+| E12-S1 | The kitchen on every dish: a section per kitchen on each meal (`meal_kitchens`), dishes and staff given a kitchen, the per-temple backfill to the main kitchen, the provisioning seed, the reset keep-list | **UAT-093** steps 1–2 (every staff member has a kitchen after the backfill), 26 (each dish under one kitchen). The migration itself automated only (`WhichKitchenMigrationIT`). *Built 2026-09-19, not deployed* |
+| E12-S2 | The planner asks which kitchen, and refuses without an answer; reuse and series carry the kitchens | **UAT-093** steps 14–25. `KMS-400180`, `400181` and `400182` cannot be reached from the screens: automated only. *Built 2026-09-19, not deployed* |
+| E12-S3 | The composer: a section per kitchen, **+ Add another kitchen**, × with an inline confirm, People needed per kitchen, own kitchen first | **UAT-093** steps 14–25, 37–39. *Built 2026-09-19, not deployed* |
+| E12-S4 | Every surface says whose meal it is: one card with a section per kitchen, per-kitchen crew, the week tile, Today | **UAT-093** steps 26–30, 36, 39. *Built 2026-09-19, not deployed* |
+| E12-S5 | One job card per kitchen, one card number per meal | **UAT-093** steps 31–34. `KMS-400186` and `400187` automated only. *Built 2026-09-19, not deployed* |
+| E12 staff kitchen | Every staff member belongs to one kitchen, required on add and edit; the Temple Admin's **Check these kitchen assignments** list; a kitchen with staff cannot be archived (added to Epic 12 by Rajeev 2026-09-19) | **UAT-093** steps 1–13 (`KMS-400184`, `KMS-400185`), 48. *Built 2026-09-19, not deployed* |
+| E12 planner access | Only the Temple Admin, and people whose kitchen plans its meals here, can open the meal planner; hidden from the menu and refused by the server (`KMS-400183`) (added to Epic 12 by Rajeev 2026-09-19) | **UAT-093** steps 35, 40–48. *Built 2026-09-19, not deployed* |
 | Brief 2026-08-21, groups 1, 2, 7 (`42982bb`, `b84dcd0`, `0a7d6c9`) | The kit every form and table is built from, the focus screen, and one voice for the site's words | UAT-073 uses the focus-screen add. *No test of the kit as such* |
 | Brief 2026-08-21, group 3 (`6839960`) | The staff register, and a record for people who have left (E6-S8) | **UAT-064** step 17 (Former staff) |
 | Brief 2026-08-21, groups 4, 5 (`858b867`, `6df10ca`) | How many hands a meal takes; the planner plans meals, moves through time, and can name a feast (E4-S7) | **UAT-032**, UAT-078 |
@@ -204,6 +210,15 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | T-209 | Equipment taken off the job card, on screen, print and PDF (E4-S11) | *No UAT test* — E4-S11 has none |
 | T-307, T-308, T-310 | An event repeats once every 1 to 12 weeks until a date, as a linked series: a live count and the skipped dates before pressing, the series line on every occurrence, and cancel *just this event* or *this and all later ones*; no copy on a past date (E4-S15 D8b) | **UAT-086** steps 45–56 (repeat, preview, skips, `KMS-400175`–`400177`), 57–61 (the copies, the series line, editing one alone), 62–69 (both cancels, the edited one named, volunteers, `KMS-400179`, no question when nothing is later), 70 (kitchen staff). `KMS-400178` and "never a cooked or recorded one" automated only (`MealSeriesIT`) |
 | T-245 to T-306, T-310 to T-312, T-343 | The procurement release (R-… in `docs/work/PROCUREMENT-REQUIREMENTS.md`) and its fixes | **§1a** below maps every requirement; UAT-038 to UAT-046 rewritten or amended, UAT-087 to UAT-092 new |
+| T-350 | V150: a section per kitchen on each meal, the dish and staff kitchen columns, the per-temple backfill to the main kitchen, the viewer's section order, the provisioning seed (E12-S1) | **UAT-093** steps 1–2, 26, 36, 39. The migration automated only (`WhichKitchenMigrationIT`, `KitchenOrderTest`) |
+| T-351 | The composer: **What each kitchen cooks**, a section per kitchen, **+ Add another kitchen**, × with *Remove … and its N dishes?*, People needed per kitchen (E12-S3) | **UAT-093** steps 14–25, 37–38 |
+| T-352 | The meal's card with a section per kitchen, each with its own People needed, rostered names and **Download job card**; the week tile grouped by kitchen; Today names the kitchens (E12-S4, E12-S5) | **UAT-093** steps 26–34, 36 |
+| T-353 | Staff belong to a kitchen; **Check these kitchen assignments**; the planner hidden from the menu and refused at its address (E12 staff kitchen, E12 planner access) | **UAT-093** steps 1–11, 13, 35, 40–48 |
+| T-354 | Meals saved and read by kitchen, reuse and series carry the kitchens, V151 moves People needed to each kitchen, `KMS-400180`–`400182` (E12-S2) | **UAT-093** steps 14–26. The three codes automated only |
+| T-356 | One job card per kitchen, V152 moves the card's version to each kitchen, `KMS-400186`–`400187` (E12-S5) | **UAT-093** steps 31–34. The two codes automated only |
+| T-357 | The staff kitchen API, the check list, the planner access rule and its sign-in fields, a kitchen with staff cannot be archived, `KMS-400183`–`400185` (E12 staff kitchen, E12 planner access) | **UAT-093** steps 1–13, 40–48 |
+| T-358 | People needed and rostered staff per kitchen, volunteers counted once in the main kitchen's section; Today's kitchen names (E12-S4) | **UAT-093** steps 15, 21, 27, 29–30 |
+| T-355 | *No entry in the Epic 12 dispatch. Not used by this stream as far as the dispatch records* | *Nothing to cover* |
 | T-022, T-062, T-064 (with T-065), T-075, T-076, T-078, T-092, T-093, T-145, T-152, T-189, T-210 | Tests for five screens that had none; CI heap and Spring context counts; flaky tests fixed; the linter, and rules-of-hooks linting; local development migrates as `kms_migration` | *Automated tests only — no manual surface* |
 | T-058 | Held cleanups: four fixed, five dropped, three sent back to Rajeev | *No UAT step* |
 | T-017, T-018, T-091 | Stopped before building; nothing shipped | *Nothing built — no test* |
@@ -219,6 +234,10 @@ Complete to 2026-09-14, and for the procurement release of 2026-09-19 (§1a): ev
 T-200 to T-210, T-212 and T-216 were committed in `69da777` and released to staging on 2026-09-14, after Phase A in `74d3535` and its fixes in `6dd436c`), and the work between 2026-08-20 and 2026-09-06 that
 had no task id. Commits in that stretch that only fixed a defect in a story already listed have no row
 of their own.
+
+Added 2026-09-19: Epic 12's stories and its tasks T-350 to T-358, mapped to UAT-093. They were built in
+an unmerged worktree and are not deployed, so the step numbers are written against the build, not
+against anything a tester has run.
 
 Work done by task id has no story of its own, and the table's only precedent (a decision added to its
 story's row) does not scale to two hundred tasks, so tasks are rows keyed by task id, naming the story

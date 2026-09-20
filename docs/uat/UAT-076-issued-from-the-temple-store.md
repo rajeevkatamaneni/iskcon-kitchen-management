@@ -43,7 +43,7 @@ that much *at least*, and probably more.
 ## Before you start
 
 - **Sign in as:** `ikms.temple-admin.1@trading4good.org` (temple admin)
-- **Start at:** **/issued-from-store** (menu: **Kitchen** → **Issued from store**)
+- **Start at:** **/issued-from-store** (menu: **Kitchens** → **Issued to kitchens**)
 - **You need issuing to have happened.** Finish **UAT-070** first. If you have not, do this much:
 
   1. On **/vendors** (UAT-037), make sure **Rice**, **Toor Dal** and **Ghee** have a **List price**.
@@ -62,8 +62,8 @@ that much *at least*, and probably more.
 
 | # | Do this | You should see |
 |---|---|---|
-| 1 | Open the menu and find **Issued from store** | It is in the **Kitchen** group, next to **Cost per serving** |
-| 2 | **Read the heading, word for word** | **Issued from the temple store**. Not "kitchen food cost", not "Deity kitchen spend" — the name is the honesty of the report |
+| 1 | Open the menu and find **Issued to kitchens** | It is in the **Kitchens** group, between **Ingredient requests** and **All kitchens**. It is *not* next to **Cost per serving** any more — that one stays at the top of the menu with Today and the planner (Rajeev, 2026-09-19) |
+| 2 | **Read the heading, word for word** | **Issued to kitchens**. Not "kitchen food cost", not "Deity kitchen spend" — *issued* is the honesty of the report, and it has to survive the rename (Rajeev, 2026-09-19) |
 | 3 | **Read the sentence under the heading, word for word** | It says what the screen is, **and** that *a kitchen may also buy food itself, and that never reaches these figures*, **and** that *each one is a floor, not a total*. **All three parts must be there.** If any is missing, stop and write it down — this is the most important check in this test |
 | 4 | Read the notice above the table | **Estimated, materials only**, and: *This is what left the temple store, and nothing else. A kitchen that buys food itself keeps no record of it here, so its real food cost is higher than the figure beside its name* |
 | 5 | Read the line **below** the table | It tells you what to do about food a kitchen bought itself: if it is carried into the temple store, record it as a **donation in kind**, and it is then issued back out like anything else |
@@ -84,7 +84,7 @@ that much *at least*, and probably more.
 
 ## It passes if
 
-- [ ] **The heading reads *Issued from the temple store*.**
+- [ ] **The heading reads *Issued to kitchens*.**
 - [ ] **The screen states, in words, that a kitchen may buy food itself and that each figure is a floor, not a total.**
 - [ ] One row per kitchen the store issued to, dearest first, with requests, ingredients and the estimate.
 - [ ] Several requests to one kitchen make one row.

@@ -64,7 +64,9 @@
 - `/kitchens` — table with Edit and Delete per row, **Add a kitchen** top right, empty state.
 - `/kitchens/new` and `/kitchens/[id]/edit` — `FocusScreen` with the intake form.
 - The main-kitchen checkbox names the kitchen that will lose the flag and waits for confirmation. On a temple's first kitchen it is ticked and disabled, with a line saying why.
-- Two nav entries in the Kitchen group, after Inventory.
+- Two nav entries in the **Kitchens** group: *Ingredient requests* first and *All kitchens* last
+  (Rajeev's standard menu, 2026-09-19). *All kitchens*, not *Kitchens*, so the row is not the
+  group's own heading said twice.
 
 **Acceptance criteria:**
 - [ ] The list→form→list transition matches recipes, and `?added=` flashes on return.
@@ -343,9 +345,12 @@ of the basket entirely — which is the same answer the store's own balance alre
   the same `KMS-400122` as E3-S9. `MANAGE_KITCHENS` was the other candidate and is wrong: it gates
   deciding that a kitchen exists, is held by the Temple Admin alone, and using it here would lock the
   storekeeper out of the report about their own issuing.
-- Screen at `/issued-from-store`, in the kitchen group of the menu beside *Cost per serving*. One
-  row per kitchen the store issued to, dearest first; a kitchen issued nothing does not appear,
-  because a row of zeroes is not a finding.
+- Screen at `/issued-from-store`, titled *Issued to kitchens*, in the **Kitchens** group of the menu
+  between *Ingredient requests* and *All kitchens*. One row per kitchen the store issued to, dearest
+  first; a kitchen issued nothing does not appear, because a row of zeroes is not a finding.
+  *(Renamed from* Issued from store *and moved out of the old* Kitchen *group by Rajeev's standard
+  menu, 2026-09-19 — `docs/work/MENU-LAYOUT-2026-09-19.md`. The address is unchanged, so every link
+  and bookmark still works, and* Cost per serving *left this group for the daily screens at the top.)*
 - Each row carries how many requests were filled, how many distinct ingredients went over the
   counter, the estimate, and how many of its ingredients have no known price. A kitchen that now
   plans its meals here is marked, because anything on its row is from before that.

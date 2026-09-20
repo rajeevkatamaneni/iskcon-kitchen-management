@@ -18909,3 +18909,148 @@ the only thing the id protects, and it is exactly what collided.
   404 once T-301 checked permissions first (`GET /donations/recurring` hits `/donations/{donationId}`, which a volunteer
   may not read). The test now signs in as a Temple Admin, so the 404 is the only possible answer. No product code changed.
 - **Next free:** migration V150, error code KMS-400180.
+
+## Epic 12 — which kitchen is cooking (2026-09-19, work manager, in worktree `.claude/worktrees/agent-a93967b8b0080da44`)
+
+Built in a separate git worktree (fast-forwarded to 97b8a2b before starting) because the main checkout was being
+deployed. Nothing here is committed. Spec, binding: `docs/stories/EPIC-12-which-kitchen-is-cooking-DESIGN.md` (Option B)
+**as amended by** `docs/work/NEXT-MENU-LAYOUT.md` "Also approved 2026-09-19: Epic 12" (main checkout only), and the
+approved mock `frontend/app/dev-kitchen-meal/page.tsx` in the main checkout (git-excluded; view = its Option 1, composer =
+its `?option=build` tab). The design doc's file:line references predate D-27 (meal_plans is now `meal_dishes` under a
+`meals` row) and are not trusted.
+
+**The data model, decided here (the design doc predates D-27 and the per-kitchen crew and card):**
+- `meal_kitchens` (new, RLS): one row per kitchen cooking a meal: `meal_id`, `kitchen_id`, `crew_required` (that
+  kitchen's People needed), `card_version`, `card_fingerprint` (each kitchen prints its own card, so each needs its own
+  version history). UNIQUE (meal_id, kitchen_id). It is the meal's sections, and exists even for a section with no
+  dishes yet.
+- `meal_dishes.kitchen_id` NOT NULL, with a composite FK (meal_id, kitchen_id) → meal_kitchens, so a dish can only be
+  under a kitchen that is on its meal.
+- `staff_profiles.kitchen_id` NOT NULL (every staff member belongs to exactly one kitchen) and
+  `staff_profiles.kitchen_needs_check` (true for rows the migration filled in; feeds the Temple Admin's "Check these
+  kitchen assignments" list; cleared when the record is saved or confirmed).
+- `meals.crew_required` moves to `meal_kitchens` and is dropped (V151, T-354); `meals.card_version`/`card_fingerprint`
+  move and are dropped (V152, T-356). The card **number** stays one per meal, printed on every kitchen's card with the
+  kitchen's name. MealView/MealCrewView keep a meal-level `crewRequired` as the read-only sum.
+- Section order for a viewer (Rajeev 2026-09-19): their own kitchen first if on the meal; else the main kitchen first if
+  on the meal; then Settings order (`is_main DESC, name`, as `KitchenService` lists them). Computed on the server in one
+  helper (`kitchen/KitchenOrder.java`, T-350) and sent already ordered.
+- Planner access: MANAGE_MEAL_PLANS as today, **plus** a kitchen check: allowed if Temple Admin (every kitchen), or the
+  person has a current staff record whose kitchen is ACTIVE with `uses_meal_planner`. No staff record → refused.
+  Otherwise `KMS-400183`. No new permission constant. (Corrected by the coordinator 2026-09-19 against Rajeev's rule:
+  "only people who belong to a kitchen that opted for meal planning should be able to get to the meal planner"; the
+  work manager's first draft let a person with no staff record in.)
+- Volunteers (assumption, flagged for Rajeev): per-kitchen rostered = that kitchen's staff whose window covers ready-by;
+  the meal's volunteers are counted once, in the main kitchen's section if it is on the meal, else the first section.
+- API default (keeps every other caller and ~13 test files working): a save with `kitchens` absent (null) gets one
+  section, the saver's kitchen if it plans meals here, else the main kitchen, and dishes with no `kitchenId` go to the
+  only section; with two or more sections a dish without a kitchen is `KMS-400182`. An empty list is `KMS-400180`. The
+  composer always sends both.
+
+**Reservations, all written by the work manager before wave 1:**
+- Migrations: **V150** (T-350), **V151** (T-354), **V152** (T-356).
+- `ErrorCode.java`: KMS-400180 MEAL_NEEDS_A_KITCHEN, 400181 KITCHEN_DOES_NOT_PLAN_MEALS, 400182 DISH_KITCHEN_NOT_ON_MEAL
+  (T-354); 400183 PLANNER_NOT_FOR_YOUR_KITCHEN, 400184 STAFF_NEEDS_A_KITCHEN, 400185 KITCHEN_HAS_STAFF (T-357); 400186
+  JOB_CARD_NEEDS_A_KITCHEN, 400187 KITCHEN_NOT_ON_THIS_MEAL (T-356). Next free: KMS-400188.
+- `api.ts`: WhoAmI.kitchenId/kitchenName/canPlanMeals; StaffProfileView.kitchenId/kitchenName/kitchenNeedsCheck;
+  HireStaffInput.kitchenId; StaffKitchenCheckView + staffKitchenChecks/setStaffKitchen/confirmStaffKitchens;
+  Kitchen.staffCount; MealDishView.kitchenId; MealView.kitchens (MealKitchenView); SaveMealInput.kitchens
+  (MealKitchenDraft) replacing crewRequired; MealDishDraft.kitchenId; KitchenCrewView + MealCrewView.kitchens;
+  CrewAtView.staffNames + mealCrewAt(…, token, kitchenId?, countVolunteers?); requestJobCard(…, token, kitchenId?);
+  jobCardPrintUrl(mealId, language?, kitchenId?); TodayMeal.kitchenNames.
+- `nav.ts`, `Sidebar.tsx`, `RequireRole.tsx`: owned by T-353 in wave E12-1 (hide the planner when `!canPlanMeals`).
+- No new permission constant. T-numbers T-350..T-361 are this stream's.
+
+### Wave E12-1 — schema foundation, and the three frontend surfaces against the stubbed api.ts
+
+#### T-350 — V150: meal_kitchens, dish and staff kitchen columns, per-tenant backfill, provisioning seed
+- **source:** NEXT-MENU-LAYOUT.md Epic 12 bullets (Rajeev 2026-09-19); design doc §3.
+- **paths:** `backend/src/main/resources/db/migration/V150__which_kitchen_is_cooking.sql` (new);
+  `backend/src/main/java/org/iskcon/kms/kitchen/KitchenOrder.java` (new); `…/kitchen/KitchenService.java` (seed method
+  only); `…/tenant/TenantProvisioningService.java`; `…/meal/MealPlanService.java` and `…/staff/StaffEmploymentService.java`
+  (INSERT statements only, interim, so the tree stays green until wave E12-2 replaces them); `docs/reset-temple-data.sql`;
+  tests: new `backend/src/test/java/org/iskcon/kms/kitchen/WhichKitchenMigrationIT.java`, new `…/kitchen/KitchenOrderTest.java`,
+  and the fixtures that insert or delete meals/dishes/staff by SQL: `meal/MealFixture.java`, `meal/MealCrewIT.java`,
+  `meal/MealRebuildMigrationIT.java`, `staff/CrewCoverageIT.java`, `staff/OwnScheduleLeaveIT.java`, `staff/HalfDayLeaveIT.java`,
+  `today/TodayIT.java`, `document/JobCardIT.java`, `shift/ShiftMealLinkIT.java`, `perf/TempleScaleFixture.java`,
+  `TenantLoopMigrationIT.java`, `tenant/TenantProvisioningIT.java`, `tenant/ProvisioningAtZeroZeroIT.java`,
+  `tenant/TenantUpdateIT.java`, and any other test under `backend/src/test` that fails only because it deletes
+  meals/staff without clearing `meal_kitchens` first (each listed in the proof).
+- **reservations:** V150.
+- **wave:** E12-1 · **state:** queued · **proof:** docs/work/proof/T-350.md
+
+#### T-351 — the composer: a section per kitchen, "+ Add another kitchen", × with inline confirm
+- **source:** NEXT-MENU-LAYOUT.md (composer approved "looks AMAZING"); mock `?option=build`.
+- **paths:** `frontend/components/planner/MealComposer.tsx`; new `frontend/components/planner/KitchenSections.tsx`;
+  `frontend/app/planner/compose/page.tsx`; `frontend/app/planner/meal/[id]/page.tsx`; tests `frontend/__tests__/meal-composer.test.tsx`,
+  `planner-shift.test.tsx`, new `meal-composer-kitchens.test.tsx`.
+- **reservations:** api.ts SaveMealInput.kitchens/MealKitchenDraft/MealDishDraft.kitchenId, MealView.kitchens,
+  Kitchen.staffCount, WhoAmI.kitchenId/canPlanMeals, CrewAtView.staffNames + mealCrewAt kitchen args (use only).
+- **wave:** E12-1 · **state:** queued · **proof:** docs/work/proof/T-351.md
+
+#### T-352 — the meal's view: one card, a section per kitchen, per-kitchen crew and job card; week tile; Today
+- **source:** NEXT-MENU-LAYOUT.md (Option 1 chosen); mock Option 1 day view and week tile; design doc §4 (Today line).
+- **paths:** `frontend/components/planner/MealServices.tsx`; `frontend/components/planner/DayView.tsx`;
+  `frontend/app/planner/page.tsx`; `frontend/app/planner/[date]/page.tsx`; `frontend/app/today/page.tsx`;
+  `frontend/app/leave/page.tsx` (only if needed); tests `planner.test.tsx`, `planner-day-routes.test.tsx`,
+  `planner-saved-notice.test.tsx`, `today.test.tsx`, `leave.test.tsx`, `crew-pebble.test.tsx`, `meal-recording.test.tsx`,
+  `meal-correction.test.tsx`, `repeat-series.test.tsx`, new `meal-kitchen-sections.test.tsx`.
+- **reservations:** api.ts MealView.kitchens, MealDishView.kitchenId, MealCrewView.kitchens/KitchenCrewView,
+  requestJobCard/jobCardPrintUrl kitchenId, TodayMeal.kitchenNames (use only).
+- **wave:** E12-1 · **state:** queued · **proof:** docs/work/proof/T-352.md
+
+#### T-353 — staff belong to a kitchen; "Check these kitchen assignments"; planner hidden from the menu
+- **source:** NEXT-MENU-LAYOUT.md "Staff and kitchens (Rajeev, 2026-09-19)".
+- **paths:** `frontend/components/staff/StaffForm.tsx`; `frontend/app/staff/new/page.tsx`; `frontend/app/staff/[id]/edit/page.tsx`;
+  `frontend/app/staff/[id]/page.tsx`; `frontend/app/staff/page.tsx`; new `frontend/components/staff/KitchenChecks.tsx`;
+  `frontend/lib/nav.ts`, `frontend/components/Sidebar.tsx`, `frontend/components/RequireRole.tsx` (granted this wave);
+  tests `staff-fixtures.ts`, `staff.test.tsx`, `staff-hire.test.tsx`, `nav.test.ts`, `my-schedule.test.tsx`,
+  `kitchens.test.tsx`, `kitchen-form.test.tsx`, `ingredient-request-new.test.tsx`, `unit-refusal-names-ingredient.test.tsx`
+  (fixture fields only in the last four), new `staff-kitchen.test.tsx`.
+- **reservations:** api.ts WhoAmI.*, StaffProfileView.kitchen*, HireStaffInput.kitchenId, StaffKitchenCheckView and its
+  three methods, Kitchen.staffCount.
+- **wave:** E12-1 · **state:** queued · **proof:** docs/work/proof/T-353.md
+
+### Wave E12-2 (after E12-1 proven) — the backend behind it
+- **T-354** meals save/read by kitchen, V151 (drop meals.crew_required), KMS-400180..182: meal package save/read,
+  reuse/series carry kitchens, viewer order.
+- **T-356** one job card per kitchen, V152 (drop meals.card_version/fingerprint), KMS-400186..187: document package.
+- **T-357** staff kitchen API, check list, planner access guard + WhoAmI fields, kitchen staffCount/archive guard,
+  KMS-400183..185: staff (employment) + auth + kitchen packages.
+- **T-358** per-kitchen crew (MealCrewService/View/Controller, CrewCoverageService, WorkforceService) and Today's
+  kitchenNames: meal crew + today packages.
+
+### Wave E12-3
+- **T-359** live UI measurement against the mock at 1280/1024/390 on :3100 with a backend on :8180 (database kms_e12),
+  planner page guards, fixes. **T-360** docs: UAT story, traceability, Epic 12 story statuses. **T-361** spare.
+
+### Outcome — 2026-09-19, all states `proven`, nothing committed
+T-350 (V150, backfill, KitchenOrder) · T-351 (composer sections) · T-352 (meal view, week tile, Today) · T-353 (staff
+kitchen, check list, menu) · T-354 (V151, meals by kitchen) · T-356 (V152, a job card per kitchen) · T-357 (staff API,
+planner guard, whoami, kitchen staffCount) · T-358 (crew per kitchen, Today) · T-360 (UAT-087, traceability, story
+statuses) · T-361 (guard switched on; the ~114 tests that signed in with no staff record fixed in one place,
+`testsupport/TestStaffRecords` called from `StubTokenVerifier.verify`) · T-362 (the menu Rajeev settled 2026-09-19, and
+"Issued from store" → "Issued to kitchens", route unchanged) · T-359 (live pass: measured against the mock at
+1280/1024/390 element by element, identical throughout, no layout changed; the series-of-one defect fixed and verified;
+four roles driven).
+
+**Merged-tree run, after every builder was out (work manager):** backend `./gradlew test` **3562 tests, 0 failures, 0
+errors, 7 skipped**, BUILD SUCCESSFUL in 6m49s; frontend `tsc --noEmit` 0, `eslint . --max-warnings=0` 0, `vitest run`
+**182 files, 2583 passed**, `next build` exit 0 (run in a copy of frontend/ so the live dev server's `.next` was left
+alone). Logs: scratchpad `e12-final-{backend,eslint,vitest,nextbuild}.log`. Rajeev verified the kitchen work and the
+menu on the worktree's own stack (:3100 against :8180/kms_e12) and cleared them to ship.
+
+**T-363 — outside events — is parked, NOT in this release.** Rajeev asked that the dead-end "Upcoming outside
+commitments" section go, the events stay in the day list sorted by ready-by with a blue (info) handover pill, and Today
+carry the cross-date heads-up. Established read-only on staging first: the event he could not open was on 26 Sept and
+fully working there; his screenshot was the 28th; the real defect is that the section's rows link nowhere, though the
+server sends `mealId` for exactly that. The work is parked as a patch, not a stash — its files overlap Epic 12's
+uncommitted work, so a path-scoped stash would have taken the release with it: `scratchpad/T-363.patch` (925 lines, 13
+files, `git apply --check -p1` clean) and `scratchpad/T-363-parked/`. Its api.ts reservation (TodayView.upcomingOutside,
+removing `api.outsideCommitments`) was **backed out by the work manager** so the release typechecks; re-reserve it when
+T-363 resumes on top of the new main. Still to do there: RequireRole's wording for KMS-400183 (the guard refuses before
+any request and `/whoami` sends only the boolean, so the sentence goes in the client or WhoAmI must carry it), Today's
+seven dead planner links for a non-planning cook, tests, and the browser measurements.
+
+**Open for Rajeev:** volunteers are counted in the main kitchen's section; turning a kitchen's planner flag off locks
+its staff out of the planner; next free migration V153, next free error code KMS-400188.
