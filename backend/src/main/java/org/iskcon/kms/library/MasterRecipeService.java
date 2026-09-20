@@ -300,6 +300,18 @@ public class MasterRecipeService {
 						Map.of("field", "ingredients", "value", String.valueOf(line.qty()))));
 		m.put("qtyValue", parsed.value());
 		m.put("qtyUnit", parsed.unit());
+		// Written even when there is none, and written null rather than "": this is the jsonb the
+		// operator's create and update both store, so a field left out here is a field erased. An
+		// operator opening one of Rajeev's curated recipes and pressing save with the preparation
+		// untouched would otherwise wipe it, silently, from the row the import reads (T-401).
+		m.put("prep", line.prep() == null || line.prep().isBlank() ? null : line.prep().trim());
+		// Same trap, and a worse one if it is missed: prep lost is a note nobody reads, while
+		// not_bought lost is water back on the shopping list of every temple that copies the recipe
+		// afterwards. Written on every line, true or false, so the stored shape is the loader's
+		// (T-403). There is no screen behind this — nothing in the frontend posts a library recipe —
+		// so what has to send it is whatever tool does: a GET returns `notBought` on every line and
+		// this accepts it back under the same name.
+		m.put("not_bought", line.notBought());
 		return m;
 	}
 
@@ -366,11 +378,24 @@ public class MasterRecipeService {
 		for (Map<String, Object> line : raw) {
 			@SuppressWarnings("unchecked")
 			Map<String, String> scaled = (Map<String, String>) line.get("scaled");
+			// Not String.valueOf, which the four fields above can afford because a line always has
+			// them: it turns a null into the four-character string "null", and prep is null on
+			// every line of every vendored book and on most of a curated one. "null" as a
+			// preparation would reach the screen as "Rice · null" and the shopping list as a note
+			// nobody wrote.
+			Object prep = line.get("prep");
+			// Boolean.TRUE.equals rather than a cast, because every row written before T-403 has no
+			// not_bought key at all and a cast of null to boolean throws. Absent reads as false —
+			// "the temple buys this" — which is the right answer for every vendored line and the
+			// only safe default: the other way round would take an ingredient off the shopping list
+			// on the strength of a key nobody wrote.
 			out.add(new MasterRecipeView.MasterRecipeIngredient(
 					String.valueOf(line.get("name")),
 					String.valueOf(line.get("qty")),
 					new BigDecimal(String.valueOf(line.get("qtyValue"))),
 					String.valueOf(line.get("qtyUnit")),
+					prep == null ? null : String.valueOf(prep),
+					Boolean.TRUE.equals(line.get("not_bought")),
 					scaled));
 		}
 		return out;

@@ -119,17 +119,31 @@ public class LibraryLoader {
 	 * policy, which is what happened the first time this was written.
 	 */
 	public Result load() {
+		return load(BOOKS);
+	}
+
+	/**
+	 * Loads the books matching an Ant pattern. Production always loads {@link #BOOKS} and nothing
+	 * else; this exists so a test can hand the reader one small book of its own.
+	 *
+	 * <p>Needed because the vendored books carry neither a {@code prep} key nor a {@code not_bought}
+	 * one — the preparation is still inside their names, after a comma, and nothing in them says the
+	 * temple never buys a thing — so there is no real book that proves the reader carries either
+	 * across. {@link RecipeLibraryIT} reads the real 32 and is the test that matters for everything a
+	 * real book does say; a fixture is the only way to read a key none of them holds.
+	 */
+	Result load(String books) {
 		TenantContext.setLibraryLoad();
 		try {
-			return transactions.execute(status -> loadWithin());
+			return transactions.execute(status -> loadWithin(books));
 		} finally {
 			TenantContext.clearLibraryLoad();
 		}
 	}
 
-	private Result loadWithin() {
+	private Result loadWithin(String books) {
 		{
-			List<Row> rows = readAll();
+			List<Row> rows = readAll(books);
 			disambiguate(rows);
 			upsert(rows);
 
@@ -147,16 +161,16 @@ public class LibraryLoader {
 
 	// ------------------------------------------------------------------ reading
 
-	private List<Row> readAll() {
+	private List<Row> readAll(String pattern) {
 		Resource[] books;
 		try {
-			books = new PathMatchingResourcePatternResolver().getResources(BOOKS);
+			books = new PathMatchingResourcePatternResolver().getResources(pattern);
 		} catch (IOException e) {
-			throw new IllegalStateException("Could not list the recipe books at " + BOOKS, e);
+			throw new IllegalStateException("Could not list the recipe books at " + pattern, e);
 		}
 		if (books.length == 0) {
 			throw new IllegalStateException(
-					"No recipe books found at " + BOOKS + ". They are committed under "
+					"No recipe books found at " + pattern + ". They are committed under "
 							+ "backend/src/main/resources/recipe-library — check an ignore rule has not eaten them.");
 		}
 
@@ -225,11 +239,35 @@ public class LibraryLoader {
 			// The local-language name and unit are deliberately not carried across. `scaled` is,
 			// where the book precomputed it: it is the book's own arithmetic at 50, 100, 250 and
 			// 500 devotees, and showing it costs nothing.
+			//
+			// `prep` is carried too, as of T-401. It is what the cook does to the line — "Slit",
+			// "Roasted", "Soaked overnight" — and the books used to say it inside the name, after a
+			// comma ("Green chilli, slit"), which is why nothing here ever stored it: the import
+			// split the name again at the far end and recovered it. Rajeev's curated recipes
+			// (2026-09-19) name the ingredient plainly and put the preparation in `prep`, so there
+			// is no comma left to split and this key is now the only record of 84 of his notes.
+			// Written even when the book has none, as an explicit null: a line whose key is absent
+			// and a line whose preparation is genuinely nothing would otherwise read alike, and the
+			// reader downstream could not tell an old row from a new one.
+			//
+			// `not_bought` is carried as of T-403, and is the only line field that is a statement
+			// about the *ingredient* rather than about this line: the temple never buys it at all.
+			// Fifteen lines of Rajeev's curated set say it, every one of them water. An ingredient
+			// the import creates from such a line is created with `ingredients.is_not_bought` set
+			// (V153), which is what keeps water off every shopping list for good instead of being
+			// unticked again on each one. Written as a real true/false on every line rather than
+			// only where the book says true, for the reason `prep` is written as an explicit null:
+			// a missing key and a false would read alike, and "the book did not say" is a different
+			// thing from "the book said no". Both spellings are the book's own, kept as the book
+			// writes them; the API renames it to `notBought` on the way out, where the rest of the
+			// product spells it that way.
 			Map<String, Object> line = new LinkedHashMap<>();
 			line.put("name", ingredientName);
 			line.put("qty", qty);
 			line.put("qtyValue", parsed.value());
 			line.put("qtyUnit", parsed.unit());
+			line.put("prep", text(i, "prep"));
+			line.put("not_bought", i.path("not_bought").asBoolean(false));
 			if (i.hasNonNull("scaled")) {
 				line.put("scaled", mapper.convertValue(i.get("scaled"), Map.class));
 			}

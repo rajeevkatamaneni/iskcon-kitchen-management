@@ -184,6 +184,19 @@ export function RecipePeek({
 }
 
 /**
+ * A line's name with its preparation note, "Green chilli · slit" (R-DUP-1): a middle dot with a
+ * space either side, and the name alone where there is no note.
+ *
+ * <p>Exported because the library recipe's own page prints its lines the same way and there is no
+ * reason for two spellings of one rule (T-401). The recipe page at `app/recipes/[id]` still declares
+ * its own identical copy, so there are two in the tree; folding those two into one wants a shared
+ * module under `lib/`, which is a file to create rather than a line to move.
+ */
+export function withPreparation(name: string, note: string | null | undefined): string {
+  return note ? `${name} · ${note}` : name;
+}
+
+/**
  * One shape for two kinds of recipe.
  *
  * <p>A temple's own recipe and a library one are different records — one carries quantities as
@@ -200,7 +213,10 @@ function asReadable(recipe: RecipeDetail | MasterRecipeDetail) {
       yieldText: master.yieldText,
       badges: [master.badge, master.state].filter(Boolean) as string[],
       tags: recipeTagLabels(master.tags),
-      ingredients: master.ingredients.map((line) => ({ name: line.name, quantity: line.qty })),
+      ingredients: master.ingredients.map((line) => ({
+        name: withPreparation(line.name, line.prep),
+        quantity: line.qty,
+      })),
       method: master.method,
       // No catering note: catering is out of the product (Rajeev, 2026-09-18).
       notes: [master.why, master.noteStart, master.noteVessel, master.noteSeason]
@@ -222,8 +238,9 @@ function asReadable(recipe: RecipeDetail | MasterRecipeDetail) {
     ),
     ingredients: mine.ingredients.map((line) => ({
       // With its preparation note, "Green chilli · slit" (R-DUP-1), exactly as the recipe's own page
-      // and the printed cards say it. A library recipe's lines above keep the book's own wording.
-      name: line.preparationNote ? `${line.ingredientName} · ${line.preparationNote}` : line.ingredientName,
+      // and the printed cards say it — and as a library recipe's lines above say it, since T-401
+      // gave those a preparation of their own to print.
+      name: withPreparation(line.ingredientName, line.preparationNote),
       // The cook's form: this panel is read to decide whether to cook something, and it has to
       // agree line for line with the recipe's own page, which says it the same way.
       quantity: cooksQuantity(line.quantity, line.unit),

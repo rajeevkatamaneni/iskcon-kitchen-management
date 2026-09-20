@@ -9,6 +9,9 @@ import type { MasterRecipeDetail } from "@/lib/api";
  * had added it yet (Rajeev, Decisions Desk, 2026-09-18). What is guarded here is the structure: a
  * table with the same two headings, one row per line, and the ruled-table classes that give it the
  * same column rules and the same card layout on a phone.
+ *
+ * <p>And, since T-401, that a line's name carries its preparation the same way too — "Green chilli ·
+ * slit". The library has always held one; this screen printed the bare name.
  */
 
 const { recipeRef, pushMock, importMock, closeMatchesMock } = vi.hoisted(() => ({
@@ -69,8 +72,8 @@ function recipe(): MasterRecipeDetail {
     tags: [],
     serveWith: [],
     ingredients: [
-      { name: "Rice", qty: "8 Kg", qtyValue: 8, qtyUnit: "KG", scaled: null },
-      { name: "Toor dal", qty: "4 Kg", qtyValue: 4, qtyUnit: "KG", scaled: null },
+      { name: "Rice", qty: "8 Kg", qtyValue: 8, qtyUnit: "KG", scaled: null, prep: null, notBought: false },
+      { name: "Toor dal", qty: "4 Kg", qtyValue: 4, qtyUnit: "KG", scaled: null, prep: null, notBought: false },
     ],
     method: ["Cook the rice."],
     sourceRef: "",
@@ -96,6 +99,23 @@ describe("a library recipe's ingredients", () => {
     expect(within(rows[0]).getByText("8 Kg").className).toContain("kms-num");
     expect(within(rows[1]).getByText("Toor dal")).toBeInTheDocument();
     expect(within(rows[1]).getByText("4 Kg")).toBeInTheDocument();
+  });
+
+  it("print their preparation the way a temple's own recipe does, and nothing extra without one", () => {
+    const withPrep = recipe();
+    withPrep.ingredients = [
+      { name: "Green chilli", qty: "250 gm", qtyValue: 250, qtyUnit: "GM", scaled: null, prep: "slit", notBought: false },
+      { name: "Rice", qty: "8 Kg", qtyValue: 8, qtyUnit: "KG", scaled: null, prep: null, notBought: false },
+    ];
+    recipeRef.current = { data: withPrep, error: null, loading: false };
+    render(<LibraryRecipePage />);
+
+    const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+    // The rendered text, not a prop: a middle dot U+00B7 with a space either side, which is the
+    // separator the recipe page, the job card and the printed card all use (R-DUP-1).
+    expect(within(rows[0]).getAllByRole("cell")[0].textContent).toBe("Green chilli · slit");
+    // And a line with no preparation gains no separator, no trailing space, nothing.
+    expect(within(rows[1]).getAllByRole("cell")[0].textContent).toBe("Rice");
   });
 
   it("asks \"Did you mean …?\" before copying, and a confirmed different ingredient is sent as one (T-287)", async () => {

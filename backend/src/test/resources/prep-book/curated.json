@@ -1,0 +1,59 @@
+{
+  "slug": "prep-fixture",
+  "state": "Prep Fixture",
+  "language": "English",
+  "title": "A one-recipe book that states its preparations",
+  "tagline": "Fixture for T-401 and T-403. Not a state, not vendored, never loaded by the application. Its water line carries prep \"Hot\" and not_bought true, exactly as Rajeev's curated akki-rotti does.",
+  "categories": [
+    { "key": "breakfast-items", "name": "Breakfast Items", "n": 1 }
+  ],
+  "recipes": [
+    {
+      "slug": "akki-rotti-curated",
+      "name": "Akki Rotti Curated",
+      "name_l": "ಅಕ್ಕಿ ರೊಟ್ಟಿ",
+      "cat": "breakfast-items",
+      "badge": "Everyday",
+      "sub": "Rice flour flatbread",
+      "yield": "200 rottis (2 per devotee)",
+      "per": null,
+      "cost": 2650,
+      "why": "Reads a prep key out of a book, which no vendored book carries yet.",
+      "ing": [
+        {
+          "name": "Rice flour",
+          "name_l": "ಅಕ್ಕಿ ಹಿಟ್ಟು",
+          "qty": "12 Kg",
+          "qty_l": "ಕೆ.ಜಿ."
+        },
+        {
+          "name": "Water",
+          "name_l": "ಬಿಸಿ ನೀರು",
+          "qty": "14 L",
+          "qty_l": "ಲೀ.",
+          "prep": "Hot",
+          "not_bought": true
+        },
+        {
+          "name": "Coconut",
+          "name_l": "ತುರಿದ ತೆಂಗಿನಕಾಯಿ",
+          "qty": "16 Pieces",
+          "qty_l": "ನಗ",
+          "prep": "Grated",
+          "scaled": { "50": "4 Pieces", "100": "8 Pieces" }
+        },
+        {
+          "name": "Green chilli",
+          "name_l": "ಹೆಚ್ಚಿದ ಹಸಿ ಮೆಣಸಿನಕಾಯಿ",
+          "qty": "250 gm",
+          "qty_l": "ಗ್ರಾಂ",
+          "prep": "Chopped"
+        }
+      ],
+      "method": [
+        { "en": "Mix the flour, the coconut and the chilli.", "l": "ಬೆರೆಸಿ." },
+        { "en": "Bring the water to the boil and work it in.", "l": "ಕುದಿಸಿ." }
+      ]
+    }
+  ]
+}

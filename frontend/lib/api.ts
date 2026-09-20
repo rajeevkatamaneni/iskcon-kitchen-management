@@ -573,6 +573,35 @@ export interface MasterRecipeIngredient {
   qtyValue: number;
   qtyUnit: string;
   scaled: Record<string, string> | null;
+  /**
+   * What the cook does to this ingredient — "slit", "roasted", "soaked overnight" — or null
+   * (T-401).
+   *
+   * <p>The book files a name noun-first with the preparation after a comma ("Green chilli, slit"),
+   * and until now that comma was the only record of it: `LibraryLoader` wrote name/qty/qtyValue/
+   * qtyUnit/scaled and nothing else, and `RecipeImportService` re-derived the preparation by
+   * splitting the name again at import time. Rajeev's curated recipes (2026-09-19) removed the
+   * commas and put the preparation in a field of its own, so a curated line carried no preparation
+   * anywhere the split could find it and the note would have come out empty. This field is where it
+   * now lives, from the book through `master_recipes.ingredients` to the screen.
+   *
+   * <p><strong>Required and nullable, not optional.</strong> The server always sends the key; null
+   * means the line has no preparation. Optional would let a fixture omit it and read as "no
+   * preparation" silently, which is the very failure this field exists to stop.
+   */
+  prep: string | null;
+  /**
+   * True where the temple never buys this — water, ice (T-403, Rajeev 2026-09-19).
+   *
+   * <p>It still goes into the pot, still consumes stock and still costs money; it simply never
+   * reaches a shopping list. An ingredient the import creates from a line marked here is created
+   * with `IngredientView.notBought` set, so nobody has to decide it again per list.
+   *
+   * <p>Required, not optional, for the reason `IngredientView.supply` is: the Java field is a
+   * primitive `boolean`, an absent key deserialises to `false`, and `false` is the answer that
+   * quietly puts water back on the order.
+   */
+  notBought: boolean;
 }
 
 /** A library recipe in full. Read-only to a temple; an operator may edit one. */

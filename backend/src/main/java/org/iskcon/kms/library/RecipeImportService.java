@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -50,10 +51,16 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Plans every ingredient line against the temple's catalogue and refuses, having written
  *       nothing, if a line is a close match nobody has answered for (Q-11, below).</li>
  *   <li>Resolves the category, creating it on first use.</li>
- *   <li>Resolves every ingredient by name, creating what is missing. A preparation in the name
- *       ("Cashew, halved") goes on the recipe line as its note, never into a new ingredient. So does
- *       the rest of a name the person has matched to an existing ingredient ("Ginger, peeled", "Use
- *       Ginger": Ginger · peeled; A-N5).</li>
+ *   <li>Resolves every ingredient by name, creating what is missing. A preparation the line states
+ *       in its own {@code prep} field ("Green chilli" + "Slit") goes on the recipe line as its note;
+ *       so does one the older books left inside the name ("Cashew, halved"), recovered by splitting
+ *       it. Neither ever becomes an ingredient. So does the rest of a name the person has matched to
+ *       an existing ingredient ("Ginger, peeled", "Use Ginger": Ginger · peeled; A-N5).</li>
+ *   <li>Marks what the book says the temple never buys, on the ingredients this import
+ *       <em>creates</em> and on no others (T-403). Water arrives as an ingredient that will never
+ *       reach a shopping list; a Water the temple already holds is left exactly as the temple has
+ *       it, and the disagreement is written into the import's audit entry. See
+ *       {@link #resolveIngredients} for the argument.</li>
  *   <li>Writes the recipe and its lines.</li>
  * </ol>
  *
@@ -141,7 +148,8 @@ public class RecipeImportService {
 		Map<String, ImportCloseMatchDecision> answers = answersFor(decisions, listed);
 
 		CategoryResolution category = resolveCategory(master);
-		List<ResolvedIngredient> ingredients = resolveIngredients(actor, plans, listed, answers);
+		Resolution resolution = resolveIngredients(actor, plans, listed, answers);
+		List<ResolvedIngredient> ingredients = resolution.lines();
 
 		UUID recipeId = UUID.randomUUID();
 		jdbc.update("""
@@ -196,6 +204,15 @@ public class RecipeImportService {
 				answered.add(entry);
 			});
 			after.put("closeMatches", answered);
+		}
+		// The book said the temple never buys these and the temple's own rows say it does. The
+		// import does not overrule that (see resolveIngredients), so the entry says so instead of
+		// the disagreement vanishing: this is the one thing about the copy that did not come out the
+		// way the library wrote it, and a Temple Admin asking "why is water still on our order after
+		// we copied Rajeev's recipes" has one entry to find. Left out when there is nothing to say,
+		// like closeMatches above, so an ordinary import's entry reads exactly as it did before.
+		if (!resolution.notBoughtNotApplied().isEmpty()) {
+			after.put("notBoughtNotApplied", resolution.notBoughtNotApplied());
 		}
 		audit.record(actor, AuditAction.RECIPE_IMPORTED, AuditEntityType.RECIPE, recipeId,
 				null, after, null);
@@ -257,6 +274,25 @@ public class RecipeImportService {
 	 * (halved); the preparation goes on the recipe line as its note, and only the ingredient is
 	 * looked for or created.
 	 *
+	 * <p><strong>Unless the line says its preparation outright, in which case that is the answer
+	 * (T-401).</strong> Splitting the name is a reconstruction, and it only works because the
+	 * vendored books file a name noun-first with a comma. Rajeev's curated recipes (2026-09-19) took
+	 * the commas out and put the preparation in {@code prep}: "Green chilli, slit" became "Green
+	 * chilli" with prep "Slit". Split, such a name yields nothing, and all 84 of his notes would
+	 * import empty. So a line carrying a {@code prep} is not split at all — the whole name is the
+	 * ingredient, and {@code prep} is the note, kept in the words he wrote. The split is the
+	 * fallback, for the books that still say it inside the name.
+	 *
+	 * <p><strong>{@link #leftOver} still runs on a curated line, and that is deliberate.</strong> It
+	 * asks a different question from the split: not "which of these words is a preparation" but
+	 * "which of these words is not the ingredient the person just chose". On most curated lines the
+	 * name is the bare ingredient, so it finds nothing and the note is simply the {@code prep} —
+	 * which is the expected answer, not a skipped step. Where a curated name still carries a comma
+	 * because the comma names what the temple buys ("Rice, basmati"), and the person answers "Use
+	 * Rice", "basmati" is as much part of the note as it ever was and is joined to the prep by
+	 * {@link #combineNotes}. Suppressing it would lose a word the library wrote, which is the fault
+	 * A-N5 was raised to fix.
+	 *
 	 * <p>What is looked for is decided by {@link IngredientNameMatcher#findMatch}, the same rule the
 	 * create-and-rename guard uses (R-DUP-2), against every ingredient's name and every alias in
 	 * {@code ingredient_aliases} — so a name merged away ("Curd, sour", now an alias of Curd) finds
@@ -275,14 +311,26 @@ public class RecipeImportService {
 	private List<LinePlan> plan(MasterRecipeView master, List<IngredientNameMatcher.Entry> catalogue) {
 		List<LinePlan> plans = new ArrayList<>();
 		for (MasterRecipeView.MasterRecipeIngredient line : master.ingredients()) {
-			IngredientNameMatcher.Split split = IngredientNameMatcher.split(line.name().trim());
-			String base = split.base();
+			String written = line.name() == null ? "" : line.name().trim().replaceAll("\\s+", " ");
+			String stated = line.prep() == null || line.prep().isBlank() ? null : line.prep().trim();
+
+			String base;
+			String note;
+			if (stated != null) {
+				base = written;
+				note = stated;
+			} else {
+				IngredientNameMatcher.Split split = IngredientNameMatcher.split(written);
+				base = split.base();
+				note = split.preparation();
+			}
+
 			Optional<IngredientNameMatcher.Match> match = IngredientNameMatcher.findMatch(base, catalogue);
 			boolean exact = match.isPresent() && match.get().kind() == IngredientNameMatcher.MatchKind.EXACT;
 			IngredientNameMatcher.Match close = match.isPresent() && !exact ? match.get() : null;
 			String useNote = close == null ? null
-					: combineNotes(line.name(), split.preparation(), leftOver(base, close));
-			plans.add(new LinePlan(line, base, split.preparation(), IngredientNameMatcher.normalise(base),
+					: combineNotes(written, note, leftOver(base, close));
+			plans.add(new LinePlan(line, base, note, IngredientNameMatcher.normalise(base),
 					exact ? match.get().entry() : null, close, useNote));
 		}
 		return plans;
@@ -421,16 +469,61 @@ public class RecipeImportService {
 	 *
 	 * <p>The unit comes from the book's own quantity, which is why it can: all 46,337 ingredient
 	 * lines in the library parse, into five units the catalogue already knows.
+	 *
+	 * <h2>What the book's {@code not_bought} mark does, and what it deliberately does not (T-403)</h2>
+	 *
+	 * <p><strong>It marks an ingredient this import creates. It never changes one the temple already
+	 * has.</strong> Rajeev's curated set marks fifteen lines, every one of them water, and the point
+	 * of the mark is that water never reaches a shopping list again (T-402, V153). Creating Water
+	 * already marked is how a temple loading the catalogue gets that for nothing — and the temple that
+	 * already holds a Water it buys keeps buying it until somebody says otherwise.
+	 *
+	 * <p>The reason for the second half is the permission. Copying a library recipe is
+	 * {@code MANAGE_RECIPES}, which all three kitchen roles hold; marking an ingredient the temple
+	 * never buys is {@code MANAGE_BUYING_POLICY}, which T-402 gave to the Temple Admin alone, behind
+	 * an endpoint of its own that is audited on every move. If an import could flip the flag on a row
+	 * the temple owns, a Kitchen Manager copying a recipe would set a flag they are not allowed to
+	 * set, and it would happen with nothing on the screen to say so. The same reasoning
+	 * {@link #create} already gives for the Ekadashi flag applies with more force here, because this
+	 * one silently removes something from what the temple orders.
+	 *
+	 * <p>Creating a <em>new</em> row marked is a different act and not the same objection: the temple
+	 * held no opinion about an ingredient that did not exist a moment ago, the authority behind the
+	 * mark is the platform operator who curated the book (writing the library is
+	 * {@code MANAGE_RECIPE_LIBRARY}), and the mistake it can make is reversible in the safe
+	 * direction — an ingredient wrongly marked shows up as something missing from an order, which is
+	 * the thing a store keeper notices, and one click on the ingredient clears it. Each such creation
+	 * writes {@code INGREDIENT_NOT_BOUGHT_CHANGED} exactly as the ingredient form does, so "who said
+	 * we never buy this" has one action to grep for whichever route set it.
+	 *
+	 * <p><strong>The mark is per ingredient, not per line.</strong> The keys are collected across the
+	 * whole recipe before anything is resolved, so two lines naming the same thing cannot give
+	 * different answers depending on which came first — a recipe whose water is marked on one line and
+	 * not on another marks it, because a mark is a statement about water and not about a line.
+	 *
+	 * <p>Where the book marks a line and the temple's own row disagrees, the names come back in
+	 * {@link Resolution#notBoughtNotApplied} and are written into the import's audit entry. Silence
+	 * would be the one outcome nobody could act on.
 	 */
-	private List<ResolvedIngredient> resolveIngredients(AuthenticatedUser actor, List<LinePlan> plans,
+	private Resolution resolveIngredients(AuthenticatedUser actor, List<LinePlan> plans,
 			Map<String, CloseMatch> listed, Map<String, ImportCloseMatchDecision> answers) {
+		Set<String> neverBought = neverBoughtKeys(plans);
 		List<IngredientNameMatcher.Entry> createdHere = new ArrayList<>();
 		List<ResolvedIngredient> resolved = new ArrayList<>();
+		// The temple's own rows that the book says it never buys, by id so that two lines naming the
+		// same one are asked about once. Whether each really disagrees is read from the database
+		// afterwards, in one statement — the catalogue this import matched against carries names and
+		// aliases, not flags.
+		Map<UUID, String> alreadyTheirs = new LinkedHashMap<>();
 
 		for (LinePlan plan : plans) {
 			MasterRecipeView.MasterRecipeIngredient line = plan.line();
+			boolean neverBuys = neverBought.contains(plan.key());
 
 			if (plan.exact() != null) {
+				if (neverBuys) {
+					alreadyTheirs.put(plan.exact().id(), plan.exact().name());
+				}
 				resolved.add(new ResolvedIngredient(plan.exact().id(), plan.exact().name(), plan.note(),
 						line.qtyValue(), line.qtyUnit(), false));
 				continue;
@@ -438,26 +531,75 @@ public class RecipeImportService {
 
 			if (plan.close() != null
 					&& answers.get(plan.key()).useIngredientId() != null) {
-				resolved.add(answeredCloseMatch(plan));
+				ResolvedIngredient used = answeredCloseMatch(plan);
+				if (neverBuys) {
+					alreadyTheirs.put(used.id(), used.name());
+				}
+				resolved.add(used);
 				continue;
 			}
 
 			Optional<IngredientNameMatcher.Match> again = IngredientNameMatcher.findMatch(plan.base(), createdHere);
 			if (again.isPresent() && again.get().kind() == IngredientNameMatcher.MatchKind.EXACT) {
+				// A row this very import created, so it already carries whatever the book said: the
+				// keys were collected across the whole recipe before the first one was written.
+				// Nothing to mark and nothing to disagree with.
 				IngredientNameMatcher.Entry found = again.get().entry();
 				resolved.add(new ResolvedIngredient(found.id(), found.name(), plan.note(),
 						line.qtyValue(), line.qtyUnit(), false));
 				continue;
 			}
 
-			ResolvedIngredient created = create(plan.base(), plan.note(), line);
+			ResolvedIngredient created = create(actor, plan.base(), plan.note(), line, neverBuys);
 			if (plan.close() != null) {
-				auditConfirmedDifferent(actor, created, line, listed.get(plan.key()).match());
+				auditConfirmedDifferent(actor, created, line, listed.get(plan.key()).match(), neverBuys);
 			}
 			createdHere.add(new IngredientNameMatcher.Entry(created.id(), created.name()));
 			resolved.add(created);
 		}
-		return resolved;
+		return new Resolution(resolved, stillBought(alreadyTheirs));
+	}
+
+	/**
+	 * What the resolution produced: every line's ingredient, and the names of the temple's own
+	 * ingredients the book says it never buys and that the import left alone.
+	 */
+	private record Resolution(List<ResolvedIngredient> lines, List<String> notBoughtNotApplied) {
+	}
+
+	/**
+	 * The normalised base names any line of this recipe marks {@code not_bought}, collected before
+	 * anything is resolved. Read {@link #resolveIngredients} for why it is a set of ingredients rather
+	 * than a property of each line.
+	 */
+	private static Set<String> neverBoughtKeys(List<LinePlan> plans) {
+		Set<String> keys = new LinkedHashSet<>();
+		for (LinePlan plan : plans) {
+			if (plan.line().notBought()) {
+				keys.add(plan.key());
+			}
+		}
+		return keys;
+	}
+
+	/**
+	 * Of the temple's own ingredients the book marks, the ones the temple still buys — the
+	 * disagreements worth recording. Empty in the ordinary case, including the one that matters most:
+	 * a temple loading the curated catalogue creates Water marked on the first recipe that names it,
+	 * and every recipe after that agrees with the row it finds.
+	 *
+	 * <p>One statement for all of them, and the names come from the row rather than from the match,
+	 * because it is the temple's name for the thing that a person reading the audit will recognise.
+	 */
+	private List<String> stillBought(Map<UUID, String> candidates) {
+		if (candidates.isEmpty()) {
+			return List.of();
+		}
+		String placeholders = String.join(",", java.util.Collections.nCopies(candidates.size(), "?"));
+		return jdbc.queryForList(
+				"SELECT name FROM ingredients WHERE id IN (" + placeholders + ") AND NOT is_not_bought"
+						+ " ORDER BY name",
+				String.class, candidates.keySet().toArray());
 	}
 
 	/**
@@ -611,7 +753,8 @@ public class RecipeImportService {
 	 * had one — the import's own {@code RECIPE_IMPORTED} entry counts them — and still does not.
 	 */
 	private void auditConfirmedDifferent(AuthenticatedUser actor, ResolvedIngredient created,
-			MasterRecipeView.MasterRecipeIngredient line, IngredientNameMatcher.Match match) {
+			MasterRecipeView.MasterRecipeIngredient line, IngredientNameMatcher.Match match,
+			boolean neverBought) {
 		Map<String, Object> lookalike = new LinkedHashMap<>();
 		lookalike.put("id", match.entry().id().toString());
 		lookalike.put("name", match.entry().name());
@@ -624,6 +767,10 @@ public class RecipeImportService {
 		after.put("unit", line.qtyUnit());
 		after.put("ekadashiProhibited", false);
 		after.put("supply", false);
+		// Beside supply, in the order IngredientService.snapshot writes them, so the two routes'
+		// entries still read as one shape (T-403). Unlike the two above it is not always false: an
+		// ingredient created from a line the book marks arrives marked.
+		after.put("notBought", neverBought);
 		after.put("aliases", List.of());
 		after.put("libraryDerived", true);
 		after.put("confirmedDifferentFrom", lookalike);
@@ -634,20 +781,40 @@ public class RecipeImportService {
 						+ "”: confirmed as a different ingredient.");
 	}
 
-	/** Creates {@code base} as a library-derived ingredient of this temple, with the note on the line. */
-	private ResolvedIngredient create(String base, String note, MasterRecipeView.MasterRecipeIngredient line) {
+	/**
+	 * Creates {@code base} as a library-derived ingredient of this temple, with the note on the line
+	 * and — where the book says the temple never buys it — the mark that keeps it off every shopping
+	 * list (T-403, V153).
+	 */
+	private ResolvedIngredient create(AuthenticatedUser actor, String base, String note,
+			MasterRecipeView.MasterRecipeIngredient line, boolean neverBought) {
 		// The catalogue unit is the one the recipe asked in: an ingredient first met as "200 gm"
 		// is catalogued in grams, and every later recipe and stock movement speaks that unit.
 		UUID id = UUID.randomUUID();
 		jdbc.update("""
 				INSERT INTO ingredients (
-					id, tenant_id, name, category, canonical_unit, library_derived)
-				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, true)
-				""", id, base, IngredientCategories.forName(base), line.qtyUnit());
+					id, tenant_id, name, category, canonical_unit, library_derived, is_not_bought)
+				VALUES (?, NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?, true, ?)
+				""", id, base, IngredientCategories.forName(base), line.qtyUnit(), neverBought);
+
+		if (neverBought) {
+			// The same second entry the ingredient form writes when a row is created already marked,
+			// and for the reason its comment gives: "who said we never buy this" should have one
+			// action to grep for, whichever route set it. IngredientService keeps that write private
+			// to itself, so this is the same two maps written here rather than a call across —
+			// asserted against each other in RecipeImportNotBoughtIT so the shapes cannot drift.
+			audit.record(actor, AuditAction.INGREDIENT_NOT_BOUGHT_CHANGED, AuditEntityType.INGREDIENT,
+					id,
+					Map.of("name", base, "notBought", false),
+					Map.of("name", base, "notBought", true),
+					null);
+		}
 
 		// Nothing the import creates arrives pre-flagged for Ekadashi either: the flag is a Temple
 		// Admin's to set, and the import cannot tell a grain from a spice. That is the gap the
-		// warning box on the Recipes page exists to make honest (D-18).
+		// warning box on the Recipes page exists to make honest (D-18). The buying mark above is not
+		// the same case and the difference is the whole of T-403's argument: nobody has to guess it,
+		// because the book states it outright on the line.
 		return new ResolvedIngredient(id, base, note, line.qtyValue(), line.qtyUnit(), true);
 	}
 

@@ -78,8 +78,22 @@ public record MasterRecipeInput(
 	/**
 	 * One ingredient line.
 	 *
-	 * @param qty as a person writes it — "8 L", "200 gm". Parsed on the way in, and refused if it
-	 *            does not resolve: a quantity nobody can compute with is worse than no recipe.
+	 * @param qty  as a person writes it — "8 L", "200 gm". Parsed on the way in, and refused if it
+	 *             does not resolve: a quantity nobody can compute with is worse than no recipe.
+	 * @param prep what the cook does to it — "Slit", "Roasted" — or nothing. Optional, because most
+	 *             lines have none and a book that never wrote one should not force a person to
+	 *             invent one. Capped at 200 with the same message the merge tool uses for the note
+	 *             it writes onto the very same recipe lines ({@code MergeGroupInput.Member}), so one
+	 *             field does not accept what the other refuses. The column it eventually lands in,
+	 *             {@code recipe_ingredients.preparation_note}, is TEXT and has no length of its own
+	 *             — only a check that it is not blank, which is why a blank is stored as null here.
+	 * @param notBought whether the temple never buys this at all — water (T-403). A primitive, so
+	 *             leaving it out means false, and false means the temple buys it. That is the right
+	 *             default for a field being added to an existing body, and it is also the one field
+	 *             here a caller can erase by omission: a tool that reads a curated recipe and writes
+	 *             it back without this key turns water back into something bought. Nothing in the
+	 *             frontend posts a library recipe, so there is no screen to get this wrong; a GET
+	 *             returns it on every line and a faithful round-trip sends it back.
 	 */
 	public record Line(
 			@NotBlank(message = "Enter the ingredient's name.")
@@ -87,6 +101,9 @@ public record MasterRecipeInput(
 			String name,
 			@NotBlank(message = "Enter how much of it is needed.")
 			@Size(max = 50, message = "That amount is too long.")
-			String qty) {
+			String qty,
+			@Size(max = 200, message = "That preparation note is too long.")
+			String prep,
+			boolean notBought) {
 	}
 }

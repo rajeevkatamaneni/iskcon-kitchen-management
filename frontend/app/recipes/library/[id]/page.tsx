@@ -18,6 +18,7 @@ import {
   type ImportCloseMatchView,
 } from "@/lib/api";
 import { ImportCloseMatches, closeMatchesFrom } from "@/components/ImportCloseMatches";
+import { withPreparation } from "@/components/RecipePeek";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { batchCost } from "@/lib/format";
@@ -186,7 +187,9 @@ function LibraryRecipeView() {
             Ingredient as the primary flexible column, Quantity as a fixed figure (reading left, like every column since T-236).
             It was a plain list, so the same dish read two different ways depending on whether the
             temple had added it yet (Rajeev, Decisions Desk, 2026-09-18). The library's quantity
-            arrives as text already written ("2 Kg"), so it is printed as it comes. */}
+            arrives as text already written ("2 Kg"), so it is printed as it comes. The name carries
+            its preparation the way a temple's own recipe does, "Green chilli · slit" — the book has
+            always had one and this screen printed the bare name until T-401. */}
         <div className="table-wrap mt-3 overflow-x-auto">
           <table className={RULED_TABLE}>
             <thead className={THEAD}>
@@ -198,7 +201,7 @@ function LibraryRecipeView() {
             <tbody>
               {recipe.ingredients.map((line, i) => (
                 <tr key={`${line.name}-${i}`} className={TR}>
-                  <td className={TD_PRIMARY}>{line.name}</td>
+                  <td className={TD_PRIMARY}>{withPreparation(line.name, line.prep)}</td>
                   <td className={TD_FIXED_NUM}>{line.qty}</td>
                 </tr>
               ))}
