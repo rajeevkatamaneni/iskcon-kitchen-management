@@ -396,3 +396,34 @@ un-cook it, so a shortfall is booked as `USED_BEYOND_RECORDED_STOCK` instead. Me
 cooking after a single ordering round: **1,574 lines cooked beyond recorded stock against 681
 drawn from it.** Adding rounds afterwards does not repair it; the movements are already written
 and the table is append-only.
+
+**22. The library loader upserts and never deletes.** `POST /api/v1/library/recipes/load` keys on
+`(state_slug, recipe_slug)`, so removing a book from `src/main/resources/recipe-library/` removes it
+from the **jar**, not from `master_recipes`. Measured: after loading the 2 curated books the library
+still read **5,376 across 32 books** — the 44 overwrote 44 matching rows and 5,332 sat untouched,
+still stamped `kranthimj23/ikms@41cf173`, from books whose JSON no longer exists. Removing them is
+`DELETE /api/v1/library/recipes/{id}` one at a time as the super admin; there is no bulk path, and
+SQL is not an alternative because `master_recipes` is behind FORCE row-level security and V68 makes
+deletion an ACTIVE SUPER_ADMIN's act alone — `kms_migration` sees an empty table.
+
+**23. `PlannerKitchenGuard` is about the kitchen, not the role.** An account with MANAGE_MEAL_PLANS
+still gets **403 KMS-400183** on `/api/v1/meals` unless its own kitchen has `uses_meal_planner` (a
+TEMPLE_ADMIN always passes). `GET /api/v1/whoami` answers this directly with **`canPlanMeals`** —
+use it rather than inferring from the role. UAT-093 exists to prove this distinction.
+
+**24. Staging and local disagree about who runs the kitchen.** `ikms.kitchen-staff.5` holds
+KITCHEN_MANAGER locally and plain KITCHEN_STAFF on staging, where **no account holds the manager
+role**. `docs/uat/README.md` lists all five kitchen-staff accounts as kitchen staff, so staging is
+right and the local database is the deviation (`DISPATCH.md` records T-284 making the change and
+calls it "Local"). Resolve the account at run time; never hardcode one.
+
+**25. A socket timeout is not an API refusal, and must be retried separately.** One timed-out
+`/whoami` killed a phase twenty minutes in. `urllib` raises `URLError`/`TimeoutError` rather than
+returning a status, so a client that only retries on 429/502/503/504 does not catch it. Over a run
+making tens of thousands of calls to Cloud Run it is a certainty, not a risk.
+
+**26. Correcting a stock count leaves the reorder threshold stale.** Phase 01 sets the threshold to
+a quarter of the opening count; adjust the count afterwards and the threshold stays where it was —
+ghee holding 490 Kg with a threshold of 11. The low-stock screen then stays silent until there is a
+day's cooking left, which is worse than no warning because it looks like one. `PUT
+/api/v1/inventory/items/{id}` carries `reorderThreshold`; move it with the count.
