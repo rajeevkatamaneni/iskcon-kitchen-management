@@ -1233,6 +1233,72 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-20 — A temple arranges its own left-hand menu, and nothing counted one by one can be a fraction (tasks T-420 to T-427)
+
+**Migration V154**; the next free is V155. **Error codes KMS-400189** (`MENU_LAYOUT_NOT_UNDERSTOOD`),
+**KMS-400190** (`MENU_ITEM_IN_TWO_GROUPS`) and **KMS-400191** (`PART_OF_A_COUNTED_THING`); the next
+free is KMS-400192. No new permission — the menu screen sits behind MANAGE_TEMPLE_SETTINGS, which the
+Temple Admin already holds. **Deployed to staging; not seen working by Rajeev** (the deploy is recorded
+in `docs/work/proof/RELEASE-2026-09-20-menu-layout.md`).
+
+**Settings → Menu.** The left-hand menu was one order for every temple. A Temple Admin can now
+arrange it: drag an item, or move it up, down or into another group without dragging; rename a group,
+add one, delete an empty one, and put the standard menu back. It saves on a Save button rather than
+as you drag, because the arrangement is the whole temple's and a stray drag must not repaint
+everybody's menu; Reset asks first. Every move works from the keyboard and at 390px — drag is the
+enhancement, not the mechanism. The screen has no row of its own in the menu and is reached from
+Settings.
+
+**What the arrangement is, and what it deliberately is not.** It names ids and orders them.
+`frontend/lib/nav.ts` stays the one list of what destinations exist, what they are called and who may
+reach them, and the two are merged at render, so a destination added in a later release is never
+missing from an old arrangement: it lands at the end of its standard group, or under a group headed
+"New" if that group is gone. **It decides order and grouping, never access** — `navForRole` arranges,
+then filters by role, exactly as before — and items are never renamed and never hidden. Stored as a
+`menu_layout` JSONB column on `tenant_settings`, under the RLS that table has carried since V36, so
+no new table and no new policy. Null means "never arranged", which is not the same as "arranged it to
+look standard"; Reset writes null back, so a temple that resets follows the standard menu as it
+changes. Every nav item and group carries a permanent id rather than being keyed on its address,
+because a route that changed would otherwise drop that destination to the bottom of every temple's
+menu. The first group cannot be deleted: it is the standard home of the nine destinations the editor
+never shows — a volunteer's four and the platform operator's five — so deleting it would rearrange a
+menu belonging to somebody the admin cannot see.
+
+**A thing counted one by one is now whole everywhere.** Seeding staging produced 7.2 LPG cylinders,
+3.6 brooms, 2.4 mops and a return of 1.5 aprons, all recorded without complaint, and an apron sitting
+at 88.5 in stock. The application knew the unit was PIECES; nothing in it knew a piece cannot be
+split, and every quantity column is NUMERIC(_, 3). One rule beside `IngredientUnits.requireSameFamily`
+is now called at every server door across **sixteen services**, refusing with KMS-400191 in the
+temple's own words — "Apron is counted in whole pieces. Enter 88 or 89." On screen, **twenty-six
+quantity boxes across seventeen pages** ask one named function what step to carry, and a counted box
+takes `step="1"`, so the browser refuses the fraction before the request is made. The rule is about
+the unit, not the number: PIECES is only the first counted unit.
+
+**And the fractions the application produced for itself.** Scaling a recipe from 40 servings to 250
+asked for 16.78 bananas and 400.98 coconuts, and the cook's job card printed a different figure from
+the stock draw because the card rounded for display and nothing else did. `RecipeScaler` now rounds a
+counted line **up**, once, where the scaled quantity is produced, so the scale preview, the job card,
+the cooking draw, the sufficiency badge and the cost estimate cannot disagree. Up rather than to
+nearest: rounding to nearest tells the kitchen to take 2 while the store gives up 2.1. It moves money
+a little and visibly — a day's estimate of ₹222.00 becomes ₹250.00, cost per serving ₹5.55 becomes
+₹6.25 — and that is the cost of the food actually taken off the shelf.
+
+**Two things still take a fraction, on purpose.** A goods-in pack line accepts 2.8 bags, because that
+is what the vendor delivered and the pack is the measured thing; and a bill can restate a delivery,
+because the paper says what it says. Nothing already stored was rewritten.
+
+**Copying a recipe now says which buying settings it left alone.** The import already refused to set
+"never bought" on an ingredient the temple owns — copying is MANAGE_RECIPES, the buying policy is
+MANAGE_BUYING_POLICY — but the refusal went only into the audit entry's JSON and nowhere a person
+would look, so a Kitchen Manager copied a recipe whose water is marked never-bought, the temple's
+water stayed on the shopping list, and nobody was told. Fifteen times on staging in one week. The
+response now carries the names and both copy screens say them, as a note and not an error.
+
+**Not done:** the "never bought" copy text lives once per copy screen rather than in a shared module,
+guarded by a test that compares the two strings; it should be lifted. Proofs:
+`docs/work/proof/T-420.md` through `T-427.md`; the wave's reasoning, including the eleven decisions
+the menu spec did not settle, is in `docs/work/DISPATCH.md`.
+
 ### 2026-09-20 — The temple's own approved recipes are the library (tasks T-404, T-405, T-406)
 
 **No migration** and **no new error code**; the next free remain V154 and KMS-400189. **Deployed to

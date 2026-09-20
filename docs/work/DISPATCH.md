@@ -19501,3 +19501,893 @@ for credentials before committing: none. Passwords come from the environment and
 to run without them; the Firebase web API key is read from `frontend/.env.local.example`, where it
 already is, because a web API key is not a secret. `.state/` and `__pycache__/` are gitignored by
 `tools/seed/.gitignore`, verified with `git check-ignore` before the add.
+
+## 2026-09-20 — The temple arranges its own left-hand menu (T-420, T-421, T-422)
+
+Approved by Rajeev in the terminal on 2026-09-19 — "go, put it next in line after this release" — and
+specified in `docs/work/NEXT-MENU-LAYOUT.md`. The local playground it grew out of,
+`frontend/app/dev-menu/page.tsx`, is gitignored and never ships; it is read for the interaction he
+liked and for nothing else.
+
+Built in a worktree at `/Users/Rajeev/Workspace/kms-menu-layout`, branch `menu-layout`, off
+`origin/main` at `8e647ad8`. The main checkout is left clean because `infra/deploy.sh` ships the
+working tree.
+
+### The seven decisions this wave had to make, and why
+
+None of them was in the spec. They are written here rather than in a builder's brief because each
+one outlives the task, and because five of the seven become hard to reverse the moment a temple
+saves an arrangement on production — which has not happened yet, so all seven are still free.
+
+**D-M1 — A saved arrangement is never migrated. The two lists are merged at render, every time.**
+`nav.ts` stays the one list of what destinations exist; the stored row is only an *arrangement* of
+ids. So a destination added in a later release is not "missing" from an old arrangement, it is
+simply one the arrangement does not place, and the merge places it: at the end of its standard
+group if that group id is still in the arrangement (even renamed), otherwise at the bottom in a
+group headed "New" — Rajeev's own rule in the spec. A destination **removed** in a later release
+disappears from the menu, and **its id is left in the stored row rather than pruned**, so if it
+ever comes back it comes back where the temple put it.
+
+*Against it:* the row accumulates ids for things that no longer exist, and an item that returns
+jumps to a position set long ago rather than appearing somewhere obvious. Both are small, and the
+alternative is worse: an upgrade-time rewrite needs a migration per release, and a migration that
+rewrites a temple's arrangement cannot be undone.
+
+**D-M2 — An emptied group stays, until the Temple Admin deletes it on purpose.** Two surfaces,
+two answers. In the **menu**, a group with no items the reader may see renders nothing — that is
+already `navForRole`'s rule and it does not change. In the **editor**, a group the admin has
+emptied stays on screen with its empty-state line and stays in the saved row.
+
+The reason is not tidiness. A kept group is where a later release's new destination lands. If
+emptying "Ordering" quietly deleted it, the next release's new ordering screen would turn up at the
+bottom under "New" — a surprising consequence of merely rearranging. And the admin needs somewhere
+to drag an item back into.
+
+*Against it:* a temple that empties a group and forgets it is carrying an invisible heading that a
+later release can silently repopulate. The editor shows it plainly, and Reset clears it.
+
+**D-M3 — Every nav item and group gets a permanent, opaque `id`; the arrangement is keyed on that,
+never on `href`.** Routes have already been kept deliberately stable in this codebase for exactly
+this kind of reason — `/issued-from-store` kept its address when Rajeev renamed it to "Issued to
+kitchens" so that links and bookmarks survived — but a route *can* change, and if it did, every
+temple's arrangement would silently drop that destination to the bottom. One field on 32 items, and
+one assertion in `nav.test.ts`, buys immunity from that.
+
+The initial values are the href with the leading slash off and the rest hyphenated (`/today` →
+`today`, `/settings/occasions` → `settings-occasions`). **That is how they were first chosen, not a
+rule for deriving them again:** from here the id is permanent and independent of the address.
+
+**And `/notices` appears twice in `GROUPS`** — once for the platform operator in the first group,
+once for the Temple Admin under "Temple". Two items, one href. Ids must be unique or the merge
+indexes one over the other, so the operator's copy takes `notices-operator`.
+
+**D-M4 — The arrangement rides on the session (`WhoAmI.menuLayout`), not a fetch of its own.**
+Following `themeId`, whose comment already argues the case: every page mounts its own `Sidebar`, so
+a menu that fetched its own arrangement would ask once per navigation and show the standard order
+for a frame each time. Saving calls `refresh()` from `useAuth`, which is already there.
+
+**D-M5 — The server validates the shape and holds no copy of the menu.** It checks the version,
+the group count, heading length, id syntax and that no destination is listed twice. It cannot check
+that an id *exists*, because the list of destinations is `nav.ts` and a second copy of that list on
+the far side of the wire is a copy that drifts. Unknown ids are harmless by D-M1.
+
+**D-M6 — The screen is `/settings/menu`, reached from the Settings page, with no row of its own in
+the left-hand menu.** Rajeev settled the seven groups item by item on 2026-09-19 and "Menu" is not
+among them; `nav.test.ts` asserts that list precisely so a well-meant addition fails rather than
+ships. A menu row for arranging the menu is also faintly recursive, and it is a thing a temple does
+once. One line in `nav.ts` reverses this if he wants it.
+
+**D-M7 — The editor arranges the Temple Admin's own menu.** The nine destinations no admin can
+reach — the volunteer's four and the platform operator's five — are not on the board. They are not
+lost: the merge puts them in their standard group, which for all nine is the first group, so a
+volunteer's menu is unchanged and an operator (who belongs to no temple, so carries no arrangement)
+is untouched.
+
+**D-M8 — The screen saves on a Save button, not as you drag.** The playground autosaved to the
+browser, which was right for one person trying orders out. This arrangement is the whole temple's,
+so a stray drag must not repaint everybody's menu; and the Settings page's own convention is already
+read-only until you press Edit, then Save or Cancel. Reset to the standard menu asks first, for the
+same reason — it throws away work done for everyone.
+
+**D-M9 — No preview copy of the sidebar.** The playground drew its own left-hand menu by copying
+`Sidebar.tsx`'s class strings verbatim, and said in its own comment that it would go stale. The real
+screen sits inside the application with the real menu already on the left, so the editor's own list
+— groups, headings, items, icons, in order — is the preview, and the menu on the left repaints when
+Save calls `refresh()`. The lesser evil: one list that is always right, rather than two that agree
+until somebody touches the sidebar.
+
+**D-M10 — Drag is an enhancement; nothing depends on it.** HTML5 drag-and-drop does not work on a
+touch screen and cannot be driven from a keyboard, and this screen must work at 390px. So every
+move is reachable without dragging — Move up, Move down, and a "Move to group" control on each item
+— and those are the primary controls rather than the fallback.
+
+**D-M11 — the first group cannot be deleted. Raised by T-422, decided here.** The builder found
+that an admin can delete the first, unheaded group by emptying it, and asked whether that should be
+allowed. It should not. That group is the standard home of the **nine destinations that are not on
+the board** — a volunteer's four and the platform operator's five (D-M7) — so deleting it moves a
+volunteer's whole menu under a heading reading "New", and the admin who did it cannot see that
+happen. Nothing is lost, nothing is hidden and Reset undoes it, so this is not a defect; but a change
+whose only visible effect is on a role you are not looking at is the kind a person cannot learn from.
+The same guard that already refuses to delete the last group refuses this one, with a sentence saying
+why. **Not folded into T-422** — it had already left the tree — so it is T-426.
+
+### Reservations, made before the wave and held by nobody else
+
+| Slot | Allocated | To |
+|---|---|---|
+| Migration version | **V154** — `V154__the_temple_arranges_its_own_menu.sql` | T-420 |
+| Error code | **KMS-400189** `MENU_LAYOUT_NOT_UNDERSTOOD` (400) | T-420 |
+| Error code | **KMS-400190** `MENU_ITEM_IN_TWO_GROUPS` (409) | T-420 |
+| `ErrorCode.java` | Both entries written by the work manager, with their text and next step | nobody |
+| `frontend/lib/api.ts` | `MenuLayout`, `MenuLayoutGroup`, `WhoAmI.menuLayout`, `saveMenuLayout`, `resetMenuLayout` — written by the work manager | nobody |
+| `RolePermissions.java` | **No new permission.** `MANAGE_TEMPLE_SETTINGS` already exists, is the Temple Admin's alone, and is what every other settings endpoint declares | nobody |
+
+`tsc --noEmit` over the whole frontend after the `api.ts` reservation: **0 errors**. The new
+`WhoAmI.menuLayout` is required and nullable on purpose (the T-044 lesson: a spread exempts excess
+properties, never missing required ones), and it broke nothing, because the 131 test files that mock
+`appUser` mock a structural shape rather than `WhoAmI`.
+
+### T-420 — The temple's arrangement is stored, validated, and carried on the session
+- **id:** T-420 · **wave:** M1 · **state:** **proven** 2026-09-20 · **proof:** `docs/work/proof/T-420.md`
+- **result:** numbers read off the JUnit XML, not an exit code. `MenuLayoutSettingsIT` 15/15 new;
+  `TenantThemeIT` 9/9 and `WarningHorizonSettingsIT` 11/11 unchanged and green. Every repo-wide
+  guard run: `ErrorCodeTest` 967, `FieldErrorMessageTest` 6, `NextStepPermissionTest` 6,
+  `RolePermissionsTest` 97, `RowLevelSecurityIT` 30, `TenantLoopMigrationIT` 1, `TenantExportIT` 6,
+  `PermissionBeforeValidationIT` 97 (was 93 — two new probes, each checked twice), all zero
+  failures, `BUILD SUCCESSFUL in 1m 17s`. Two negative controls, each with a one-match anchor
+  assertion, a `cmp` proving the tree changed, `--rerun-tasks` and a trapped restore: validation
+  removed gives `15 tests completed, 3 failed` — exactly the three refusals that carry a code; the
+  arrangement sent as raw text rather than an object gives `15 tests completed, 5 failed` — every
+  test that reaches inside `$.menuLayout`. Restored tree `cmp`-clean on both files and back to 15/15.
+- **decided differently, and it was right:** this brief contradicted itself. It asked for `version`
+  to be bean validation (a field error) and then asked, in acceptance criterion 8, for `version: 2`
+  to answer `400 KMS-400189`. The builder took the code and left `version` unconstrained on the
+  record, because no screen has a version box so a field error would point at nothing — which is
+  the rule `ErrorCode.java`'s own comment states two lines above the code it minted. Asserted both
+  ways in the test.
+- **it also asked who else reads that table, and found one:** no `SELECT *` on `tenant_settings`
+  anywhere in main, but `TenantExportService.writeSheet` takes every column dynamically, so a
+  temple's data export now carries its arrangement. That is correct, and it goes through the same
+  `String.valueOf` path `whatsapp_refused_templates` (also JSONB) has used since V128.
+  `TenantExportIT` green. Nothing sums or counts the table.
+- **small addition it had to make:** a three-line `codeOf` helper in `PermissionBeforeValidationIT`.
+  The reset is the first probe on that list whose permitted answer is a 204 with no body, and
+  `json.readTree(null)` throws. The alternative was leaving the endpoint off the guard entirely.
+- **not verified:** the 200-items-across-the-whole-arrangement bound is implemented but not tested;
+  the bounds either side of it are. And no hand smoke test — there is no user-facing surface in
+  this task.
+- **source:** `docs/work/NEXT-MENU-LAYOUT.md`, Rajeev 2026-09-19.
+- **what:** A nullable `menu_layout JSONB` column on `tenant_settings` — the table that already
+  holds the theme, the locale and the warning horizons, one row per tenant, under
+  `enable_tenant_rls()` since V36 — guarded by `CHECK (menu_layout IS NULL OR jsonb_typeof(
+  menu_layout) = 'object')`. Null means the temple has never arranged its menu, which is not the
+  same as arranging it to look standard, exactly as `selected_theme_id` distinguishes those two.
+  `TenantSettingsService` gains `menuLayout()`, `setMenuLayout(...)` and `clearMenuLayout()` on the
+  `INSERT … ON CONFLICT (tenant_id) DO UPDATE` idiom already in that file. `SettingsController`
+  gains `PUT /api/v1/settings/menu-layout` and `DELETE /api/v1/settings/menu-layout`, each with its
+  own `@PreAuthorize("hasAuthority('MANAGE_TEMPLE_SETTINGS')")`, as every other method there has.
+  `WhoAmIController` puts the stored JSON on the session beside `themeId`.
+- **paths (backend main):** `backend/src/main/resources/db/migration/V154__the_temple_arranges_its_own_menu.sql`
+  (new), `backend/src/main/java/org/iskcon/kms/shift/SettingsController.java`,
+  `backend/src/main/java/org/iskcon/kms/shift/TenantSettingsService.java`,
+  `backend/src/main/java/org/iskcon/kms/auth/WhoAmIController.java`.
+- **paths (backend test):** `backend/src/test/java/org/iskcon/kms/shift/MenuLayoutSettingsIT.java`
+  (new), `backend/src/test/java/org/iskcon/kms/shift/TenantThemeIT.java`,
+  `backend/src/test/java/org/iskcon/kms/shift/WarningHorizonSettingsIT.java`,
+  `backend/src/test/java/org/iskcon/kms/auth/PermissionBeforeValidationIT.java`.
+- **reservations:** V154; KMS-400189 and KMS-400190, both already written into `ErrorCode.java`.
+- **forbidden:** every file under `frontend/`, `ErrorCode.java`, `RolePermissions.java`,
+  `Permission.java`, any other migration.
+
+### T-421 — Nav items get permanent ids, and the menu obeys the temple's arrangement
+- **id:** T-421 · **wave:** M1 · **state:** **proven** 2026-09-20 · **proof:** `docs/work/proof/T-421.md`
+- **result:** whole frontend suite `Test Files 183 passed (183)` / `Tests 2624 passed (2624)`; `tsc
+  --noEmit` exit 0 and silent; `eslint . --max-warnings=0` no output; `next build` `✓ Compiled
+  successfully`, `✓ Generating static pages (76/76)`. Three negative controls, each anchored on a
+  whole statement with `grep -c` asserting one match and each `cmp -s`-proved to have changed the
+  file and been restored: the merge neutered gives `9 failed | 6 passed (15)`, one id shared by both
+  Notices items gives `2 failed | 27 passed (29)`, the sidebar not passing the arrangement gives
+  `1 failed | 8 passed (9)`. The six that pass under the first control are the three access tests
+  and the three fallback tests, which pass vacuously once no arrangement is applied — the proof
+  says so rather than leaving a reader to wonder. An earlier control run failed only seven and
+  exposed two of the builder's own tests passing vacuously; it rewrote both.
+- **exports the next task consumes:** `standardMenu()`, `applyMenuLayout(groups, layout)`,
+  `NEW_GROUP_ID = "new"` and `NEW_GROUP_TITLE = "New"` (the id `"new"` is reserved and must never be
+  minted for a temple's own group), and `navForRole(role, person?, layout?)`.
+- **decided differently, and correctly:** an arrangement that names no group id *and* no item id
+  this menu knows is treated as no arrangement at all. Followed literally the brief's rules would
+  have heaped all 42 destinations under "New" rather than falling back to the standard menu, which
+  is what criterion 12 asks for. An arrangement naming even one recognisable thing is honoured in
+  full.
+- **also changed, and it had to be:** the sidebar's React keys moved off `group.title ?? "main"` and
+  `item.href` onto the new ids. A heading is now something an admin types — two groups may share one
+  or have none — and `/notices` is two items at one address.
+- **not verified:** no hand smoke-test in a running app. Nothing can produce a real `menuLayout`
+  until T-420 and T-422 land, so the column and the phone drawer were checked by rendering them
+  under an arrangement and reading the links back, not by pressing anything.
+- **source:** `docs/work/NEXT-MENU-LAYOUT.md`, Rajeev 2026-09-19.
+- **what:** `NavItem` and `NavGroup` gain a permanent `id` (D-M3). `nav.ts` exports the merge —
+  standard menu plus a temple's arrangement, before the existing role filter — and `navForRole`
+  takes the arrangement as a third argument, defaulting to the standard menu when there is none.
+  `Sidebar.tsx` passes `appUser.menuLayout` through; nothing else about it changes.
+- **paths (frontend):** `frontend/lib/nav.ts`, `frontend/components/Sidebar.tsx`.
+- **paths (frontend test):** `frontend/__tests__/nav.test.ts`,
+  `frontend/__tests__/menu-layout.test.ts` (new),
+  `frontend/__tests__/sidebar-scroll.test.tsx`, `frontend/__tests__/sidebar-names.test.tsx`,
+  `frontend/__tests__/phone-menu.test.tsx`, `frontend/__tests__/staff-kitchen.test.tsx`.
+- **reservations:** none of its own. `api.ts` is done for it.
+- **forbidden:** `frontend/lib/api.ts`, everything under `backend/`, everything under
+  `frontend/app/`.
+
+### T-422 — Settings → Menu: the screen the temple arranges it on
+- **id:** T-422 · **wave:** M2 · **state:** **proven** 2026-09-20 · **proof:** `docs/work/proof/T-422.md`
+- **result:** `frontend/app/settings/menu/page.tsx` and `frontend/components/MenuArranger.tsx` (974
+  lines), a Menu section on the Settings page, 18 new tests. `globals.css` was on the contract and
+  **was not needed** — the survey's read of it was right.
+- **measured, not estimated.** Chrome would not resize below the display width (`innerWidth` stayed
+  1470 through three `resize_window` calls — only the height changed), so each viewport was measured
+  in a same-origin iframe of exactly that size, with `getBoundingClientRect` and `scrollWidth` read
+  from the iframe's own document. The harness was rebuilt after the last edit and the component it
+  served has the same md5 as the tree (`4656368074a56340a1c5c385538c5566`) — which is the check that
+  makes the numbers belong to the thing that was built.
+  - **1280:** `scrollWidth` 1280, widest right edge 1280; `main` 896 wide, 52px to the viewport and
+    52px to the sidebar; 131 controls, **none under 44px**, every button and select exactly 44px tall
+    at 14px; card content gaps 0px at both ends of all 8 cards; longest label "Vendor performance"
+    138/138 on one line. Group-header and item-row controls occupy the same three columns to the
+    pixel — 870–914, 918–962, 966–1158, grips both at x=402.
+  - **390:** `scrollWidth` 390, so **no horizontal page scroll**; 131 controls, none under 44px; card
+    gaps 0; nothing clipped or wrapped (longest label 138px in 306px of room); the sticky action bar
+    at y=56, exactly under the 56px phone bar.
+  - **The one gap over 120px** is inside an item row, 271.8–376.5px at 1280, between the label and
+    the first button. Judged rather than escalated, which is what the rules ask for: read as the
+    two-column table it is, the table rule puts all spare width into the single gap between the two
+    columns, and that is what the rule's own phone layout does with `.kms-actions`. Nothing is
+    squeezed and nothing is clipped.
+- **checks:** `tsc --noEmit` silent; `eslint . --max-warnings=0` no output; whole suite `Test Files
+  184 passed (184)` / `Tests 2642 passed (2642)`; `next build` `✓ Compiled successfully`, `✓
+  Generating static pages (77/77)`, `/settings/menu 5.86 kB`.
+- **negative control:** three breakages, each a whole statement, each `grep -cF`-asserted at one
+  match and `cmp`-proved to have reached and left the tree — merge neutered `2 failed | 16 passed`,
+  the cross-boundary move neutered `1 failed | 17 passed`, refresh neutered `2 failed | 16 passed`.
+  **The guard fired for real once:** a two-line anchor made `grep -cF` report 3, because grep reads a
+  newline in a `-F` pattern as a pattern separator and `await refresh();` appears twice. The script
+  aborted rather than reporting anything. That is condition 5 of the control rules catching a false
+  red before it was believed — worth keeping, because a false red looks like success.
+- **two defects it found in its own work and fixed before reporting**, which is the "after building,
+  check" rule working: the playground's `requestAnimationFrame` focus does not work — after Add group
+  the keyboard landed on `document.body`, because React had not committed yet (replaced with a ref
+  and a post-commit effect, re-measured in the browser); and Save reported a failed session refresh
+  as *"We couldn't save your menu arrangement"*, which is false. The two acts are separate now, and
+  the unsaved marker is measured against what the screen knows it saved, so "Saved." and "Not saved
+  yet" can no longer appear together.
+- **two layout changes it made after measuring:** the group heading box capped at 384px (it stretched
+  the whole card and was the one line that did not read "content left, controls right"), and the
+  group's delete control made a 192px labelled button rather than a trash icon, so its three columns
+  line up with every item row's.
+- **not verified, and Rajeev should press it:** the real menu repainting after Save was never seen in
+  a browser — the harness has no Firebase, so `refresh()` throws in it. Unit-tested only. No server
+  was involved either: `KMS-400189`, `KMS-400190` and the field errors were exercised against a mock,
+  and the screen prevents two of them client-side (`maxLength=40`, New group disabled at 20 groups).
+  Dragging is untested by decision (D-M10) and is the part most likely to have a rough edge. · **proof:** `docs/work/proof/T-422.md`
+- **source:** `docs/work/NEXT-MENU-LAYOUT.md`, Rajeev 2026-09-19; interaction from the playground.
+- **what:** The Settings → Menu screen at `/settings/menu`, Temple Admin only, rebuilding the
+  playground's interaction properly — drag an item, drag a group, Move up / Move down, New group,
+  rename a group, delete a group, Reset to the standard menu — **without** item renaming and
+  **without** hiding, neither of which the product allows. Linked from the Settings page (D-M6).
+- **paths (frontend):** `frontend/app/settings/menu/page.tsx` (new),
+  `frontend/components/MenuArranger.tsx` (new, if the screen is worth splitting),
+  `frontend/app/settings/page.tsx`, `frontend/app/globals.css`,
+  `frontend/__tests__/settings-menu.test.tsx` (new).
+- **reservations:** none of its own. `api.ts` is done for it; `nav.ts` comes from T-421.
+- **forbidden:** `frontend/lib/api.ts`, `frontend/lib/nav.ts`, `frontend/components/Sidebar.tsx`,
+  everything under `backend/`.
+
+### Wave M1 merged-tree backend check — 2026-09-20, by the work manager, after T-420 and T-421 were out
+
+`./gradlew test` over the whole backend on the merged tree, under the `verify-backend` lock, with
+T-422 live in `frontend/` only and nothing in `backend/`.
+
+```
+BUILD SUCCESSFUL in 6m 18s
+```
+and, counted off the JUnit XML rather than taken from the build's own summary or its exit code:
+```
+classes=251  tests=3649  failures=0  errors=0  skipped=7
+```
+
+Read from the log and the XML deliberately. This session has now watched an exit code of 0 sit over
+a failure three times, and the harness work below added a fourth medium: a `next start` that died on
+`EADDRINUSE` into a log nobody read, while an older server on the same port went on answering every
+request — three measurement cycles taken against the previous build before the log was opened.
+**`pkill -f "next start"` does not kill it**: `next start` execs a `next-server` the pattern never
+matches. Kill by port.
+
+The frontend merged-tree run waits for T-422, which is still in the tree.
+
+## 2026-09-20 — A counted thing cannot be a fraction (T-423 onward, wave M3)
+
+From the coordinator, 2026-09-20, independent of the menu work and dispatched alongside it. Seeding
+staging produced **7.2 LPG cylinders, 3.6 brooms, 2.4 mops and a return of 1.5 aprons**, and the
+application recorded every one without complaint; an apron ended up sitting at **88.5** in stock. It
+knows the unit is PIECES. It does not know that a piece is indivisible.
+
+The rule to build: anything measured in a `Unit.Family.COUNT` unit is a whole number wherever a
+person or the API can enter it — ordering, receiving, rejecting part of a line, returning, issuing
+to a kitchen, an ingredient request, a stock count or correction, opening stock, a recipe line, a
+meal's actuals, and anywhere else the survey turns up.
+
+**Existing rows stay exactly as they are.** Goods receipts are append-only and 25 fractional lines
+are already written on staging. They record what was entered, which is honest. No migration rewrites
+history; this is about what can be entered from here.
+
+### The three decisions the coordinator asked for
+
+**D-C1 — One rule, called at two depths. Not a bean-validation annotation, and not eleven copies.**
+The survey settled this by finding that **a quantity learns its unit three different ways**: it is on
+the request (`PoLineInput`, `RecipeIngredientLine`, `AdjustStockRequest` and eight more); it is the
+ingredient's canonical unit read from the database (the whole receiving family carries **no unit at
+all** — a receipt's quantity is in the PO line's unit); or it is the recipe's yield unit (`DishDraft`,
+`DishRecord`, `DishCorrection`, `ConsumeRequest`). A `ConstraintValidator` sees only the record in
+front of it, and no validator in this tree reads the database, so for two of those three the
+annotation cannot answer the question at all. The two custom constraints that do exist —
+`NotAtZeroZero` and `PortionFitsYield` — both work precisely because everything they compare is on
+one record.
+
+So: **one rule object, a dozen call sites.** It goes beside `IngredientUnits.requireSameFamily`,
+which is already the "may this quantity be said about this ingredient" rule and already has six call
+sites, with a unit-and-number entry point for the paths that hold a `Unit` and an ingredient-keyed
+one that resolves the unit first.
+
+**And two depths, which is one rule rather than two.** `StockMovementService.validate` is the choke
+point all eight ledger-writing services pass through, and its own comment already states the
+convention: *"The ledger is the last line of defence, not the first (BL-9) … this is the one gate all
+of them pass through."* But it covers only half the doors — recipe lines, PO lines, shopping-list
+lines, meal plans, pack sizes, library imports and invoice lines never write a stock movement. So the
+door the person came in by refuses first, so the message lands on the right screen, and the ledger
+refuses last, so nothing reaches it by a path nobody thought of. That is exactly what BL-9 already
+does for unit families.
+
+**D-C2 — `KMS-400191 PART_OF_A_COUNTED_THING`, with the specifics travelling in `fieldErrors`.**
+`ErrorCode`'s text is static and there is no override anywhere in the codebase; the only per-instance
+channel that reaches a reader is `ApplicationException`'s `details`. Two precedents, both correct and
+both about this shape: `IngredientUnits:63-77` files `INCOMPATIBLE_UNIT` with **the ingredient's name
+in the `field` slot**, and `IngredientIssueService:117-140` files a **computed, unit-formatted
+number** through `Quantities.cooks`. So the static words stay unit-neutral — *"Some of these are
+counted one by one, so a part of one can't be entered."* / *"Round the amounts marked below to a
+whole number and try again."* — and each bad line carries its own sentence: *"Apron is counted in
+whole pieces. Enter 1 or 2."* Name, plain language, and the nearest whole number offered, which is
+what was asked for.
+
+It is **not** folded into `INCOMPATIBLE_UNIT` (400013). That is the family question — is this
+quantity even sayable about this ingredient. This is a unit that fits perfectly and a number that
+does not, and somebody told *"that quantity is in a unit this ingredient can't be measured in"* after
+typing 1.5 aprons goes looking for the wrong mistake.
+
+**D-C3 — The box takes `step="1"`; the sentence already exists.** `formMessages.wholeNumber` at
+`frontend/components/ds/formMessages.ts:78` already reads ``${name} must be a whole number`` and is
+already wired to the browser's native `stepMismatch` at `:144`. **What suppresses it is `step="any"`,
+which is on 25 of the 28 unit-bearing quantity boxes.** Three pack-count boxes already use `step="1"`
+deliberately, and the comment at `orders/new/page.tsx:599` is the precedent for the whole task. So
+the frontend work is a named "is this unit counted" rule in `format.ts` — the frontend has no
+`Family` concept and identifies a count today by its *absence* from a map, which is a rule nobody can
+read — plus the `step`, plus the six screens that sit outside the shared `<Form>` and hand-roll their
+own error slots. Those six are the real work.
+
+**`frontend/app/globals.css` needs no edit**, which is what makes T-424 safe to run beside T-422.
+
+### Split into two, and both dispatched at once
+
+- **T-423 — backend: the rule and every server door.** Wide contract across `backend/src/**`, because
+  the rule is genuinely cross-cutting and nobody else is in `backend/`. Forbidden: `ErrorCode.java`
+  (reserved and written), `RolePermissions.java`, `Permission.java`, T-420's four files, **the whole
+  migration directory**, and all of `frontend/`.
+- **T-424 — frontend: a counted box will not take a fraction.** `frontend/lib/format.ts`, the 18
+  screen and component files, `ds/formMessages.ts` and `ds/Form.tsx` if needed, and the ~35 existing
+  tests that cover them, granted up front. Forbidden: `globals.css`, everything T-422 holds,
+  `nav.ts`, `Sidebar.tsx`, `api.ts`, all of `backend/`.
+
+They are disjoint from each other and from T-422. **No migration in either.**
+
+**Reserved:** `KMS-400191 PART_OF_A_COUNTED_THING` (400), written into `ErrorCode.java` by the work
+manager. No new permission — nothing about this changes who may do what.
+
+*A note on the survey that produced all of the above: it reported the highest allocated error code as
+`400174`. It was wrong — `400188` was the highest, and 400189/400190 had just been taken. The number
+was re-established with a `grep` against the file before 400191 was minted. The protocol already says
+this about migration versions — establish the highest from `ls`, never from the table — and it holds
+for anything a report asserts about the tree.*
+
+**Surveyed before dispatch, on purpose.** A cross-cutting rule needs its paths mapped before its
+contracts can be written, and this one had to come out disjoint from T-422, which holds
+`frontend/app/settings/`, `frontend/components/MenuArranger.tsx` and `frontend/app/globals.css` while
+it is flying. The protocol's own lesson applies exactly here: *a ledger describes the tree it was
+written against, and only the tree describes the tree* — wave 7 lost a round trip to two contracts
+naming files that did not exist. The survey found 65 source files, ~45 backend test classes and ~35
+frontend test files, and it is what the two contracts below are written from.
+
+### T-423 widened mid-flight — the arithmetic, not only the typing (2026-09-20)
+
+The coordinator widened it: *"a countable thing is whole wherever the application produces a number,
+not only where a person enters one."* Staging's stock screen reads **Banana 16.78, Coconut 400.98,
+Lemon 170.74**. Nobody typed those. A dish for 140 people is scaled from a recipe written for 200 and
+the requirement is drawn from stock as 0.78 of a banana. A real temple sees this on day one.
+
+**Ownership checked before widening, as the protocol requires.** The two other builders in the air
+are frontend-only — T-422 holds `frontend/app/settings/`, `MenuArranger.tsx`, `globals.css` and its
+own test; T-424 is forbidden `backend/` outright. Neither holds `recipe/`, `costing/`, `document/`,
+`inventory/` or `meal/`. T-423's contract already covered them, so this is one builder being told
+more, not a second builder entering a file.
+
+**What the widening found before it was written**, so the builder did not have to: the disagreement
+is already built into the type. `recipe/ScaledQuantity.java`'s own javadoc says it carries *"the
+unrounded `rawQuantity` … (for downstream calculation) and a rounded, unit-promoted
+`displayQuantity` … (for a human)"*. The screen shows the rounded figure and the draw uses the raw
+fraction — the "money and quantity tell different stories" problem, present before anybody asked
+about it. Its consumers are the blast radius: `costing/BasketCostingService`,
+`document/JobCardService`, `document/DocumentGenerationService`, `inventory/CommittedStockService`,
+`inventory/InventoryConsumptionService`, `meal/SufficiencyService`, `recipe/RecipeService`. And
+`ingredient/Quantities.java:149-153` already rounds a COUNT unit **HALF_UP for display only**, which
+is why a screen can print "17" while 16.78 is drawn.
+
+**Round up, never to nearest** — you cannot use 0.78 of a banana.
+
+**Three things the brief pinned rather than left open:**
+- **Scale first, round once, at the end.** 0.25 coconut per head across 800 heads is 200 coconuts.
+  Rounding each head's share first makes it 800. That exact test was asked for by those numbers.
+- **Round where the application *produces* a number; never where it *displays a stored one*.** An
+  apron already at 88.5 and a banana already at 16.78 go on reading 88.5 and 16.78. A screen that
+  quietly rounds a stored figure hides the very damage this work exists to stop.
+- **The money follows the quantity.** If cost comes from the drawn figure it rises slightly and
+  consistently; if it comes from the unrounded one the two disagree on screen, which is worse than
+  either. Read from the code, decide, and say what it does to a cost per serving.
+
+Left to the builder, to decide from how the draw is actually assembled: three dishes each needing
+0.4 of a coconut — three coconuts, or aggregate to 1.2 and round once to two.
+
+**And it was given leave to decline.** If the combined scope is too large to do well, it reports the
+entry-doors half cleanly and stops, and the scaling path becomes its own task with nobody else in
+those files. A sprawl would be worse than a second wave.
+
+### T-423 declined the widening, correctly, and the scaling path becomes T-425 (2026-09-20)
+
+The builder took the offer and stopped at the entry doors. Its two reasons are better than the
+widening was:
+
+- **Size.** The doors are ~18 services, a new IT, the repo-wide guards and a 6m18s suite run. The
+  scaling half is 7 consumer services, a money decision, and a re-baseline of every costing, job-card
+  and sufficiency expectation.
+- **They are different kinds of change.** The doors refuse input and move no stored number. The
+  scaling half changes what the application *computes*, including what a temple is charged per
+  serving. **Landing both in one unreviewed tree means that if the suite goes red nobody can tell
+  which half did it.** That is the argument, and it is the right one.
+
+**Four facts T-425 must not re-derive.** Each cost the builder real work and each is measured rather
+than assumed:
+
+1. **The ledger's last line of defence is gated on the movement kinds whose figure a person typed** —
+   PO_RECEIPT, DONATION_IN_KIND, RETURN_TO_VENDOR, ADJUSTMENT. CONSUMPTION, ISSUE and
+   USED_BEYOND_RECORDED_STOCK are deliberately **not** gated, and **must stay ungated even after the
+   scaling half rounds at production**: FEFO splits a whole requirement across batches, so drawing 5
+   whole aprons from lots holding 2.5 and 86 still posts a 2.5 movement. The existing fractional rows
+   make that permanent.
+2. **`StockMovementService.compensate` goes straight to the insert past validation and must not be
+   gated.** Its own comment already says why: *"a movement written before the unit rule existed is
+   exactly the one somebody needs to reverse."* That is how 88.5 comes off.
+3. **The shipped library data is clean — parsed, not assumed.** Across `recipe-library/karnataka.json`,
+   `andhra_pradesh.json` and `prep-book/curated.json`: 458 quantity strings, 35 in a COUNT unit, and
+   **every one of the 35 is whole** (16 Pieces, 150 Nos, 25 pieces…). All 23 fractional quantities in
+   the books are mass or volume. **So the fractions on the stock screen are produced entirely by the
+   scaler, not carried in by the data** — which confirms the coordinator's diagnosis and means T-425
+   has no data cleanup in front of it.
+4. **"Aggregate, then round once" is already the code's answer, within a dish.**
+   `InventoryConsumptionService.computePlan` merges per ingredient before allocating —
+   `requiredBase.merge(line.ingredientId(), …, BigDecimal::add)`, commented *"a recipe may list one
+   more than once, and each must draw from the shared batch pool, not see the full stock
+   independently"* — and `IngredientIssueService` does the identical merge for the same stated reason.
+   **But it aggregates only within one dish**: three dishes are three separate `consume` calls, so
+   three 0.4-coconut dishes are three draws unless something above the dish aggregates. And
+   `RecipeScaler.ratio` is applied once to the line, so scale-then-round is already the shape — the
+   risk is a consumer that rounds *before* the multiply.
+
+**Not dispatched concurrently, and the builder's own note is the one thing it got wrong.** It said
+the two halves do not collide and T-425 could start immediately. That is true of the *rules* and not
+of the *files*: `RecipeService`, `ShoppingListService`, `IngredientRequestService`,
+`InventoryConsumptionService` and `ingredient/Quantities.java` are plausibly in both sets, and this
+protocol prevents collisions by disjoint paths, not by disjoint reasoning. Two agents in
+`InventoryConsumptionService` costs the wave; waiting for a builder that is already writing its proof
+costs minutes. **Where it is in doubt, do not parallelise it.** T-425 is written from T-423's actual
+touched-file list once it is out of the tree.
+
+### T-426 — The first group cannot be deleted
+- **id:** T-426 · **wave:** M2 · **state:** **proven** 2026-09-20 · **proof:** `docs/work/proof/T-426.md`
+- **source:** raised by T-422 in its own proof; decided as D-M11 by the work manager.
+- **paths:** `frontend/components/MenuArranger.tsx`, `frontend/__tests__/settings-menu.test.tsx`.
+- **result:** the Delete button on the protected group is disabled with its own sentence, written the
+  same way as the existing last-group refusal. Emptying it is untouched. 18 → 23 tests.
+- **it settled the open question from the code, which is what it was asked to do.** The guard keys on
+  the **id, not the position**: `applyMenuLayout` places an unplaced destination with
+  `mergedById.get(group.id)` where `group` is the *standard* group, so it asks whether that group's id
+  is still in the arrangement and never looks at order or heading. And it did not hard-code `"main"` —
+  the protected set is derived from `nav.ts` as *"a standard group holding a destination no Temple
+  Admin can reach"*, which is the actual reason for the rule and yields `{main}` today. Precedence
+  when both refusals are true: the last-group sentence wins, which is also what keeps T-422's
+  existing test passing unchanged.
+- **the copy:** *"Other people see destinations in this group that you can’t, so it can’t be deleted.
+  You can still move your own items out of it."* No menu path named, per the standing rule.
+- **measured:** own harness on port 3102, md5 of the served component identical to the tree. The three
+  control columns are T-422's numbers to the pixel — 870–914, 918–962, 966–1158 at 1280 — in the
+  group carrying the sentence and in one that is not; every control still 44px at 14px; `scrollWidth`
+  equals the viewport at both widths; nothing clipped. **The one change it found and reported rather
+  than glossed:** everything below the first card moves down 28px at 1280 and 68px at 390, because
+  the sentence is one line at 1280 and three at 390.
+- **hand-driven in Chrome:** emptied the protected group (stays, empty-state line, still refused);
+  moved Ordering to the top and the now-first group was deletable while the no-longer-first protected
+  one was not — which is the id-not-position rule demonstrated by hand; deleted a six-item group
+  through its panel.
+- **checks:** `tsc` exit 0 and silent; `eslint --max-warnings=0` silent; `next build` `✓ Compiled
+  successfully`, 77/77 static pages, `/settings/menu` 5.96 kB. Negative control with single-line
+  anchors, `grep -cF` count asserted at 1 and `cmp -s` both ways: guard out → `5 failed | 18 passed`,
+  so the new tests are real and T-422's 18 are untouched by it; precedence out → `2 failed`, T-422's
+  last-group test among them.
+- **a guard it stepped out from under, and said so.** Moving the two refusal sentences out of JSX text
+  into a helper means `design-system.test.ts`'s prose scanner no longer reads them for
+  apostrophe/semicolon/ALL-CAPS. It pinned both strings literally in its own tests instead, so a
+  future edit still fails something — but it fails a test that knows the string, not a guard that
+  knows the *rules*. Accepted here because the strings are pinned and correct; **recorded because the
+  general move is how a repo-wide guard quietly loses coverage**, and the next person to lift copy out
+  of JSX should know that is what they are doing.
+- **open for Rajeev:** at 390 the sentence is three lines and permanently on the board — a judgement,
+  since a disabled button offers no tooltip to touch or keyboard. Dropping the second sentence halves
+  it and costs the next step.
+
+### T-423 — A counted thing cannot be a fraction: the rule, and every server door
+- **id:** T-423 · **wave:** M3 · **state:** **proven** 2026-09-20 · **proof:** `docs/work/proof/T-423.md`
+- **source:** the coordinator, 2026-09-20, from staging's 7.2 cylinders, 3.6 brooms, 2.4 mops and 1.5 aprons.
+- **result:** one rule in `ingredient/IngredientUnits.java` beside `requireSameFamily`, with three
+  entry points — `requireWhole(name, qty, unit)` for paths holding a unit, `requireWhole(
+  ingredientId, qty)` for paths holding only an id, and a `Whole` collector so a twenty-line form
+  names every bad line in one refusal, copied from how `IngredientIssueService` builds its
+  shortfalls. **16 services** covered: ordering (catalogue and described one-offs), receiving
+  (received *and* rejected, which also covers Record a delivery), return to vendor, invoice billed
+  quantities, stock count/correction/opening count, shopping-list add and edit, pack sizes, gifts of
+  goods, ingredient-request lines and dishes, issuing to a kitchen, recipe yield and ingredient
+  lines, planned dish targets, recorded cooked and consumed figures, cooking a recipe, library
+  curation, the library import path — plus the ledger.
+- **why the rule lives there rather than in `Quantities`:** it is the same question the file already
+  answers, `find()` already returns the name and canonical unit the message needs, and
+  `IngredientUnits.java` is **already on `UnitLabelAgreementTest`'s allow-list** of files that may
+  read `Unit.label()`. Anywhere else would have added a file to that list for nothing.
+- **the design decision that matters, and it had to be made:** the ledger's gate is **scoped**.
+  `StockMovementService.validate` is the choke point for eight write paths; four carry a typed figure
+  and three carry one the application worked out. Cooking a recipe scaled to 12 L genuinely needs 2.4
+  coconuts, and FEFO splits a whole requirement across batches, so issuing five whole aprons out of
+  lots holding 2.5 and 86 posts a 2.5 movement. **An unconditional check there would have stopped the
+  temple cooking and made the existing fractional staging rows undrawable** — which acceptance
+  criterion 7 forbids. So `ENTERED_BY_A_PERSON` is `{PO_RECEIPT, DONATION_IN_KIND, RETURN_TO_VENDOR,
+  ADJUSTMENT}`, those three are gated at their own doors on the figure the person typed, and a test
+  asserts the derived draws still go through.
+- **numbers, parsed from the JUnit XML rather than the summary:** new `ingredient/
+  PartOfACountedThingIT` **28 passed, 0 failed**, `BUILD SUCCESSFUL in 14s`. Whole suite
+  **`classes=252 tests=3682 failures=0 errors=0 skipped=7`**, `BUILD SUCCESSFUL in 7m 20s`, against
+  the 3649/251 baseline — +33, 28 of them its own. Every named guard green, `ErrorCodeTest` at 972.
+- **negative control:** patched `isWhole`, the single method both entry points funnel through, so one
+  anchor kills the rule at every door — `14 failed, 14 passed`, `tests="28" failures="14"`,
+  `5 actionable tasks: 5 executed` under `--rerun-tasks`, restored and `cmp`-verified. **The 14 that
+  pass are the criterion-4 tests, which pass vacuously once the rule is gone, and the builder
+  predicted that count before running it.**
+- **left alone on purpose, with reasoning:** reorder thresholds, every price and rate, `perHeadQty`
+  (a portion is per one person, and 2.5 idlis a head is ordinary), `packCount`, `preview` (a read),
+  and the shopping list's computed suggestion — which `BuyingAmount` already CEILINGs.
+- **two judgements Rajeev may want to overturn, each a one-line change.** A **recipe's ingredient
+  line** is held to the rule, though a recipe is arguably a ratio and cooks do halve coconuts — the
+  builder measured before deciding: of 458 quantity strings in the three shipped recipe books, 35 are
+  counted and **all 35 are already whole**, so nothing the temple cooks is refused. And an
+  **invoice's billed quantity** is held to it, so a bill against one of the 25 pre-existing
+  fractional staging deliveries must be entered whole.
+- **one operational cost, stated rather than hidden:** a receipt line sitting at 7.2 can be returned
+  at 7 but not 7.2, so 0.2 stays on the books. Deliberate — `compensate` reverses past validation and
+  is the route out, which is why no "return exactly what was recorded" exception was added.
+- **not verified:** no hand smoke-test. Shared worktree, ports not its own, another builder owned the
+  input side of those screens. Everything is proven against a real PostgreSQL through MockMvc and the
+  service layer, nothing in a browser. **The field error is keyed on the thing's name, exactly as
+  `KMS-400013` already is — somebody should check it lands beside the right box.**
+
+### T-425 — dispatched 2026-09-20, after T-423 left the tree
+The scaling half, written from T-423's exact touched-file list rather than from a guess, so no two
+agents are ever in one file. Its contract carries the six findings above, the `ScaledQuantity`
+diagnosis, and one warning worth repeating: **`RecipeScalerTest` asserts fractional counts today** —
+`scale(10, PIECES, 0.4)`, a `0.999` vector commented *"0.999 is shown '1' … The raw value is …"*, and
+`1.004`/`1.005` boundaries. T-425 rewrites those vectors, so a red suite there is expected and is not
+the builder's mistake. It was told to record what each vector asserted before and after, so a reader
+sees a change of intent rather than a test bent to fit.
+
+### T-424 — A counted box will not take a fraction
+- **id:** T-424 · **wave:** M3 · **state:** **proven** 2026-09-20 · **proof:** `docs/work/proof/T-424.md`
+- **result:** one named rule in `frontend/lib/format.ts` — `UNIT_FAMILY`, mirroring `Unit.Family` in
+  `Unit.java`, plus `isCountedUnit` / `stepForUnit` / `inputModeForUnit`. **26 quantity boxes across
+  17 files** now ask it for their `step` instead of hard-coding `step="any"`; adding crates or sacks
+  later is one line and every box inherits it. The screens outside the shared `<Form>` say the same
+  sentence from the same function — one new export, `formMessages.wholeNumberProblem(name, step,
+  value)`, wrapping the existing `wholeNumber`. **It takes the box's own `step` rather than its
+  unit, so the attribute and the sentence cannot disagree.** 25 files changed, all inside the
+  contract. `globals.css` untouched; `api.ts` needed no change, because every view model already
+  carried `unit`.
+
+- **Two things in my brief were wrong and would have shipped as defects.** Both are mine, not the
+  builder's, and both are the reason a builder is asked to push back:
+  - **A pack line at the goods-in gate must still take part of a bag.** The precedent I quoted — *"a
+    vendor sells whole bags"* — is about **ordering**, not **receiving**. `RecordDeliveryPanel` has
+    supported a partial bag deliberately since T-266 and the repo tests it: *"accepts part of a pack:
+    2.8 bags still to come reads so, and sends 70 Kg"*. The builder's first version put `step="1"`
+    there and broke that test. Corrected: the pack box keeps `step="any"` and the rule moved to the
+    **stock amount**, which is the figure that actually cannot be fractional — 2.8 boxes of a dozen
+    aprons is 33.6 aprons. Refused; 3 boxes accepted.
+  - **A bill has to be able to restate that delivery.** The same error in `InvoiceItemsTable`, caught
+    by reasoning rather than by a test. Corrected the same way: only a line billed in a counted
+    *unit* steps by 1.
+
+- **The survey was wrong in four places, and the builder checked rather than trusted it.** Line
+  numbers had drifted 2–3 lines; two of its three "already `step=1`" sites are one conditional box
+  each, counted twice; and **it is five files outside `<Form>`, not six, and not the five it
+  named** — `InvoiceItemsTable` and `KitchenSections` are both inside one, and it missed
+  `MealServices`' `RecordMeal`, a bare `<section>` on a planner page. `MealServices` has boxes on both
+  sides of that split: the correction form ten lines below **is** inside a `<Form>`. This is the
+  protocol's own rule arriving in a third medium — *a survey describes the tree it was written
+  against, and only the tree describes the tree.*
+
+- **measured, and the measurement method had to be replaced.** `resize_window` could not move
+  `innerWidth` off 600, so no number from a real window could be trusted to be at the width claimed.
+  The builder used a headless Chrome on its own debug port with `Emulation.setDeviceMetricsOverride`;
+  every run reports `clientWidth` and it reads 1280 and 390 exactly. Two full `next build` harnesses,
+  before and after, both logs confirmed `✓ Ready`, both killed by port.
+  - **Every box rectangle is byte-identical before and after**, at both widths — the in-table reorder
+    box `926.8,255 43.8x44 → 926.8,255 43.8x44` at 1280; the shopping-list line box
+    `107.3,602 80x36 → 107.3,602 80x36` at 390. Counted boxes went `step any→1`, `inputmode
+    none→numeric`; the Kg box stayed `any`.
+  - **No horizontal page scroll at 390**: `scrollWidth` 390 against a 390 viewport, both screens,
+    before and after.
+  - **The "2792" rule holds**: the in-table box grows `28.8 → 41.0 → 51.4px` for `10 / 2792 / 88888`
+    at 390, `clipped=False` throughout, page still 390.
+  - **The refusal itself rendered at 390**: *"Tell me when Apron drops below must be a whole
+    number"*, `x=41 w=308` in a 390 viewport, not clipped, on its own line under the box, the box
+    still holding `3.6`.
+  - **Existing fractions still display**: Inventory renders "88.5 pieces" and "7.2 pieces", and
+    *Everything arrived* on a line owing 88.5 aprons fills the box with 88.5. That is the
+    round-what-you-produce-never-what-you-store rule, checked rather than assumed.
+- **checks:** whole suite `186 files / 2694 tests passed`; tsc 0, lint 0, `next build` 0. **Two
+  earlier suite runs failed (2, then 3) and are written up in the proof rather than dropped** — one
+  of them **exited 0 while the log said `3 failed`, because the command was piped into `tail`**. That
+  is the seventh instance today, and it is the reason every number in that proof is read from a log.
+- **negative control:** broke `isCountedUnit` to answer `false` — one anchor, `grep -c` asserted at 1
+  — **19 of 57 failed**, restore `cmp`-verified byte-identical. The four "still takes a fraction"
+  tests are **not** among the 19: they pass with the rule switched off, and the proof says so plainly
+  rather than letting the count read as a hole.
+- **open for Rajeev:**
+  - **Two sentences read awkwardly**, and it is a copy call rather than a code one: *"Tell me when
+    Apron drops below must be a whole number"* and *"Issued Apron must be a whole number"*. Each uses
+    the box's own accessible name, which is what `Form` does everywhere and is already how those
+    fields word their other refusals. Fixing it means renaming the fields. One deliberate exception
+    on the delivery panel, whose name is *"Apron received now, in Kg"* — the comma clause cannot take
+    the phrase, so those two use the name up to the comma.
+  - **Two pre-existing touch-target shortfalls at 390, measured and unchanged by this task:**
+    shopping-list line boxes are **36px** tall against the 44 the rule asks for, and the in-place
+    reorder box is **28.8px** wide. Not fixed — `globals.css` belonged to another builder this wave,
+    and it is a layout judgement. **This is a real finding that predates the wave.**
+  - **The two corrections above are worth his eye**, because they contradict what the brief assumed.
+    If he would rather the gate could *not* write down 2.8 bags, that is a product change and bigger
+    than this task.
+
+### Merged-tree frontend check — 2026-09-20, after T-422, T-424 and T-426 were all out
+
+Run under the `verify-frontend` lock with only T-425 still live, and T-425 is in `backend/` alone.
+`tsc --noEmit && eslint --max-warnings=0 && vitest run && next build`, in one command:
+
+```
+ Test Files  186 passed (186)
+      Tests  2694 passed (2694)
+ ✓ Compiled successfully
+ ✓ Generating static pages (77/77)
+```
+
+`grep -cE "failed|FAIL|error TS|✗"` over the whole log returns **0** — read from the log rather than
+taken from `work-lock`'s `exited 0`, which has sat over a failing build **seven times today**, once
+inside a builder's own run because the command was piped into `tail`.
+
+This is the run no builder can do for itself: a targeted run never loads a repo-wide guard, and the
+three frontend guards here — `design-system.test.ts`, `invalid-border.test.ts`, `table-rule.test.ts`,
+all tree-walkers — belong to no wave's files. It also picks up the one cross-builder interaction
+nobody owned: T-426 reported `record-delivery-panel.test.tsx` red at 02:45, which was T-424's file
+mid-edit and is green here.
+
+The merged-tree **backend** check is re-run after T-425 lands, because T-425 changes what the
+application computes.
+
+### T-425 — A countable thing is whole wherever the application produces a number
+- **id:** T-425 · **wave:** M3 · **state:** **proven** 2026-09-20 · **proof:** `docs/work/proof/T-425.md`
+- **source:** the coordinator, 2026-09-20 — Banana 16.78, Coconut 400.98, Lemon 170.74 on staging's
+  stock screen, none of them typed by anybody.
+- **result: the rounding is one line**, in `RecipeScaler.scale`:
+  ```java
+  if (unit.family() == Unit.Family.COUNT) {
+      BigDecimal whole = raw.setScale(0, RoundingMode.CEILING);
+      return new ScaledQuantity(whole, unit.name(), whole, unit.label(whole));
+  }
+  ```
+  It was `round(raw)` into `displayQuantity` with the raw fraction left in `rawQuantity` — the screen
+  showing one number while everything else used another.
+- **why there, proved from the code rather than taken from the brief.** `RecipeScaler.scale` is
+  called from exactly one place (`RecipeService:203`), and `RecipeService.scale`/`scaleAll` from
+  exactly six — `BasketCostingService:67`, `JobCardService:685`, `DocumentGenerationService:441`,
+  `InventoryConsumptionService:278`, `CommittedStockService:279`, `RecipeController:118`. **Every one
+  reads `rawQuantity`; none reads `displayQuantity`.** `SufficiencyService` does no scaling of its
+  own. So one rounding at the production point is the only change that makes all of them agree, and
+  **no other service needed touching.** `ScaledQuantity`'s two fields now hold the same number for a
+  count, documented rather than one field deleted — deleting would change `ScaledLine`'s wire shape
+  and reach into `frontend/`.
+- **the money, measured both ways on a real costing path** (Coconut Rice, 40 Kg for 40 people,
+  coconut ₹35, rice ₹45, a 1.2-coconut requirement): `/api/v1/materials-cost` estimatedTotal
+  **₹222.00 → ₹250.00**, costPerServing **₹5.55 → ₹6.25** — +₹0.70 a plate, 12.6%. Both pinned in the
+  new IT. **The rise is the point:** the estimate is now the cost of the two coconuts the kitchen is
+  actually told to take.
+- **numbers:** whole suite **`classes=253 tests=3689 failures=0 errors=0 skipped=7`**,
+  `BUILD SUCCESSFUL in 6m 21s`, parsed from the XML — +1 class and +7 tests over the 252/3682
+  baseline, exactly what it added. **0.25 coconut × 800 heads = 200**, asserted in `RecipeScalerTest`
+  and end-to-end through `GET /api/v1/recipes/{id}/scaled`.
+- **negative control with predictions declared first:** `halfup` predicted 3 failures, got 3;
+  `roundfirst` predicted 2, got 2; `beforeT425` predicted 4, **got 3 — the prediction was wrong, and
+  informatively**: the old code already scaled before it rounded, it simply never rounded. **The
+  ordering was never the bug.** A wrong prediction reported as a finding is worth more than a right
+  one reported as a formality.
+- **the red test it did not expect, and what it turned out to be.** The first whole-suite run was red
+  by one test in `document/JobCardIT`, a file it had never opened. It is the rule working. Fixture:
+  cardamom 3 PIECES × 0.7 = 2.1. The card printed that through `Quantities.cooks` (HALF_UP) as
+  **2 pieces** while the draw, the cost and the badge all took the raw **2.1**. **The test's own name
+  was *"because the card rounds first"* — it was pinning the two-stories defect, not guarding against
+  it.** Rewritten to assert 3 pieces, before/after in the proof, and `"1 piece"` still comes out
+  singular, asserted with `doesNotContain("1 pieces")` beside it because one is a substring of the
+  other.
+
+- **two judgements for Rajeev, both deliberate, both reversible:**
+  1. **2.1 cardamom pods is now 3 pods — a 43% over-draw on a spice.** That is what "round up, never
+     to nearest" means at small counts. The builder thinks it right (you cannot fetch a tenth of a
+     pod, and the sheet must equal the ledger) and so do I, but it is the judgement here most worth
+     his view.
+  2. **Three dishes at 0.4 coconut each take three coconuts, not two.** `consume` is called per dish
+     and cannot see the others; `CommittedStockService` sums across dishes, so aggregating would make
+     the inventory screen say 2 while the ledger took 3, permanently. Rounded per line rather than
+     per ingredient, because the three consumers merge on three different keys — job card by
+     ingredient+unit+note, stock and costing by ingredient alone — so rounding after each merge gives
+     three different whole numbers for one dish. **Measured before deciding:** across the 458
+     ingredient lines in the three shipped recipe books, **no recipe names the same ingredient on two
+     lines at all**, so nothing the temple cooks today pays for the choice.
+- **untouched, as required:** `StockMovementService` — `ENTERED_BY_A_PERSON` unchanged, `compensate`
+  still past validation. Nothing in `library/`.
+- **not verified:** no hand smoke-test — backend-only in a worktree, nothing deployed. Evidence is
+  MockMvc through the real controllers against a real PostgreSQL. **Worth opening by hand:** the
+  recipe scale preview, a printed job card for a dish with a counted ingredient, and Materials Cost
+  for the same day, where the figure now reads slightly higher.
+- **two process notes worth keeping.** `work-lock` reported `exited 0` over a `BUILD FAILED` again —
+  the eighth instance in this wave. And **a tally keyed on the XML `name` attribute silently drops
+  every `@Nested` suite**: `BuyingAmountTest` first read as "not run" and had in fact run 51 tests
+  green. Sum the per-file `tests` attributes instead, which is what the work manager's own tally
+  does and why its independent count agreed with Gradle's at 3689.
+
+### T-427 — A copy that keeps your own setting says so
+- **id:** T-427 · **wave:** M3 · **state:** **proven** 2026-09-20 · **proof:** `docs/work/proof/T-427.md`
+- **source:** the coordinator, 2026-09-20 — fifteen silent audit entries on staging in one week.
+- **result:** the import response carries `notBoughtNotApplied` and both copy screens say it. **The
+  refusal itself is unchanged** — `RecipeImportNotBoughtIT`'s thirteen existing assertions were not
+  edited and still pass, which was the point: a copy is `MANAGE_RECIPES` and a buying policy is
+  `MANAGE_BUYING_POLICY`, so a copy must never set one quietly. Filled from the same list the audit
+  entry carries, ordered by `stillBought()`'s `ORDER BY name`. **One asymmetry, now pinned by a
+  test:** the audit entry still omits the key when there is nothing to say; the response always sends
+  it, `[]` when empty.
+- **the copy:**
+  > **Water stays on your shopping list**
+  > The library marks it "Not bought". A Temple Admin can change that in Ingredients.
+
+  Three names read *"Buttermilk, churned, Tender coconut water and Water stay on your shopping
+  list"*. Nothing withheld: **no line at all.** Shaped by the installed `ux-writing` skill and
+  DESIGN_SYSTEM §9 — sentence case, twelve words max, and the two body sentences are 6 and 8. **"Not
+  bought" is imported as the `NOT_BOUGHT` constant from the Ingredients screen rather than retyped**,
+  so the two cannot drift. It names the role rather than instructing, because most copiers are
+  Kitchen Managers and cannot do it themselves. No menu path named, per the standing rule.
+- **colour: neutral** (`InlineNotice tone="info"` → `bg-sunken text-ink`), no auto-dismiss. Not green,
+  because the copy is the success and this is its footnote; not amber, because a temple that buys
+  bottled water has nothing to take care about. Precedent is `IngredientFacts.tsx`, which prints this
+  very setting in plain ink for the same stated reason. **Asserted on the rendered class, not the
+  prop** — a prop assertion would pass against a tone that renders wrongly.
+- **where it lands on the screen that navigates away, which was the real design question.** When —
+  and only when — something was withheld, `/recipes/library/[id]` **does not navigate**. The notice
+  appears under the Add button with an "Open the recipe" link, and the button becomes "Already in
+  your recipes". Cost: one extra click, only on copies that have something to say. The alternative, a
+  query param to `/recipes/[id]`, needs a third screen the builder did not own. On `/recipes` it goes
+  in the grid, `col-span-full`, **directly under the tile whose plus made the copy** — not at the top,
+  because a 400-recipe list scrolls and a message at the top recreates the silence this task fixes.
+- **numbers:** backend `BUILD SUCCESSFUL in 6m 42s`, XML `classes=253 tests=3693 failures=0 errors=0
+  skipped=7` (+4 over 3689) — **independently re-tallied by the work manager and agreeing**. Frontend
+  `Test Files 187 passed (187) / Tests 2702 passed (2702)` (+1 file, +8 tests), tsc clean, eslint
+  clean, `next build` ✓. The one ` FAILED` line in the backend log is a test *name* that passed.
+- **measured** over CDP with `Emulation.setDeviceMetricsOverride`, `clientWidth` reported on every row
+  so the width is proved rather than claimed. At 1280 and 390: `scrollWidth == clientWidth`, no
+  horizontal scroll, notice fully inside the viewport (right edge 1248 / 374), nothing clipped with
+  three long real names. Notice 936×68 at 1280, 358×108/156 at 390.
+- **negative control:** three mutations, `grep -cF` anchors each asserted at 1, `cmp` proving the tree
+  changed, trapped restore, `--rerun-tasks`. Backend **3 of 17 red, exactly as predicted**; frontend
+  **6 of 8 red against a prediction of 5** — the builder expected one absence test to pass vacuously
+  and it does not, because it waits for the message to appear first. **A first control run proved
+  nothing and is recorded rather than dropped:** the mutation `java.util.List.of()` would not compile
+  and the XML read `initializationError`, which is not a red test. That is the T-059 lesson in a new
+  medium — a control that did not run is not a control that passed.
+- **contract question, ruled on by the work manager.** `frontend/__tests__/recipes.test.tsx` is not in
+  T-427's named grant list and matches none of its patterns, but it **is** the test for
+  `frontend/app/recipes/page.tsx`, which is on its contract, and it stubs `api.importRecipe`, so it
+  breaks the moment the screen reads the new field. The builder treated it as covered by the stated
+  category — *"the existing tests covering those two screens"* — changed one hunk, and flagged it.
+  **That reading is correct and the grant is confirmed:** `grep` over `DISPATCH.md` shows no other
+  contract in this wave names that file, and every other frontend builder was out of the tree. This
+  is exactly the wave-6 lesson working — grant a modified screen's existing test up front, and when
+  one is missed, check ownership and hand it over rather than let the builder stop.
+- **also asked for: what else the import does silently.** Reported, not fixed, all out of scope:
+  1. `ingredientsCreated` is on the response and **neither screen reads it** — a grep over
+     `frontend/app` and `frontend/components` returns nothing.
+  2. **`categoryCreated` — a copy can create a recipe category and nobody is told anywhere.**
+     `resolveCategory` inserts a `recipe_categories` row and sets its `fasting_compatible` (an
+     **Ekadashi** setting) from the book via `CategoryMapping.fastingCompatible`. Not on any screen,
+     and **not in the `RECIPE_IMPORTED` audit entry either** — invisible in both places. The builder
+     would fix this one next, and so would I.
+  3. **The Ekadashi warning exists on only one of the two copy screens.** `grep -rln "Check imported
+     ingredients for Ekadashi"` returns `app/recipes/page.tsx` and nothing else — yet `create()`'s own
+     comment says that warning box is what makes leaving created ingredients unflagged honest. **Copy
+     from the library recipe's own screen and you never pass it.**
+  4. An exact or alias match is silent by design ("Green chillies" → the temple's "Green chilli");
+     only *close* matches are ever asked about.
+  5. A created ingredient's catalogue unit is set by whichever recipe met it first — a lasting
+     catalogue property set by a copy, unreported.
+  6. `CategoryMapping.nameFor` can file a recipe under a category name the reader never saw.
+  7. A line's ingredient can differ from the printed name ("Cashew, halved" → Cashew · halved).
+- **open for Rajeev: a 632px gap at 1280 on `/recipes`.** A `col-span-full` cell always starts a new
+  row, so the copied tile sits alone in its row with two empty columns until the next copy or search.
+  No gap at 390. Kept deliberately — *"nothing hidden" beats "no dead space" when they collide*, and
+  moving the notice above the grid reinstates the silence this task exists to fix — but it is a
+  judgement and a two-line change to reverse. Screenshots in the scratchpad: `T-427-list-1280.png`,
+  `T-427-list-390.png`, `T-427-detail-1280.png`, `T-427-detail-390.png`.
+- **not verified:** no hand smoke-test against staging. The screens were driven in a real browser
+  against a real `next build` of this tree with a canned API, which is where the numbers come from,
+  but nobody has pressed the button against the deployed app with real data.
+- **debt it named rather than hid:** the copy text lives twice, once per page, because a shared module
+  would be a file outside the contract. Guarded by a test that renders both screens and compares the
+  strings, and both copies carry a comment saying to lift them. **It should be lifted.**
+
+### Final merged-tree check — 2026-09-20, after every builder was out
+
+Both halves, on the finished tree, with nobody in it.
+
+**Backend**, tallied by the work manager from `backend/build/test-results/test/*.xml` rather than
+from any builder's report:
+```
+classes=253 tests=3693 failures=0 errors=0 skipped=7
+```
+Summed per file rather than keyed on the XML `name` attribute — keying on the name silently drops
+every `@Nested` suite, which made `BuyingAmountTest` read as "not run" in a builder's first tally
+when it had in fact run 51 tests green.
+
+**Frontend**, under the `verify-frontend` lock, `tsc && eslint --max-warnings=0 && vitest run &&
+next build` in one command:
+```
+ Test Files  187 passed (187)
+      Tests  2702 passed (2702)
+ ✓ Compiled successfully
+ ✓ Generating static pages (77/77)
+```
+`grep -cE "failed|FAIL|error TS|✗|ELIFECYCLE"` over the whole log returns **0**.
+
+Started at 251 classes / 3649 backend tests and 183 files / 2623 frontend tests. Ended at 253 /
+3693 and 187 / 2702 — **+44 backend and +79 frontend tests, nothing removed, nothing skipped that
+was not already skipped.**
+
+*The one number this wave will be remembered for: `work-lock` printed `exited 0` over a failing
+build **eight separate times**, in four different agents, once because Gradle was piped into `tail`
+(a pipeline reports the last command's status, not Gradle's) and once because a dead `next start`
+left an older server answering on the same port while the new one died on `EADDRINUSE` into a log
+nobody opened. Every number above is read from a log or parsed from XML. None is an exit code.*
