@@ -37,8 +37,25 @@
 -- **Nothing about a meal moves.** Meals already carry their own plan date, which phase 05 set
 -- from the window. There is nothing to correct.
 --
--- So this file only moves the three things that record *when paperwork was raised* and have no
--- other way to be set: purchase orders, invoices and payments.
+-- So this file moves the things that record *when paperwork was raised* and have no other way to
+-- be set: purchase orders, their deliveries, invoices and payments.
+--
+-- ---------------------------------------------------------------------
+-- A guard only checks the pair you were thinking about
+--
+-- Worth reading before adding another date rule here, because the next person will make the same
+-- assumption I did. The first version of this script had three guards — a needed-by before its
+-- order, a payment before its invoice, a due date before its invoice — and all three passed. The
+-- pair that actually broke was the one I had not thought to check, because I believed it was
+-- already correct: **the delivery against its order.** Phase 07 sets `received_date` through the
+-- API, so I reasoned it was right, and it was — right relative to *today*. The moment this script
+-- moved the orders across a month, the two became unrelated and five orders showed goods arriving
+-- before the order existed, one of them nine days before.
+--
+-- The lesson is not "add more guards". It is that **the dates this script does not move are as
+-- much its responsibility as the ones it does**, because moving one end of a relationship breaks
+-- it just as thoroughly as mis-setting both. Anything dated that hangs off a purchase order has
+-- to move with it, or be asserted against it.
 -- =====================================================================
 
 \set ON_ERROR_STOP on
@@ -57,6 +74,14 @@ DECLARE
     -- one day, so the aging buckets on the payables screen have something in each of them.
     v_from    date := DATE '2026-08-29';
     v_to      date := DATE '2026-09-26';
+    -- Paperwork stops at today. The window runs to 26 September so that meals can be *planned*
+    -- ahead, but an order that has been delivered, billed and paid has already happened, and
+    -- spreading the orders evenly to the end of the window dated three of them into the future —
+    -- an invoice raised on 28 September and a payment made on 4 October, with today the 20th.
+    -- Orders therefore spread only as far as a few days before today, leaving room for their
+    -- delivery and their bill to land before today as well.
+    v_today   date := CURRENT_DATE;
+    v_spread  date := LEAST(v_to, v_today - 3);
 BEGIN
     IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
         RAISE EXCEPTION
@@ -79,7 +104,7 @@ BEGIN
         SELECT o.id,
                -- row_number() returns bigint and date + bigint has no operator, so the step
                -- is cast to int before it is added to a date.
-               (v_from + (((v_to - v_from) * o.n / GREATEST(o.total - 1, 1))::int)) AS new_order_date,
+               (v_from + (((v_spread - v_from) * o.n / GREATEST(o.total - 1, 1))::int)) AS new_order_date,
                -- Needed-by comes from the VENDOR'S OWN LEAD TIME, not from the gap the order
                -- happened to carry. Two reasons. The gap is meaningless: phase 06 had to clamp
                -- every needed-by to tomorrow, so it is an artefact of the clamp rather than of
@@ -120,9 +145,51 @@ BEGIN
     RAISE NOTICE 'Order events aligned: %', v_rows;
 
     -- ---------------------------------------------------------------
-    -- Goods receipts. The line-level received_date is already right (phase 07 sets it through
-    -- the API), so only the header's timestamp is corrected, to the earliest date on its lines.
+    -- Goods receipts, which have to MOVE WITH THEIR ORDER.
+    --
+    -- The first version of this script left the delivery dates alone, on the reasoning that
+    -- phase 07 sets `received_date` through the API and they were therefore already right. They
+    -- were right relative to *today*, and the orders had just been spread across a month — so the
+    -- two became unrelated, and the result was **five orders whose goods arrived before the order
+    -- was raised**: PO-2026-0014 ordered on the 24th and delivered on the 15th. At the other end
+    -- PO-2026-0001 waited twenty days. Nothing caught it, because the guards below checked that a
+    -- needed-by was not before its order date and never checked the delivery.
+    --
+    -- So each receipt is re-dated from its own order: the first lands a day before it was needed,
+    -- or four days after if this is one of the orders meant to arrive late, and a second receipt
+    -- follows three days behind the first. Which orders are late is taken from the PO number the
+    -- same way phase 07 chooses the delivery — every sixth one from the third — so the script and
+    -- the seeding agree instead of each having an opinion.
     -- ---------------------------------------------------------------
+    WITH numbered AS (
+        SELECT r.id,
+               r.po_id,
+               po.order_date,
+               po.needed_by,
+               (regexp_replace(po.po_number, '^.*-', ''))::int AS po_seq,
+               row_number() OVER (PARTITION BY r.po_id ORDER BY r.received_at) - 1 AS part
+        FROM goods_receipts r
+        JOIN purchase_orders po ON po.id = r.po_id
+        WHERE r.tenant_id = v_tenant
+    ), dated AS (
+        SELECT id,
+               GREATEST(
+                   order_date + 1,
+                   CASE WHEN (po_seq - 1) % 6 = 2      -- the "late" case in phase 07's rotation
+                        THEN needed_by + 4
+                        ELSE needed_by - 1
+                   END
+               ) + (part * 3)::int AS arrived   -- row_number() is bigint; date + bigint has no operator
+        FROM numbered
+    )
+    UPDATE goods_receipt_lines l
+    SET received_date = LEAST(dated.arrived, v_today)
+    FROM dated
+    WHERE l.receipt_id = dated.id AND l.tenant_id = v_tenant;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    v_total := v_total + v_rows;
+    RAISE NOTICE 'Delivery dates moved to follow their orders: %', v_rows;
+
     UPDATE goods_receipts r
     SET received_at = COALESCE((
             SELECT min(l.received_date)::timestamptz + TIME '07:30'
@@ -136,13 +203,22 @@ BEGIN
 
     -- ---------------------------------------------------------------
     -- Invoices. A bill follows its delivery rather than the calendar, so each one is dated two
-    -- days after the last delivery it covers, and falls due 21 days after that. This is what
-    -- puts real spread into the payables aging buckets.
+    -- days after the last delivery it covers. What it then falls due depends on THE VENDOR.
+    --
+    -- Every bill used to fall due 23 days after delivery, and a temple that pays everybody in
+    -- twenty-three days is a temple nobody recognises. The mandi sells vegetables off a cart and
+    -- wants cash; the packaging supplier delivers on a purchase order and gives thirty days. The
+    -- terms below are the trade each vendor is in, and they line up with the lead times phase 03
+    -- already gives them: a vendor who delivers same-day is a vendor you pay on the spot.
+    --
+    -- They are written out here, by name, rather than computed from the lead time by a formula,
+    -- so that a reader can see what the temple's terms actually are and change one of them
+    -- without working out a rule first. A vendor not named here gets 21 days.
     -- ---------------------------------------------------------------
     UPDATE vendor_invoices i
-    SET invoice_date = billed.last_delivery + 2,
-        due_date     = billed.last_delivery + 23,
-        created_at   = (billed.last_delivery + 2)::timestamptz + TIME '16:20'
+    SET invoice_date = LEAST(billed.last_delivery + 2, v_today),
+        due_date     = LEAST(billed.last_delivery + 2, v_today) + COALESCE(terms.days, 21),
+        created_at   = LEAST(billed.last_delivery + 2, v_today)::timestamptz + TIME '16:20'
     FROM (
         SELECT d.invoice_id, max(l.received_date) AS last_delivery
         FROM vendor_invoice_deliveries d
@@ -150,18 +226,32 @@ BEGIN
         WHERE d.tenant_id = v_tenant AND l.received_date IS NOT NULL
         GROUP BY d.invoice_id
     ) billed
+    LEFT JOIN vendor_invoices vi ON vi.id = billed.invoice_id
+    LEFT JOIN vendors v ON v.id = vi.vendor_id
+    LEFT JOIN (VALUES
+        ('Kalasipalya Vegetable Mandi',    0),   -- a market cart: cash on the day
+        ('Heritage Fresh Dairy',           7),   -- delivers at 5am daily, billed weekly
+        ('Jayanagar Hardware Store',       7),   -- a walk-in counter with an account
+        ('Sri Venkateshwara Rice Traders',15),   -- sacks on an account, settled fortnightly
+        ('Sri Balaji Traders',            15),
+        ('Mahalakshmi Stores',            15),
+        ('Anand Masala Depot',            21),
+        ('Ganesh Oil & Provisions',       21),
+        ('Karnataka Provision Mart',      21),
+        ('Vishwa Packaging & Supplies',   30)    -- a proper supplier, thirty days
+    ) AS terms(vendor_name, days) ON terms.vendor_name = v.name
     WHERE i.id = billed.invoice_id AND i.tenant_id = v_tenant;
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     v_total := v_total + v_rows;
-    RAISE NOTICE 'Invoices dated from their deliveries: %', v_rows;
+    RAISE NOTICE 'Invoices dated from their deliveries, due on each vendor own terms: %', v_rows;
 
     -- ---------------------------------------------------------------
     -- Payments. A payment cannot predate its bill. Each one lands a few days after, and the
     -- append-only trigger is why the purge flag is set at the top of this file.
     -- ---------------------------------------------------------------
     UPDATE invoice_payments p
-    SET paid_on    = i.invoice_date + 6,
-        created_at = (i.invoice_date + 6)::timestamptz + TIME '11:05'
+    SET paid_on    = LEAST(i.invoice_date + 6, v_today),
+        created_at = LEAST(i.invoice_date + 6, v_today)::timestamptz + TIME '11:05'
     FROM vendor_invoices i
     WHERE p.invoice_id = i.id AND p.tenant_id = v_tenant;
     GET DIAGNOSTICS v_rows = ROW_COUNT;
@@ -186,6 +276,18 @@ BEGIN
         RAISE EXCEPTION 'A payment is dated before the invoice it pays. Rolled back.';
     END IF;
 
+    -- The one that was missing, and the one that actually fired in reality: goods cannot arrive
+    -- before the order that asked for them.
+    PERFORM 1 FROM goods_receipt_lines l
+    JOIN goods_receipts r ON r.id = l.receipt_id
+    JOIN purchase_orders po ON po.id = r.po_id
+    WHERE l.tenant_id = v_tenant AND l.received_date IS NOT NULL
+      AND l.received_date < po.order_date
+    LIMIT 1;
+    IF FOUND THEN
+        RAISE EXCEPTION 'A delivery is dated before the order that asked for it. Rolled back.';
+    END IF;
+
     PERFORM 1 FROM vendor_invoices i
     WHERE i.tenant_id = v_tenant AND i.due_date IS NOT NULL AND i.due_date < i.invoice_date
     LIMIT 1;
@@ -199,7 +301,34 @@ BEGIN
         RAISE EXCEPTION 'An order landed outside the simulation window. Rolled back.';
     END IF;
 
-    RAISE NOTICE 'Back-dated % row(s). Window % to %.', v_total, v_from, v_to;
+    -- Nothing that has already happened may be dated after today. Meals are planned ahead on
+    -- purpose and are not touched by this script; paperwork is not.
+    PERFORM 1 FROM purchase_orders
+    WHERE tenant_id = v_tenant AND order_date > v_today LIMIT 1;
+    IF FOUND THEN
+        RAISE EXCEPTION 'An order is dated in the future. Rolled back.';
+    END IF;
+
+    PERFORM 1 FROM goods_receipt_lines
+    WHERE tenant_id = v_tenant AND received_date > v_today LIMIT 1;
+    IF FOUND THEN
+        RAISE EXCEPTION 'A delivery is dated in the future. Rolled back.';
+    END IF;
+
+    PERFORM 1 FROM vendor_invoices
+    WHERE tenant_id = v_tenant AND invoice_date > v_today LIMIT 1;
+    IF FOUND THEN
+        RAISE EXCEPTION 'An invoice is dated in the future. Rolled back.';
+    END IF;
+
+    PERFORM 1 FROM invoice_payments
+    WHERE tenant_id = v_tenant AND paid_on > v_today LIMIT 1;
+    IF FOUND THEN
+        RAISE EXCEPTION 'A payment is dated in the future. Rolled back.';
+    END IF;
+
+    RAISE NOTICE 'Back-dated % row(s). Window % to %, paperwork spread % to % (today %).',
+        v_total, v_from, v_to, v_from, v_spread, v_today;
 END;
 $backdate$;
 
@@ -225,8 +354,12 @@ FROM purchase_orders
 WHERE tenant_id = :'tenant'
 ORDER BY po_number;
 
-SELECT invoice_number, invoice_date, due_date, status,
-       (SELECT min(paid_on) FROM invoice_payments p WHERE p.invoice_id = vendor_invoices.id) AS paid_on
-FROM vendor_invoices
-WHERE tenant_id = :'tenant'
-ORDER BY invoice_number;
+SELECT invoice_number, v.name AS vendor, invoice_date, due_date,
+       (due_date - invoice_date) AS terms_days,
+       CASE WHEN due_date < CURRENT_DATE THEN 'overdue' ELSE '' END AS overdue,
+       status,
+       (SELECT min(paid_on) FROM invoice_payments p WHERE p.invoice_id = i.id) AS paid_on
+FROM vendor_invoices i
+JOIN vendors v ON v.id = i.vendor_id
+WHERE i.tenant_id = :'tenant'
+ORDER BY invoice_date;

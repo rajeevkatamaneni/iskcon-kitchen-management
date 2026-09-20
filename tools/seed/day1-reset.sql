@@ -159,7 +159,8 @@ DECLARE
         'calendar_days', 'calendar_overrides', 'calendar_precompute_state',
         -- the vendors themselves, without their prices
         'vendors', 'vendor_status_changes',
-        -- the wish list
+        -- The wish list. Kept, but see "the wish list needs putting back" below — keeping the
+        -- items while clearing the donations leaves a fulfilled item with no money behind it.
         'wishlist_items',
         -- Equipment: phase 15 raises service requests against these four items, so they are what
         -- it has to raise them against. Kept by the conductor, 2026-09-19.
@@ -311,6 +312,29 @@ BEGIN
     v_total := v_total + v_rows;
     RAISE NOTICE 'Removed % test vendor(s).', v_rows;
 
+    -- --- the wish list needs putting back, not just keeping ------------------
+    --
+    -- A wish-list item survives the reset; the gifts that paid for it do not. And the two halves
+    -- of "is it paid for" live in different places: **`status` and `fulfilled_at` are stored
+    -- columns, while the paid figure is computed from the donations**. Clear the donations and a
+    -- fulfilled item comes back reading "Rs 0 of Rs 78,500 — FULFILLED", which is the first thing
+    -- a reader queries. It happened on staging on 2026-09-20 and it will happen to every temple
+    -- that is ever reset.
+    --
+    -- There is **no way to repair it through the application**: `UpdateWishlistItemRequest`
+    -- carries the title, price, category, quantity and note, and no status, so an operator's only
+    -- option through the UI is to archive the item and lose it. So the reset does it here, where
+    -- the column is reachable — an item whose funding has just been deleted is an item nobody has
+    -- paid for yet, and ACTIVE is what that means.
+    UPDATE wishlist_items
+    SET status = 'ACTIVE', fulfilled_at = NULL, updated_at = now()
+    WHERE tenant_id = v_tenant AND status = 'FULFILLED';
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    IF v_rows > 0 THEN
+        v_total := v_total + v_rows;
+        RAISE NOTICE 'Wish-list items put back to ACTIVE (their gifts were cleared): %', v_rows;
+    END IF;
+
     -- --- what a reset temple must look like afterwards ---------------------
     -- Asserted rather than assumed: if one of these is not empty the delete loop skipped it, and a
     -- skip that nobody notices is the whole failure mode this script is written against.
@@ -340,6 +364,14 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM calendar_days WHERE tenant_id = v_tenant) THEN
         RAISE EXCEPTION 'The reset removed the calendar. Rolled back.';
+    END IF;
+
+    PERFORM 1 FROM wishlist_items
+    WHERE tenant_id = v_tenant AND status = 'FULFILLED' LIMIT 1;
+    IF FOUND THEN
+        RAISE EXCEPTION
+            'A wish-list item is still marked fulfilled after its gifts were cleared, so it would '
+            'read "Rs 0 of Rs n — FULFILLED". Rolled back.';
     END IF;
 
     RAISE NOTICE 'Kept: % user(s), % kitchen(s), % meal kind(s), % vendor(s), % calendar day(s), % wish-list item(s), % staff.',
