@@ -157,8 +157,22 @@ export function AccountDisabled() {
  * that lands on a second "Not your page" would be the very defect this fixes, twice. Its label is
  * that destination's own name from `nav.ts`, so the button and the menu row above it can never come
  * to call the same screen two different things.
+ *
+ * <p><b>`reason` is for a refusal that has a sentence of its own (T-363).</b> Without one the reader
+ * gets the generic sentence below, which is all that is true when the only thing wrong is the role:
+ * we do not know which door they tried and there is nothing to say about it beyond who can open it.
+ * The planner's refusal is not like that — the server has a written reason for it, and a next step
+ * that is not "ask your temple administrator" but a specific thing an administrator does on a
+ * specific screen — so it passes that reason in and it is rendered instead.
  */
-function WrongRole({ role }: { role: PrincipalRole }) {
+function WrongRole({
+  role,
+  reason,
+}: {
+  role: PrincipalRole;
+  /** The catalogue's own words for this refusal, where the refusal has some. See {@link PLANNER_REFUSAL}. */
+  reason?: { code: string; message: string; action: string };
+}) {
   // Both fall back, and the reason is the same in both: this is the screen a reader lands on when
   // something about them does not fit, so it is the last screen in the application that may itself
   // break. `homeForRole` is exhaustive over the roles we know, and a server that begins sending one
@@ -181,20 +195,68 @@ function WrongRole({ role }: { role: PrincipalRole }) {
           below carries the document's one main landmark. */}
       <div className="min-w-0 flex-1">
         <main className="mx-auto flex min-h-screen max-w-prose flex-col justify-center px-6 py-12">
+          {/* The heading is the screen's own and stays a literal whichever sentence follows it,
+              exactly as `AccountDisabled` above splits the two: an h1 here is short and
+              unpunctuated, and a catalogue sentence is a sentence and keeps its full stop. Rendering
+              the reason as the heading would force a choice between a punctuated heading and
+              trimming the stored text on its way to the screen, and the guard test in
+              `refusal-words-reach-the-reader.test.tsx` asserts against exactly that. */}
           <h1>Not your page</h1>
-          <p className="mt-2 text-ink-secondary">
-            You don’t have access to this part of the app. Ask your temple administrator.
-          </p>
+          {reason ? (
+            <>
+              <p className="mt-2 text-ink">{reason.message}</p>
+              <p className="mt-1 text-sm text-ink-secondary">{reason.action}</p>
+            </>
+          ) : (
+            <p className="mt-2 text-ink-secondary">
+              You don’t have access to this part of the app. Ask your temple administrator.
+            </p>
+          )}
           <div className="mt-6">
             <ButtonLink href={home} variant="ghost">
               Go to {label}
             </ButtonLink>
           </div>
+          {/* Offered as quietly as the disabled screen offers `KMS-400019`, and for the same reason:
+              the reader does not need it, and the one person who does — whoever they ring — needs it
+              to be the same string support has written down. Only where there is a code; the generic
+              refusal above has none, because it is not one failure but any door a role cannot open. */}
+          {reason && (
+            <p className="mt-6 text-xs text-ink-secondary">
+              If you need help, quote <span className="font-mono font-medium">{reason.code}</span>
+            </p>
+          )}
         </main>
       </div>
     </div>
   );
 }
+
+/**
+ * `KMS-400183`'s own words, for the reader the meal planner is shut to (T-363).
+ *
+ * <p><b>Why they are written here and not read off the wire.</b> Every other refusal in this file
+ * carries the server's sentence through, because the server said it: `/whoami` answers a refusal with
+ * the whole contract and `auth-context` hands it on. This one is never said by the server to this
+ * reader at all. The guard below refuses the planner *before any request is made* — that is the
+ * point of it, so a planner page does not start asking for a week it would be refused — and
+ * `/whoami` carries only the `canPlanMeals` boolean, not the text. There is nothing to read.
+ *
+ * <p>So this is a hand-kept copy of `PLANNER_NOT_FOR_YOUR_KITCHEN` in `ErrorCode.java`, and a
+ * hand-kept copy is a coincidence rather than a mechanism — which is the whole defect T-116 was
+ * written to stop. What makes it safe is the mechanism put around it instead:
+ * `refusal-words-reach-the-reader.test.tsx` parses `ErrorCode.java`'s source and asserts this screen
+ * renders that code's message and next step exactly. Reword the catalogue and the test goes red the
+ * same day. **So change these strings by changing `ErrorCode.java`, never here.**
+ *
+ * <p>Somebody who reaches the planner's API anyway — by hand, or from an older tab — still gets the
+ * server's own `KMS-400183`, because the server is the rule and this is only what it looks like.
+ */
+const PLANNER_REFUSAL = {
+  code: "KMS-400183",
+  message: "Your kitchen doesn't plan its meals here, so the meal planner isn't open to you.",
+  action: "If you have moved kitchens, ask a Temple Admin to change your kitchen on the Staff page.",
+} as const;
 
 /** A layout effect in the browser and a plain one on the server, where there is no layout. */
 const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -266,10 +328,15 @@ export function RequireRole({
           </main>
         );
       }
-      // The same refusal as a wrong role, deliberately: to the reader it is the same fact — this
-      // part of the app is not theirs — and the menu beside it no longer offers the planner either.
+      // The same screen as a wrong role, deliberately: to the reader it is the same fact — this part
+      // of the app is not theirs — and the menu beside it no longer offers the planner either. But
+      // not the same sentence any more (T-363). "You don't have access to this part of the app. Ask
+      // your temple administrator." is true of it and says nothing: it leaves somebody who has just
+      // moved kitchens with no idea that that is why, and sends them to an administrator who is not
+      // told what to change. `KMS-400183` says both, and it is the sentence the server would give
+      // them if the request were ever made.
       if (isMealPlannerPath(path)) {
-        return <WrongRole role={appUser.role} />;
+        return <WrongRole role={appUser.role} reason={PLANNER_REFUSAL} />;
       }
     }
     return <>{children}</>;

@@ -124,6 +124,7 @@ function today(overrides: Partial<TodayView> = {}): TodayView {
     // Null rather than zero, because they say different things: null is a reader who does not book
     // the engineer, zero is a temple with nothing late. The cases below state whichever they mean.
     equipmentOverdue: null,
+    upcomingOutside: [],
     approvals: { ingredientRequests: 0, ingredientRequestsSoon: 0, leaveRequests: 0, leaveRequestsSoon: 0 },
     deliveries: [
       {
@@ -813,6 +814,121 @@ describe("today", () => {
       render(<TodayPage />);
 
       expect(screen.getByRole("link", { name: /working today/i })).toHaveTextContent("Breakfast 2 of 4");
+    });
+  });
+
+  /**
+   * The cross-date heads-up (T-363).
+   *
+   * <p>What is left of the planner's *Upcoming outside commitments* section, which Rajeev removed:
+   * the events themselves are ordinary meals in the planner's day list, sorted by ready-by, where
+   * they open, adjust and print. The one thing a day view cannot do is look across dates — somebody
+   * reading Monday cannot see Saturday's delivery — so that, and only that, is here.
+   *
+   * <p>The server decides what is on it (tomorrow to a fortnight out, cancelled ones dropped, one
+   * row per meal — see `TodayIT`). What these assert is that the screen draws the answer whole, that
+   * every row goes somewhere, and that it draws nothing at all when there is nothing.
+   */
+  describe("what is going out of the temple in the days ahead", () => {
+    function commitment(fields: Record<string, unknown> = {}) {
+      return {
+        mealId: "meal-bhajan",
+        planDate: "2026-08-22",
+        eventName: "Children's Bhagavad-gita Reading",
+        mealKind: "Event",
+        handover: "DELIVERY",
+        contactName: "Mrs Shanta",
+        contactPhone: "+91 98862 30011",
+        deliveryAddress: "Vidyaranyapura, Bengaluru",
+        readyBy: "10:00:00",
+        guestsEatAt: "13:00:00",
+        preparations: 2,
+        ...fields,
+      } as TodayView["upcomingOutside"][number];
+    }
+
+    function card() {
+      return screen.queryByRole("region", { name: /going out of the temple/i });
+    }
+
+    it("names each one, says who moves the food, and opens the day it is on", () => {
+      queryRef.current = {
+        data: today({
+          upcomingOutside: [
+            commitment(),
+            commitment({
+              mealId: "meal-community",
+              planDate: "2026-08-29",
+              eventName: "Community programme",
+              handover: "PICKUP",
+              deliveryAddress: null,
+              guestsEatAt: null,
+            }),
+          ],
+        }),
+        error: null,
+        loading: false,
+      };
+      render(<TodayPage />);
+
+      const list = card();
+      expect(list).not.toBeNull();
+      const inside = within(list as HTMLElement);
+      // The weekday leads, because which Saturday it is decides whether anybody is rostered.
+      expect(inside.getByText(/Sat 22 Aug/)).toBeInTheDocument();
+      expect(inside.getByText("Children's Bhagavad-gita Reading")).toBeInTheDocument();
+      // The same two labels as the meal card in the planner — see meal-kitchen-sections.test.tsx.
+      // Same fact, same words, in every view.
+      expect(inside.getByText("We deliver it")).toHaveClass("bg-info-bg", "text-info");
+      expect(inside.getByText("They collect it")).toHaveClass("bg-info-bg", "text-info");
+
+      // Every row goes somewhere. The dead end was the defect: the deleted section printed the
+      // event's name in a table cell although the server sent the meal's own id with it.
+      expect(
+        inside.getByRole("link", { name: /Children's Bhagavad-gita Reading on Sat 22 Aug/ })
+      ).toHaveAttribute("href", "/planner?date=2026-08-22");
+      expect(
+        inside.getByRole("link", { name: /Community programme on Sat 29 Aug/ })
+      ).toHaveAttribute("href", "/planner?date=2026-08-29");
+    });
+
+    it("draws nothing at all when nothing is going out", () => {
+      queryRef.current = { data: today({ upcomingOutside: [] }), error: null, loading: false };
+      render(<TodayPage />);
+
+      // An empty card every morning is furniture saying nothing, and a temple that does no outside
+      // cooking would carry it for ever.
+      expect(card()).toBeNull();
+      // And the column above it is undisturbed: Deliveries is still drawn.
+      expect(screen.getByRole("region", { name: /^Deliveries/ })).toBeInTheDocument();
+    });
+
+    it("falls back to the meal's kind where the event was never named", () => {
+      queryRef.current = {
+        data: today({ upcomingOutside: [commitment({ eventName: null })] }),
+        error: null,
+        loading: false,
+      };
+      render(<TodayPage />);
+
+      expect(within(card() as HTMLElement).getByText("Event")).toBeInTheDocument();
+    });
+
+    it("says nothing about the handover where nobody was ever asked", () => {
+      // V88 carried the old plans across with `handover` NULL. A pill reading "Not set" on a
+      // morning screen is a question mark the reader cannot answer from here.
+      queryRef.current = {
+        data: today({ upcomingOutside: [commitment({ handover: null })] }),
+        error: null,
+        loading: false,
+      };
+      render(<TodayPage />);
+
+      const inside = within(card() as HTMLElement);
+      expect(inside.getByText("Children's Bhagavad-gita Reading")).toBeInTheDocument();
+      expect(inside.queryByText("We deliver it")).not.toBeInTheDocument();
+      expect(inside.queryByText("They collect it")).not.toBeInTheDocument();
+      expect(inside.queryByText(/Not set/)).not.toBeInTheDocument();
     });
   });
 

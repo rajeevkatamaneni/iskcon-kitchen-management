@@ -8,6 +8,7 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 import org.iskcon.kms.meal.MealCrewView;
+import org.iskcon.kms.meal.OutsideCommitment;
 
 /**
  * The temple's morning screen, in one payload (E4-S8).
@@ -43,6 +44,14 @@ import org.iskcon.kms.meal.MealCrewView;
  *                 due-soon machines stay on the Equipment screen, for the reason E4-S14 D5 gave
  *                 about the unrecorded-meal nudge: a warning a month early, every month, is
  *                 wallpaper by the second month.
+ * @param upcomingOutside what the temple has undertaken to send out of the building in the days
+ *                 ahead, soonest first (T-363). Not a section of its own on a screen: the planner
+ *                 carried one at the foot of every view and Rajeev removed it, because an outside
+ *                 event is an ordinary meal and already sits in the planner's day list with the
+ *                 rest, sorted by ready-by. What no day view can do is look across dates, and a
+ *                 delivery on Saturday is exactly what somebody reading Monday needs warning of —
+ *                 so what is left of that section is a heads-up, and heads-ups live here. Empty
+ *                 where nothing is going out, and the screen then draws nothing at all.
  */
 public record TodayView(
 		LocalDate date,
@@ -56,7 +65,8 @@ public record TodayView(
 		int unrecordedMeals,
 		Approvals approvals,
 		List<Delivery> deliveries,
-		Integer equipmentOverdue) {
+		Integer equipmentOverdue,
+		List<OutsideCommitment> upcomingOutside) {
 
 	/**
 	 * What today and tomorrow ask of the kitchen. Tomorrow matters as much as today: a fast changes

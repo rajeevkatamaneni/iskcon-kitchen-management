@@ -367,50 +367,71 @@ class MealPlanIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("upcoming outside commitments: future, in date order, cancelled ones gone, in-house never on it")
-	void outsideCommitmentsAreWhatLeavesTheTemple() throws Exception {
-		LocalDate today = LocalDate.now();
+	@DisplayName("an outside event is an ordinary meal in the day list, in ready-by order among the rest")
+	void outsideEventsAreOrdinaryMealsInTheDayList() throws Exception {
+		// What Rajeev reported on 2026-09-19: an outside event he could not open, adjust or print a job
+		// card for. The events were never missing from the day — nothing on the read path has ever
+		// filtered them out — but the planner drew them in a separate section of plain table cells that
+		// linked nowhere, and that section took no date, so it sat under a day panel it contradicted.
+		// This is the claim the fix rests on, asserted rather than assumed: the event is in the day's
+		// own list, in its place, with everything the card needs to draw it, and it opens by its own id.
+		LocalDate day = LocalDate.of(2025, 3, 17);
 		create("""
-				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":30,"readyBy":"17:00",
-				 "eventName":"Children's Bhagavad-gita Reading"}
-				""".formatted(today.plusDays(3), khichdi));
+				{"planDate":"%s","mealKind":"Lunch","recipeId":"%s","targetYield":100,"readyBy":"12:00",
+				 "adults":100}
+				""".formatted(day, khichdi));
 		create("""
-				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":50,"readyBy":"11:00",
-				 "eventName":"Last month's school delivery","isOutside":true,"handover":"PICKUP",
-				 "contactName":"Mr Rao","contactPhone":"+919000000001"}
-				""".formatted(today.minusDays(20), khichdi));
-		create("""
-				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":80,"readyBy":"11:00",
-				 "eventName":"Community programme","isOutside":true,"handover":"PICKUP",
-				 "contactName":"Mrs Latha Rao","contactPhone":"+919000000002"}
-				""".formatted(today.plusDays(20), khichdi));
-		UUID soonest = create("""
-				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":80,"readyBy":"10:00",
-				 "eventName":"School Gita Reading","isOutside":true,"handover":"DELIVERY",
+				{"planDate":"%s","mealKind":"Dinner","recipeId":"%s","targetYield":100,"readyBy":"19:30",
+				 "adults":100}
+				""".formatted(day, khichdi));
+		UUID event = create("""
+				{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":80,"readyBy":"16:00",
+				 "eventName":"Children's Bhagavad-gita Reading","isOutside":true,"handover":"DELIVERY",
 				 "contactName":"Mrs Shanta","contactPhone":"+919000000003",
-				 "deliveryAddress":"Vidyaranyapura, Bengaluru","guestsEatAt":"13:00"}
-				""".formatted(today.plusDays(5), khichdi));
+				 "deliveryAddress":"Vidyaranyapura, Bengaluru","guestsEatAt":"17:00"}
+				""".formatted(day, khichdi));
 
-		mvc.perform(get("/api/v1/meal-plans/outside-commitments")
+		// Between the lunch and the dinner, because 16:00 is between 12:00 and 19:30 — sorted by when
+		// it is due like any other meal, which is exactly what Rajeev asked for.
+		mvc.perform(get("/api/v1/meals").param("from", day.toString()).param("to", day.toString())
 						.header("Authorization", "Bearer valid-token"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.length()").value(2))
-				.andExpect(jsonPath("$[0].mealId").value(soonest.toString()))
-				.andExpect(jsonPath("$[0].eventName").value("School Gita Reading"))
-				.andExpect(jsonPath("$[0].contactName").value("Mrs Shanta"))
-				.andExpect(jsonPath("$[0].deliveryAddress").value("Vidyaranyapura, Bengaluru"))
-				.andExpect(jsonPath("$[0].preparations").value(1))
-				.andExpect(jsonPath("$[1].eventName").value("Community programme"));
+				.andExpect(jsonPath("$.length()").value(3))
+				.andExpect(jsonPath("$[0].mealKind").value("Lunch"))
+				.andExpect(jsonPath("$[1].mealId").value(event.toString()))
+				.andExpect(jsonPath("$[1].eventName").value("Children's Bhagavad-gita Reading"))
+				.andExpect(jsonPath("$[1].isOutside").value(true))
+				// Everything the deleted section listed in six columns, on the meal itself: who moves
+				// the food, who to ring, and where it is going.
+				.andExpect(jsonPath("$[1].handover").value("DELIVERY"))
+				.andExpect(jsonPath("$[1].contactName").value("Mrs Shanta"))
+				.andExpect(jsonPath("$[1].deliveryAddress").value("Vidyaranyapura, Bengaluru"))
+				.andExpect(jsonPath("$[2].mealKind").value("Dinner"));
 
-		// A cancelled commitment is not a commitment.
-		mvc.perform(post("/api/v1/meals/{id}/cancel", soonest)
-						.header("Authorization", "Bearer valid-token"))
-				.andExpect(status().isOk());
+		// And it opens, which is the half the old section made impossible: it sent the meal's id and
+		// then rendered it as a table cell. "I cant open it to adjust it OR view what is in it."
+		mvc.perform(meal(event))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.eventName").value("Children's Bhagavad-gita Reading"))
+				.andExpect(jsonPath("$.isOutside").value(true))
+				.andExpect(jsonPath("$.dishes.length()").value(1));
+	}
 
+	@Test
+	@DisplayName("the outside-commitments endpoint is gone, and nothing answers in its place")
+	void theOutsideCommitmentsEndpointIsGone() throws Exception {
+		// The accepted consequence of the removal, written down rather than left to be discovered.
+		// `GET /api/v1/meal-plans/outside-commitments` fed the planner's deleted section; the rows it
+		// returned are now part of `GET /api/v1/today` as `upcomingOutside`, over a shorter window
+		// (see TodayIT). Any tab still holding the old planner asks for this and is told there is no
+		// such thing, which is the truth — better than a route left answering an empty list for ever.
+		//
+		// A 404 and not a 403: `PermissionBeforeValidationIT` walks the controllers for endpoints that
+		// validate before they check a permission, and an endpoint that no longer exists is invisible
+		// to it. This asserts the route really went rather than merely losing its annotation.
 		mvc.perform(get("/api/v1/meal-plans/outside-commitments")
 						.header("Authorization", "Bearer valid-token"))
-				.andExpect(jsonPath("$.length()").value(1))
-				.andExpect(jsonPath("$[0].eventName").value("Community programme"));
+				.andExpect(status().isNotFound());
 	}
 
 	@Test

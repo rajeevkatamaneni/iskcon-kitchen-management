@@ -452,6 +452,7 @@ function MealBlock({
                 Neutral both ways: green is kept for the moment the recording itself succeeds (the
                 notice below), not a standing state (Rajeev, 2026-09-18, T-227). */}
             {meal.recorded ? <Badge>Recorded</Badge> : <Badge>Not yet recorded</Badge>}
+            <HandoverBadge meal={meal} />
             {/* No crew pebble here any more (Epic 12): People needed belongs to each kitchen, so the
                 count sits in each kitchen's section below, against that kitchen's own staff. */}
             {/* What has been asked for, beside the number that says it is needed. Asking, and changing
@@ -1617,6 +1618,37 @@ function headCount(meal: MealView): string {
   if (meal.children) parts.push(`${meal.children} children`);
   if (meal.seniors) parts.push(`${meal.seniors} seniors`);
   return parts.join(", ");
+}
+
+/**
+ * Who moves the food, on a meal that leaves the temple (T-363).
+ *
+ * <p>This used to be a column in the planner's *Upcoming outside commitments* table at the foot of
+ * the screen. Rajeev removed that section on 2026-09-19 — "No need for special handling for outside
+ * commitments" — so the one fact on it that the meal's own card did not already carry moved here:
+ * whether we drive it there or somebody comes for it. Everything else the table held (the contact,
+ * where it is going, the hour) is already on the card's facts line above.
+ *
+ * <p><strong>Blue for both, and that is deliberate.</strong> Rajeev chose blue. Both readings wear
+ * it because colour in this product means <em>how serious is this</em>, never <em>what kind of thing
+ * is this</em> (DESIGN_SYSTEM v1.14): amber is reserved for something to act on or take care over,
+ * and these meals already carry the amber loading-time warning on the form that plans them. Giving
+ * a pickup one colour and a delivery another would say one of the two matters more, which is not
+ * true — a collection nobody turns up for and a delivery nobody drives are the same failure.
+ *
+ * <p>Nothing at all on an in-house meal, and nothing on an outside one whose handover was never
+ * asked (the plans V88 carried across from the old catering kinds). A pill reading "Not set" on the
+ * day's card would be a permanent question mark beside a meal the kitchen can still cook; the meal's
+ * own form is where that gets answered, and it asks.
+ */
+function HandoverBadge({ meal }: { meal: MealView }) {
+  if (!meal.isOutside || !meal.handover) return null;
+  // The words the deleted table used, kept so that nobody has to learn a second vocabulary for the
+  // same fact. "They collect it" rather than "Collected", which read as something that had already
+  // happened on a meal that has not been cooked yet.
+  return (
+    <Badge tone="info">{meal.handover === "DELIVERY" ? "We deliver it" : "They collect it"}</Badge>
+  );
 }
 
 /**

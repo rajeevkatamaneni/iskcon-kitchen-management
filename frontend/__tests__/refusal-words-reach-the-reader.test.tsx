@@ -465,3 +465,119 @@ describe("an unexplained 401 is given no words at all", () => {
     expect(screen.queryByText(CATALOGUE.get("KMS-400020")!.message)).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// The refusal the server never gets to say.
+// ---------------------------------------------------------------------------
+
+/**
+ * The meal planner's refusal says `KMS-400183`'s own words (T-363).
+ *
+ * <p><strong>Why this one is not in the table above.</strong> Everything above is driven by
+ * `REFUSALS`, which routes a code the *server sent* to an `AuthStatus`. `KMS-400183` is never sent to
+ * this reader: `RequireRole` refuses the planner before any request is made — deliberately, so a
+ * planner page does not start asking for a week it would be refused — and `/whoami` carries only the
+ * `canPlanMeals` boolean, not the sentence. There is nothing on the wire to render.
+ *
+ * <p><strong>So the screen holds a copy, and this is the mechanism that stops it drifting.</strong>
+ * That is precisely the shape T-116 was written about: `AccountDisabled` held two literals that
+ * matched `ErrorCode.java` by coincidence, and the proof it was a coincidence was that T-114
+ * reworded a neighbouring code and no screen moved. The fix there was to read the words off the
+ * refusal. It cannot be the fix here, because there is no refusal to read — so the catalogue is read
+ * by the test instead, and the day somebody rewords `KMS-400183` this goes red rather than the
+ * screen quietly keeping the old sentence for ever.
+ *
+ * <p>Same parse as everything above, so it cannot pass vacuously: `catalogue()` throws if it finds
+ * fewer than fifty constants, and the first assertion here proves it found this one.
+ */
+describe("the meal planner's refusal, for a kitchen that does not plan here", () => {
+  const CODE = "KMS-400183";
+
+  /** The whoami this guard reads: a real role, and the one flag that shuts the planner. */
+  function kitchenThatDoesNotPlan() {
+    whoami.mockResolvedValue({
+      userId: "u1",
+      tenantId: "t1",
+      role: "KITCHEN_STAFF",
+      fullName: "Gopal Das",
+      tenantName: "ISKCON Bengaluru",
+      tenantSlug: "bengaluru",
+      timezone: "Asia/Kolkata",
+      temples: [],
+      themeId: null,
+      canPlanMeals: false,
+    });
+  }
+
+  function standAtThePlanner() {
+    window.history.replaceState({}, "", "/planner");
+  }
+
+  it("was found in the catalogue at all", () => {
+    const words = CATALOGUE.get(CODE);
+    expect(
+      words,
+      `${CODE} is no longer in ErrorCode.java. It is the planner's refusal and RequireRole renders ` +
+        `its words; if the code has been renumbered, change CODE here to the new one rather than ` +
+        `deleting this test — the point is that the screen and the catalogue cannot drift.`
+    ).toBeDefined();
+    expect(words!.message).toContain("meal planner");
+  });
+
+  it("says what ErrorCode.java says, message and next step both", async () => {
+    const words = CATALOGUE.get(CODE)!;
+    kitchenThatDoesNotPlan();
+    standAtThePlanner();
+
+    render(
+      <AuthProvider>
+        <RequireRole roles={["KITCHEN_STAFF", "TEMPLE_ADMIN"]}>
+          <p>The week</p>
+        </RequireRole>
+      </AuthProvider>
+    );
+    signIntoFirebase();
+
+    expect(await screen.findByText(words.message)).toBeInTheDocument();
+    expect(screen.getByText(words.action)).toBeInTheDocument();
+    // Quoted for support, the same way the disabled screen quotes KMS-400019.
+    expect(screen.getByText(CODE)).toBeInTheDocument();
+
+    // Body copy, never the heading — the same rule the wire-read refusals are held to above, and
+    // for the same reason: a catalogue sentence ends in a full stop and no h1 in this app does.
+    expect(
+      screen.queryByRole("heading", { name: words.message })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Not your page", level: 1 })).toBeInTheDocument();
+
+    // And the planner itself never rendered. The words are the point of this test, but a refusal
+    // that said the right thing over a page that had already asked the server for a week would be
+    // the wrong fix twice over.
+    expect(screen.queryByText("The week")).not.toBeInTheDocument();
+  });
+
+  it("does not put the planner's sentence on a refusal that is not the planner's", async () => {
+    // The generic wrong-role refusal is still generic. A cook standing at /donate is not being told
+    // anything about kitchens, and borrowing KMS-400183's sentence for every closed door would be
+    // the same class of lie as the dead links this task removed from Today.
+    const words = CATALOGUE.get(CODE)!;
+    kitchenThatDoesNotPlan();
+    window.history.replaceState({}, "", "/donate");
+
+    render(
+      <AuthProvider>
+        <RequireRole roles={["TEMPLE_ADMIN"]}>
+          <p>Giving</p>
+        </RequireRole>
+      </AuthProvider>
+    );
+    signIntoFirebase();
+
+    expect(await screen.findByRole("heading", { name: "Not your page", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByText(words.message)).not.toBeInTheDocument();
+    expect(screen.queryByText(CODE)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("You don’t have access to this part of the app. Ask your temple administrator.")
+    ).toBeInTheDocument();
+  });
+});

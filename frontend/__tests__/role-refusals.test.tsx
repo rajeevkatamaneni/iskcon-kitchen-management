@@ -218,6 +218,8 @@ function todayView(): TodayView {
     materialsCost: { estimatedTotal: 18400, withoutPrice: 0, mealsCostedAsCooked: 0, mealsCostedAsPlanned: 0 },
     unrecordedMeals: 0,
     equipmentOverdue: null,
+    // Nothing going out of the temple (T-363); this file is about who is offered which tile.
+    upcomingOutside: [],
     approvals: {
       ingredientRequests: 0,
       ingredientRequestsSoon: 0,
@@ -252,6 +254,146 @@ describe("Today tells a cook who is in without sending them at the schedule", ()
 
     const tile = await screen.findByRole("link", { name: /working today/i });
     expect(tile).toHaveAttribute("href", "/staff-schedule");
+  });
+});
+
+// --- (2b) Today's seven doors into the meal planner ----------------------------------------
+
+/**
+ * None of Today's ways into the meal planner is offered to somebody the planner is shut to (T-363).
+ *
+ * <p>Epic 12 made the planner a kitchen's screen as well as a role's: somebody whose kitchen does
+ * not plan its meals here is refused it whatever their role, and `nav.ts` already leaves it out of
+ * the menu for them. Today did not, and offered seven doors that all landed on "Not your page" — the
+ * header button, two stat tiles, the fasting notice's "Review menu", the empty state's "Open
+ * planner", the meal rows, and the catch-up nudge's "Record them".
+ *
+ * <p>Same shape as section (2) above and for the same reason, in that section's own words: the fact
+ * stays and the act goes, because "a tile that lands them on 'Not your page' teaches them that the
+ * tiles lie". Every case here asserts the figure or the sentence is still on the screen beside the
+ * missing link, and each has a twin proving the door is still there for somebody who may use it — a
+ * test that only asserted absence would pass the day somebody deleted the tile.
+ *
+ * <p>The rule is read from `plannerRefused` in `nav.ts`, the menu's own test, so the menu and this
+ * screen cannot come to disagree about who is offered the planner.
+ */
+describe("Today offers no door into the planner to a kitchen that does not plan here", () => {
+  /** Signed in with the one flag Epic 12 added, which is what shuts the planner. */
+  function signedInWithPlanner(role: string, canPlanMeals: boolean) {
+    authRef.current = {
+      status: "signed-in",
+      appUser: { role, userId: "me", fullName: "Gopal Das", canPlanMeals },
+      getToken: async () => "test-token",
+      refresh: () => {},
+    } as typeof authRef.current;
+  }
+
+  /** A morning with a fast, a meal, and some catch-up owing — every door on one screen. */
+  function aMorningWithEveryDoor(): TodayView {
+    return {
+      ...todayView(),
+      calendar: { ...todayView().calendar!, fastingToday: true, todayName: "Ekadashi" },
+      meals: [
+        {
+          mealId: "meal-lunch",
+          mealKind: "Lunch",
+          eventName: null,
+          readyBy: "12:00:00",
+          plates: 820,
+          recorded: false,
+          awaitingRecord: true,
+          occasionName: null,
+          kitchenNames: ["Deity kitchen"],
+          dishes: [],
+        },
+      ],
+      unrecordedMeals: 2,
+    };
+  }
+
+  beforeEach(() => {
+    api.today.mockReset().mockResolvedValue(aMorningWithEveryDoor());
+  });
+
+  it("offers no link to /planner or /planner/catch-up anywhere on the screen", async () => {
+    signedInWithPlanner("KITCHEN_STAFF", false);
+    render(<TodayPage />);
+    await screen.findByText(/servings today/i);
+
+    const toThePlanner = screen
+      .getAllByRole("link")
+      .filter((a) => (a.getAttribute("href") ?? "").startsWith("/planner"));
+    expect(
+      toThePlanner.map((a) => `${a.getAttribute("href")} — ${a.textContent}`),
+      "Today is offering a door into the planner to somebody it is shut to"
+    ).toEqual([]);
+  });
+
+  it("keeps every fact those doors carried", async () => {
+    signedInWithPlanner("KITCHEN_STAFF", false);
+    render(<TodayPage />);
+
+    // The two tiles: the figures are theirs to read, they are cooking the food.
+    expect(await screen.findByText(/servings today/i)).toBeInTheDocument();
+    expect(screen.getByText("1,240")).toBeInTheDocument();
+    expect(screen.getByText(/cost of materials/i)).toBeInTheDocument();
+    // The fast: they are cooking for it.
+    expect(screen.getByText(/no grains, dal or beans today/i)).toBeInTheDocument();
+    // The catch-up nudge: the store room overstating itself is a fact about the temple, and a cook
+    // who reads it can tell whoever does the recording.
+    expect(screen.getByText(/the store room still shows their ingredients as on hand/i)).toBeInTheDocument();
+    // And the meal itself, which is their day's work.
+    expect(screen.getByText("Lunch")).toBeInTheDocument();
+  });
+
+  it("draws the meal row as plain text, with no hover tone and no link label", async () => {
+    signedInWithPlanner("KITCHEN_STAFF", false);
+    render(<TodayPage />);
+    const row = await screen.findByText("Lunch");
+
+    // A block that lights up under the pointer and then does nothing is the same lie as a link that
+    // refuses you, so the hover tone goes with the link.
+    expect(row.closest("a")).toBeNull();
+    expect(row.closest("[class*='hover:bg-sunken']")).toBeNull();
+    // And there is nothing left for a screen reader to announce a destination for.
+    expect(screen.queryByLabelText(/Lunch at 12:00/)).not.toBeInTheDocument();
+  });
+
+  it("offers an empty morning no way to go and plan one either", async () => {
+    signedInWithPlanner("KITCHEN_STAFF", false);
+    api.today.mockResolvedValue({ ...aMorningWithEveryDoor(), meals: [], platesToday: 0 });
+    render(<TodayPage />);
+
+    expect(await screen.findByText(/nothing planned for today/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /open planner/i })).not.toBeInTheDocument();
+    // The empty state still says something true rather than nothing: the meals will appear, they
+    // are simply not this reader's to plan.
+    expect(screen.getByText(/meals appear here once they are planned/i)).toBeInTheDocument();
+  });
+
+  it("still offers all seven to a kitchen manager whose kitchen does plan here", async () => {
+    signedInWithPlanner("KITCHEN_MANAGER", true);
+    render(<TodayPage />);
+    await screen.findByText(/servings today/i);
+
+    expect(screen.getByRole("link", { name: /open planner/i })).toHaveAttribute("href", "/planner");
+    expect(screen.getByRole("link", { name: /servings today/i })).toHaveAttribute("href", "/planner");
+    expect(screen.getByRole("link", { name: /cost of materials/i })).toHaveAttribute("href", "/planner");
+    expect(screen.getByRole("link", { name: /review menu/i })).toHaveAttribute("href", "/planner");
+    expect(screen.getByRole("link", { name: /record them/i })).toHaveAttribute(
+      "href", "/planner/catch-up");
+    expect(screen.getByLabelText("Lunch at 12:00")).toHaveAttribute("href", "/planner?date=2026-08-14");
+  });
+
+  it("is unchanged for a session from before Epic 12, which carries no flag at all", async () => {
+    // `plannerRefused` shuts the planner on an explicit false only. A session shaped before the
+    // field existed carries undefined, and taking the planner away from everybody on an older
+    // session would be a far worse failure than the dead links this fixes.
+    signedInAs("KITCHEN_MANAGER");
+    render(<TodayPage />);
+
+    expect(await screen.findByRole("link", { name: /open planner/i })).toHaveAttribute(
+      "href", "/planner");
   });
 });
 

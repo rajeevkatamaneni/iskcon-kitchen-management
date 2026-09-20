@@ -406,6 +406,110 @@ class TodayIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.calendar").doesNotExist());
 	}
 
+	// ---- What the temple has promised to send out ------------------------
+
+	@Test
+	@DisplayName("what is going out: the fortnight ahead, soonest first, and not today's own")
+	void upcomingOutsideIsTheFortnightAhead() throws Exception {
+		// The cross-date heads-up (T-363), which is what is left of the planner's deleted section of
+		// outside commitments. Its whole reason for existing is that a day view cannot look past its
+		// own day: somebody reading Monday's plan cannot see Saturday's delivery.
+		planOutsideOn(today.plusDays(6), "Vidyaranyapura School Gita Reading", "DELIVERY", "10:00");
+		planOutsideOn(today.plusDays(1), "Community programme", "PICKUP", "11:00");
+
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.upcomingOutside.length()").value(2))
+				// Soonest first, and each row carries its meal's own id so it opens that meal rather
+				// than whichever meal on that date happens to share its kind and name (D-27).
+				.andExpect(jsonPath("$.upcomingOutside[0].eventName").value("Community programme"))
+				.andExpect(jsonPath("$.upcomingOutside[0].planDate").value(today.plusDays(1).toString()))
+				.andExpect(jsonPath("$.upcomingOutside[0].handover").value("PICKUP"))
+				.andExpect(jsonPath("$.upcomingOutside[0].mealId").value(mealNamed("Community programme").toString()))
+				.andExpect(jsonPath("$.upcomingOutside[0].preparations").value(1))
+				.andExpect(jsonPath("$.upcomingOutside[1].eventName").value("Vidyaranyapura School Gita Reading"))
+				.andExpect(jsonPath("$.upcomingOutside[1].handover").value("DELIVERY"));
+	}
+
+	@Test
+	@DisplayName("today's own outside event is on the meals card, not on the heads-up as well")
+	void todaysOwnOutsideEventIsNotOnTheHeadsUp() throws Exception {
+		// From tomorrow, not from today. Today's outside meals are already on this screen with
+		// everything else the kitchen is cooking, and listing one twice would say the temple had two.
+		planOutsideOn(today, "Bhajan Prasadam at the school", "DELIVERY", "11:00");
+
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.meals.length()").value(1))
+				.andExpect(jsonPath("$.meals[0].eventName").value("Bhajan Prasadam at the school"))
+				.andExpect(jsonPath("$.upcomingOutside.length()").value(0));
+	}
+
+	@Test
+	@DisplayName("a delivery beyond the fortnight is the planner's problem, not the morning's")
+	void beyondTheFortnightIsNotAHeadsUp() throws Exception {
+		planOutsideOn(today.plusDays(14), "Inside the window", "PICKUP", "11:00");
+		planOutsideOn(today.plusDays(15), "Beyond the window", "PICKUP", "11:00");
+
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.upcomingOutside.length()").value(1))
+				.andExpect(jsonPath("$.upcomingOutside[0].eventName").value("Inside the window"));
+	}
+
+	@Test
+	@DisplayName("a cancelled event is not a commitment, and an in-house meal was never one")
+	void cancelledAndInHouseAreNotCommitments() throws Exception {
+		planMealOn(today.plusDays(2), "Lunch", 200);
+		planOutsideOn(today.plusDays(3), "Called off", "PICKUP", "11:00");
+		planOutsideOn(today.plusDays(4), "Still on", "PICKUP", "11:00");
+
+		mvc.perform(post("/api/v1/meals/{id}/cancel", mealNamed("Called off"))
+						.header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk());
+
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.upcomingOutside.length()").value(1))
+				.andExpect(jsonPath("$.upcomingOutside[0].eventName").value("Still on"));
+	}
+
+	@Test
+	@DisplayName("nothing going out is an empty list, and the screen then draws nothing")
+	void nothingGoingOutIsAnEmptyList() throws Exception {
+		planMeal("Lunch", 300);
+
+		mvc.perform(get("/api/v1/today").header("Authorization", "Bearer valid-token"))
+				.andExpect(status().isOk())
+				// Empty, never null: the screen draws the card only when there is something on it, and
+				// a null would make "nothing promised" and "this reader is not told" the same answer.
+				.andExpect(jsonPath("$.upcomingOutside").isArray())
+				.andExpect(jsonPath("$.upcomingOutside.length()").value(0));
+	}
+
+	/** Plans an event that leaves the temple, the way the composer does. */
+	private void planOutsideOn(LocalDate date, String eventName, String handover, String readyBy)
+			throws Exception {
+		String extra = "DELIVERY".equals(handover)
+				? ",\"deliveryAddress\":\"Vidyaranyapura, Bengaluru\",\"guestsEatAt\":\"13:00\""
+				: "";
+		mvc.perform(post("/api/v1/meals").header("Authorization", "Bearer valid-token")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(MealRequests.save("""
+								{"planDate":"%s","mealKind":"Event","recipeId":"%s","targetYield":80,
+								 "adults":80,"readyBy":"%s","eventName":"%s","isOutside":true,
+								 "handover":"%s","contactName":"Mrs Latha Rao",
+								 "contactPhone":"+919000000002"%s}
+								""".formatted(date, khichdi, readyBy, eventName, handover, extra),
+								admin, tenant)))
+				.andExpect(status().isCreated());
+	}
+
+	private UUID mealNamed(String eventName) {
+		return admin.queryForObject(
+				"SELECT id FROM meals WHERE tenant_id = ? AND event_name = ?", UUID.class, tenant, eventName);
+	}
+
 	// ---------------------------------------------------------------------
 
 	private void planMeal(String kind, int servings) throws Exception {

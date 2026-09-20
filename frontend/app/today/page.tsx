@@ -16,6 +16,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { PlatformNotices } from "@/components/PlatformNotices";
 import {
   api,
+  type OutsideCommitment,
   type TodayDelivery,
   type TodayDish,
   type TodayMaterialsCost,
@@ -24,6 +25,7 @@ import {
   type TodayWorkforce,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { plannerRefused } from "@/lib/nav";
 import { dayLabel } from "@/lib/calendar-names";
 import { ekadashiSpelling } from "@/lib/vaishnava-day";
 import { cooksQuantity, hhmm, longDay, money, shortDate } from "@/lib/format";
@@ -64,6 +66,27 @@ function TodayScreen() {
   // is given the fact without the act, rather than the fact withheld.
   const maySeeSchedule = appUser?.role === "TEMPLE_ADMIN" || appUser?.role === "KITCHEN_MANAGER";
 
+  /**
+   * Whether to offer this reader a way into the meal planner at all (T-363, from T-359 §8).
+   *
+   * <p>Epic 12 made the planner a kitchen's screen as well as a role's: somebody whose kitchen does
+   * not plan its meals here is refused it whatever their role, and the menu already leaves it out for
+   * them. Today did not, and offered seven doors into it — the header button, the catch-up nudge,
+   * three meal rows and two stat tiles — every one of which landed on "Not your page". Counted on
+   * staging as Gopal Das, Kitchen Staff in the Deity Kitchen.
+   *
+   * <p>The fact stays and the act goes, which is the shape this screen already uses twice: the
+   * workforce tile shows a cook the count without the link to the schedule, and the server sends a
+   * null equipment count rather than a zero to somebody who does not book the engineer. What a person
+   * cannot do should not be dangled in front of them; what is true of their kitchen's day is still
+   * theirs to read.
+   *
+   * <p>`plannerRefused` is the menu's own test — `whoami.canPlanMeals === false` — so the menu and
+   * this screen cannot come to disagree about who is offered the planner. It is not the protection;
+   * the guard on the planner and the server behind it are.
+   */
+  const mayPlan = !plannerRefused(appUser);
+
   return (
     <div className="flex min-h-screen">
       <Sidebar activeHref="/today" />
@@ -74,9 +97,11 @@ function TodayScreen() {
             subtitle={data ? summarise(data) : undefined}
             actions={
               <>
-                <ButtonLink href="/planner" variant="secondary">
-                  Open planner
-                </ButtonLink>
+                {mayPlan && (
+                  <ButtonLink href="/planner" variant="secondary">
+                    Open planner
+                  </ButtonLink>
+                )}
                 <ButtonLink href="/orders">Record a delivery</ButtonLink>
               </>
             }
@@ -91,10 +116,10 @@ function TodayScreen() {
                   thing to scroll past (E9-S1). The component fetches its own feed. */}
               <PlatformNotices />
 
-              {fastingNotice(data)}
+              {fastingNotice(data, mayPlan)}
               {aheadNotice(data)}
               {approvalNotices(data)}
-              {unrecordedNotice(data)}
+              {unrecordedNotice(data, mayPlan)}
               {equipmentNotice(data)}
               {/* Drafts nobody has sent that are at or past their order-by date (T-137, D-24a).
                   Fetches its own list, like PlatformNotices above — see the component. */}
@@ -105,7 +130,9 @@ function TodayScreen() {
                   label="Servings today"
                   value={data.platesToday.toLocaleString("en-IN")}
                   icon="bowl"
-                  href="/planner"
+                  // A figure, not a door, for somebody whose kitchen does not plan here (T-363) —
+                  // the same treatment the workforce tile gives a cook below.
+                  href={mayPlan ? "/planner" : undefined}
                   note={
                     data.meals.length
                       ? // Per meal, from each meal's head count — never a sum of dish servings,
@@ -147,14 +174,22 @@ function TodayScreen() {
                   label="Cost of materials"
                   value={inr(data.materialsCost.estimatedTotal)}
                   icon="receipt"
-                  href="/planner"
+                  href={mayPlan ? "/planner" : undefined}
                   note={<MaterialsNote cost={data.materialsCost} />}
                 />
               </div>
 
               <div className="grid items-start gap-4 xl:grid-cols-[1.4fr_1fr]">
-                <MealsCard meals={data.meals} date={data.date} />
-                <DeliveriesCard deliveries={data.deliveries} />
+                <MealsCard meals={data.meals} date={data.date} mayPlan={mayPlan} />
+                {/* The narrow column stacks what is coming: today's deliveries in, and then what the
+                    temple has promised to send out in the days ahead. Both are lists of things
+                    arriving or leaving that nobody has to act on this minute, and the space under
+                    Deliveries was empty on every temple whose morning has fewer than a dozen of
+                    them. */}
+                <div className="grid gap-4">
+                  <DeliveriesCard deliveries={data.deliveries} />
+                  <GoingOutCard commitments={data.upcomingOutside} mayPlan={mayPlan} />
+                </div>
               </div>
             </>
           )}
@@ -216,20 +251,21 @@ function summarise(data: TodayView): string {
  * or take care over, and a fasting day is information the temple already lives by. The banner's
  * place at the top of the page carries the weight; the colour does not need to.
  */
-function fastingNotice(data: TodayView) {
+function fastingNotice(data: TodayView, mayPlan: boolean) {
   const calendar = data.calendar;
   if (!calendar) return null;
 
+  // No "Review menu" for somebody the planner is shut to (T-363): it is the menu they would be
+  // reviewing it in. The fast itself is still theirs to know about — they are cooking for it.
+  const review = mayPlan ? (
+    <ButtonLink href="/planner" size="sm" variant="ghost">
+      Review menu
+    </ButtonLink>
+  ) : undefined;
+
   if (calendar.fastingToday) {
     return (
-      <InlineNotice
-        tone="info"
-        action={
-          <ButtonLink href="/planner" size="sm" variant="ghost">
-            Review menu
-          </ButtonLink>
-        }
-      >
+      <InlineNotice tone="info" action={review}>
         Today is a fasting day{calendar.todayName ? ` (${ekadashiSpelling(calendar.todayName)})` : ""}. No grains, dal
         or beans today.
       </InlineNotice>
@@ -238,14 +274,7 @@ function fastingNotice(data: TodayView) {
 
   if (calendar.fastingTomorrow) {
     return (
-      <InlineNotice
-        tone="info"
-        action={
-          <ButtonLink href="/planner" size="sm" variant="ghost">
-            Review menu
-          </ButtonLink>
-        }
-      >
+      <InlineNotice tone="info" action={review}>
         Tomorrow is a fasting day{calendar.tomorrowName ? ` (${ekadashiSpelling(calendar.tomorrowName)})` : ""}. No
         grains, dal or beans tomorrow.
       </InlineNotice>
@@ -291,17 +320,26 @@ function aheadNotice(data: TodayView) {
  * Each meal is a link through to that day's planner (A2) — a number nobody can act on is
  * decoration, and the planner is where the acting happens.
  */
-function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
+function MealsCard({
+  meals,
+  date,
+  mayPlan,
+}: {
+  meals: TodayMeal[];
+  date: string;
+  /** Whether this reader may open the planner at all (T-363). A row is a link only if they may. */
+  mayPlan: boolean;
+}) {
   return (
     <Card title="Meals planned for today" meta="In the order they are due">
       {meals.length === 0 ? (
         <EmptyState
           title="Nothing planned for today"
-          action={
-            <ButtonLink href="/planner">Open planner</ButtonLink>
-          }
+          action={mayPlan ? <ButtonLink href="/planner">Open planner</ButtonLink> : undefined}
         >
-          Plan a meal and it will appear here.
+          {mayPlan
+            ? "Plan a meal and it will appear here."
+            : "Meals appear here once they are planned."}
         </EmptyState>
       ) : (
         <div className="grid">
@@ -309,16 +347,13 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
             // The divider lives on a square wrapper, not on the rounded link: a top border on a
             // rounded box bends down at both ends, which drew every divider as a shallow bracket.
             <div key={meal.mealId} className="border-t border-hairline first:border-t-0">
-            <Link
-              href={`/planner?date=${date}`}
-              // Named for what it is, so a screen reader announces "Lunch at 12:00" rather than
-              // reading the whole block of dishes before saying where the link goes. An event is
-              // announced by its name, the same as the heading it stands for.
-              aria-label={`${mealName(meal)} at ${hhmm(meal.readyBy)}`}
-              // Item 14. Pulled out and padded back, so the hover tone gains 12px each side and a
-              // radius rather than hugging the words. Nothing on the row moves: the negative margin
-              // and the padding cancel, and only the highlight is bigger.
-              className="-mx-3 grid gap-2 rounded px-3 py-3 transition-colors duration-state hover:bg-sunken"
+            {/* A row is a link to the day's plan for anybody who can open it, and plain text for
+                anybody who cannot (T-363). `MealRow` is one body drawn either way, rather than the
+                whole block written twice and drifting. */}
+            <MealRow
+              href={mayPlan ? `/planner?date=${date}` : null}
+              // An event is announced by its name, the same as the heading it stands for.
+              label={`${mealName(meal)} at ${hhmm(meal.readyBy)}`}
             >
               <span className="flex items-center gap-4">
                 <span className="w-14 flex-none text-sm tabular-nums text-ink-secondary">
@@ -363,13 +398,168 @@ function MealsCard({ meals, date }: { meals: TodayMeal[]; date: string }) {
                   </span>
                 ))}
               </span>
-            </Link>
+            </MealRow>
             </div>
           ))}
         </div>
       )}
     </Card>
   );
+}
+
+/**
+ * One meal's row on Today: a link into that day's plan, or the same row as plain text.
+ *
+ * <p>The hover tone and the pulled-out padding belong to the link and are dropped with it, because a
+ * block that lights up under the pointer and then does nothing is the same lie as a link that refuses
+ * you. The `aria-label` goes too: without a link there is nothing for a screen reader to announce a
+ * destination for, and the row's own words already say what it is.
+ */
+function MealRow({
+  href,
+  label,
+  children,
+}: {
+  href: string | null;
+  label: string;
+  children: ReactNode;
+}) {
+  const body = "grid gap-2 py-3";
+  if (!href) {
+    return <div className={body}>{children}</div>;
+  }
+  return (
+    <Link
+      href={href}
+      // Named for what it is, so a screen reader announces "Lunch at 12:00" rather than reading the
+      // whole block of dishes before saying where the link goes.
+      aria-label={label}
+      // Item 14. Pulled out and padded back, so the hover tone gains 12px each side and a radius
+      // rather than hugging the words. Nothing on the row moves: the negative margin and the padding
+      // cancel, and only the highlight is bigger.
+      className={`-mx-3 rounded px-3 transition-colors duration-state hover:bg-sunken ${body}`}
+    >
+      {children}
+    </Link>
+  );
+}
+
+/**
+ * What the temple has promised to send out of the building in the days ahead (T-363).
+ *
+ * <p>This is what is left of the planner's *Upcoming outside commitments* section, which Rajeev
+ * removed on 2026-09-19: the events themselves are ordinary meals and sit in the planner's day list
+ * with everything else, sorted by ready-by. The one thing a day view cannot do is look across dates —
+ * somebody reading Monday cannot see Saturday's delivery — and that is a heads-up rather than a
+ * section, so it is here, small, with the temple's other heads-ups.
+ *
+ * <p>Deliberately a nudge and not a table. The old section listed the contact, the address, the hour
+ * and the number of preparations in six columns and linked to none of it; all of that is on the
+ * meal's own card, which is where a row here goes.
+ *
+ * <p><strong>Nothing at all when there is nothing.</strong> An empty card every morning is furniture
+ * saying nothing, and a temple that does no outside cooking would carry it for ever.
+ */
+function GoingOutCard({
+  commitments,
+  mayPlan,
+}: {
+  commitments: OutsideCommitment[];
+  /** A row opens the day's plan; for a reader the planner is shut to it is plain text (T-363). */
+  mayPlan: boolean;
+}) {
+  if (commitments.length === 0) return null;
+
+  return (
+    <Card title="Going out of the temple" meta="In the days ahead, soonest first">
+      <div className="grid">
+        {commitments.map((c) => {
+          const name = c.eventName || c.mealKind;
+          const row = (
+            <>
+              {/* The name over its date, with the pill to the right — the same three-part row the
+                  Deliveries card directly above this one uses for a vendor, its order and its state.
+                  Two cards in one column reading two different ways would make the reader learn the
+                  column twice.
+
+                  It is also the only arrangement that fits, and that was measured rather than
+                  guessed. In a column and a date beside it, the name had 184px at 1280 and all
+                  three real names were clipped: "Children's Bhagavad-gita Reading" — Rajeev's own
+                  event, the one he could not open — needs 192px, and the other two 210 and 217.
+                  Letting them wrap in that column took one of them to three lines. Over the date
+                  the name has 242px and every one of them is a single line. The name is the whole
+                  of what the row says, so it is the last thing that may be cut or cramped.
+
+                  The weekday stays, because which Saturday it is decides whether anybody is
+                  rostered, and a bare "26 Sept" makes the reader count. */}
+              <span className="grid min-w-0">
+                <span className="text-sm font-medium text-ink">{name}</span>
+                <span className="text-xs text-ink-muted">{dayAndDate(c.planDate)}</span>
+              </span>
+              <HandoverBadge handover={c.handover} />
+            </>
+          );
+          return (
+            <div key={c.mealId} className="border-t border-hairline first:border-t-0">
+              {mayPlan ? (
+                <Link
+                  href={`/planner?date=${c.planDate}`}
+                  aria-label={`${name} on ${dayAndDate(c.planDate)}`}
+                  className="-mx-3 flex items-start justify-between gap-3 rounded px-3 py-2.5 transition-colors duration-state hover:bg-sunken"
+                >
+                  {row}
+                </Link>
+              ) : (
+                <div className="flex items-start justify-between gap-3 py-2.5">{row}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Who moves the food — the same pill, in the same words and the same blue, as the meal's own card in
+ * the planner (T-363).
+ *
+ * <p>Blue for both readings, on Rajeev's choice. Colour in this product is severity and never
+ * category (DESIGN_SYSTEM v1.14): amber belongs to something to act on or take care over, and these
+ * meals already carry the amber loading-time warning on the form that plans them. One colour for a
+ * delivery and another for a collection would say one of the two matters more, and it does not.
+ *
+ * <p>Nothing where the handover was never asked — the plans V88 carried over from the old catering
+ * kinds. A pill reading "Not set" on a morning screen is a question mark nobody can answer from here.
+ */
+function HandoverBadge({ handover }: { handover: OutsideCommitment["handover"] }) {
+  if (!handover) return null;
+  // `flex-none whitespace-nowrap`, and both were measured. As an ordinary flex child in this row the
+  // pill shrank at 390 and "They collect it" broke over two lines inside its own rounded box — a
+  // three-word label folded in half, which is the cramped pill Rajeev has had to point out before.
+  // It holds its width and the name wraps instead, which is the right way round: a name can run to
+  // two lines and still read, a three-word pill cannot.
+  return (
+    <span className="flex-none whitespace-nowrap">
+      <Badge tone="info">{handover === "DELIVERY" ? "We deliver it" : "They collect it"}</Badge>
+    </span>
+  );
+}
+
+/**
+ * "2026-09-26" → "Sat 26 Sept", for a row that has to say which day of the week it is in a narrow
+ * column.
+ *
+ * <p>Built here rather than in `lib/format.ts` because this screen is the only place that needs the
+ * weekday abbreviated beside the date; `shortDate` ("26 Sept") and `longDay` ("Saturday, 26
+ * September") are the two shapes the rest of the product uses, and neither fits a 1fr column. Day
+ * first and the month named, like every other date here. A wall date built at `T00:00:00` and
+ * rendered with no timeZone, which is the correct handling for a calendar day — see the rule in
+ * `design-system.test.ts`.
+ */
+function dayAndDate(iso: string): string {
+  const weekday = new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short" });
+  return `${weekday} ${shortDate(iso)}`;
 }
 
 /** What is expected from vendors — the store keeper's first question of the morning. */
@@ -673,7 +863,7 @@ function approvalNotices(data: TodayView) {
  * A nudge, not an alarm (§2). Stock only leaves the store room when a meal is recorded, so meals
  * nobody has typed back in are the reason the inventory quietly overstates itself.
  */
-function unrecordedNotice(data: TodayView) {
+function unrecordedNotice(data: TodayView, mayPlan: boolean) {
   if (data.unrecordedMeals === 0) return null;
   const one = data.unrecordedMeals === 1;
   return (
@@ -691,10 +881,15 @@ function unrecordedNotice(data: TodayView) {
           from earlier this week {one ? "hasn’t" : "haven’t"} been recorded yet.
         </>
       }
+      // Catching up is a planner screen, so it is not offered to a reader the planner is shut to
+      // (T-363). The nudge itself stays: the store room overstating itself is a fact about the
+      // temple, and a cook who reads it can tell whoever does the recording.
       action={
-        <ButtonLink href="/planner/catch-up" size="sm" variant="ghost">
-          Record them
-        </ButtonLink>
+        mayPlan ? (
+          <ButtonLink href="/planner/catch-up" size="sm" variant="ghost">
+            Record them
+          </ButtonLink>
+        ) : undefined
       }
     >
       Until they are, the store room still shows their ingredients as on hand.

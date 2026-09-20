@@ -132,15 +132,11 @@ function views() {
   return screen.getByRole("tablist", { name: /planner view/i });
 }
 
-/** The commitments list is fed by the same shared query as everything else here — see the mock. */
-function commitmentsList(): HTMLElement | null {
-  return screen.queryByRole("region", { name: /upcoming outside commitments/i });
-}
-
-function outsideTheCommitmentsList(matches: HTMLElement[]): HTMLElement[] {
-  const list = commitmentsList();
-  return list ? matches.filter((el) => !list.contains(el)) : matches;
-}
+// No `commitmentsList` / `outsideTheCommitmentsList` here any more (T-363). They existed because
+// the planner drew an *Upcoming outside commitments* table at the foot of every view, fed — like
+// everything else on this screen — by the one shared query mocked above, so a fixture meal appeared
+// twice and every count had to subtract the table. The table is gone: an outside event is an
+// ordinary meal in the day list, and the counts below say what the screen draws.
 
 describe("meal planner", () => {
   beforeEach(() => {
@@ -312,10 +308,9 @@ describe("a meal is the unit of planning", () => {
     // One lunch, not three. The block names the meal and the plates it scales to; the three
     // preparations sit beneath it rather than beside two more copies of "Lunch".
     //
-    // Counted outside the commitments table, which every query in this file feeds from the one
-    // shared array (see the mock above) and which would otherwise put a second "Lunch" on the
-    // screen that the planner itself never draws.
-    expect(outsideTheCommitmentsList(screen.getAllByText("Lunch"))).toHaveLength(1);
+    // One "Lunch" on the whole screen now. It used to need counting around the commitments table,
+    // which the same shared query fed a second copy of the fixture into (T-363).
+    expect(screen.getAllByText("Lunch")).toHaveLength(1);
     expect(screen.getByText(/133 servings/)).toBeInTheDocument();
     expect(screen.getByText("Bisi Bele Bath")).toBeInTheDocument();
     expect(screen.getByText("Majjige")).toBeInTheDocument();
@@ -739,81 +734,19 @@ function previousMonth(iso: string): number {
   return m === 1 ? 12 : m - 1;
 }
 
-/**
- * Upcoming outside commitments (E4-S15 D4).
- *
- * <p>The idea behind the *Upcoming catering* table that was designed and never built was right —
- * nobody should discover a booking on the morning — and this covers more, because it is keyed off
- * *is this going outside* rather than *is this catering*. The school delivery and the community
- * programme are on it beside the wedding.
- *
- * <p>What is future, what order they come in and which are dropped is the server's answer (it
- * returns future, uncancelled rows in date order); what this asserts is that the screen draws that
- * answer whole, and draws nothing at all when there is none.
- */
-describe("upcoming outside commitments", () => {
-  beforeEach(() => {
-    authRef.current = {
-      status: "signed-in",
-      appUser: { role: "KITCHEN_STAFF", userId: "me", fullName: "Gopal Das" },
-    };
-    urlRef.current?.write("");
-  });
-
-  it("lists what is leaving the temple, with enough to act on without opening anything", () => {
-    queryRef.current = [
-      commitment(),
-      commitment({
-        planDate: "2026-09-19",
-        eventName: "Vidyaranyapura School Gita Reading",
-        handover: "PICKUP",
-        contactName: "Mrs Latha Rao",
-        contactPhone: "+91 98862 30011",
-        deliveryAddress: null,
-        guestsEatAt: null,
-      }),
-    ];
-    render(<PlannerPage />);
-
-    const list = commitmentsList();
-    expect(list).not.toBeNull();
-    // When it is, what it is called, who to ring, and where it is going.
-    expect(within(list as HTMLElement).getByText("Bhajan Prasadam at the school")).toBeInTheDocument();
-    expect(within(list as HTMLElement).getByText("Mrs Latha Rao")).toBeInTheDocument();
-    expect(
-      within(list as HTMLElement).getByText("Hare Krishna Hill, Rajajinagar 560010")
-    ).toBeInTheDocument();
-    expect(within(list as HTMLElement).getByText("We deliver it")).toBeInTheDocument();
-    expect(within(list as HTMLElement).getByText("Collected")).toBeInTheDocument();
-  });
-
-  it("draws nothing at all when nothing is going out", () => {
-    queryRef.current = [];
-    render(<PlannerPage />);
-    // An empty table on every planner screen is furniture saying nothing, and a temple that does no
-    // outside cooking would carry it for ever.
-    expect(commitmentsList()).toBeNull();
-  });
-});
-
-/** One commitment, as `outside-commitments` returns it. `dishes` keeps the meal grids out of it. */
-function commitment(fields: Record<string, unknown> = {}) {
-  return {
-    mealId: "meal-bhajan-prasadam",
-    planDate: "2026-09-12",
-    eventName: "Bhajan Prasadam at the school",
-    mealKind: "Event",
-    handover: "DELIVERY",
-    contactName: "Sri Anand Rao",
-    contactPhone: "+91 98450 11223",
-    deliveryAddress: "Hare Krishna Hill, Rajajinagar 560010",
-    readyBy: "11:00:00",
-    guestsEatAt: "13:00:00",
-    preparations: 2,
-    dishes: [],
-    ...fields,
-  };
-}
+// The *upcoming outside commitments* describe block stood here until T-363 (2026-09-19). It
+// asserted that the planner drew a table of everything leaving the temple and drew nothing when
+// there was none. Rajeev removed the table: "No need for special handling for outside commitments."
+// It was also a dead end — six columns of plain table cells with no link on any of them, so an
+// event named on it could not be opened, adjusted or printed, which is what he reported.
+//
+// What replaced each half:
+//   - the events are ordinary meals in the day list, covered by `MealPlanIT`'s
+//     `outsideEventsAreOrdinaryMealsInTheDayList` and by the handover pill in
+//     `meal-kitchen-sections.test.tsx`;
+//   - looking across dates, which a day view cannot do, is Today's heads-up — `TodayIT`'s
+//     `upcomingOutsideIsTheFortnightAhead` and the "going out of the temple" block in
+//     `today.test.tsx`.
 
 // --- T-219: coming back from a meal's screen --------------------------------
 

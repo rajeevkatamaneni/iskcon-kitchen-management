@@ -484,4 +484,6 @@ const TODAY: TodayView = {
   approvals: { ingredientRequests: 0, ingredientRequestsSoon: 0, leaveRequests: 0, leaveRequestsSoon: 0 },
   deliveries: [],
   equipmentOverdue: null,
+  // Nothing promised to anybody outside the temple (T-363); this file is not about that heads-up.
+  upcomingOutside: [],
 };

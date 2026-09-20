@@ -11,7 +11,10 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
  * (wave E12-2), so every figure here is what the reserved types in `lib/api.ts` promise it will send.
  */
 
-const { meals, mealCrew, jobCardLanguages, requestJobCard, getJobCardDocument, downloadJobCardDocument } =
+const {
+  meals, mealCrew, jobCardLanguages, requestJobCard, getJobCardDocument, downloadJobCardDocument,
+  travelEstimate,
+} =
   vi.hoisted(() => ({
     meals: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
     mealCrew: vi.fn(async (_from: string, _to: string, _t?: string) => [] as unknown[]),
@@ -26,6 +29,13 @@ const { meals, mealCrew, jobCardLanguages, requestJobCard, getJobCardDocument, d
     // Ready at once, so the download goes through without the poll's wait.
     getJobCardDocument: vi.fn(async () => ({ id: "d1", status: "READY" })),
     downloadJobCardDocument: vi.fn(async () => new Blob(["%PDF"])),
+    // `TravelLine` asks for this the moment a delivery's card mounts, so the handover cases below
+    // need it stubbed or the real `fetch` runs and jsdom rejects the relative URL. Unmocked it was
+    // an unhandled rejection rather than a failure, which vitest warns can make a pass meaningless.
+    travelEstimate: vi.fn(async () => ({
+      available: false, leaveBy: null, optimisticMinutes: null, pessimisticMinutes: null,
+      guestsEatAt: null, reason: "No route provider configured",
+    })),
   }));
 
 vi.mock("next/navigation", () => ({
@@ -48,6 +58,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       requestJobCard,
       getJobCardDocument,
       downloadJobCardDocument,
+      travelEstimate,
     },
   };
 });
@@ -329,5 +340,118 @@ describe("a meal's sections, one per kitchen", () => {
     // The kitchen goes with a one-kitchen meal's card too.
     expect(requestJobCard.mock.calls[0][3]).toBe(MAIN);
     await act(async () => {});
+  });
+});
+
+/**
+ * Who moves the food, on the meal's own card (T-363).
+ *
+ * <p>The one fact the planner's deleted *Upcoming outside commitments* table carried that the meal
+ * card did not. Rajeev asked for it "like an information pill" that catches the eye, and chose blue.
+ * Everything else that table held — the contact, where it is going, the hour — was already on the
+ * card's facts line, which is why only this moved.
+ *
+ * <p>The words are asserted exactly, in both places they appear. Rajeev wrote "We deliver it"
+ * himself; "They collect it" is its pair and says the same thing about the other direction, so a
+ * reader who has learned one has learned both. `today.test.tsx` asserts the same two strings on the
+ * heads-up row — the same label in every view, so the same fact is never called two things.
+ */
+describe("the handover pill on an outside event", () => {
+  /** A Lunch that leaves the temple, otherwise the fixture above unchanged. */
+  function goingOut(handover: "DELIVERY" | "PICKUP" | null) {
+    return {
+      ...lunch([{ kitchenId: MAIN, kitchenName: "Main kitchen", isMain: true, crewRequired: 6 }], [
+        dish("d-rice", "r-rice", "Basmati rice", MAIN, 150),
+      ]),
+      mealKind: "Event",
+      eventName: "Children's Bhagavad-gita Reading",
+      isOutside: true,
+      handover,
+      contactName: "Mrs Shanta",
+      contactPhone: "+91 98862 30011",
+      deliveryAddress: handover === "DELIVERY" ? "Vidyaranyapura, Bengaluru" : null,
+      guestsEatAt: handover === "DELIVERY" ? "13:00:00" : null,
+    };
+  }
+
+  beforeEach(() => {
+    meals.mockReset();
+    mealCrew.mockReset().mockResolvedValue([crewOf([MAIN_CREW])]);
+  });
+
+  async function openEvent(handover: "DELIVERY" | "PICKUP" | null) {
+    meals.mockResolvedValue([goingOut(handover)]);
+    render(
+      <MealServices
+        date={DATE}
+        sufficiency={new Map()}
+        recipes={RECIPES as never}
+        readOnly={false}
+        onChanged={vi.fn()}
+        onError={vi.fn()}
+      />
+    );
+    return screen.findByText("Children's Bhagavad-gita Reading");
+  }
+
+  it("says we deliver it, in Rajeev's own words and in the info blue he chose", async () => {
+    await openEvent("DELIVERY");
+    const pill = screen.getByText("We deliver it");
+    // The design system's own info tokens, not a colour written on this component. `globals.css`
+    // defines them as #326086 on #E5F2FD, which is the blue.
+    expect(pill).toHaveClass("bg-info-bg", "text-info");
+    expect(screen.queryByText("They collect it")).not.toBeInTheDocument();
+  });
+
+  it("says they collect it when the guests come for the food", async () => {
+    await openEvent("PICKUP");
+    const pill = screen.getByText("They collect it");
+    expect(pill).toHaveClass("bg-info-bg", "text-info");
+    // Not "Collected", which the deleted table used and which reads as something that has already
+    // happened, on a meal nobody has cooked yet.
+    expect(screen.queryByText("Collected")).not.toBeInTheDocument();
+  });
+
+  it("says nothing at all where the handover was never asked", async () => {
+    // V88 carried the old catering and outside-event plans across with `handover` NULL, because
+    // nobody was ever asked. A pill reading "Not set" on a day's card is a permanent question mark
+    // the reader cannot answer from there; the meal's own form asks it.
+    await openEvent(null);
+    expect(screen.queryByText("We deliver it")).not.toBeInTheDocument();
+    expect(screen.queryByText("They collect it")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Not set/)).not.toBeInTheDocument();
+  });
+
+  it("says nothing on a meal that never leaves the temple", async () => {
+    meals.mockResolvedValue([lunch()]);
+    render(
+      <MealServices
+        date={DATE}
+        sufficiency={new Map()}
+        recipes={RECIPES as never}
+        readOnly={false}
+        onChanged={vi.fn()}
+        onError={vi.fn()}
+      />
+    );
+    await screen.findByText("Lunch");
+    expect(screen.queryByText("We deliver it")).not.toBeInTheDocument();
+    expect(screen.queryByText("They collect it")).not.toBeInTheDocument();
+  });
+
+  it("still opens for editing and still offers its kitchen's job card", async () => {
+    // Rajeev, on the event he could not reach from the deleted table: "I cant open it to adjust it
+    // OR view what is in it, cant print a Job card. NOTHING!!" Both are on the card, and were all
+    // along — the table was the dead end, not the meal.
+    await openEvent("DELIVERY");
+    const edit = screen.getByRole("link", { name: /edit/i });
+    expect(edit).toHaveAttribute("href", expect.stringContaining("/planner/meal/meal-1"));
+    // Named by the event rather than by the kind, the same as the heading above it: a job card for
+    // "the Event" would be no use to anybody holding three of them.
+    expect(
+      screen.getByRole("button", {
+        name: "Download the Children's Bhagavad-gita Reading, Main kitchen job card",
+      })
+    ).toBeInTheDocument();
   });
 });

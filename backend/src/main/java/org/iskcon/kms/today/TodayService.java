@@ -1,6 +1,7 @@
 package org.iskcon.kms.today;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
@@ -24,7 +25,9 @@ import org.iskcon.kms.invoice.VendorInvoiceService;
 import org.iskcon.kms.invoice.VendorInvoiceView;
 import org.iskcon.kms.meal.MealCrewService;
 import org.iskcon.kms.meal.MealDishView;
+import org.iskcon.kms.meal.Handover;
 import org.iskcon.kms.meal.MealStatus;
+import org.iskcon.kms.meal.OutsideCommitment;
 import org.iskcon.kms.meal.ServedMeal;
 import org.iskcon.kms.meal.ServedMealService;
 import org.iskcon.kms.purchaseorder.PoStatus;
@@ -33,6 +36,7 @@ import org.iskcon.kms.purchaseorder.PurchaseOrderView;
 import org.iskcon.kms.staff.WorkforceCount;
 import org.iskcon.kms.staff.WorkforceService;
 import org.iskcon.kms.tenancy.TempleClock;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,6 +69,17 @@ public class TodayService {
 	/** How far back the unrecorded-meal nudge looks. A week is what somebody can still remember. */
 	private static final int NUDGE_DAYS = 7;
 
+	/**
+	 * How far ahead the outside-commitment heads-up looks (T-363).
+	 *
+	 * <p>A fortnight, not a month and not everything. This is a nudge about food that has been promised
+	 * to somebody outside the temple, and its whole value is that the reader has not planned around it
+	 * yet; a delivery six weeks out is on the planner where it belongs and is nobody's morning problem.
+	 * Bounded by meaning rather than by a row count on purpose — a cap of "the next five" would quietly
+	 * hide the sixth, and the reader would have no way of knowing there was one.
+	 */
+	private static final int OUTSIDE_AHEAD_DAYS = 14;
+
 	private final TempleClock clock;
 	private final ServedMealService servedMealService;
 	private final MealCrewService mealCrewService;
@@ -77,6 +92,7 @@ public class TodayService {
 	private final IngredientRequestService ingredientRequestService;
 	private final LeaveService leaveService;
 	private final EquipmentService equipmentService;
+	private final JdbcTemplate jdbc;
 
 	public TodayService(
 			ServedMealService servedMealService, MealCrewService mealCrewService,
@@ -84,7 +100,8 @@ public class TodayService {
 			WorkforceService workforceService, MaterialsCostService materialsCostService,
 			PurchaseOrderService purchaseOrderService, VendorInvoiceService vendorInvoiceService,
 			CalendarService calendarService, IngredientRequestService ingredientRequestService,
-			LeaveService leaveService, EquipmentService equipmentService, TempleClock clock) {
+			LeaveService leaveService, EquipmentService equipmentService, TempleClock clock,
+			JdbcTemplate jdbc) {
 		this.clock = clock;
 		this.servedMealService = servedMealService;
 		this.mealCrewService = mealCrewService;
@@ -97,6 +114,7 @@ public class TodayService {
 		this.ingredientRequestService = ingredientRequestService;
 		this.leaveService = leaveService;
 		this.equipmentService = equipmentService;
+		this.jdbc = jdbc;
 	}
 
 	@Transactional(readOnly = true)
@@ -133,7 +151,8 @@ public class TodayService {
 				servedMealService.unrecordedCount(today.minusDays(NUDGE_DAYS), today.minusDays(1)),
 				approvals(actor, tomorrow),
 				deliveries(actor, today),
-				equipmentOverdue(actor));
+				equipmentOverdue(actor),
+				upcomingOutside(today));
 	}
 
 	// ---- The kitchen's day ----------------------------------------------
@@ -230,6 +249,67 @@ public class TodayService {
 		var cost = materialsCostService.costFor(today);
 		return new TodayView.MaterialsCost(cost.estimatedTotal(), cost.ingredientsWithoutPrice(),
 				cost.mealsCostedAsCooked(), cost.mealsCostedAsPlanned());
+	}
+
+	// ---- What has been promised to somebody outside --------------------
+
+	/**
+	 * What the temple has undertaken to send out of the building over the next fortnight, soonest
+	 * first (T-363).
+	 *
+	 * <p>This query was {@code MealPlanService.outsideCommitments()} until 2026-09-19, feeding a section
+	 * at the foot of the meal planner. Rajeev removed that section — <em>"I don't think making a separate
+	 * section for outside events is strictly necessary. We should be able to fit it into the regular
+	 * meal planner tile and arrange them by ready by time JUST like any other meal."</em> — and the
+	 * planner's day list already does exactly that, because the meals endpoint orders by plan date and
+	 * then ready-by whether a meal is going outside or not.
+	 *
+	 * <p>What the day list cannot do is look across dates. Somebody reading Monday's plan cannot see
+	 * Saturday's delivery, and Saturday's delivery is the thing nobody should discover on the morning.
+	 * That is a heads-up rather than a screen, so it lives on Today with the temple's other heads-ups.
+	 *
+	 * <p><b>From tomorrow, not from today.</b> Today's own outside meals are already on this screen,
+	 * in the meals card above with everything else the kitchen is cooking; listing them twice would say
+	 * the temple had two of them. The old planner section started at today because the planner might be
+	 * showing any date at all.
+	 *
+	 * <p>Cancelled meals are dropped, as is a meal whose every dish was called off; one row per meal,
+	 * never per dish. The window is worked from the temple's own clock, so a list read in Bengaluru at
+	 * half past six in the morning is not a day out because the server is still on yesterday in UTC.
+	 *
+	 * <p>Read here with SQL rather than through a service that owns it, and that is a deliberate
+	 * exception to this class's rule of asking whoever owns each figure. Nothing owns this one any
+	 * more: it had one reader, that reader has gone, and the method went with it. The row's shape —
+	 * {@link OutsideCommitment} — stays in the meal package, because the shape does belong there.
+	 */
+	private List<OutsideCommitment> upcomingOutside(LocalDate today) {
+		return jdbc.query("""
+				SELECT m.id, pd.plan_date, m.event_name, k.name AS meal_kind, m.handover, m.contact_name,
+					   m.contact_phone, m.delivery_address, m.ready_by, m.guests_eat_at,
+					   (SELECT count(*) FROM meal_dishes d
+						WHERE d.meal_id = m.id AND d.status <> 'CANCELLED') AS preparations
+				FROM meals m
+				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
+				JOIN meal_kinds k ON k.id = m.meal_kind_id
+				WHERE m.is_outside
+				  AND pd.plan_date > ?
+				  AND pd.plan_date <= ?
+				  AND EXISTS (SELECT 1 FROM meal_dishes d WHERE d.meal_id = m.id AND d.status <> 'CANCELLED')
+				ORDER BY pd.plan_date, m.ready_by, m.event_name
+				""",
+				(rs, n) -> new OutsideCommitment(
+						rs.getObject("id", UUID.class),
+						rs.getObject("plan_date", LocalDate.class),
+						rs.getString("event_name"),
+						rs.getString("meal_kind"),
+						rs.getString("handover") == null ? null : Handover.valueOf(rs.getString("handover")),
+						rs.getString("contact_name"),
+						rs.getString("contact_phone"),
+						rs.getString("delivery_address"),
+						rs.getObject("ready_by", LocalTime.class),
+						rs.getObject("guests_eat_at", LocalTime.class),
+						rs.getInt("preparations")),
+				today, today.plusDays(OUTSIDE_AHEAD_DAYS));
 	}
 
 	// ---- What is arriving -----------------------------------------------

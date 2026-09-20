@@ -1803,6 +1803,25 @@ export interface TodayView {
    * on the Equipment screen.
    */
   equipmentOverdue: number | null;
+  /**
+   * What the temple has undertaken to send out of the building in the days ahead, soonest first
+   * (T-363).
+   *
+   * <p>Not a section of its own on a screen. The planner carried one at the foot of every view and
+   * Rajeev had it removed: an outside event is an ordinary meal and already sits in the planner's
+   * day list with the rest, sorted by ready-by, where it opens, adjusts and prints like any other.
+   * What the old card actually did was contradict the day panel above it — it took no date at all,
+   * so an event on the 26th sat under a day panel correctly saying the 28th was empty, and its rows
+   * were plain table cells that linked nowhere.
+   *
+   * <p>What no day view can do is look across dates, and a delivery on Saturday is exactly what
+   * somebody reading Monday needs warning of. So what is left of that card is a heads-up, and
+   * heads-ups live here. Empty where nothing is going out, and the screen then draws nothing.
+   *
+   * <p>Required, like every other field on this interface: an optional field is a field a builder
+   * can forget and still compile (T-043, T-044).
+   */
+  upcomingOutside: OutsideCommitment[];
 }
 
 /**
@@ -6002,9 +6021,13 @@ export const api = {
       { method: "GET", token }
     ),
 
-  /** What is going out of the temple from today onwards, soonest first (E4-S15 D4). */
-  outsideCommitments: (token?: string) =>
-    request<OutsideCommitment[]>("/api/v1/meal-plans/outside-commitments", { method: "GET", token }),
+  // No `outsideCommitments` here any more (T-363). It fed one card at the foot of the planner
+  // listing what the temple had undertaken to send out of the building, and Rajeev had that card
+  // removed: an outside event is an ordinary meal and belongs in the planner's day list with
+  // everything else, sorted by ready-by, where it opens, adjusts and prints. The card took no date
+  // at all, so it sat under a day panel it contradicted, and its rows linked nowhere although the
+  // server sent each meal's own id for exactly that. The one thing it did that a day cannot — look
+  // across dates — is a heads-up rather than a screen, and it arrives on `TodayView.upcomingOutside`.
 
   /**
    * When to leave the temple for this delivery (E4-S16).

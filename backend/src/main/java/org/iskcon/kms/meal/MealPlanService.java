@@ -1323,44 +1323,13 @@ public class MealPlanService {
 		return dayContext(date).occasionName();
 	}
 
-	// ---- Going outside ---------------------------------------------------
+	// ---- Naming an event --------------------------------------------------
 
-	/**
-	 * Everything this temple has undertaken to send out of the building, soonest first (E4-S15 D4).
-	 *
-	 * <p>Future only, cancelled meals dropped, one row per meal. Today is today <em>at the
-	 * temple</em>, so a list read in Bengaluru at half past six in the morning has not dropped this
-	 * morning's delivery because the server is still on yesterday in UTC.
-	 */
-	@Transactional(readOnly = true)
-	public List<OutsideCommitment> outsideCommitments() {
-		return jdbc.query("""
-				SELECT m.id, pd.plan_date, m.event_name, k.name AS meal_kind, m.handover, m.contact_name,
-					   m.contact_phone, m.delivery_address, m.ready_by, m.guests_eat_at,
-					   (SELECT count(*) FROM meal_dishes d
-						WHERE d.meal_id = m.id AND d.status <> 'CANCELLED') AS preparations
-				FROM meals m
-				JOIN meal_plan_days pd ON pd.id = m.meal_plan_day_id
-				JOIN meal_kinds k ON k.id = m.meal_kind_id
-				WHERE m.is_outside
-				  AND pd.plan_date >= ?
-				  AND EXISTS (SELECT 1 FROM meal_dishes d WHERE d.meal_id = m.id AND d.status <> 'CANCELLED')
-				ORDER BY pd.plan_date, m.ready_by, m.event_name
-				""",
-				(rs, n) -> new OutsideCommitment(
-						rs.getObject("id", UUID.class),
-						rs.getObject("plan_date", LocalDate.class),
-						rs.getString("event_name"),
-						rs.getString("meal_kind"),
-						rs.getString("handover") == null ? null : Handover.valueOf(rs.getString("handover")),
-						rs.getString("contact_name"),
-						rs.getString("contact_phone"),
-						rs.getString("delivery_address"),
-						rs.getObject("ready_by", LocalTime.class),
-						rs.getObject("guests_eat_at", LocalTime.class),
-						rs.getInt("preparations")),
-				LocalDate.now(clock.zone()));
-	}
+	// `outsideCommitments()` was here until T-363 (2026-09-19), reading every future, uncancelled
+	// meal marked `is_outside` for the planner's own section of them. That section is gone — the
+	// events are ordinary meals in the planner's day list — and the only reader left is Today's
+	// cross-date heads-up, which owns the query now. The OutsideCommitment record stays here,
+	// because the shape belongs to the meal domain wherever it is read from.
 
 	/**
 	 * The event names this temple has used before, newest first, with what each was last time

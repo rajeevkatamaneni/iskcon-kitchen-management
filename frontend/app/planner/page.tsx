@@ -23,11 +23,9 @@ import {
   type CalendarDayView,
   type MealView,
   type MealSufficiency,
-  type OutsideCommitment,
   type RecipeSummary,
   type WorkforceCount,
 } from "@/lib/api";
-import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 import { useAuth } from "@/lib/auth-context";
 import { dayLabel } from "@/lib/calendar-names";
 import { ekadashiLabel, ekadashiSpelling } from "@/lib/vaishnava-day";
@@ -225,101 +223,26 @@ function PlannerView() {
             <PlannerMonth anchor={anchor} today={today} calendar={calendar} meals={meals} onPick={pick} />
           )}
 
-          {/* Under all three views, because forgetting a delivery is not a property of the week you
-              happen to be looking at. */}
-          <OutsideCommitments key={nonce} />
+          {/*
+            No *Upcoming outside commitments* section under the views any more (Rajeev, 2026-09-19):
+            "I don't think making a separate section for outside events is strictly necessary. We
+            should be able to fit it into the regular meal planner tile and arrange them by ready by
+            time JUST like any other meal. No need for special handling for outside commitments."
+
+            It was also a dead end. It named an event, its contact and where the food was going in
+            plain table cells with no link on any of them, although the server had been sending the
+            meal's own id for exactly that purpose — so somebody who saw "Children's Bhagavad-gita
+            Reading" on it had no way through to the meal. The events themselves were never missing:
+            they are in the day list above with every other meal, sorted by ready-by, with their
+            contact, destination, handover and travel line on the card.
+
+            The one thing the section did that the day list cannot is look across dates — a delivery
+            on Saturday is invisible on Monday's day view. That is a heads-up rather than a section,
+            so it moved to Today, where the temple's other heads-ups live.
+          */}
         </Screen>
       </main>
     </div>
-  );
-}
-
-/**
- * Everything the temple has undertaken to send out of the building (E4-S15 D4).
- *
- * <p>The idea behind the *Upcoming catering* table that was designed and never built was right —
- * <strong>nobody should discover a booking on the morning</strong> — and this covers more than that
- * one would have. It is keyed off <em>is this going outside</em> rather than <em>is this
- * catering</em>, so the school delivery and the community programme are on it beside the wedding,
- * and those are exactly as easy to forget.
- *
- * <p>The columns are what somebody can act on without opening anything: when it is, what it is
- * called, who to ring, and where it is going.
- *
- * <p><strong>Nothing at all when there is nothing.</strong> An empty table on every planner screen
- * is a permanent piece of furniture saying nothing, and a temple that does no outside cooking would
- * carry it for ever. The list appears when there is something on it, which is also when it matters.
- */
-function OutsideCommitments() {
-  const { data } = useAuthedQuery(
-    useCallback((t?: string) => api.outsideCommitments(t).catch(() => [] as OutsideCommitment[]), [])
-  );
-
-  const commitments = data ?? [];
-  if (commitments.length === 0) return null;
-
-  return (
-    <Card
-      title="Upcoming outside commitments"
-      meta="Food leaving the temple, soonest first"
-      // The table runs to the card's edges; the title is padded so it sits where every other
-      // card's title does rather than flush against the border.
-      padding="p-0 [&>header]:px-6 [&>header]:pt-6"
-    >
-      <div className="overflow-x-auto">
-        <table className={RULED_TABLE}>
-          <thead className={THEAD}>
-            <tr>
-              <th className={TH_PRIMARY}>Event</th>
-              <th className={TH_SECOND}>Who to ring</th>
-              <th className={TH_SECOND}>Where it is going</th>
-              <th className={TH_FIXED}>When</th>
-              <th className={TH_FIXED}>Handover</th>
-              <th className={TH_FIXED}>Preparations</th>
-            </tr>
-          </thead>
-          <tbody>
-            {commitments.map((c) => (
-              <tr key={c.mealId} className={TR}>
-                <td className={TD_PRIMARY}>
-                  {c.eventName ?? c.mealKind}
-                  {c.eventName && (
-                    <span className="block text-xs text-ink-muted">{c.mealKind}</span>
-                  )}
-                </td>
-                <td className={TD_SECOND}>
-                  {c.contactName ?? "—"}
-                  {c.contactPhone && (
-                    <span className="block text-xs tabular-nums text-ink-muted">{c.contactPhone}</span>
-                  )}
-                </td>
-                <td className={TD_SECOND}>{c.deliveryAddress ?? "—"}</td>
-                <td className={TD_FIXED}>
-                  {longDate(c.planDate)}
-                  <span className="block text-xs tabular-nums text-ink-muted">
-                    {/* The hour that matters to whoever reads this is the one the guests sit down
-                        for, where there is one; the ready-by is when the kitchen must be finished. */}
-                    Ready by {hhmm(c.readyBy)}
-                    {c.guestsEatAt && ` · guests eat at ${hhmm(c.guestsEatAt)}`}
-                  </span>
-                </td>
-                <td className={TD_FIXED}>
-                  {c.handover === "DELIVERY"
-                    ? "We deliver it"
-                    : c.handover === "PICKUP"
-                      ? "Collected"
-                      : // V88 carried the old catering and outside-event plans across with no
-                        // handover, because nobody was ever asked. Saying so is better than
-                        // picking one on their behalf.
-                        "Not set"}
-                </td>
-                <td className={TD_FIXED_NUM} data-label="Preparations">{c.preparations}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
   );
 }
 

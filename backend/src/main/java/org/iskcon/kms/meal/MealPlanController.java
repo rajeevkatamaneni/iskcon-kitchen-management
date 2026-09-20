@@ -94,15 +94,12 @@ public class MealPlanController {
 		return sufficiencyService.shortfallFeed();
 	}
 
-	/**
-	 * What is going out of the temple from today onwards, soonest first (E4-S15 D4), one row per meal
-	 * with that meal's id.
-	 */
-	@GetMapping("/outside-commitments")
-	@PreAuthorize("hasAuthority('MANAGE_MEAL_PLANS')")
-	public List<OutsideCommitment> outsideCommitments() {
-		return mealPlanService.outsideCommitments();
-	}
+	// No /outside-commitments here any more (T-363, 2026-09-19). It fed one section at the foot of the
+	// planner listing what the temple had undertaken to send out of the building, and Rajeev removed
+	// that section: the events are ordinary meals and sit in the planner's day list with everything
+	// else, sorted by ready-by. The one thing the section could do that a day cannot — look across
+	// dates — is a heads-up rather than a screen, so it moved to Today, which reads the same rows
+	// through TodayService and still answers with OutsideCommitment.
 
 	/**
 	 * The event names this temple has used before, newest first, with what each was last time
