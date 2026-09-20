@@ -228,9 +228,31 @@ class PermissionBeforeValidationIT extends AbstractIntegrationTest {
 				new Probe(get, "/api/v1/meals/{id}/later-in-series", Permission.MANAGE_MEAL_PLANS, Body.NONE_BAD_ID, HttpStatus.NOT_FOUND));
 	}
 
-	/** Every probe the two parameterised checks run. */
+	/**
+	 * Arranging the temple's own menu and putting the standard one back (T-420), added here because
+	 * the body is the reason: it is a blob — every group and every destination the temple has — and
+	 * reading it is the expensive part of the request. Somebody who may not arrange the menu should
+	 * never get that far.
+	 *
+	 * <p>Not part of {@link #everyProcurementWriteEndpointIsListed}, which is about the procurement
+	 * controllers; the rest of {@code SettingsController} predates this class.
+	 *
+	 * <p>The reset takes no body and no id, and for a role that holds the permission it is a real
+	 * reset: 204, whether or not the temple had arranged anything. So its permitted answer is the
+	 * only success on this list, and that is exactly why it is worth probing — the refusal has to
+	 * arrive before the endpoint does the thing.
+	 */
+	static Stream<Probe> menuLayoutEndpoints() {
+		return Stream.of(
+				new Probe(HttpMethod.PUT, "/api/v1/settings/menu-layout",
+						Permission.MANAGE_TEMPLE_SETTINGS, Body.EMPTY_OBJECT, HttpStatus.BAD_REQUEST),
+				new Probe(HttpMethod.DELETE, "/api/v1/settings/menu-layout",
+						Permission.MANAGE_TEMPLE_SETTINGS, Body.NONE_BAD_ID, HttpStatus.NO_CONTENT));
+	}
+
+	/** Every probe the three parameterised sources give the two checks below. */
 	static Stream<Probe> everyProbe() {
-		return Stream.concat(endpoints(), mealSeriesEndpoints());
+		return Stream.concat(Stream.concat(endpoints(), mealSeriesEndpoints()), menuLayoutEndpoints());
 	}
 
 	/**
@@ -320,8 +342,7 @@ class PermissionBeforeValidationIT extends AbstractIntegrationTest {
 		assertThat(response.getStatusCode())
 				.as("%s as %s: %s", probe, permitted, response.getBody())
 				.isEqualTo(probe.permittedStatus());
-		assertThat(json.readTree(response.getBody()).path("code").asText())
-				.isNotEqualTo("KMS-400021");
+		assertThat(codeOf(response)).isNotEqualTo("KMS-400021");
 
 		assertThat(rowCounts()).as("rows written by a malformed request").isEqualTo(before);
 	}
@@ -355,6 +376,20 @@ class PermissionBeforeValidationIT extends AbstractIntegrationTest {
 	}
 
 	// ---------------------------------------------------------------------
+
+	/**
+	 * The {@code KMS-nnnnnn} on a response, or nothing where the response has no body.
+	 *
+	 * <p>Every probe on this list used to answer with an error body, so the code could be read
+	 * straight off it. The menu-layout reset does not: for a role that holds the permission it
+	 * succeeds, and a 204 carries nothing. Absent is the right reading — a response with no body is
+	 * certainly not the refusal this check is watching for — and it beats leaving the one endpoint
+	 * whose permitted answer is a success off the list.
+	 */
+	private String codeOf(ResponseEntity<String> response) throws Exception {
+		String body = response.getBody();
+		return body == null || body.isBlank() ? "" : json.readTree(body).path("code").asText();
+	}
 
 	private static String tokenFor(User.Role role) {
 		return role == User.Role.VOLUNTEER ? VOLUNTEER_TOKEN : "t301-" + role.name().toLowerCase();

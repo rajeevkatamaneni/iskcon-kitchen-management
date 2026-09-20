@@ -3,6 +3,13 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/today" }));
 
+/**
+ * The temple's own arrangement of the menu, as the session carries it (T-421). Mutable so that one
+ * test can hand the drawer an arrangement; every other test here runs on `null`, which is the
+ * standard menu, exactly as before.
+ */
+let menuLayout: MenuLayout | null = null;
+
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({
     appUser: {
@@ -12,6 +19,7 @@ vi.mock("@/lib/auth-context", () => ({
       tenantName: "ISKCON South Bengaluru",
       tenantSlug: "iskcon-south-bengaluru",
       temples: [],
+      menuLayout,
     },
     signOut: vi.fn(),
     switchTemple: vi.fn(),
@@ -19,6 +27,8 @@ vi.mock("@/lib/auth-context", () => ({
 }));
 
 import { Sidebar } from "@/components/Sidebar";
+import { standardMenu } from "@/lib/nav";
+import type { MenuLayout } from "@/lib/api";
 
 /**
  * The phone and portrait-tablet menu (T-225). jsdom does no layout and applies no media queries, so
@@ -45,6 +55,7 @@ describe("the phone menu", () => {
   beforeEach(() => {
     sessionStorage.clear();
     document.body.style.overflow = "";
+    menuLayout = null;
   });
 
   it("starts closed, and its button says so and names what it controls", () => {
@@ -134,6 +145,33 @@ describe("the phone menu", () => {
     // …and backward off the first wraps to the last.
     fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(signOut);
+  });
+
+  it("shows the temple's own arrangement, because the drawer is the same menu (T-421)", () => {
+    // The drawer is not a second copy of the menu — it is the very same <nav>, repositioned — so an
+    // arrangement reaching the column reaches the drawer too. That is the claim; this measures it
+    // rather than assuming it, by reading the drawer's own links after opening it.
+    menuLayout = {
+      version: 1,
+      groups: standardMenu().map((g) => ({
+        id: g.id,
+        title: g.id === "ordering" ? "Buying" : (g.title ?? null),
+        items: g.id === "main" ? ["cost-per-serving", "today"] : g.items.map((i) => i.id),
+      })),
+    };
+    renderShell();
+    fireEvent.click(menuButton());
+    const dialog = screen.getByRole("dialog", { name: "Menu" });
+    const links = within(dialog).getAllByRole("link").map((a) => a.textContent);
+
+    // The temple put Cost per serving first, and the three the arrangement left out of the first
+    // group follow it in their standard order.
+    expect(links.slice(0, 5)).toEqual([
+      "Cost per serving", "Today", "Vaishnava calendar", "Meal planner", "Reuse a plan",
+    ]);
+    // And its own heading, in the drawer, above the group it renamed.
+    expect(within(dialog).getByText("Buying")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Ordering")).not.toBeInTheDocument();
   });
 
   it("slides in only for people who have not asked for less motion", () => {

@@ -1223,6 +1223,29 @@ public enum ErrorCode {
 			"The temple doesn't buy this, so it can't go on a shopping list.",
 			"Take the Not bought mark off it on the Ingredients page first."),
 
+	// The temple's own arrangement of the left-hand menu (T-420/T-421/T-422, Rajeev 2026-09-19).
+	//
+	// Two codes, and the reason there are only two is worth writing down. A blank heading, a heading
+	// longer than the column can show, more groups than anybody could use — those are field errors on
+	// the request, because the person is being told which box to fix and bean validation already says
+	// so in words. A code is minted only where the refusal is about the arrangement as a whole and
+	// there is no one field to point at.
+	//
+	// Neither next step names a menu path. The rule Rajeev set on 2026-09-19 is that help text says
+	// "open Deliveries", never "Ordering → Deliveries", and this feature is the reason the rule
+	// exists: once a temple can move an item, any sentence naming the group it used to sit in is a
+	// sentence that goes wrong for that temple first.
+	MENU_LAYOUT_NOT_UNDERSTOOD(400189, 400,
+			"We couldn't read that menu arrangement.",
+			"Open Menu in Settings, arrange it again and save. If it keeps happening, quote the code below."),
+
+	// The arrangement is readable and says one destination twice. The server cannot reach for "the
+	// last one wins": which copy the temple meant is a question only the person can answer, and
+	// silently dropping one would move a destination somebody had just placed on purpose.
+	MENU_ITEM_IN_TWO_GROUPS(400190, 409,
+			"A menu item can only be in one group.",
+			"Open Menu in Settings, take the repeated item out of one of the groups and save again."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { navForRole } from "@/lib/nav";
+import { navForRole, standardMenu } from "@/lib/nav";
 import type { PrincipalRole } from "@/lib/api";
 
 /**
@@ -298,5 +298,72 @@ describe("navForRole", () => {
   it("puts a volunteer's whole menu in that first group, so they never see a heading at all", () => {
     const groups = navForRole("VOLUNTEER");
     expect(groups).toHaveLength(1);
+  });
+});
+
+/**
+ * The permanent ids a temple's arrangement of the menu is keyed on (T-421). They are the contract
+ * between `nav.ts` and every stored arrangement: change one and that destination silently falls out
+ * of every temple's arrangement and down to the bottom of their menu, where they did not put it.
+ */
+describe("the menu's permanent ids", () => {
+  it("is exactly this list of ids, in this order — they are written down, not worked out", () => {
+    // Frozen on purpose. Nothing derives an id from an href at runtime, and nothing may: the two
+    // are independent from here, which is what lets a route be renamed without disturbing a temple's
+    // arrangement. So the test is a list, and a new destination means adding a line to it — which is
+    // the moment to check the id has never been used before.
+    expect(standardMenu().flatMap((g) => g.items.map((i) => i.id))).toEqual([
+      "tenants", "operations", "whatsapp-templates", "library", "notices-operator",
+      "today", "calendar", "planner", "planner-reuse", "cost-per-serving",
+      "my-shifts", "shifts", "donate", "my-donations",
+      "shopping-list", "orders", "deliveries", "invoices", "vendors", "vendor-performance",
+      "inventory", "recipes", "ingredients", "supplies", "equipment",
+      "ingredient-requests", "issued-from-store", "kitchens",
+      "my-schedule", "staff", "staff-schedule", "leave", "users", "volunteers",
+      "donations", "wishlist", "communications",
+      "notices", "settings-occasions", "settings-meal-kinds", "audit", "settings",
+    ]);
+  });
+
+  it("gives every item an id of its own, including the two Notices at one address", () => {
+    // `/notices` is in the menu twice — the operator's, beside Operations, and the admin's under
+    // Temple. One id for both would let an arrangement index one over the other, and a temple that
+    // moved Notices would lose it.
+    const ids = standardMenu().flatMap((g) => g.items.map((i) => i.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    const notices = standardMenu().flatMap((g) => g.items).filter((i) => i.href === "/notices");
+    expect(notices.map((i) => i.id)).toEqual(["notices-operator", "notices"]);
+  });
+
+  it("gives every group an id of its own, in the order the groups are in", () => {
+    expect(standardMenu().map((g) => g.id)).toEqual([
+      "main", "ordering", "inventory-recipes", "kitchens", "people", "giving-outreach", "temple",
+    ]);
+  });
+
+  it("carries the ids through navForRole, so what the menu renders is what an arrangement names", () => {
+    for (const role of ["SUPER_ADMIN", "TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF", "VOLUNTEER"] as const) {
+      for (const group of navForRole(role)) {
+        expect(typeof group.id).toBe("string");
+        expect(group.id.length).toBeGreaterThan(0);
+        for (const item of group.items) {
+          expect(typeof item.id).toBe("string");
+          expect(item.id.length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it("hands out copies of the standard menu, so a screen that rearranges one cannot move everybody's", () => {
+    // The Settings → Menu screen is a caller whose whole job is to splice this array about.
+    const mine = standardMenu();
+    mine.splice(1, 1);
+    mine[0].items.pop();
+    mine[0].title = "Mine";
+    expect(standardMenu().map((g) => g.id)).toEqual([
+      "main", "ordering", "inventory-recipes", "kitchens", "people", "giving-outreach", "temple",
+    ]);
+    expect(standardMenu()[0].title).toBeUndefined();
+    expect(navForRole("TEMPLE_ADMIN")[0].items.map((i) => i.id)).toContain("cost-per-serving");
   });
 });

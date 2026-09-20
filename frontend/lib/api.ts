@@ -371,6 +371,54 @@ export interface WhoAmI {
    * enforces the same rule (`KMS-400183`); this only keeps the menu from offering a refusal.
    */
   canPlanMeals: boolean;
+  /**
+   * How this temple has arranged its own left-hand menu, or null where it has never arranged one —
+   * which is not the same as arranging it to look like the standard menu, exactly as `themeId`
+   * above distinguishes "never chose" from "chose the default".
+   *
+   * <p>Carried on the session for the reason the theme is: every screen mounts its own `Sidebar`,
+   * so a menu that fetched its own arrangement would ask once per navigation and show the standard
+   * order for a frame each time. One request a session already makes answers it, and switching
+   * temples repaints the menu without anybody arranging for it to.
+   *
+   * <p><strong>It decides order and grouping, never access.</strong> The server sends the same
+   * arrangement to everybody at the temple; `navForRole` applies it and then filters by role
+   * exactly as it did before, so nothing here can offer a person a destination their role does not
+   * already allow, or take one away.
+   */
+  menuLayout: MenuLayout | null;
+}
+
+/**
+ * A temple's own arrangement of the left-hand menu (Rajeev, 2026-09-19).
+ *
+ * <p>It is an arrangement, not a menu: it names ids and orders them, and says nothing about what
+ * each id is. `frontend/lib/nav.ts` remains the one list of what destinations exist, what they are
+ * called and which roles may reach them, and the merge in `nav.ts` puts the two together at render.
+ * So a destination this arrangement has never heard of still appears, and an id in here that no
+ * longer exists is simply passed over.
+ *
+ * <p>The server validates the shape of this and nothing more. It deliberately holds no copy of the
+ * menu: a second list of destinations on the far side of the wire is a list that drifts from the
+ * first one.
+ */
+export interface MenuLayout {
+  /** 1 today. Present so a later shape can be told apart from this one rather than guessed at. */
+  version: 1;
+  groups: MenuLayoutGroup[];
+}
+
+export interface MenuLayoutGroup {
+  /**
+   * Permanent and opaque. A standard group keeps the id `nav.ts` gives it even after the temple
+   * renames its heading, which is what lets a destination added in a later release still land in
+   * the group it belongs to. A group the temple made carries an id generated when it was made.
+   */
+  id: string;
+  /** The heading, or null for a group shown without one. Only the first group is normally unheaded. */
+  title: string | null;
+  /** `NavItem.id`s, in the order the temple put them. */
+  items: string[];
 }
 
 export interface TempleMembership {
@@ -5671,6 +5719,25 @@ export const api = {
   // that is already gone is a silent 204, so a second click never raises.
   deleteMealKind: (id: string, token?: string) =>
     request<void>(`/api/v1/meal-kinds/${id}`, { method: "DELETE", token }),
+
+  // The temple's own arrangement of the left-hand menu (Rajeev, 2026-09-19). Both are
+  // MANAGE_TEMPLE_SETTINGS — the Temple Admin alone — and both take effect for everybody at the
+  // temple, so the screen calls `refresh()` from `useAuth` afterwards rather than reloading: the
+  // arrangement rides on the session, and refreshing it is what repaints the menu.
+  //
+  // There is no read method here on purpose. `WhoAmI.menuLayout` already carries it, and a second
+  // way to fetch the same fact is a second thing that can be stale.
+  //
+  // Refuses with MENU_LAYOUT_NOT_UNDERSTOOD (KMS-400189) when the arrangement cannot be read at
+  // all, and MENU_ITEM_IN_TWO_GROUPS (KMS-400190) when one destination is listed in two groups. A
+  // blank or over-long heading, or more groups than the screen allows, comes back as an ordinary
+  // field error instead, because the person can be told which box to fix.
+  saveMenuLayout: (layout: MenuLayout, token?: string) =>
+    request<void>("/api/v1/settings/menu-layout", { method: "PUT", body: JSON.stringify(layout), token }),
+
+  /** Forgets the temple's arrangement, so everybody is back on the standard menu. */
+  resetMenuLayout: (token?: string) =>
+    request<void>("/api/v1/settings/menu-layout", { method: "DELETE", token }),
 
   // The whole morning screen in one request: it is the first thing loaded each day, often on a
   // phone on a temple's connection.

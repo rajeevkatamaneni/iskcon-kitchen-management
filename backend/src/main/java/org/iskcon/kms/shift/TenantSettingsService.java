@@ -1,7 +1,14 @@
 package org.iskcon.kms.shift;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
@@ -79,10 +86,34 @@ public class TenantSettingsService {
 	 */
 	private static final Pattern THEME_ID = Pattern.compile("^[a-z0-9]+(-[a-z0-9]+)*$");
 
-	private final JdbcTemplate jdbc;
+	/**
+	 * The shape of a menu group's identifier and of a menu item's, which are the same shape.
+	 *
+	 * <p>Shape only, for the reason spelled out on {@link #THEME_ID} above: the destinations that
+	 * exist live in {@code frontend/lib/nav.ts}, beside the pages they point at, and a copy of that
+	 * list on this side would be a copy that drifts. So an item this application has never heard of
+	 * is stored without complaint — the merge in the browser passes over it — while something that
+	 * could not be an identifier at all is refused at the boundary.
+	 *
+	 * <p>Hyphens are allowed inside and at the end, unlike a theme's, because a group's id is minted
+	 * by the browser from whatever the temple types and a trailing hyphen is an ordinary outcome of
+	 * that. What matters is that it starts with a letter or a digit and holds nothing that would
+	 * need escaping.
+	 */
+	private static final Pattern MENU_ID = Pattern.compile("^[a-z0-9][a-z0-9-]*$");
 
-	public TenantSettingsService(JdbcTemplate jdbc) {
+	/** The one arrangement shape this release writes and reads. See V154. */
+	static final int MENU_LAYOUT_VERSION = 1;
+
+	/** Long enough for any id the menu has ever used, short enough that nothing long lands here. */
+	static final int MAX_MENU_ID_LENGTH = 64;
+
+	private final JdbcTemplate jdbc;
+	private final ObjectMapper json;
+
+	public TenantSettingsService(JdbcTemplate jdbc, ObjectMapper json) {
 		this.jdbc = jdbc;
+		this.json = json;
 	}
 
 	@Transactional(readOnly = true)
@@ -171,6 +202,196 @@ public class TenantSettingsService {
 				ON CONFLICT (tenant_id)
 				DO UPDATE SET selected_theme_id = EXCLUDED.selected_theme_id, updated_at = now()
 				""", themeId);
+	}
+
+	/**
+	 * How this temple has arranged its own left-hand menu, as the JSON object stored in V154, or
+	 * null where it has never arranged one.
+	 *
+	 * <p>Returned as text rather than as a parsed model, and that is deliberate. Nothing on this
+	 * side reads inside an arrangement: it is written by one endpoint, handed back on the session,
+	 * and merged with the standard menu in the browser, which is the only place that knows what
+	 * destinations exist. Parsing it here would mean a second model of a document this application
+	 * has no opinion about — see {@link #MENU_ID}. The caller that puts it on the wire parses it
+	 * there, because the client's type says {@code MenuLayout | null} and a JSON string in that slot
+	 * would be a lie the type system cannot see.
+	 *
+	 * <p>Null is not the same as "arranged it to look standard", which is why the column is nullable
+	 * and why reset writes null rather than today's standard arrangement. V154 §2 has the argument.
+	 *
+	 * <p>Null for a platform operator too, and without a special case: they carry no
+	 * {@code app.tenant_id}, so the policy on this table matches nothing.
+	 *
+	 * <p>Read off the list rather than through {@code stream().findFirst()}, for the reason spelled
+	 * out at length on {@link #themeId()}: this column is nullable, a settings row written for some
+	 * other preference holds a null here, and {@code Optional.of(null)} throws. That is the exact
+	 * shape that took the application down on 2026-08-30.
+	 */
+	@Transactional(readOnly = true)
+	public String menuLayout() {
+		// ::text so the driver hands back a String rather than a PGobject the caller would have to
+		// know about.
+		List<String> arranged = jdbc.query("SELECT menu_layout::text FROM tenant_settings",
+				(rs, n) -> rs.getString(1));
+		return arranged.isEmpty() ? null : arranged.get(0);
+	}
+
+	/**
+	 * Records how the temple has arranged its menu, for everybody who serves there.
+	 *
+	 * <p>Takes the arrangement as JSON and checks it here, before the write, rather than trusting
+	 * the record the controller bound. The two are not the same thing: what is checked is what is
+	 * about to be stored, and what is stored is rebuilt from the check — version, groups, and on
+	 * each group an id, a title and its items, in the order they were sent and nothing else. So a
+	 * document that reached this method by any route is stored in one canonical shape.
+	 *
+	 * <p>Not audited, for the reason set out on {@link #setThemeId}: nothing else on the settings
+	 * screen is, and auditing one preference while the rest sit unaudited beside it would read as a
+	 * decision about this one rather than the accident it would be.
+	 */
+	@Transactional
+	public void setMenuLayout(String arrangement) {
+		String checked = checkedArrangement(arrangement);
+		jdbc.update("""
+				INSERT INTO tenant_settings (tenant_id, menu_layout)
+				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?::jsonb)
+				ON CONFLICT (tenant_id)
+				DO UPDATE SET menu_layout = EXCLUDED.menu_layout, updated_at = now()
+				""", checked);
+	}
+
+	/**
+	 * Puts the standard menu back.
+	 *
+	 * <p>A plain UPDATE, not an upsert, and the difference is the honest answer rather than a saving:
+	 * a temple that has never had a settings row has nothing to clear, and writing a row to record
+	 * that it has stopped doing something it never started would be a row that says nothing. The
+	 * statement matches no rows there and the endpoint still answers 204 — reset is never a 404,
+	 * because "it is already standard" is the outcome the person asked for.
+	 *
+	 * <p>NULL rather than today's standard arrangement written out, which is the whole of V154 §2:
+	 * a temple that resets is asking to follow the standard menu from here on, including the parts
+	 * of it that have not been decided yet.
+	 */
+	@Transactional
+	public void clearMenuLayout() {
+		jdbc.update("""
+				UPDATE tenant_settings SET menu_layout = NULL, updated_at = now()
+				WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+				""");
+	}
+
+	/**
+	 * Reads an arrangement, refuses the ones that could not be acted on, and gives back the
+	 * canonical text to store.
+	 *
+	 * <p>Two refusals and no more, because there are only two things a person can be told here that
+	 * are not already a field error on the form. Group and item counts, a blank heading, a heading
+	 * too long to show — those come back from bean validation against the box that holds them, which
+	 * is a better answer than a code. What is left is the arrangement as a whole: an id that could
+	 * not be an id, two groups claiming the same id, a document that cannot be read
+	 * ({@code KMS-400189}); and one destination placed twice, which is a real arrangement saying
+	 * something contradictory ({@code KMS-400190}).
+	 *
+	 * <p>The repeated id goes into the exception's context, which reaches the log and not the
+	 * screen. The message the person reads says to take the repeated item out of one of the groups,
+	 * and they are looking at the arrangement while they read it.
+	 */
+	private String checkedArrangement(String arrangement) {
+		JsonNode root = readOrRefuse(arrangement);
+		if (!root.isObject()) {
+			throw notUnderstood("the arrangement is not an object");
+		}
+		if (!root.path("version").isInt() || root.path("version").asInt() != MENU_LAYOUT_VERSION) {
+			throw notUnderstood("version is not " + MENU_LAYOUT_VERSION);
+		}
+		if (!root.path("groups").isArray()) {
+			throw notUnderstood("groups is not a list");
+		}
+
+		ObjectNode canonical = json.createObjectNode();
+		canonical.put("version", MENU_LAYOUT_VERSION);
+		ArrayNode groups = canonical.putArray("groups");
+
+		Set<String> groupIds = new HashSet<>();
+		Set<String> placed = new HashSet<>();
+		for (JsonNode group : root.path("groups")) {
+			if (!group.isObject()) {
+				throw notUnderstood("a group is not an object");
+			}
+			String id = requireId(group.path("id"), "group id");
+			if (!groupIds.add(id)) {
+				throw notUnderstood("two groups share the id " + id);
+			}
+
+			ObjectNode written = groups.addObject();
+			written.put("id", id);
+			JsonNode title = group.path("title");
+			if (title.isNull() || title.isMissingNode()) {
+				written.putNull("title");
+			}
+			else if (title.isTextual()) {
+				written.put("title", title.asText().trim());
+			}
+			else {
+				throw notUnderstood("a group heading is neither text nor absent");
+			}
+
+			if (!group.path("items").isArray()) {
+				throw notUnderstood("a group's items are not a list");
+			}
+			ArrayNode items = written.putArray("items");
+			for (JsonNode item : group.path("items")) {
+				String itemId = requireId(item, "item id");
+				if (!placed.add(itemId)) {
+					// Not "the last one wins". Which copy the temple meant is a question only the
+					// person arranging can answer, and quietly dropping one would move a destination
+					// somebody had just placed on purpose.
+					throw new ApplicationException(ErrorCode.MENU_ITEM_IN_TWO_GROUPS,
+							Map.of("item", itemId));
+				}
+				items.add(itemId);
+			}
+		}
+
+		try {
+			return json.writeValueAsString(canonical);
+		}
+		catch (JsonProcessingException e) {
+			// A tree this method built itself, so this cannot happen for a reason the caller could
+			// act on; it is here because the checked exception is.
+			throw new ApplicationException(ErrorCode.MENU_LAYOUT_NOT_UNDERSTOOD,
+					Map.of("reason", "the checked arrangement would not serialise"), e);
+		}
+	}
+
+	private JsonNode readOrRefuse(String arrangement) {
+		if (arrangement == null || arrangement.isBlank()) {
+			throw notUnderstood("the arrangement is empty");
+		}
+		try {
+			return json.readTree(arrangement);
+		}
+		catch (JsonProcessingException e) {
+			throw new ApplicationException(ErrorCode.MENU_LAYOUT_NOT_UNDERSTOOD,
+					Map.of("reason", "the arrangement could not be read"), e);
+		}
+	}
+
+	/** Shape and length only — never whether the thing it names exists. See {@link #MENU_ID}. */
+	private String requireId(JsonNode node, String what) {
+		if (!node.isTextual()) {
+			throw notUnderstood(what + " is not text");
+		}
+		String id = node.asText();
+		if (id.isBlank() || id.length() > MAX_MENU_ID_LENGTH || !MENU_ID.matcher(id).matches()) {
+			throw notUnderstood(what + " is not an identifier");
+		}
+		return id;
+	}
+
+	private ApplicationException notUnderstood(String reason) {
+		return new ApplicationException(ErrorCode.MENU_LAYOUT_NOT_UNDERSTOOD, Map.of("reason", reason));
 	}
 
 	/**

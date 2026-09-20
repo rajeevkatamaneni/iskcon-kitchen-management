@@ -348,7 +348,13 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
   const { appUser } = useAuth();
   // The person as well as the role (Epic 12): a cook whose kitchen does not plan its meals here is
   // not offered the planner, because its page would only refuse them.
-  const groups = navForRole(appUser?.role, appUser);
+  //
+  // And the temple's own arrangement of the menu, third (Settings → Menu, Rajeev 2026-09-19). It
+  // comes off the session rather than from a request of this component's own: every page mounts its
+  // own copy of this menu, so a menu that fetched its arrangement would ask for it once per
+  // navigation and show the standard order for a frame each time it did. `navForRole` arranges
+  // first and filters by role after, so nothing here changes who may reach what.
+  const groups = navForRole(appUser?.role, appUser, appUser?.menuLayout ?? null);
   // The temple's own name, from whoami. A platform operator belongs to no temple and runs the
   // platform itself, so they are told so rather than shown an empty line.
   const subtitle =
@@ -441,7 +447,11 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
             className="-mx-3 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-3"
           >
             {groups.map((group) => (
-              <div key={group.title ?? "main"} className="grid gap-1">
+              // Keyed on the group's permanent id, not its heading. A temple arranges its own menu
+              // now, and two groups can carry the same words, or none at all — "main" was a fine key
+              // while the seven groups were fixed and is a collision waiting to happen once a
+              // heading is something an admin types.
+              <div key={group.id} className="grid gap-1">
                 {group.title && (
                   <span className="mb-1 px-3 text-xs uppercase tracking-eyebrow text-ink-muted">
                     {group.title}
@@ -451,7 +461,10 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
                   const active = item.href === activeHref;
                   return (
                     <Link
-                      key={item.href}
+                      // The id, for the same reason as the group above it: two items share the
+                      // address `/notices` (the operator's and the admin's), and an id is the one
+                      // thing about a destination that is guaranteed unique.
+                      key={item.id}
                       href={item.href}
                       aria-current={active ? "page" : undefined}
                       className={[

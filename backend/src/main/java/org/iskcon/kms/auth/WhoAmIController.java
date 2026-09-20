@@ -1,5 +1,8 @@
 package org.iskcon.kms.auth;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +11,8 @@ import java.util.UUID;
 import org.iskcon.kms.kitchen.KitchenOrder;
 import org.iskcon.kms.shift.TenantSettingsService;
 import org.iskcon.kms.user.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,14 +31,26 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1")
 public class WhoAmIController {
 
+	private static final Logger log = LoggerFactory.getLogger(WhoAmIController.class);
+
+	/**
+	 * A menu arrangement is read back as a plain tree, not into a model of its own: this side has no
+	 * opinion about what is in it — see {@code TenantSettingsService.MENU_ID} — and a model here
+	 * would be a second statement of a shape that is stated once, in V154 and on the wire.
+	 */
+	private static final TypeReference<Map<String, Object>> MENU_LAYOUT_SHAPE = new TypeReference<>() {};
+
 	private final JdbcTemplate jdbc;
 	private final TenantSettingsService settings;
 	private final KitchenOrder kitchenOrder;
+	private final ObjectMapper json;
 
-	public WhoAmIController(JdbcTemplate jdbc, TenantSettingsService settings, KitchenOrder kitchenOrder) {
+	public WhoAmIController(JdbcTemplate jdbc, TenantSettingsService settings, KitchenOrder kitchenOrder,
+			ObjectMapper json) {
 		this.jdbc = jdbc;
 		this.settings = settings;
 		this.kitchenOrder = kitchenOrder;
+		this.json = json;
 	}
 
 	@GetMapping("/whoami")
@@ -70,6 +87,25 @@ public class WhoAmIController {
 		// row-level policy matches nothing without any special case here. Both mean "the default",
 		// which the resolver on the other side supplies.
 		body.put("themeId", settings.themeId());
+		// How this temple has arranged its own menu (T-420), and it rides here for exactly the
+		// reason the theme above does — only more so. Every page in the frontend mounts its own
+		// sidebar. A menu that fetched its own arrangement would ask once per navigation, and
+		// until the answer came back it would draw the standard order and then rearrange itself
+		// in front of the person, on every page, for ever. The one request a session already
+		// makes is the request that should answer it.
+		//
+		// The arrangement itself, parsed, not the text it is stored as: the client's type says
+		// MenuLayout, and a JSON string in that slot would be a lie the type system cannot see.
+		//
+		// Null when the temple has never arranged its menu — which is not the same as having
+		// arranged it to look standard, see V154 §2 — and null for a platform operator, who has
+		// no app.tenant_id, so the row-level policy matches nothing without a special case here.
+		// Both mean "the standard menu", which the merge on the other side supplies.
+		//
+		// Order and grouping only. What this person may open is still decided by the permissions
+		// their role holds, applied after the merge; nothing in here can add a destination to
+		// somebody's menu or take one away.
+		body.put("menuLayout", menuLayout());
 		// The temple's own clock, and the browser cannot work it out for itself.
 		//
 		// Rajeev, 2026-09-05: "ALL Date and Time values for that Temple MUST be in that Time zone
@@ -117,6 +153,29 @@ public class WhoAmIController {
 				.anyMatch(a -> Permission.MANAGE_MEAL_PLANS.name().equals(a.getAuthority()));
 		return holdsPermission
 				&& kitchenOrder.mayPlan(user.getUserId(), user.getRole() == User.Role.TEMPLE_ADMIN);
+	}
+
+	/**
+	 * The stored arrangement, read back into the object the client's type promises, or null.
+	 *
+	 * <p>Only this application writes the column, and it writes a document it has just checked and
+	 * rebuilt itself, so an unreadable one means somebody has been in the database by hand. It is
+	 * still not allowed to stop anybody signing in: a menu arrangement is a preference, and the
+	 * honest fallback for a preference nobody can read is the standard menu. The line in the log is
+	 * how anyone finds out it happened.
+	 */
+	private Map<String, Object> menuLayout() {
+		String arrangement = settings.menuLayout();
+		if (arrangement == null) {
+			return null;
+		}
+		try {
+			return json.readValue(arrangement, MENU_LAYOUT_SHAPE);
+		}
+		catch (JsonProcessingException e) {
+			log.warn("A stored menu arrangement could not be read; falling back to the standard menu", e);
+			return null;
+		}
 	}
 
 	private String kitchenName(UUID kitchenId) {

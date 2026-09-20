@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Field } from "@/components/Field";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Form } from "@/components/ds/Form";
 import { FieldRow } from "@/components/ds/FieldRow";
 import { HintedField } from "@/components/ds/InfoHint";
@@ -140,6 +141,8 @@ function SettingsView() {
 
       <LanguageSection initial={locale} getToken={getToken} />
 
+      <MenuSection />
+
       {stockExpiryDays !== null && contractEndDays !== null && equipmentServiceDays !== null && (
         <WarningsSection
           stockExpiryDays={stockExpiryDays}
@@ -176,6 +179,39 @@ function SettingsView() {
 
       <EmailSection initial={contactEmail} getToken={getToken} />
     </main>
+  );
+}
+
+// ---- Menu ------------------------------------------------------------------
+
+/**
+ * The way to Settings → Menu, which has no row in the left-hand menu of its own (D-M6).
+ *
+ * <p>A section rather than a line of text, so it reads as one of this screen's settings alongside
+ * Appearance and Language — which is what it is: how the application presents itself to everybody at
+ * this temple. It is the only section here with nothing to edit in place, because arranging a menu
+ * needs the whole width of a screen rather than a field, so its footer holds a link where the others
+ * hold Edit. Quiet, like Edit, since it commits nothing.
+ *
+ * <p>The sentence says what the screen decides and, just as importantly, what it does not: a person
+ * still sees exactly the destinations their role allows, whatever the temple does with the order.
+ */
+function MenuSection() {
+  return (
+    <section className="card mt-6 px-5 py-6 sm:px-7 sm:py-7" aria-label="Menu">
+      <h2 className="text-lg font-semibold text-ink">Menu</h2>
+      <p className="mt-1 max-w-[60ch] text-sm text-ink-secondary">
+        The order and the grouping of the left-hand menu, for everyone at this temple. What each
+        person can open stays exactly what their role allows.
+      </p>
+
+      <div className="mt-7 flex items-center gap-3 border-t border-hairline pt-6">
+        <span className="flex-1" />
+        <ButtonLink href="/settings/menu" variant="secondary" className="min-h-touch px-6 text-sm">
+          Arrange the menu
+        </ButtonLink>
+      </div>
+    </section>
   );
 }
 
