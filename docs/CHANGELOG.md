@@ -1233,6 +1233,58 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-20 — An outside event opens from the day list, a printed row says one unit, and the WhatsApp fact says whose it is (tasks T-363 to T-366)
+
+**No migration** — the next free is still V156, and V160, which this wave reserved, is unused.
+**No new error code** — the next free is still KMS-400192, because KMS-400183 already said what was
+needed. **No new permission.** **Deployed to staging; not seen working by Rajeev.**
+
+**An outside event opens, adjusts and prints from the day list, and a day that says it is empty is
+empty.** Rajeev created "Children's Bhagavad-gita Reading" and could then do nothing with it, while
+the 28th of September read *"Nothing planned for this day"* with the event apparently sitting under
+it. Nothing was ever wrong with the day list: `GET /api/v1/meals` filters on the two dates and
+nothing else, so an outside event has always been in the planner's day with the rest, sorted by
+ready-by. The fault was a card called "Upcoming outside commitments" at the foot of the planner. It
+took no date at all and was drawn under every view, so an event on the 26th sat below a day panel
+correctly saying the 28th was empty; and its rows were plain table cells linking nowhere although
+the server was sending each meal's own id. The card is gone with its endpoint
+(`GET /api/v1/meal-plans/outside-commitments`) and its service method, a comment at each site saying
+what went. What no day view can do is look across dates, so that much survives on **Today**: a
+fortnight ahead, **starting tomorrow** — today's outside meals are already in the meals card and
+listing one twice would say the temple has two — each row a link to the planner for its date.
+Handover shows as a blue pill in both places, **"We deliver it"** and **"They collect it"**, his
+words and his colour, and nothing where the temple has not said. Two things found alongside it:
+seven links to the planner on Today were offered to readers the planner refuses and are now gated on
+the same fact the menu uses, every figure still shown; and the planner's refusal said "Not your
+page" when KMS-400183 has a sentence of its own naming the screen an administrator fixes it on, so
+it now says that, under a guard test. The heads-up row was rebuilt after measurement, not
+inspection: all three real event names clipped at 1280px, his own title needing 192px in 184.
+
+**One row on a printed sheet says its quantities in one unit.** A picking row on a work order is
+arithmetic read in a glance, and every figure on it used to be written on its own and choose its own
+word, so the lots visibly failed to add up to the total: a line short of 0.8 Kg out of 12 printed
+*"800 gm / 12 Kg"*. The largest figure on the row now picks the word for all of them. The recipe
+card's yield sentence had the same fault — *"Scaled to 2 L (base 500 ml)"* now reads *"(base
+0.5 L)"*. The switch to a cook's wording is unchanged where a figure stands alone: a 0.1344 Kg line
+still reads "135 gm". All eleven places that write a quantity onto a printed document were read; the
+job card needed nothing.
+
+**`whatsappEverSent` is `templeWhatsappEverSent`.** It is a fact about the temple riding on an
+order's payload, and read as a claim about the order in front of you a brand-new draft reporting
+`true` was filed on staging as a defect when it was the right value. Nothing about the behaviour
+changed; only the subject of the name. It and `deliveryScore` are now required on the TypeScript
+interface, ending an exception two fixtures had earned by being outside an older task's path
+contract.
+
+**A repair script for counted things holding fractions**, `tools/seed/01c-whole-counted-stock.py`.
+Staging holds 400.98 coconuts and 1,080.74 lemons from before the whole-counts rule, and the
+storekeeper's adjustment door cannot fix them: an adjustment is a signed change, not a target, so
+-0.98 is refused and -1 leaves 399.98. The script goes through movement compensation instead,
+reversing the fractional figures a person typed and putting back what that over-removes as one whole
+count correction. Where the fraction is the application's own arithmetic — a recipe scaled to 12 L
+genuinely needs 2.4 coconuts — it writes nothing, reports it and ends non-zero, because reversing it
+would say the cooking did not happen. **Not run anywhere.**
+
 ### 2026-09-20 — A staff member has a record, a volunteer can see what she has done, and Inventory is rebuilt (tasks T-428 to T-432)
 
 **Migrations V155** (staff documents and previous employment, both under `enable_tenant_rls()`) and

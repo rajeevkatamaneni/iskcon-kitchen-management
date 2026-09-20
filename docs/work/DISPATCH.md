@@ -20641,3 +20641,510 @@ web 200.
 Full record: `docs/work/proof/RELEASE-2026-09-20-menu-layout.md`. **Nobody has driven the screens on
 staging yet** — the first verification pass is still owed.
 
+
+---
+
+# Wave OE — outside events, printed units, the whatsapp name, and fractional counts
+
+**Work manager, 2026-09-20.** Off `origin/main` at `b69ff67e`, in a new worktree
+`/Users/Rajeev/Workspace/kms-outside-events` (branch `wave-outside-events`), because the main
+checkout, `/Users/Rajeev/Workspace/kms-menu-layout`, `/Users/Rajeev/Workspace/kms-staff-inventory`
+and `.claude/worktrees/agent-ad44cab0eee0a1c41` are all in use. The staff-and-inventory release is
+in flight while this wave builds and will land `V155`, `V159` and about 112 files, mostly under
+`frontend/app/staff`, `frontend/app/inventory` and the ingredient/inventory services. **Every
+builder rebases onto `origin/main` and re-runs everything before it finishes.**
+
+## Reservations, checked against the tree rather than taken from the brief
+
+Per the README's rule — *a ledger describes the tree it was written against, and only the tree
+describes the tree.*
+
+- **Migrations.** `ls`, numerically sorted, in all three live worktrees. This one and
+  `kms-menu-layout` top out at `V154`; `kms-staff-inventory` holds `V155` and `V159`, which is where
+  the "V155 and V159" in the brief comes from. **Next free is V160**, reserved to T-363 and expected
+  unused. No task in this wave is known to need a migration.
+- **Error codes.** Max in `ErrorCode.java` is **`KMS-400191`**, identically in all three worktrees —
+  so `KMS-400192` onward is free, as the brief said. **`KMS-400192` and `KMS-400193` reserved to
+  T-363**, expected unused: the sentence its refusal needs already exists as
+  `PLANNER_NOT_FOR_YOUR_KITCHEN(400183)`. No other task in this wave may take a code.
+- **`frontend/lib/api.ts`.** Edited by the work manager before dispatch, twice, and **no builder in
+  wave OE may open it**:
+  - `TodayView` gains a required `upcomingOutside: OutsideCommitment[]`, after `equipmentOverdue`;
+  - `api.outsideCommitments` is removed and replaced by a comment saying what went and why. The
+    `OutsideCommitment` interface stays — `TodayView` now references it.
+
+  This leaves the tree red on purpose (`app/planner/page.tsx` and three `TodayView` fixtures), and
+  making it green is T-363's job. The same reservation was made and backed out once before, on the
+  parked attempt; the difference now is that a builder is live behind it.
+- **`RolePermissions.java`, `nav.ts`, `Sidebar.tsx`, `routes.ts`.** Nothing reserved and nothing
+  expected. `MANAGE_MEAL_PLANS` already gates both endpoints T-363 touches, and `plannerRefused`
+  already exists at `nav.ts:423-436`. A builder that thinks it needs one of these stops and asks.
+
+## Waves
+
+**Wave OE-1** — T-363, T-364, T-366, concurrently. Path sets are disjoint: T-363 is the meal/today
+packages and the planner and Today screens; T-364 is `document/` plus `ingredient/Quantities.java`;
+T-366 is `tools/seed/` alone.
+
+**Wave OE-2** — T-365, after T-363 is out of `frontend/lib/api.ts`. It is a rename *in* that file,
+and it also needs `__tests__/lead-time-one-promise.test.tsx`, which T-363 holds for its
+`TodayView` fixture. One file wanted by two tasks is a wave boundary, not a negotiation. T-365 is
+small; the serialisation costs about half an hour and the alternative costs the wave.
+
+---
+
+### T-363 — an outside event is read in the day list, like any other meal
+- **id:** T-363 · **wave:** OE-1 · **state:** **proven** 2026-09-20 ·
+  **proof:** `docs/work/proof/T-363.md` (rewritten; the previous builder's read-only staging
+  findings are kept inside it)
+- **result, and the diagnosis confirmed rather than inherited.** The builder checked this ledger's
+  claim rather than taking it: `ServedMealService.list()` is `WHERE 1 = 1` plus the two date bounds
+  and nothing else, and `grep -c isOutside frontend/components/planner/MealServices.tsx` returned
+  **0** — the meal card had no outside branch at all. **The defect was entirely the deleted card.**
+  Card, component, render site, ten table imports, the controller endpoint and
+  `MealPlanService.outsideCommitments()` all gone, with a tombstone comment at each site.
+  `TodayView.upcomingOutside` filled by `TodayService`: **a fortnight, from tomorrow** — a fortnight
+  because a row cap hides the sixth item silently, from tomorrow because today's outside meals are
+  already in the meals card and listing one twice would say the temple has two. Rows link to
+  `/planner?date=…` rather than `/planner/meal/{id}`, **because the edit form is hidden once a meal
+  is recorded and that row would start refusing readers** — a better reason than the one this
+  ledger offered. Blue `Badge tone="info"` pills, **"We deliver it"** and **"They collect it"**,
+  nothing at all where handover is null. All seven planner doors on Today gated on
+  `plannerRefused`, every fact kept, meal rows losing their hover tone and `aria-label` with the
+  link. The planner refusal now says `KMS-400183`'s own words, held to `ErrorCode.java` by a new
+  guard in `refusal-words-reach-the-reader.test.tsx`.
+- **the two blues, answered by measurement rather than by argument.** No card ever carries both:
+  the Ekadashi badge is in the day-summary panel (`closest('.card')` → none, y=241) and the pills
+  are inside separate meal cards at y=736 and y=1162. All three measured `rgb(229,242,253)` on
+  `rgb(50,96,134)`.
+- **⭐ the measurement caught a real defect in the parked patch, and this is the wave's best find.**
+  The patch's heads-up row **clipped all three real event names at 1280** — Rajeev's own
+  "Children's Bhagavad-gita Reading" at **184px available against 192 needed**, the other two at 210
+  and 217. Letting them wrap took one row to three lines. Rebuilt as name-over-date with the pill
+  right-aligned, which is the shape the Deliveries card directly above it already uses; at 390 the
+  pill then broke "They collect it" over two lines inside its own box, fixed with
+  `flex-none whitespace-nowrap`. Nothing clipped or cramped at either width now. **A patch that
+  reads well and had been declared finished was wrong on the screen, and only the measurement said
+  so** — which is the whole of Rajeev's 2026-09-18 instruction working as intended.
+- **numbers, from the logs.** Backend, the ten named classes, `--rerun-tasks`, through the lock:
+  **Total 1252, Passed 1252, Failed 0**, `BUILD SUCCESSFUL in 2m 43s`; `PermissionBeforeValidationIT`
+  97 passed with the endpoint gone. Merged against `origin/main` by archive overlay: tsc silent,
+  eslint silent, **vitest 2749 passed / 0 failed**, `next build` `Compiled successfully` 77/77.
+  Real worktree: **187 files / 2718 passed**, zero unhandled rejections.
+- **controls.** The guard test's control applied and caught the drift (1 failed / 11 passed),
+  restored byte-identical through `trap`. **The removal control could not be run and the builder
+  says so rather than manufacturing one** — you cannot revert a deleted endpoint. The accepted
+  consequence is asserted instead: the route answers **404, not 403**, deliberately, so
+  `PermissionBeforeValidationIT` cannot mask it; and the event opens, adjusts and prints from the
+  day list.
+- **⚠ not done, and it is the one real gap: no hand smoke-test of a running app.** Every local port
+  was taken, the shared `kms-postgres` is at V144 against this tree's V154 so starting a backend
+  would have migrated it under another agent's live stack, and a stack of its own needs a Firebase
+  sign-in for which no stub harness exists. Instead it rendered the real page components, built the
+  app's own Tailwind stylesheet, served the markup and measured in Chrome at 1280 and 390 — real
+  layout and real CSS, but fixtures rather than temple data. **The end-to-end pass is Rajeev's.**
+- **unused reservations:** `V160`, `KMS-400192`, `KMS-400193`. `KMS-400183` already said the right
+  thing.
+- **follow-ups it found and correctly left alone** — see the wave's follow-up list below.
+- **source:** Rajeev's own defect report, from the screenshot he sent — *"On Monday, 28 September, I
+  created an outside event 'Children's Bhagavad-gita Reading'. Now I cant open it to adjust it OR
+  view what is in it, cant print a Job card. NOTHING!!"*; the day reading *"Nothing planned for this
+  day"*, which he called *"not entirely true"*; and *"THEN why is it showing up under September
+  28'th? That makes absolutly no sense"*. The labels are his too: *"Yeh we deliver lable is needed
+  and put it like an infomration pill and make it catch the users eye"*, then *"Ok blue"*.
+- **the mechanism, and it is not what the report looks like.** Nothing excludes outside events from
+  the day list. `GET /api/v1/meals` is `WHERE 1 = 1 AND pd.plan_date >= ? AND pd.plan_date <= ?` and
+  nothing else (`ServedMealService.java:92-113`): no `is_outside` predicate, no kind predicate, no
+  kitchen predicate on the read path, no per-kitchen RLS. **The 28th was empty because nothing was
+  planned on the 28th.** The event was on the 26th and worked there — established read-only on
+  staging by the previous builder. What broke is the card: `OutsideCommitments`
+  (`planner/page.tsx:253`) **takes no date at all** and is rendered under all three views, so an
+  event on the 26th sat under a day panel correctly saying the 28th was empty. And its rows are bare
+  `<td>` text with no link, although `c.mealId` is the React key at `:282` and
+  `OutsideCommitment.java:20-21` says the id is carried for exactly that. Two defects, both in the
+  card, neither in the day query — and all three of his complaints dissolve when it goes.
+- **what:** remove the card and its endpoint and service method, leaving a comment at each site
+  saying what went; move the query to `TodayService` as a cross-date heads-up, because looking
+  across dates is the one thing the card did that a day view cannot; give each heads-up row
+  somewhere to go; add the handover pill — blue "We deliver it" on Rajeev's instruction, a settled
+  pickup wording beside it — to the planner meal card and the heads-up, same words in both; close
+  the seven affordances on Today that offer a refused reader a planner they cannot open; and make
+  the planner's refusal say `KMS-400183`'s sentence instead of "Not your page", under a guard of the
+  kind `refusal-words-reach-the-reader.test.tsx` already establishes.
+- **paths:** `backend/.../meal/{MealPlanController,MealPlanService,OutsideCommitment}.java`;
+  `backend/.../today/{TodayService,TodayView}.java`; `backend/src/test/.../meal/MealPlanIT.java`,
+  `.../today/TodayIT.java`; `frontend/app/{planner,today}/page.tsx`;
+  `frontend/components/planner/MealServices.tsx`; `frontend/components/RequireRole.tsx`; and
+  eleven `frontend/__tests__/` files — the three `TodayView` fixtures (`today`, `role-refusals`,
+  `lead-time-one-promise`), the four planner suites, `refusal-words-reach-the-reader`, and the five
+  that render `MealServices`. Granted up front per the wave-6 lesson: **a task that modifies a
+  screen gets that screen's existing tests, or it discovers them at the merged run.**
+- **reservations:** `api.ts` already edited by the work manager (above); `V160`, `KMS-400192`,
+  `KMS-400193`, all expected unused.
+- **explicitly not granted, and why:** `frontend/app/kitchens/page.tsx` (a heading "Kitchens" → "All
+  kitchens") and `frontend/components/ds/PeriodNav.tsx` (one stale comment). Both are in the parked
+  patch, both are plausible, both are out of scope, and the staff-and-inventory wave is in that
+  territory. **Follow-ups, not this task.**
+- **the parked patch.** `scratchpad/T-363.patch`, 13 files, written against an older `main`, never
+  applied. Its reasoning is sound and its prose is worth keeping; its line numbers are stale, it
+  reaches into the two files above, and it does nothing about the refusal message. The builder was
+  told to judge it, not apply it.
+
+### T-364 — one row, one unit, on a printed page
+- **id:** T-364 · **wave:** OE-1 · **state:** **proven** 2026-09-20 ·
+  **proof:** `docs/work/proof/T-364.md`
+- **result:** two switches found and fixed, both shown as rendered HTML before and after. The work
+  order's **picking row** — which is arithmetic, not a column: one `<tr>` holds the total to fetch,
+  the amount out of each lot, and the shortfall pair, and the lots are meant to add up. A row
+  totalling 2.5 Kg listed a lot as "500 gm"; the row's figures are now gathered first, the biggest
+  chooses the word, and the whole row uses it. That covers `:280`, `:292-294` and `:304` and the
+  banner built from the same string: `800 gm / 12 Kg` → `0.8 Kg / 12 Kg`. And the **recipe card's
+  yield sentence**: "Scaled to 2 L (base 500 ml)" → "(base 0.5 L)".
+  **The job card needed nothing** — all eleven `Quantities.cooks` sites in `document/` were
+  surveyed and every quantity on it is a single figure; the "Cooked" and "Served" columns beside
+  "Planned" are ruled boxes, not numbers.
+  Tree as handed back: **172 passed, 0 failed, BUILD SUCCESSFUL in 43s**, `grep -c " FAILED$"` = 0.
+  Guards `UnitLabelAgreementTest` 2/2 and `BaseQuantityIT` 7/7. Negative control applied and proved
+  applied (anchors counted 1 and 1, `cmp -s`, `--rerun-tasks`, trap-restore byte-identical):
+  **27 tests, 3 failed, all three its own**, the actual failure reading `["2.5 Kg", "500 gm"]`.
+- **the column question, answered no, and the builder is right.** Rendered both ways on a real
+  recipe card with rice at 10 Kg and cardamom at 0.008 Kg: per figure `8 gm`, one unit `0.008 Kg`.
+  The rule is about figures **read together** — nobody sums an ingredient column, nobody subtracts
+  within it, and its rows are not even all one family, so "one unit for the column" is not well
+  defined there. Three leading zeroes on the sheet a cook holds at the scale, in exchange for an
+  alignment nobody reads down. **Pinned by a test so it is not reversed by accident**, with the
+  counter-argument stated fairly in the proof.
+- **the judgement the task actually turned on.** `cooksOneUnitFor` adds the cook's rounding, and
+  within it **each figure is rounded at its own scale and then restated in the set's unit**.
+  Without that, 0.008 Kg in a kilogram row rounds to **"0 Kg"** — a lot the storekeeper is being
+  sent to, reported as nothing. That is the one deliberate difference from the TypeScript
+  `oneUnitFor`, which is the ledger form and rounds nothing away.
+- **the two copies agree.** `origin/main`'s `format.ts` proved byte-identical to the branch copy it
+  wrote against, and all eleven TS cases are mirrored in `QuantitiesTest.SetOfFigures` with the same
+  inputs and expected strings. `frontend/__tests__/quantities.test.ts` was not needed, not touched.
+- **no existing test had to change**, against the brief's expectation. It expected to amend
+  `DocumentGenerationIT:156-157` and `WorkOrderIT:257-258`, **checked rather than assumed**, and
+  neither needed it. `WorkOrderIT:263-276` (the 135 gm case) is green — a one-member set.
+- **not verified:** how any of it looks on paper at A4. No smoke test — these are server-rendered
+  documents with no deploy in this task, and the PDF path proves nothing because `StubPdfRenderer`
+  keeps only the HTML's length.
+- **source:** conductor's brief 2026-09-20, item 2.
+- **what:** `Quantities.java:137` steps a figure down into the small unit of its family under 1000
+  base units, per call, on one number, knowing nothing about the numbers beside it. The three
+  printed documents inherit it through `Quantities.cooks`.
+- **the sharpest instance, and it is unarguable:** `WorkOrderService.java:292-294` formats
+  `"%s / %s"` from two figures of one family, so a line short of 0.8 Kg out of 12 prints
+  **"800 gm / 12 Kg"** — in one cell, in one act of reading. `WorkOrderTemplate.java:96` documents
+  the field as `"3 Kg / 12 Kg"`; one unit was always the intent. The recipe card's yield line
+  (`DocumentGenerationService.java:458-462`) has the same shape and can print
+  *"Scaled to 2 L (base 500 ml)"*, and its own comment already admits the pair can differ.
+- **the judgement the builder owns, stated in the brief as a judgement.** `oneUnitFor`, landing on
+  `main` with the staff-and-inventory wave, is the **ledger** form — *nothing is rounded away*, up
+  to six decimals. The printed documents are the **cook's** form and round deliberately. Applied
+  blindly to a column, one unit prints 8 gm of cardamom as **"0.01 Kg"**, which is a worse document
+  for the person holding it. So: fix every within-a-reading switch, then decide the column question
+  separately with rendered output both ways and name the lesser evil. A "leave the column alone"
+  conclusion is acceptable if it is argued and shown.
+- **two guards that will bite, neither of which a targeted run loads.**
+  `UnitLabelAgreementTest:145` asserts on the *text* of `Quantities.java` — it must contain the
+  literal `unit.label(value)` — and `:102` asserts the set of no-arg `.label()` call sites in the
+  whole of `src/main` equals exactly four. `BaseQuantityIT:134` walks `backend/src` matching the
+  literal substrings `"CASE unit"` and `"CASE m.unit"`, **including in comments**; `DISPATCH.md:955`
+  records a red run caused by exactly that.
+- **two tests pin the defect and will change.** `DocumentGenerationIT:156-157` asserts a recipe card
+  whose column already reads "5 Kg" and "500 gm" — the defect, green. `WorkOrderIT:263-276`
+  (*"a 0.134 Kg line reads 135 gm, never 0.134 Kg"*) is a one-line sheet and a largest-figure rule
+  should keep it green; the builder was told to check rather than assume.
+- **paths:** `backend/.../ingredient/Quantities.java`; `backend/.../document/{JobCardService,
+  JobCardTemplate,WorkOrderService,WorkOrderTemplate,DocumentGenerationService,RecipeCardTemplate}
+  .java`; `backend/src/test/.../document/**`; `.../ingredient/{QuantitiesTest,
+  UnitLabelAgreementTest}.java`.
+- **reservations:** none. No migration, no error code, no `api.ts` — the documents are
+  server-rendered HTML and the client only links to their URLs.
+- **not granted:** `frontend/lib/format.ts` (read the rule from the sibling branch, never edit it)
+  and `BaseQuantityIT.java` (run it, do not change it). `frontend/__tests__/quantities.test.ts` is
+  not in the contract — if it needs a change the builder stops and asks.
+
+### T-366 — a counted thing is recounted to a whole number
+- **id:** T-366 · **wave:** OE-1 · **state:** **proven** 2026-09-20 ·
+  **proof:** `docs/work/proof/T-366.md`
+- **result:** `tools/seed/01c-whole-counted-stock.py`, one row added to `tools/seed/README.md`.
+  No backend change needed; no migration, no error code. Own database (a `pg_dump` copy of
+  `kms_verify`) on port **8097**, leaving `kms_seed`, `:8080`, `:8091` and `:8093` alone, dropped
+  afterwards. **Coconut 400.980 → 400.000** and **Lemon 1,080.740 → 1,080.000** — Rajeev's own two
+  figures — every write a 201, read back through the application's own `to_on_hand_qty` sum, every
+  lot whole, audited as 5 `STOCK_MOVEMENT_CORRECTED` and 1 `STOCK_ADJUSTED`. `--dry-run`: identical
+  figures, 586 rows before and after. Second run: three GETs, no POSTs, 594 rows either side.
+  Fixture SQL headed "SETUP ONLY, NOT PART OF THE REPAIR"; the repair path contains no SQL at all.
+- **the refusal this ledger predicted, confirmed verbatim:** `POST …/adjustments` with
+  `quantity: -0.98` → **HTTP 400 `KMS-400191`** — "Coconut is counted in whole pieces. Enter -1 or
+  0." Neither of those lands on 400.
+- **the builder corrected the suggested approach, and the correction is the substantive finding.**
+  Compensating *every* fractional movement would have been wrong.
+  `StockMovementService.ENTERED_BY_A_PERSON` already splits movements into the ones carrying a
+  figure somebody typed (`PO_RECEIPT`, `DONATION_IN_KIND`, `RETURN_TO_VENDOR`, `ADJUSTMENT`) and
+  the ones carrying a figure the application worked out (`CONSUMPTION`, `ISSUE`). **A fractional
+  `CONSUMPTION` is a recipe scaled to 12 L genuinely drawing 2.4 coconuts** — reversing it would
+  say the cooking never happened and put back food that was eaten. So it reverses only typed
+  fractions, and where a lot's fraction is the application's own arithmetic it writes nothing,
+  leaves the item as found, and reports why. Built as a control and shown behaving correctly.
+- **two further deviations, both argued in the file.** The residual is settled **per lot, not per
+  item** — one residual for the whole item moves stock between lots that never held it; the cost,
+  stated plainly, is that an item over several fractional lots can land up to one unit below the
+  floor of its total, always downwards. And counted units are read from the backend's own
+  `Unit.java` rather than hardcoded to `PIECES`, because the API exposes no unit metadata at all;
+  proved by injecting a `CRATES` COUNT unit into a throwaway copy and watching the script pick it
+  up. `--counted-units` overrides it.
+- **rounding: down**, as this ledger argued. 400.98 → 400. The builder's framing is better than
+  mine and is worth keeping: this does not contradict `01b` rounding *up*, because both round to
+  the side where being wrong is cheap, and that side differs for a **warning about the future**
+  versus a **claim about the shelf now**.
+- **⚠ two things for Rajeev before he runs it.** (1) **Run `--dry-run` on staging first** — neither
+  the builder nor this work manager could look at staging, so nobody knows whether its fractions
+  are typed mis-entries or the application's own arithmetic; the dry run names every item it cannot
+  fix and why. (2) **Coconut may need a market rate set first.** Reversing a 160.98 delivery removes
+  all of it, and the 160 that goes back is an adjustment that *adds*, which R-ING-3 requires a value
+  for. The script **refuses rather than inventing a price** and names the item in the dry run before
+  writing anything. It had no rate in the local snapshot either; the builder set one through
+  `PUT /api/v1/ingredients/{id}/market-rate` as a clearly separated operator step.
+- **source:** conductor's brief 2026-09-20, item 4. Staging shows Coconut 400.98 pieces and Lemon
+  1,080.74. The application no longer produces these — the whole-counts rule shipped as T-423 — but
+  the old figures remain.
+- **what:** a small, named, re-runnable, dry-runnable repair in `tools/seed/`, beside
+  `01b-whole-reorder-levels.py`, correcting a counted item through the application's own HTTP
+  endpoints as a storekeeper recounting would. **Never by SQL.** Not to be run against staging;
+  Rajeev runs it himself.
+- **the obstacle, found by the work manager before dispatch, and it shapes the whole task.**
+  `InventoryItemService.adjust` (~`:406`) calls
+  `IngredientUnits.requireWhole(item.ingredientName(), request.quantity(), unit)` — **the
+  whole-counts rule is checked on the adjustment amount, not on the resulting balance.** Taking
+  Coconut from 400.98 to 400 means posting −0.98 pieces, which that endpoint refuses; −1 leaves
+  399.98. There is no "set the count to N" route. **The endpoint built to correct a count cannot
+  correct these counts.** The one in-app path that is not validated is
+  `POST /movements/{id}/compensate` — `StockMovementService.compensate` skips validation and calls
+  `append` directly, by design, and says so at `:91-92`. That is the suggested route, and it is a
+  suggestion.
+- **the rounding direction is argued, not assumed.** `01b` rounds reorder levels *up* because a
+  warning early is useful and late is the thing it prevents. Stock inverts that: overstating is the
+  dangerous direction, because the allocator promises food the temple does not have. So **down** —
+  400.98 becomes 400 — which is also the only direction that needs no `pricePerUnit`. The builder
+  argues it in the file or argues it out.
+- **if the rule defeats every in-app route, the task is to say so and stop.** `InventoryItemService`,
+  `IngredientUnits` and `ErrorCode.java` are not in its contract. The written-up case for checking
+  the rule on the resulting balance rather than the delta, with the real HTTP refusal pasted in, is
+  a good outcome.
+- **paths:** `tools/seed/01c-*.py` (new), `tools/seed/README.md` (to list it). `tools/seed/common/`
+  is read-only to it.
+- **reservations:** none.
+
+### T-365 — `whatsappEverSent` is a misleading name
+- **id:** T-365 · **wave:** OE-2 · **state:** **proven** 2026-09-20 ·
+  **proof:** `docs/work/proof/T-365.md`
+- **the name: `templeWhatsappEverSent`**, and the builder's reasoning is better than the brief's.
+  *The old name's fault was positional, not lexical.* The field sits on an order payload beside
+  `order.sentAt`, `order.status`, `order.cancelledAt` — every neighbour a fact about the order — so
+  the reader supplies "this order" as the subject. Putting `temple` first settles the subject before
+  the reader reaches `EverSent` and guesses. It also keeps every sentence already written about the
+  field true, so the long doc comment survived the rename instead of needing to be re-argued.
+  Rejected, with reasons: `templeWhatsappWorks` (a temple that is verified but has never sent also
+  "works", and that is exactly the state Rajeev's ruling says must **not** show the button — it
+  trades one misreading for a worse one); `whatsappEverSentByTemple` (the misleading word is still
+  first); `tenantWhatsappEverSent` ("tenant" is our word, the product says temple).
+- **`hasEverSentSuccessfully()` left alone, and the argument is right.** The ambiguity came from the
+  field's neighbours; the method has none — it hangs off `TenantWhatsAppSettingsService`, whose type
+  name supplies the subject, and at its one call site no order is in scope. Renaming it would mean
+  opening two files outside the contract for no reader who is currently misled.
+- **`deliveryScore` came too**, now `OrderDeliveryScore | null`. Its stated reason for being optional
+  was fixture convenience and that reason is spent: all six construction sites are fixtures inside
+  the contract. The server always sends it, so `undefined` was modelling a state the wire cannot
+  produce. **The case against is stated fairly in the proof** — the `undefined`-reads-as-safe
+  argument does genuinely hold for this field, so requiredness buys no runtime safety; it was moved
+  because the benefit was never runtime safety but that a fixture can no longer silently test a
+  shape the server never sends.
+- **two controls, both shown to have applied.** *Coupling:* the old name put back on the Java end
+  only → `PathNotFoundException: No results for path: $['templeWhatsappEverSent']`,
+  `17 tests completed, 2 failed`, `BUILD FAILED`. That is the proof the JSON key **is** the record
+  component name — no `@JsonProperty` in the package and no naming strategy configured — which is
+  the claim that crosses the language boundary and therefore needed evidence from the far side.
+  *Requiredness:* both fields deleted from `goods-return.test.tsx` →
+  `error TS2739: … is missing the following properties … templeWhatsappEverSent, deliveryScore`.
+  Both restored and verified identical.
+- **the harness reported control 1 as "exit code 0" while the log said `BUILD FAILED`** — the third
+  instance of that hazard in this project this week. The builder read the log and caught it.
+- **numbers, from the logs.** Frontend baseline taken **before any edit**, with the other wave's 28
+  files already in the tree: tsc clean, eslint clean, **188/188 files, 2772/2772 tests**. After:
+  identical. No test added or removed, so matching counts are the expected result and the baseline
+  is what makes that statement mean anything. Backend, `--rerun-tasks`, all eight named suites:
+  **`BUILD SUCCESSFUL in 1m 24s`, 1209 passed, 0 failed** — `ErrorCodeTest` 972,
+  `PermissionBeforeValidationIT` 97, `RolePermissionsTest` 97, `PurchaseOrderWhatsAppIT` 17,
+  `WhatsAppTestSendIT` 8, `WhatsAppLastSentIT` 6, `FieldErrorMessageTest` 6,
+  `NextStepPermissionTest` 6.
+- **one widening, asked for and granted after checking ownership.**
+  `tools/seed/reference/api-procurement-donations.md:43` documents the endpoint as returning
+  `whatsappEverSent: bool` — an API reference note, so it is now **wrong** rather than merely old.
+  The builder stopped rather than widening its own contract, which is correct. Ownership checked
+  against every other contract in the wave: `tools/seed/` was T-366's, T-366 was out of the tree
+  with only `01c-whole-counted-stock.py` and one `README.md` row to its name, and T-363 and T-364
+  were out. Nobody held it, so it was granted and recorded here rather than taken quietly.
+- **the `docs/work/` hits were correctly left alone** — `PROCUREMENT-PROGRESS.md`, this ledger,
+  `proof/T-135.md`, `proof/T-370.md`, `proof/RELEASE-2026-09-19c.md`,
+  `proof/STAGING-E2E-2026-09-19.md`. They record what was true when written, and editing them would
+  falsify the history that explains why this task exists. **That is the "distinguish a live promise
+  from a historical record" rule applied without being told.**
+- **not smoke-tested by hand**, said plainly. The task adds no user-facing surface but does touch
+  the gate on a real button. Covering it: three gate tests in `order-detail.test.tsx` and four
+  `jsonPath` assertions in `PurchaseOrderWhatsAppIT`. The button is unchanged by construction — same
+  source value, same `=== true`, same `&&` on the render.
+- **source:** conductor's brief 2026-09-20, item 3.
+- **what:** the name reads as *"have we ever sent this thing"* and is in fact temple-wide, derived
+  from `tenant_settings.whatsapp_last_sent_at` (V123) through
+  `TenantWhatsAppSettingsService.hasEverSentSuccessfully()`. Its one use is correct —
+  `orders/[id]/page.tsx:543` reads it to decide whether the Send-on-WhatsApp button exists at all,
+  which is Rajeev's own ruling of 2026-09-10. **Only the name is wrong.** Rename it in
+  `frontend/lib/api.ts` and in the backend, and check nothing else reads it.
+- **held over to OE-2 for one reason:** it is a rename in `frontend/lib/api.ts`, which T-363's
+  reservation occupies, and it needs `__tests__/lead-time-one-promise.test.tsx`, which T-363 holds
+  for its `TodayView` fixture.
+- **one thing to settle while the file is open.** `api.ts:2878` has the field **optional**, against
+  that file's own convention, and the comment says why: two fixtures
+  (`__tests__/goods-return.test.tsx`, `__tests__/described-po-line.test.tsx`) construct the
+  interface and were outside T-135's path contract, and *"Make it required the next time somebody
+  may open those two files."* This task is that time.
+- **paths (provisional, to be checked against the tree at dispatch):**
+  `frontend/lib/api.ts`; `frontend/app/orders/[id]/page.tsx`;
+  `backend/.../purchaseorder/{PurchaseOrderDetailView,PurchaseOrderService}.java`;
+  `backend/src/test/.../purchaseorder/PurchaseOrderWhatsAppIT.java`; and six frontend fixtures —
+  `order-detail`, `lead-time-one-promise`, `po-merged-table`, `closing-a-part-delivered-order`,
+  `goods-return`, `described-po-line`.
+- **reservations:** `frontend/lib/api.ts`, owned outright by this task in OE-2.
+
+### T-367 — what a recipe book cannot say about an ingredient · **not built, by instruction**
+- **id:** T-367 · **wave:** — · **state:** **answered** · **proof:** none; the answer is in the
+  wave report.
+- **source:** conductor's brief 2026-09-20, item 5, over
+  `docs/work/intake/LIBRARY-LINE-SUPPLY-2026-09-20.md` (written in the staff-inventory worktree).
+  **Explicitly not to be built** — read it, check its claims, recommend.
+- **checked, and two of its claims did not hold.** Its explanation of the category fallback is wrong
+  for its own example: "leaf plates" matches `\bleaf\b` in the last rule of
+  `IngredientCategories.java:106-107` and gets "Other" by an explicit rule, not by `FALLBACK`. And
+  *"of the three facts, one is acknowledged and two are silent"* is wrong — **category is
+  acknowledged too**, on the same screen, immediately below the Ekadashi box
+  (`recipes/page.tsx:280-297`, with its twin at `ingredients/page.tsx:330-344`). One of three is
+  silent, not two.
+- **the recommendation is the opposite of the note's**, and the reasons are in the wave report:
+  the catalogue has **zero** supply lines in 460 lines and 103 distinct names, and the
+  "list what an import created" mechanism the note treats as extra work **already exists** as
+  `ingredients.library_derived`, already surfaced at `/ingredients?show=added-by-import`.
+
+### The rebase, and the instruction that was wrong — work manager, 2026-09-20
+
+**I told all three OE-1 builders to `git rebase origin/main` before finishing, and that was a
+mistake in the brief, not in any builder.** Three briefs each silently assumed their own builder
+would be the last one out of the worktree. A rebase refuses on an unstaged tree, and forcing one
+would move the branch under whoever is still mid-edit.
+
+**All three refused it, independently, and every one of them did the right thing instead:**
+`git archive origin/main` into a scratch directory, their own files overlaid, the required suite run
+there. That gives the merged-content assurance the instruction was after without touching shared git
+state. T-366 reported it first; T-364 reached the same conclusion unprompted; T-363 was told before
+it got there.
+
+**The rule this gives the protocol:** *a rebase is the work manager's step, for the same reason the
+merged-tree run is.* Only the coordinator knows when the last builder is out. A brief should ask a
+builder to **verify against `origin/main`**, never to **move the branch onto it** — and
+`git archive` is how a builder does that in a tree it shares.
+
+Rebase performed by the work manager after every builder was out: `git stash push -u`,
+`git rebase origin/main`, `git stash pop`. **No conflicts.** Branch now contains
+`origin/main` @ `a5dd6d97` (the staff-and-inventory release plus its record). Both `api.ts`
+reservations verified surviving afterwards — `upcomingOutside: OutsideCommitment[];` present once,
+`outsideCommitments:` absent. Migrations on disk now run to `V159`.
+
+**One method note worth keeping, from T-363.** `frontend/__tests__/design-system.test.ts` shells out
+to `git ls-files`, so it **cannot collect in an archive overlay** — an overlay is not a repository.
+It reports a failed *suite* that ran no test. That is the method, not the change; in a real worktree
+it is 23 passed. Anybody using the overlay technique should expect it and say so rather than
+reporting a red.
+
+### Follow-ups this wave found and deliberately did not do
+
+Each was outside the contract of the task that found it. None is urgent; all are real.
+
+- **`docs/uat/UAT-086` (five places) and `docs/stories/EPIC-4` still describe the deleted
+  "Upcoming outside commitments" card.** UAT-086 will send a tester looking for a screen that is
+  gone. This is the third removal-wave instance of the same lesson: *scope a removal by asking what
+  promised this, not only what calls this.* Neither file is locked, so neither needs sign-off.
+- `tools/seed/reference/api-meals-calendar-shifts.md` and a comment at
+  `frontend/app/orders/[id]/page.tsx:1128` also name the removed endpoint.
+- **`MealServices.tsx` cannot tell "no meals" from "the request failed".** `useAuthedQuery` leaves
+  `data` undefined either way, so a 403 or a 500 on `/api/v1/meals` also renders *"Nothing planned
+  for this day"* — the exact sentence Rajeev called *"not entirely true"*, able to lie again for a
+  different reason. Not what happened to him. Fixing it means changing the shared query hook's
+  contract, so T-363 correctly left it: **its own task.**
+- `frontend/app/kitchens/page.tsx` heading "Kitchens" → "All kitchens" (the menu's own words for
+  that screen), and one stale comment in `frontend/components/ds/PeriodNav.tsx` naming a report by
+  its old title. Both are in the parked T-363 patch and both were withheld as out of scope.
+- `tools/seed/README.md`'s phase table has **no row for `01b`** — it was never listed. T-366 added
+  only its own `01c` rather than quietly fixing somebody else's omission.
+
+### Merged-tree check over the whole of wave OE — work manager, 2026-09-20
+
+Run after the last edit in the wave (T-365's granted widening), with every builder out of the tree
+and the branch already rebased onto `origin/main` @ `a5dd6d97`. **Every figure below is read out of
+the log or the JUnit XML. No figure here comes from a harness exit notification** — that has lied
+three times on this project this week, including once inside this wave.
+
+- **Backend `./gradlew test`, whole suite, through the verify lock: `BUILD SUCCESSFUL in 7m 25s`.**
+  From the JUnit XML across **263 classes: 3783 tests, 0 failures, 0 errors, 7 skipped.**
+  `grep -c " FAILED$"` over the log returns **0**.
+- Frontend `npx tsc --noEmit`: **exit 0**.
+- Frontend `npx eslint . --max-warnings=0`: **exit 0**.
+- Frontend `npx vitest run`: **188 files passed, 2772 tests passed.**
+- Frontend `npx next build`: **`✓ Compiled successfully`**, `✓ Generating static pages (77/77)`.
+- Logs: scratchpad `merged-OE-backend-wm.log` and `merged-OE-front-wm.log`.
+
+**Every repo-wide guard in lesson 3a confirmed present in the run and green**, by reading its own
+XML file rather than trusting the whole-suite total — because a guard that fails to *run* and a
+guard that *passes* look identical in a green summary:
+
+| Guard | tests | failures |
+|---|---|---|
+| `BaseQuantityIT` | 7 | 0 |
+| `UnitLabelAgreementTest` | 2 | 0 |
+| `TempleClockTest` | 1 | 0 |
+| `CommunicationSendGuardSourceTest` | 2 | 0 |
+| `ErrorCodeTest` | 972 | 0 |
+| `FieldErrorMessageTest` | 6 | 0 |
+| `NextStepPermissionTest` | 6 | 0 |
+| `RolePermissionsTest` | 97 | 0 |
+| `RowLevelSecurityIT` | 30 | 0 |
+| `TenantLoopMigrationIT` | 1 | 0 |
+| `PermissionBeforeValidationIT` | 97 | 0 |
+| `MetaTemplateRulesTest` | 6 | 0 |
+| `NotificationTemplateTest` | 10 | 0 |
+
+`PermissionBeforeValidationIT` is the one this wave most needed: T-363 **removed** an endpoint, and
+that guard asserts over the framework's own request-mapping registry, so it belongs to no package
+and no wave. 97 passed with `/api/v1/meal-plans/outside-commitments` gone.
+
+**State of the branch:** `wave-outside-events`, containing `origin/main` @ `a5dd6d97`, with the
+wave's work **uncommitted in the working tree**. Nothing committed, pushed or deployed by anybody in
+this wave. Migrations on disk run to `V159`; **`V160` is still free** — no task in this wave needed
+one. **`KMS-400192` is still free** — no task in this wave needed a code, because `KMS-400183`
+already said what T-363's refusal had to say.
+
+### Wave OE — states
+
+| id | what | state | proof |
+|---|---|---|---|
+| T-363 | outside events read in the day list; the card, the pills, the seven doors, the refusal | **proven** | `docs/work/proof/T-363.md` |
+| T-364 | one row, one unit, on the work order and the recipe card | **proven** | `docs/work/proof/T-364.md` |
+| T-365 | `whatsappEverSent` → `templeWhatsappEverSent`, and two fields made required | **proven** | `docs/work/proof/T-365.md` |
+| T-366 | a counted thing recounted to a whole number, in `tools/seed/` | **proven** | `docs/work/proof/T-366.md` |
+| T-367 | what a recipe book cannot say about an ingredient | **answered, not built** | — |
+
+**Not yet seen working by Rajeev**, and one thing in this wave is weaker than usual on that front:
+**no task in it hand-drove a running application.** T-363 measured real rendered components in
+Chrome at 1280 and 390 with real CSS but fixture data; T-364's documents are server-rendered and
+nobody has looked at one on A4; T-365 adds no surface; T-366 ran end to end against its own
+database but must not be run against staging by anyone but Rajeev. The end-to-end pass is his.
