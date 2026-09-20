@@ -141,9 +141,11 @@ Each is one file, runs on its own, and prints what it created.
 |---|---|---|
 | 00 | preflight | checks the API, the accounts and the temple; refuses to go on if anything is missing |
 | 01 | opening stock | what a real temple has on the shelf on day one — ingredients **and** supplies, with realistic quantities and today's prices |
+| 01a | size the stock to the plan | run after 05: measures what the planned month actually needs and corrects the opening count and the reorder thresholds to match |
 | 02 | recipes | imports the curated catalogue; ingredients arrive with it |
 | 02a | curation fix-ups | the corrections to Rajeev's curated files (typos, water, coconut, commas) — run before the catalogue is built |
 | 02b | build the catalogue | turns his one-file-per-recipe curation into the loader's one-file-per-book shape, and replaces `backend/src/main/resources/recipe-library/` |
+| 02c | drop the old library | removes the vendored books from `master_recipes` after the curated ones are loaded — the loader upserts and never deletes |
 | 03 | complete the ingredients | alias, unit, Ekadashi flag, category, pack sizes, price, a preferred vendor and that vendor's details |
 | 04 | staff and schedules | checks the roster and the shift template are sane before anything is planned against them |
 | 05 | first 15 days | three meals a day, festivals on their real dates, temple events, outside events both delivered and collected |
@@ -203,16 +205,66 @@ equipment screen shows it as `DUE_SOON` or `OVERDUE`. Phase 15 builds that, and 
 faking a request. If Rajeev wants a real one with an approval and a payment, it is a feature to
 build, not data to seed.
 
-### One thing 06 has to do that it should not have to
+### Water, and the one place the mark has to be set
 
-Water is marked "not bought" in Rajeev's curated recipes, but **the application has nowhere to keep
-that**: `ingredients` has no such column, and `ingredients.supply` means "not food", which is a
-different question. So phase 06 keeps water off each list by hand, with
-`PATCH /api/v1/shopping-list/{ingredientId}` and `{"included": false}`, once per list.
+`ingredients.is_not_bought` landed in V153, so the shopping list now excludes water by itself and
+phase 06's per-list `PATCH` is a no-op left in place for a temple seeded before that.
 
-**TODO — delete this section and the PATCH when the `not_bought` flag lands** (a column on
-`ingredients` with the shopping list excluding it, V153, being built separately). Until then a
-shopping list built by any other route will order water.
+**But the mark has to be set when the ingredient is created, and nowhere else.** Copying a library
+recipe sets it only on an ingredient the *import creates*; it will not touch one the temple already
+has. That is deliberate and tested: copying a recipe is `MANAGE_RECIPES`, which a Kitchen Manager
+holds, and the buying policy is `MANAGE_BUYING_POLICY`, the Temple Admin's alone, so the import
+refuses to change a row it does not own and records `notBoughtNotApplied` in its audit entry
+instead. This toolkit creates the whole catalogue in phase 01 before any recipe is imported, so
+**every mark would be refused if phase 01 did not send it** — which is exactly what happened the
+first time, and left water on the temple's shopping list with fifteen audit rows saying so. Phase
+01 now sends `notBought` from the catalogue. `03a-mark-not-bought.py` repairs a temple seeded
+before that fix, reading the library first so it can only ever copy a mark that is really there.
+
+Two other small things follow from the same run, for whoever picks this up:
+
+**An ingredient the temple never buys still counts as low stock.** `InventoryItemService.lowStock()`
+filters on `belowThreshold` alone and knows nothing about `is_not_bought`. "Low" is
+`available < threshold`, where available is what is on the shelf minus what the plan has committed;
+water is committed by every recipe that uses it and is never received against, so it falls further
+behind every time a meal is planned. On staging it reached **−1,358 L**.
+
+Its own comment says that method is *"the single source of what's low"*, and that is the size of
+the problem — **one predicate, four places**:
+
+1. the **low-stock list** on the store screen,
+2. the **count on the dashboard** (`itemsBelowThreshold` in `/api/v1/today`),
+3. the **nightly low-stock digest** (E3-S3), which mails it out,
+4. the **reorder suggestions** (E5-S2).
+
+The seeding answer is to stop tracking water as a stock item at all —
+`DELETE /api/v1/inventory/items/{id}`, which removes the shelf record and leaves the ledger
+untouched — because a temple does not count tap water into its store. The product answer, if Rajeev
+wants one, is to exclude never-bought ingredients from that query, which fixes all four at once.
+
+**A stale platform notice is not the reset's to clear, and the next person will assume it is.**
+`platform_notices` (V66) carries **no `tenant_id` on purpose** — the whole value of a notice is that
+one raised in Bengaluru is read in Mayapur — so a per-tenant reset cannot reach it and should not.
+The same migration says a notice is **never deleted, only withdrawn**, and only by the raising
+temple or a platform operator. So a notice left over from testing survives a Day-1 reset by design,
+and taking it down is an operator act through `POST /api/v1/notices/{id}/withdraw`, not a line in
+`day1-reset.sql`. Worth checking after any reset: a withdrawn notice still appears in
+`/api/v1/notices`, but only `/api/v1/notices/feed` is what a person sees on Today, and the feed is
+per-person — somebody who dismissed a notice sees nothing while everybody else still sees it.
+
+### What a library recipe cannot say about an ingredient
+
+Worth recording because it is a gap in the product, not in the seeding, and it is a Rajeev decision
+rather than something to fix in passing. A library ingredient line carries a name, a quantity, a
+unit, a preparation note and the never-bought mark — and that is all. It cannot say that something
+is a **supply** rather than food, cannot say it is **prohibited on Ekadashi**, cannot give it a
+**category**, and cannot carry **aliases**. These are not dropped in transit the way `prep` once
+was; there is no field for them, so the book has no way to express them. The consequence is that an
+ingredient the import creates arrives as food, allowed on Ekadashi, with a category guessed from a
+keyword map that openly cannot name two dozen common items — water among them, which is how water
+came to be categorised "Other". Closing it would mean four fields on the line, four on the loader,
+and a decision about who is allowed to set them on import, since the same permission argument that
+restricts the never-bought mark applies to every one of them.
 
 ## Turning the curated recipes into a library the loader can read
 
@@ -247,6 +299,31 @@ diff against. `--keep-old` leaves them for a side-by-side look.
 `POST /api/v1/library/recipes/load` as the super admin, and that must wait for the loader fix that
 carries `prep` and `not_bought` — loading the curated catalogue with the old loader throws away
 the very fields it exists to carry.
+
+## Who does what, and why it is resolved rather than named
+
+Every act is done by the person who would really do it, and **who that is differs between
+environments**, so the scripts work it out at run time instead of hardcoding an account.
+
+`common/config.py`'s `kitchen_manager()` takes two questions rather than one:
+
+- **`needs_approval`** — approving or denying an ingredient request needs a real KITCHEN_MANAGER or
+  the Temple Admin. Nobody else can.
+- **`needs_planner`** — touching `/api/v1/meals`, `/meal-plans`, `/meal-crew` or `/job-cards` needs
+  an account whose **kitchen** has `uses_meal_planner`. `PlannerKitchenGuard` lets a Temple Admin
+  through always and everyone else only on that basis, so **the role is not enough**. `whoami`
+  answers it directly with `canPlanMeals`.
+
+Both matter, and both were learned from staging refusing something local never did. Locally
+`ikms.kitchen-staff.5` holds KITCHEN_MANAGER; on staging it is plain KITCHEN_STAFF and **no account
+holds the manager role at all**, which `docs/uat/README.md` confirms is correct — it lists all five
+as kitchen staff. A hardcoded account would have planned, ordered and received perfectly well and
+then failed only at phase 10's approvals, four groups deep. And the first version of the resolver,
+which checked the role but not the kitchen, picked somebody in a restaurant kitchen that does not
+plan and got **403 KMS-400183** on phase 05's first call.
+
+Where nobody suitable exists the Temple Admin stands in **and the phase says so in its output**,
+because a silent fallback would hide exactly the permission split the product is built around.
 
 ## Near-duplicate ingredient names, and where they are dealt with
 
