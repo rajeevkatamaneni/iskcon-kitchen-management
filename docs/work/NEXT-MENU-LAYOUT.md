@@ -1,6 +1,7 @@
 # Next in line after the procurement release: the temple's own menu layout
 
-**BUILT 2026-09-20 (T-420 to T-422, T-426), on staging, awaiting Rajeev's test.** Everything below
+**BUILT and deployed to staging 2026-09-20 (T-420 to T-422, T-426), api revision
+`kms-staging-api-00174-r44`, web `kms-staging-web-00162-w6g`. Awaiting Rajeev's test.** Everything below
 was built as written; the eleven decisions the spec did not settle are recorded in `docs/work/DISPATCH.md`.
 
 Approved by Rajeev, 2026-09-19 (terminal): "go, put it next in line after this release". Grew out of the local

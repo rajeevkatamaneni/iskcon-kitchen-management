@@ -20391,3 +20391,28 @@ build **eight separate times**, in four different agents, once because Gradle wa
 (a pipeline reports the last command's status, not Gradle's) and once because a dead `next start`
 left an older server answering on the same port while the new one died on `EADDRINUSE` into a log
 nobody opened. Every number above is read from a log or parsed from XML. None is an exit code.*
+
+### Released to staging — 2026-09-20
+
+Five commits straight to `main`, `d7281af1` `ad596f6b` `3b24874e` `1fc82ec4` `d673b669`, on top of
+`8e647ad8`, which `origin/main` was still at when the release began. CI run 35508296875: Repository,
+Backend and Frontend all green.
+
+The gate was the committed tree, not this one: `git archive HEAD` into a clean directory with
+`git init && git add -A`, then the full suite there. It reproduced the merged-tree figures above
+exactly — **253 classes / 3693 tests / 0 failures / 0 errors / 7 skipped** parsed from the JUnit XML,
+and **187 files / 2702 tests**, tsc and eslint silent, `next build` 77/77 with `/settings/menu` in
+the route table. The two files that carry hunks for more than one task, `ErrorCode.java` and
+`frontend/lib/api.ts`, were split by block across the commits, and the split was proved by
+`git write-tree`: `485478c3` before the first commit and after the fourth.
+
+Cloud SQL backup `1789904806875` (SUCCESSFUL, ended 11:48:18Z) before the deploy, because staging now
+holds a fully seeded temple. Deploy tag `20260920-045034`; api `kms-staging-api-00174-r44`, web
+`kms-staging-web-00162-w6g`, worker `kms-staging-worker-00156-hnl`, both image digests changed.
+Flyway on the new api revision: **153 → "154 - the temple arranges its own menu", 1 migration
+applied**, nothing else. No ERROR-or-worse log line on either revision. `/actuator/health` 200 UP,
+web 200.
+
+Full record: `docs/work/proof/RELEASE-2026-09-20-menu-layout.md`. **Nobody has driven the screens on
+staging yet** — the first verification pass is still owed.
+
