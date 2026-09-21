@@ -149,27 +149,14 @@ describe("hiring somebody", () => {
     expect(form.id).not.toBe("");
   });
 
-  it("offers to promote a devotee who already registered here", () => {
-    devoteesRef.current = {
-      data: [
-        {
-          id: "u9",
-          fullName: "Nitai Das",
-          email: "nitai@example.com",
-          phone: "+919000000003",
-          role: "VOLUNTEER",
-          status: "ACTIVE",
-          createdAt: "2026-01-01T00:00:00Z",
-        },
-      ],
-      error: null,
-      loading: false,
-    };
+  it("does not ask whether the person is already registered here", () => {
+    // Removed on Rajeev's instruction, 2026-09-21: "Remove 'Already registered here' and the
+    // dropdown. That was NEVER a requirement." The backend's `existingUserId` road is untouched;
+    // nothing in the UI takes it any more, so a hire always creates the account.
     render(<HireStaffPage />);
     const form = screen.getByRole("form", { name: /hire a staff member/i });
-    const picker = form.querySelector('select[name="existingUserId"]') as HTMLSelectElement;
-    expect(picker).toBeTruthy();
-    expect(within(picker).getByText(/Nitai Das/)).toBeInTheDocument();
+    expect(form.querySelector('select[name="existingUserId"]')).toBeNull();
+    expect(screen.queryByText(/already registered/i)).not.toBeInTheDocument();
   });
 
   it("refuses kitchen staff", () => {

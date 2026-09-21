@@ -30,6 +30,30 @@ public enum StaffDocumentKind {
 	 */
 	AADHAAR_SCAN;
 
+	/**
+	 * Whether <em>reading</em> one is an event worth an audit row.
+	 *
+	 * <p>The policy lives on the kind rather than in the service so that a fourth kind cannot be
+	 * added without somebody deciding this, which is the same reason the class note above says a
+	 * fourth kind is a decision taken here.
+	 *
+	 * <p><b>A photograph is not.</b> Ruled by Rajeev, 2026-09-21. The portrait at the top right of a
+	 * staff record is fetched the moment the page renders — it cannot be a plain {@code <img src>},
+	 * because the bytes only come back from an endpoint that checks the permission with the token in
+	 * a header. So every open of a record with a photo was writing "X's photo was opened", when
+	 * nobody opened it and the page drew it. Those rows would be almost everything this action ever
+	 * held, and the one row it exists for — somebody deliberately opening an Aadhaar card — would be
+	 * buried in them.
+	 *
+	 * <p><b>What this does not change.</b> Attaching, replacing and removing a photograph stay
+	 * audited, for every kind, and Rajeev asked for that explicitly on the same day: "Uploading a
+	 * Photo or changing a photo should be audited." A replacement is recorded as a removal and an
+	 * addition, because that is what happened. Only the <em>read</em> of a photograph is exempt.
+	 */
+	public boolean readIsAnEvent() {
+		return this != PHOTO;
+	}
+
 	/** What the screens call it. Kept beside the vocabulary so there is one set of words. */
 	public String label() {
 		return switch (this) {

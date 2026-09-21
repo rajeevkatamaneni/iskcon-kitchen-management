@@ -14,7 +14,7 @@ import { normalizePhone } from "@/lib/phone";
  * <h3>Several jobs, added and removed on the spot</h3>
  *
  * <p>One bordered block per job, the way the emergency contact is one bordered block, with *Remove*
- * on the block it removes and one *Add a job* under them all. A record with none shows no blocks at
+ * on the block it removes and one *Add work history* under them all. A record with none shows no blocks at
  * all and just the button — an empty block on every record would read as a job the temple failed to
  * fill in.
  *
@@ -125,7 +125,7 @@ export function PreviousEmploymentFields({ jobs }: { jobs: PreviousEmploymentVie
 
       <div>
         <Button variant="secondary" onClick={add}>
-          Add a job
+          Add work history
         </Button>
       </div>
     </div>

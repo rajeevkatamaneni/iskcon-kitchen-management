@@ -142,6 +142,54 @@ class StaffDocumentIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("opening a photograph is NOT recorded — the page fetches it, nobody pressed anything")
+	void openingAPhotoIsNotAudited() throws Exception {
+		// Ruled by Rajeev, 2026-09-21. The portrait at the top right of a record is fetched the
+		// moment the page renders, because the bytes only come back from an endpoint that checks the
+		// permission with the token in a header and a plain <img src> cannot send one. So every open
+		// of a record with a photo wrote "X's photo was opened", which nobody did. Those rows would
+		// be almost everything this action ever held, burying the read it exists for.
+		String staff = hire("Radha Devi", "COOK");
+		String photoId = attach(staff, "PHOTO", jpeg("her-photo.jpg"));
+		String aadhaarId = attach(staff, "AADHAAR_SCAN", jpeg("aadhaar-front.jpg"));
+
+		mvc.perform(authed(get(DOCUMENTS + "/{documentId}", staff, photoId)))
+				.andExpect(status().isOk());
+		assertThat(admin.queryForObject(
+				"SELECT count(*) FROM audit_events WHERE action = 'STAFF_DOCUMENT_VIEWED'", Integer.class))
+				.as("a photograph read writes nothing")
+				.isZero();
+
+		// And the exemption is the photograph's alone.
+		mvc.perform(authed(get(DOCUMENTS + "/{documentId}", staff, aadhaarId)))
+				.andExpect(status().isOk());
+		assertThat(admin.queryForList(
+				"SELECT after_state::text FROM audit_events WHERE action = 'STAFF_DOCUMENT_VIEWED'",
+				String.class))
+				.as("the Aadhaar read still writes exactly one row, and it is the only one")
+				.containsExactly("{\"kind\": \"AADHAAR_SCAN\"}");
+	}
+
+	@Test
+	@DisplayName("but attaching and replacing a photograph are still recorded")
+	void writingAPhotoIsStillAudited() throws Exception {
+		// Rajeev, 2026-09-21: "Uploading a Photo or changing a photo should be audited." Only the
+		// read is exempt; every write stays on the log, and a replacement is a removal and an
+		// addition because that is what happened.
+		String staff = hire("Radha Devi", "COOK");
+		attach(staff, "PHOTO", jpeg("first.jpg"));
+		attach(staff, "PHOTO", jpeg("second.jpg"));
+
+		// In any order, for the reason the replacement test below already records: a replacement
+		// writes both rows in ONE transaction, audit_events.created_at defaults to now(), and in
+		// PostgreSQL that is the transaction's start time — so the two share a timestamp and the
+		// tiebreaker is a random uuid. What matters is that all three facts are on the log.
+		assertThat(actions())
+				.containsExactlyInAnyOrder(
+						"STAFF_DOCUMENT_ADDED", "STAFF_DOCUMENT_REMOVED", "STAFF_DOCUMENT_ADDED");
+	}
+
+	@Test
 	@DisplayName("opening a scan is recorded, naming who, whose and which kind — and nothing else")
 	void openingIsAudited() throws Exception {
 		String staff = hire("Radha Devi", "COOK");

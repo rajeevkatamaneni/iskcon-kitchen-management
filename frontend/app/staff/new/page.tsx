@@ -38,9 +38,6 @@ function HireScreen() {
   const titles = useAuthedQuery(useCallback((t: string | undefined) => api.jobTitles(t), []));
   // Active kitchens only, in the order Settings lists them: the form offers them as they come.
   const kitchens = useAuthedQuery(useCallback((t: string | undefined) => api.listKitchens(false, t), []));
-  const devotees = useAuthedQuery(
-    useCallback((t: string | undefined) => api.listUsers(t, "VOLUNTEER"), [])
-  );
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
@@ -136,7 +133,6 @@ function HireScreen() {
         pay={null}
         options={titles.data ?? []}
         kitchens={kitchens.data ?? []}
-        devotees={(devotees.data ?? []).filter((d) => d.status === "ACTIVE")}
         onSubmit={(event) => {
           event.preventDefault();
           void attemptHire(readStaffForm(new FormData(event.currentTarget)));

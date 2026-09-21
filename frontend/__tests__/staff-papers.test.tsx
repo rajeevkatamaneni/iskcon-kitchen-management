@@ -242,7 +242,7 @@ describe("where they worked before", () => {
     expect(within(form).getByDisplayValue("Adyar Ananda Bhavan")).toBeInTheDocument();
     expect(within(form).getByDisplayValue("Suresh Kumar")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add a job" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add work history" }));
     const blocks = form.querySelectorAll("[data-previous-job]");
     expect(blocks).toHaveLength(2);
 

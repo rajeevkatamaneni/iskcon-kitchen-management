@@ -57,7 +57,6 @@ export function StaffForm({
   pay,
   options,
   kitchens,
-  devotees,
   previousEmployment = [],
   revealedPan,
   onRevealPan,
@@ -71,7 +70,6 @@ export function StaffForm({
   options: JobTitleOption[];
   /** The temple's kitchens as `listKitchens(false)` returns them. Archived ones are never offered. */
   kitchens: Kitchen[];
-  devotees: UserSummary[];
   /** Where they worked before (T-428). Empty while hiring — it is asked for on the record's own edit. */
   previousEmployment?: PreviousEmploymentView[];
   /** The PAN in clear, once somebody has asked for it. Null until then, and never fetched eagerly. */
@@ -131,29 +129,6 @@ export function StaffForm({
       <p className="col-span-full text-sm text-ink-secondary">
         A job title is what somebody is called. Access is what they may do.
       </p>
-
-      {/* The wrapper carries the grid span: HintedField owns the field's own layout and takes no
-          class of its own, deliberately, so that every hinted field on every screen is spaced the
-          same. */}
-      {!staff && devotees.length > 0 && (
-        <div className="col-span-full">
-          <HintedField
-            label="Already registered here?"
-            hint="Their seva history stays with them."
-          >
-            {(id) => (
-              <select id={id} name="existingUserId" defaultValue="" className={FIELD}>
-                <option value="">No — this person is new to the temple</option>
-                {devotees.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.fullName} · {d.email}
-                  </option>
-                ))}
-              </select>
-            )}
-          </HintedField>
-        </div>
-      )}
 
       <label className="flex flex-col gap-1 text-sm text-ink-secondary">
         <span className="pl-field-inset font-medium text-ink">Full name</span>
@@ -397,7 +372,6 @@ export function readStaffForm(f: FormData): HireStaffInput {
   const pan = String(f.get("pan") ?? "").trim();
   const salary = String(f.get("monthlySalary") ?? "").trim();
   return {
-    existingUserId: emptyToNull(String(f.get("existingUserId") ?? "")),
     fullName: String(f.get("fullName") ?? "").trim(),
     // Both numbers without their separators (T-157): what the API stores, and what it checks.
     phone: emptyToNull(normalizePhone(String(f.get("phone") ?? ""))),

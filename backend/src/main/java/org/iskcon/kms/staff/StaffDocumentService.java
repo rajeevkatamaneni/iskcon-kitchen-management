@@ -58,13 +58,20 @@ import org.springframework.web.multipart.MultipartFile;
  * has no delete, and V144 already accepts the same waste for an upload that was abandoned. It is
  * waste and not a leak — there is no way to reach an object whose key is in no row.
  *
- * <h2>Reading one is an event</h2>
+ * <h2>Reading an identity document is an event; reading a photograph is not</h2>
  *
  * <p>{@link #open} writes {@link AuditAction#STAFF_DOCUMENT_VIEWED} before it hands the bytes back,
  * in the shape {@code StaffEmploymentService.revealPan} uses: a null before, and an after that names
  * the kind and nothing from inside the file. The audit log has a wider readership than MANAGE_STAFF
  * does, and copying anything out of an identity document into it would hand that document to a
  * second audience — the point {@code STAFF_CONDUCT_NOTE_ADDED} already makes about a note's words.
+ *
+ * <p><b>A photograph is exempt from that one row</b>, and only that one. The record page fetches the
+ * portrait the moment it renders, so every open of a record was recording "X's photo was opened"
+ * when nobody opened it; those rows would be almost everything the action ever held, and the read
+ * that matters would be buried in them. The decision is {@link StaffDocumentKind#readIsAnEvent},
+ * which keeps it beside the kinds so a fourth cannot be added without answering it. Attaching,
+ * replacing and removing stay audited for every kind, photographs included.
  */
 @Service
 public class StaffDocumentService {
@@ -223,9 +230,15 @@ public class StaffDocumentService {
 				.orElseThrow(() -> new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND,
 						Map.of("staffProfileId", staffProfileId, "documentId", documentId)));
 
-		auditService.record(actor, AuditAction.STAFF_DOCUMENT_VIEWED, AuditEntityType.STAFF_MEMBER,
-				staffProfileId, null, Map.of("kind", stored.kind().name()),
-				personName + "'s " + stored.kind().label().toLowerCase(Locale.ROOT) + " was opened.");
+		// Whether the read is an event is the kind's own answer, not this method's: see
+		// StaffDocumentKind.readIsAnEvent. A photograph is not, because the record page fetches it
+		// on render and nobody pressed anything. Every surviving row is therefore a deliberate act,
+		// which is what makes "was opened" a true sentence.
+		if (stored.kind().readIsAnEvent()) {
+			auditService.record(actor, AuditAction.STAFF_DOCUMENT_VIEWED, AuditEntityType.STAFF_MEMBER,
+					staffProfileId, null, Map.of("kind", stored.kind().name()),
+					personName + "'s " + stored.kind().label().toLowerCase(Locale.ROOT) + " was opened.");
+		}
 
 		return new StaffDocumentFile(stored.contentType(), stored.originalName(), stored.sizeBytes(),
 				storage.open(stored.storageKey()));

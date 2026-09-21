@@ -146,21 +146,29 @@ function StaffRecordScreen() {
             <StaffNotFound />
           ) : (
             <>
-              {/* The name, then the photograph and Edit together on the right. Edit and the photo
-                  sit side by side rather than on a row each: two items 80px and 90px wide have no
-                  business taking two rows, and at 390 the whole right-hand group wraps under the
-                  name as one piece. Edit comes first in the source so it is the first thing after
-                  the heading for a keyboard and a screen reader; the photograph is the last thing
-                  on the line, which is what "top right" means on the page. */}
+              {/* The photograph on the left, beside the name and title; Edit alone on the right.
+                  Moved there on Rajeev's instruction, 2026-09-21: "move the Picture place holder
+                  next to below the Persons name and title. Move it to the left side." It had been
+                  top right since 2026-09-20, on his earlier instruction that "their photo sits top
+                  right and their name is prominent" — this supersedes that, and the comment is kept
+                  so the next reader does not treat the old placement as a defect.
+
+                  Edit still comes after the heading in the source, so a keyboard and a screen reader
+                  meet the name first and the action second. The photograph leads visually but is
+                  last in the reading order of the left block for the same reason: a portrait is not
+                  what somebody navigating by keyboard wants before the person's name. */}
               <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-                {/* `basis-64` is what decides the phone. The right-hand group is about 150px wide
-                    (Edit plus a 64px tile plus the gap), so on a 390px screen the two cannot both
-                    have room — 358px of content less 150 leaves the name 208, which is not enough
-                    for a name and a three-part line under it. Giving the left block a 256px basis
-                    makes the pair overflow and the group wrap onto its own line, where `ml-auto`
-                    keeps it at the right. At 1280 there is room for both and they sit side by side,
-                    which is the rule: a new row only when they genuinely cannot. */}
-                <div className="min-w-0 grow basis-64">
+                <div className="flex min-w-0 grow basis-64 items-start gap-4">
+                  {/* `order-first` puts it to the left of the name visually while the markup keeps
+                      the name ahead of it. `flex-none` so a long name never squeezes the tile. */}
+                  <div className="order-first flex-none">
+                    <StaffPhoto
+                      photo={photo}
+                      name={staff.fullName}
+                      load={async (p) => api.staffDocument(staff.id, p.id, await getToken())}
+                    />
+                  </div>
+                  <div className="min-w-0">
                   <h1 className={banned ? "text-danger" : undefined}>{staff.fullName}</h1>
                   <p className="mt-1 text-ink-secondary">
                     {staff.jobTitleLabel} · {staff.kitchenName} ·{" "}
@@ -175,6 +183,7 @@ function StaffRecordScreen() {
                       <Badge tone="danger">Banned</Badge>
                     </p>
                   )}
+                  </div>
                 </div>
                 <div className="ml-auto flex flex-none items-center gap-3">
                   {/* A former employee's record is locked against editing — ending an employment
@@ -185,11 +194,6 @@ function StaffRecordScreen() {
                       Edit
                     </ButtonLink>
                   )}
-                  <StaffPhoto
-                    photo={photo}
-                    name={staff.fullName}
-                    load={async (p) => api.staffDocument(staff.id, p.id, await getToken())}
-                  />
                 </div>
               </header>
 

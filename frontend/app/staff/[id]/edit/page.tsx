@@ -116,7 +116,6 @@ function EditStaffScreen() {
             pay={pay}
             options={titles.data ?? []}
             kitchens={kitchens.data ?? []}
-            devotees={[]}
             previousEmployment={previousEmployment}
             revealedPan={revealedPan}
             onRevealPan={revealPan}
