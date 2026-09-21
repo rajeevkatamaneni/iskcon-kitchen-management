@@ -1,5 +1,31 @@
 # Working on this project
 
+> ## ⏱ No task runs long — MANDATORY, for the conductor and every worker
+>
+> Added 2026-09-20 at Rajeev's instruction, after a work-manager spent **seven hours** on three
+> trivial items — a one-word page heading, a four-line component fix and two document corrections —
+> and then estimated three to five hours more. The heading change had also run a 41-route audit,
+> pixel geometry at two widths and a trapped negative control. Nobody asked for any of it.
+>
+> **How he hands work over:** usually **one task at a time, a few at most**. A long list only means
+> he wants something built overnight, and even then **no single item is big**.
+>
+> - **An hour per task. Two at the absolute maximum.** If a task cannot be done in that, it is more
+>   than one task — split it and say so.
+> - **Past that, question the worker.** Ask for a status with no work in between: what is done, what
+>   is in progress, what it is waiting on, and a real estimate rather than an optimistic one.
+> - **If the answer is vague, or does not make sense, kill it.** His words: *"If anything starts
+>   taking more than that, you MUST question the worker and if it is not responding OR making any
+>   sense, then KILL it."*
+> - **The one exception**, also his: work genuinely mid-flight that killing would obviously break,
+>   where repairing it is *"SUPER HARD if not impossible"*. Then let it live — and say why.
+> - Before killing, look at what is uncommitted and keep whatever is finished.
+>
+> **Match the discipline to the size of the job.** The full wave apparatus — a work-manager, path
+> contracts, reserved slots, merged-tree runs, negative controls — is for a feature. A small fix goes
+> to one builder, or the conductor does it. Thoroughness applied to a one-word change is not rigour,
+> it is waste, and it costs him time and money.
+
 > ## ⛔ STOP — there is an open build list
 >
 > **`docs/OUTSTANDING_BUILD_LIST.md` is open and binding.** It holds the defects and changes
