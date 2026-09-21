@@ -216,8 +216,15 @@ where they sit; ask before assuming any of them outranks item 1.
   kitchen staff hold, with a client method nothing calls. Only the screen is missing, which makes it
   far cheaper than the row implied. The same hole is wider than kitchen staff: a Temple Admin holds
   `VIEW_OWN_SHIFTS` too and has no *My shifts* entry either.
-- **`docs/uat/TRACEABILITY.md` §1 is stale** for everything after 2026-08-20 — E3-S8, E4-S9 onward
-  and E6-S10 onward are missing. It wants one pass of its own.
+- ~~**`docs/uat/TRACEABILITY.md` §1 is stale** for everything after 2026-08-20 — E3-S8, E4-S9 onward
+  and E6-S10 onward are missing. It wants one pass of its own.~~ **Checked and closed 2026-09-21, and
+  the claim was wrong.** §1 held 126 of the 127 story ids in `docs/stories/EPIC-*.md`; E3-S8, E4-S9
+  onward and E6-S10 onward were all present. The single genuine gap was **E9-S3**, and it is not
+  missing coverage — the cross-temple broadcast was dropped on 2026-08-20 and the shipped E9-S2
+  absorbed both halves. It now has a struck-through row saying so, which is what the other withdrawn
+  stories (E2-S4, E7-S1, E7-S3) already had. Two passes were needed to see this: a first count said
+  four were missing, because the regex used to read the table did not match the `~~struck~~` rows the
+  withdrawn ones are written in.
 - **`docs/stories/github-import/` has been behind since E1-S12** and is a job of its own, per
   `CLAUDE.md`.
 - **A settings test has been passing for the wrong reason.** `settings-payments`' "connects to

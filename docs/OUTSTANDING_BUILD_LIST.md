@@ -253,7 +253,29 @@ automatically. Nothing already held, bought or donated may remain untracked. (Bu
 
 ---
 
-## D1 — Wipe the tenant and seed a realistic day-one dataset · **NOT STARTED**
+## D1 — Wipe the tenant and seed a realistic day-one dataset · **DONE — verified 2026-09-21**
+
+*Done on 2026-09-20: staging was reset to day one and reseeded through the API by the role that
+really does each act, not by one superuser. Verified on 2026-09-21 by reading the seeded temple back
+out of the live API as `ikms.temple-admin.1` — **44 recipes, 31 purchase orders, 10 vendors, 11 staff,
+11 equipment items, 7 wish-list items, 6 leave requests**, and from the cost report **96 meals over
+42,644 servings** with no meal missing a head count and no ingredient missing a price. The machinery
+is `tools/seed/` (phases 00–15) plus three SQL jobs; `tools/seed/README.md` explains how it was made.*
+
+***Two things differ from the item as written above, both deliberate and both yours.*** *The window is
+the **four weeks of 29 August – 26 September**, not the fifteen days from 10 August — you cut it on
+2026-09-19: "ok do 4 weeks then. I need it sooner than 8 hours." And it could not have begun before
+1 August in any case, because the Vaishnava calendar is precomputed forward only. The rest of the
+item — deliveries that behave like deliveries, receiving with rejections and redelivery, vendor
+payments by cheque and cash, volunteer shifts partly filled, cash donations, wish-list items with
+donations against them, salary payments and advances, leave in all three states, and the two
+back-dated terminated hires — was seeded as asked.*
+
+***Checked by reading the data, not by driving the screens.*** *Whether each of those reads correctly
+on the screen it appears on is your pass, not mine, and the numbers above are the thing to test
+against. The one item I could not verify either way is the **Janmashtami HTML email saved as a
+draft** — Mailgun's sandbox on UAT only reaches pre-authorised addresses, so a draft cannot be
+confirmed from here.*
 
 Asked for 2026-08-23 at 08:55 IST, an hour before the demo. **Deliberately not started then**:
 it destroys the only populated data the demo had, and a wipe that is not followed by a complete

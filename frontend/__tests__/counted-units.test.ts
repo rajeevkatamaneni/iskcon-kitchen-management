@@ -292,6 +292,14 @@ describe("no quantity box is left stepping by any", () => {
         const rel = file.slice(root.length + 1);
         // The sentence file quotes the attribute in its own prose rather than putting it on a box.
         if (rel === "components/ds/formMessages.ts") continue;
+        // Local playgrounds (`app/dev-*/`) are not part of the application. They are untracked —
+        // `.git/info/exclude` holds `frontend/app/dev-*​/` — and never deployed, because
+        // `frontend/.gcloudignore` holds `app/dev-*/` too, so all three answer 404 on staging.
+        // This sweep reads the filesystem rather than the committed tree, so without this line a
+        // playground sitting in somebody's working copy fails a test that is green on CI, which
+        // sends the next session hunting a defect that is not in the product. It cost this one an
+        // hour on 2026-09-21.
+        if (/^app\/dev-[^/]+\//.test(rel)) continue;
         const source = readFileSync(file, "utf8");
         // Only the attribute as a box carries it, never the string inside a comment.
         const onABox = source.split("\n").filter((l) => /step="any"/.test(l) && !/^\s*(\/\/|\*|\{\/\*)/.test(l));

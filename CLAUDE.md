@@ -53,7 +53,13 @@
 > **The deployment pipeline is done** (2026-09-05): ~25 minutes became **5m49s** on a warm cache.
 > Items 1 and 2 — equipment servicing with its screen (E3-S10, E3-S11), and events with the travel
 > estimate and catering removed (E4-S15, E4-S16) — are **built and on staging awaiting Rajeev's
-> test**. Item 3 is the Kannada word-order defect, not yet started.
+> test**.
+>
+> *Corrected 2026-09-21: this paragraph used to end "Item 3 is the Kannada word-order defect, not yet
+> started." It was fixed on 2026-09-06 in `701e5821`, and the queue records both the fix and the real
+> cause — the translator was innocent, our own catalogue files names the way a reference book does
+> ("Water, hot"), and `IngredientNames.readable` un-inverts the name before it is sent. The banner had
+> been sending every session to look for a defect that was closed a fortnight earlier.*
 
 
 > ## ✅ Verify, never estimate — MANDATORY, for every agent and every check

@@ -118,6 +118,7 @@ document · **R5** environment/configuration · **R6** never built · **R7** the
 | E7-S10 | The donations ledger by period, against the same point last year | *No UAT test.* UAT-059 has no step for periods or the comparison |
 | E9-S1 | A notice board that spans the platform | *No UAT test* |
 | E9-S2 | The record raised at a dismissal, and the check run at a hire | *No UAT test.* UAT-064's dismissal steps do not raise the record or run the check |
+| ~~E9-S3~~ | ~~The design's second half of the ban — the broadcast to other temples~~ — **superseded 2026-08-20**; once the broadcast was dropped, raising the record and running the check at a hire are one act rather than two, and the shipped E9-S2 above covers both (`EPIC-9-cross-temple-notices-DESIGN.md`) | *No test of its own — covered by E9-S2's row above* |
 | E10-S1 | Requirements amendment: a temple has kitchens | *Documents only — no manual surface* |
 | E10-S2 | The kitchens register | **UAT-067** |
 | E10-S3 | The kitchens page | **UAT-067** |
