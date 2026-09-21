@@ -265,6 +265,24 @@ describe("inventory stock view", () => {
     expect(screen.getByText("Low")).toBeInTheDocument();
   });
 
+  /*
+   * T-440. Rajeev, 2026-09-20: *"Inventory, remove the edit button and move the functionality the
+   * current edit button provides into the edit screen. When the user clicks on the Ingredient Name,
+   * it opens in the view mode, then they see the edit button."* So the row has no button at all now
+   * — nothing else was ever in that column — and the name is the way in, which it already was. What
+   * the inline form could change is asserted on the two screens it moved to, in
+   * `inventory-edit.test.tsx`.
+   */
+  it("opens an item by its name, and offers no Edit button on the row", () => {
+    const { container } = render(<InventoryPage />);
+
+    expect(screen.getByRole("link", { name: "Toor Dal" })).toHaveAttribute("href", "/inventory/it1");
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    // And no column standing empty where the button was: six headings, all of them facts.
+    expect(container.querySelectorAll("thead th")).toHaveLength(6);
+    expect(container.querySelector("tbody tr")?.querySelectorAll("td")).toHaveLength(6);
+  });
+
   it("shows an empty state when nothing is tracked", () => {
     queryRef.current = { data: [], error: null, loading: false };
     render(<InventoryPage />);
@@ -315,62 +333,5 @@ describe("adding an item", () => {
     render(<InventoryPage />);
     expect(screen.getByText(/Toor Dal is now in your inventory/i)).toBeInTheDocument();
     expect(replaceMock).toHaveBeenCalledWith("/inventory");
-  });
-});
-
-/**
- * The reorder level edited in place on the row (T-424).
- *
- * <p>This box is **outside** the shared `<Form>`, so nothing says a word about it on its behalf. It
- * says the sentence itself, from `formMessages.wholeNumberProblem` — the same function `Form` words
- * its own refusals with — so the two screens that ask for a reorder level say the same thing.
- */
-describe("the reorder level of a counted ingredient", () => {
-  beforeEach(() => {
-    authRef.current = { status: "signed-in", appUser: { role: "KITCHEN_STAFF", userId: "me" } };
-    paramsRef.current = new URLSearchParams();
-  });
-
-  const edit = () => fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-  const level = (name: string) => screen.getByRole("spinbutton", { name: `Tell me when ${name} drops below` });
-
-  it("steps by 1 for a counted ingredient and by any for a weighed one", () => {
-    queryRef.current = { data: [item({ ingredientName: "Apron", unit: "PIECES" })], error: null, loading: false };
-    render(<InventoryPage />);
-    edit();
-    expect(level("Apron")).toHaveAttribute("step", "1");
-    expect(level("Apron")).toHaveAttribute("inputmode", "numeric");
-  });
-
-  it("refuses a fractional level and does not save it", () => {
-    queryRef.current = { data: [item({ ingredientName: "Apron", unit: "PIECES" })], error: null, loading: false };
-    render(<InventoryPage />);
-    edit();
-    fireEvent.change(level("Apron"), { target: { value: "3.6" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(screen.getByText("Apron is counted in whole pieces")).toHaveClass("text-danger");
-    expect(level("Apron")).toHaveAttribute("aria-invalid", "true");
-    // Still on screen holding what was typed, to be corrected rather than retyped.
-    expect(level("Apron")).toHaveValue(3.6);
-  });
-
-  it("still takes a fractional level on a weighed ingredient", () => {
-    queryRef.current = { data: [item({ ingredientName: "Toor Dal", unit: "KG" })], error: null, loading: false };
-    render(<InventoryPage />);
-    edit();
-    expect(level("Toor Dal")).toHaveAttribute("step", "any");
-    fireEvent.change(level("Toor Dal"), { target: { value: "3.6" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(screen.queryByText(/whole/)).toBeNull();
-  });
-
-  it("still shows a fractional level that is already on file", () => {
-    queryRef.current = {
-      data: [item({ ingredientName: "Apron", unit: "PIECES", reorderThreshold: 3.6 })],
-      error: null, loading: false,
-    };
-    render(<InventoryPage />);
-    edit();
-    expect(level("Apron")).toHaveValue(3.6);
   });
 });

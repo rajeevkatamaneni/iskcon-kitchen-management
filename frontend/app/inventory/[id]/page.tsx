@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
+import { ButtonLink } from "@/components/ds/ButtonLink";
+import { InlineNotice } from "@/components/ds/InlineNotice";
 import { Form } from "@/components/ds/Form";
 import { countedBox } from "@/components/ds/formMessages";
 import { RequireRole } from "@/components/RequireRole";
@@ -84,10 +86,22 @@ function movementTypeLabel(type: string): string {
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Movement";
 }
 
+/**
+ * One consumable, read before it is changed (T-440).
+ *
+ * <p>Rajeev, 2026-09-20, of the inventory list: *"When the user clicks on the Ingredient Name, it
+ * opens in the view mode, then they see the edit button, click on that and it goes to the edit
+ * screen which shows save and cancel."* So the list's inline Edit row is gone, this page is where an
+ * item is read, and the three things that row could change — where it is stored, the level, the
+ * notes — are all readable here and changed at `[id]/edit`. Same shape as a staff record.
+ */
 export default function InventoryItemPage() {
   return (
     <RequireRole roles={["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"]}>
-      <ItemView />
+      {/* useSearchParams — for the confirmation a saved change comes back with. */}
+      <Suspense>
+        <ItemView />
+      </Suspense>
     </RequireRole>
   );
 }
@@ -96,6 +110,22 @@ function ItemView() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const { getToken } = useAuth();
+  const router = useRouter();
+
+  /*
+   * The confirmation the edit screen sends back, caught exactly as the list catches the one from
+   * adding an item: behind a ref, because setting it re-renders and a router object that is new on
+   * each render would otherwise turn this effect into a loop.
+   */
+  const saved = useSearchParams().get("saved");
+  const [flash, setFlash] = useState<string | null>(null);
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || !saved) return;
+    captured.current = true;
+    setFlash(saved);
+    router.replace(`/inventory/${id}`);
+  }, [saved, router, id]);
 
   const fetchItem = useCallback((token: string | undefined) => api.getInventoryItem(id, token), [id]);
   const { data, error, loading, reload } = useAuthedQuery(fetchItem);
@@ -175,33 +205,53 @@ function ItemView() {
             <div className="mt-6"><ErrorNotice error={error} /></div>
           ) : item ? (
             <>
-              <header className="mb-6 mt-3 flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <h1>{item.ingredientName}</h1>
-                  <p className="mt-1 text-ink-secondary">
-                    {item.category}
-                    {item.storageLocation ? ` · ${item.storageLocation}` : ""}
-                  </p>
+              {flash && (
+                <div className="mb-6 mt-3">
+                  <InlineNotice tone="success" autoDismiss title={`Saved. ${flash} is up to date.`} />
                 </div>
-                <div className="text-right">
-                  <p className="text-3xl tabular-nums">{say(item.onHand)}</p>
-                  <p className="text-sm text-ink-secondary">On hand</p>
-                  <div className="mt-2 flex justify-end gap-1.5">
-                    {/* Two ways to be Low, and the badge says which. The list column says only
-                        "Low", which is what a column is for; here there is room to name it, and an
-                        item that is over-promised is a different problem from one that is running
-                        out — the first is fixed in the planner, the second in the store. */}
-                    {item.belowThreshold && (
-                      <span className="rounded-control bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">
-                        {item.available < 0 ? "More committed than you hold" : "Below reorder level"}
-                      </span>
-                    )}
-                    {/* Expired red, expiring soon amber (Rajeev, 2026-09-18, T-227). */}
-                    {item.expiringSoon && (
-                      <span className={`rounded-control px-2 py-1 text-xs font-semibold ${expiryWord(item.soonestExpiry) === "expired" ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning"}`}>
-                        {expiryWord(item.soonestExpiry) === "expired" ? "Expired" : "Expiring soon"}
-                      </span>
-                    )}
+              )}
+
+              {/*
+                The name, then Edit and the count on the right (T-440).
+
+                Edit comes first in the source, so it is the first thing after the heading for a
+                keyboard and a screen reader, and the on-hand figure stays the last thing on the
+                line — it is the fact this page exists to answer, and moving it would be a different
+                page. `basis-72` on the left decides the phone: the right-hand group is about 200px
+                (Edit at 76px, the count and its badges beside it), so at 390 the two cannot share a
+                line and the group wraps under the name as one piece, where `ml-auto` keeps it right.
+                At 1280 they sit side by side, which is the rule — a new row only when they genuinely
+                cannot.
+              */}
+              <header className="mb-6 mt-3 flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0 grow basis-72">
+                  <h1>{item.ingredientName}</h1>
+                  <p className="mt-1 text-ink-secondary">{item.category}</p>
+                </div>
+                <div className="ml-auto flex flex-none items-center gap-4">
+                  <ButtonLink href={`/inventory/${id}/edit`} variant="secondary">
+                    Edit
+                  </ButtonLink>
+                  <div className="text-right">
+                    <p className="text-3xl tabular-nums">{say(item.onHand)}</p>
+                    <p className="text-sm text-ink-secondary">On hand</p>
+                    <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                      {/* Two ways to be Low, and the badge says which. The list column says only
+                          "Low", which is what a column is for; here there is room to name it, and an
+                          item that is over-promised is a different problem from one that is running
+                          out — the first is fixed in the planner, the second in the store. */}
+                      {item.belowThreshold && (
+                        <span className="rounded-control bg-warning-bg px-2 py-1 text-xs text-warning font-semibold">
+                          {item.available < 0 ? "More committed than you hold" : "Below reorder level"}
+                        </span>
+                      )}
+                      {/* Expired red, expiring soon amber (Rajeev, 2026-09-18, T-227). */}
+                      {item.expiringSoon && (
+                        <span className={`rounded-control px-2 py-1 text-xs font-semibold ${expiryWord(item.soonestExpiry) === "expired" ? "bg-danger-bg text-danger" : "bg-warning-bg text-warning"}`}>
+                          {expiryWord(item.soonestExpiry) === "expired" ? "Expired" : "Expiring soon"}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </header>
@@ -297,6 +347,33 @@ function ItemView() {
                 <div>
                   <dt className="text-sm text-ink-secondary">Last counted</dt>
                   <dd className="mt-1 text-xl">{lastCountedPhrase(item.lastCounted)}</dd>
+                </div>
+                {/*
+                  The three things Edit changes, in the same card as the six it does not (T-440).
+
+                  They are here because the list's inline editor is gone and this is now the only
+                  place they can be read: a level nobody can see is a rule nobody can check, and a
+                  note written in August is worth nothing if no screen shows it. Where it is stored
+                  used to be a second line under the name; it is said once, here, beside the rest —
+                  a reader looking for "what do we know about this item" now has one place to look.
+
+                  Nine cells: six figures, then these three with Notes taking two columns from `sm`
+                  up. So the card is 3 × 3 at 1280 and 4 × 2 at 390, and no row of it is half empty
+                  at either width. Both of these are words rather than figures and are set at the
+                  body size — a sentence somebody typed, printed at 20px in a card of numbers, reads
+                  as an announcement rather than as a note.
+                */}
+                <div>
+                  <dt className="text-sm text-ink-secondary">Where it is stored</dt>
+                  <dd className="mt-1 text-base">
+                    {item.storageLocation ?? <span className="text-ink-secondary">Not recorded</span>}
+                  </dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-sm text-ink-secondary">Notes</dt>
+                  <dd className="mt-1 text-base">
+                    {item.notes ?? <span className="text-ink-secondary">None</span>}
+                  </dd>
                 </div>
               </dl>
 

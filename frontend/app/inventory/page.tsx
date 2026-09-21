@@ -9,23 +9,17 @@ import { RequireRole } from "@/components/RequireRole";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
-import { api, toApiError, type ApiError, type StockItemView } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { api, type StockItemView } from "@/lib/api";
 import {
   expiryWord,
   lastCountedPhrase,
   oneUnitFor,
-  stepForUnit,
   stockCoverPhrase,
   stockRunsOutSoon,
-  unitLabel,
 } from "@/lib/format";
-import { wholeNumberProblem } from "@/components/ds/formMessages";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
-import { Button } from "@/components/ds/Button";
-import { PLAIN_NUMBER } from "@/components/InventoryItemForm";
+import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 
 export default function InventoryPage() {
   return (
@@ -39,24 +33,13 @@ export default function InventoryPage() {
 }
 
 function InventoryView() {
-  const { getToken } = useAuth();
-  const [nonce, setNonce] = useState(0);
-  const fetchInventory = useCallback(
-    (token: string | undefined) => {
-      void nonce;
-      return api.listInventory({}, token);
-    },
-    [nonce]
-  );
+  const fetchInventory = useCallback((token: string | undefined) => api.listInventory({}, token), []);
   const { data, error, loading } = useAuthedQuery(fetchInventory);
   const items = data ?? [];
 
   const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<ApiError | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
   // Adding happens on /inventory/new and ends back here, so the confirmation has to travel in the
@@ -79,21 +62,6 @@ function InventoryView() {
     const timer = setTimeout(() => setFlash(null), 6000);
     return () => clearTimeout(timer);
   }, [flash]);
-
-  async function run(fn: (token: string | undefined) => Promise<unknown>, failure: string) {
-    setBusy(true);
-    setActionError(null);
-    try {
-      await fn(await getToken());
-      setNonce((n) => n + 1);
-      return true;
-    } catch (e) {
-      setActionError(toApiError(e, failure));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
 
   const locations = useMemo(
     () => [...new Set(items.map((i) => i.storageLocation).filter(Boolean))] as string[],
@@ -145,8 +113,6 @@ function InventoryView() {
             </div>
             <ButtonLink href="/inventory/new">Add to inventory</ButtonLink>
           </header>
-
-          {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
           {flash && (
             <div className="mb-6">
@@ -262,6 +228,13 @@ function InventoryView() {
                         What is left reads left to right as one sentence, and every quantity in it is
                         said in ONE unit, because `oneUnitFor` picks the unit for the row rather than
                         each figure picking its own.
+
+                        There is no actions column any more (T-440). The row's Edit button opened an
+                        inline form over these six cells; Rajeev asked on 2026-09-20 that the name be
+                        the way in — the item opens read-only, Edit is on that page, and the form is a
+                        screen of its own with Save and Cancel — which is the shape Staff already has.
+                        Nothing is left to put in an actions column, so the column goes rather than
+                        standing empty, and the six that remain get its width.
                       */}
                       <th className={TH_PRIMARY}>Item</th>
                       <th className={TH_FIXED}>On hand</th>
@@ -269,29 +242,12 @@ function InventoryView() {
                       <th className={TH_FIXED}>On order</th>
                       <th className={TH_FIXED}>Lasts</th>
                       <th className={TH_FIXED}>Last counted</th>
-                      <th className={TH_ACTIONS_FIXED}><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.map((i) =>
-                      editing === i.itemId ? (
-                        <EditRow
-                          key={i.itemId}
-                          item={i}
-                          busy={busy}
-                          onCancel={() => setEditing(null)}
-                          onSave={async (input) => {
-                            const ok = await run(
-                              (t) => api.updateInventoryItem(i.itemId, input, t),
-                              "We couldn’t save that change."
-                            );
-                            if (ok) setEditing(null);
-                          }}
-                        />
-                      ) : (
-                        <ItemRow key={i.itemId} item={i} onEdit={() => setEditing(i.itemId)} />
-                      )
-                    )}
+                    {visible.map((i) => (
+                      <ItemRow key={i.itemId} item={i} />
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -303,8 +259,8 @@ function InventoryView() {
   );
 }
 
-/** One consumable, read left to right. */
-function ItemRow({ item: i, onEdit }: { item: StockItemView; onEdit: () => void }) {
+/** One consumable, read left to right. Its name opens it (T-440). */
+function ItemRow({ item: i }: { item: StockItemView }) {
   /*
    * One row, one unit (T-432).
    *
@@ -370,126 +326,6 @@ function ItemRow({ item: i, onEdit }: { item: StockItemView; onEdit: () => void 
       <td className={`${TD_FIXED} text-ink-secondary`} data-label="Last counted">
         {lastCountedPhrase(i.lastCounted)}
       </td>
-      {/* Changing your mind about a level is a one-click job on the row you are looking at. It used
-          to be impossible anywhere in the application: the endpoint existed and no screen called it. */}
-      <td className={TD_ACTIONS_FIXED}>
-        <Button variant="ghost" size="sm" onClick={onEdit}>
-          Edit
-        </Button>
-      </td>
     </tr>
   );
-}
-
-/** Changing a level, a location or a note, in place on the row — the Ingredients pattern. */
-function EditRow({
-  item,
-  busy,
-  onCancel,
-  onSave,
-}: {
-  item: StockItemView;
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (input: { storageLocation: string | null; reorderThreshold: number | null; notes: string | null }) => void;
-}) {
-  const [location, setLocation] = useState(item.storageLocation ?? "");
-  const [threshold, setThreshold] = useState(item.reorderThreshold == null ? "" : String(item.reorderThreshold));
-  const [notes, setNotes] = useState(item.notes ?? "");
-  const [tried, setTried] = useState(false);
-  const FIELD = "min-h-touch w-full rounded-control border border-hairline px-2";
-
-  /*
-   * A level is compared against a stock figure, so it is whole whenever the stock figure is
-   * (T-424): "tell me when aprons drop below 3.6" is a rule that can never be read off a shelf.
-   * A level already on file holding a fraction still shows it, and is refused on Save — here and,
-   * since T-432, at the server as well, which used to accept it (KMS-400191).
-   */
-  const step = stepForUnit(item.unit);
-  // The name and the unit as well as the step, so the refusal says why rather than reading the
-  // label back — "Agarbatti is counted in whole pieces" (T-431).
-  const wholeProblem = wholeNumberProblem(
-    `Tell me when ${item.ingredientName} drops below`,
-    step,
-    threshold,
-    { subject: item.ingredientName, unit: item.unit }
-  );
-
-  return (
-    <tr className="border-t border-hairline bg-sunken align-top">
-      <td className={TD_PRIMARY}>
-        <span className="font-medium">{item.ingredientName}</span>
-        <span className="mt-0.5 block text-xs text-ink-muted">{item.category}</span>
-      </td>
-      {/*
-        The three things this row can change, across the five columns it has nothing to edit. On
-        hand, available, on order, how long it lasts and when it was last counted are all computed or
-        remembered, and none of them is a thing to type into.
-      */}
-      <td className={TD_FIXED} colSpan={5}>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-0 grow basis-40 flex-col gap-1 text-xs text-ink-secondary">
-            <span>Where is it stored</span>
-            <input value={location} onChange={(e) => setLocation(e.target.value)} className={FIELD} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-ink-secondary">
-            <span>Tell me below</span>
-            <div className="flex items-center gap-2">
-              <input
-                aria-label={`Tell me when ${item.ingredientName} drops below`}
-                type="number"
-                inputMode={step === "1" ? "numeric" : "decimal"}
-                min="0"
-                step={step}
-                value={threshold}
-                onChange={(e) => setThreshold(e.target.value)}
-                aria-invalid={tried && wholeProblem ? true : undefined}
-                className={`${FIELD} ${PLAIN_NUMBER} w-24 ${tried && wholeProblem ? "border-danger" : ""}`}
-              />
-              {/* The unit as fixed text, not a picker. Settled on 2026-09-08 (build-list item I1):
-                  changing an ingredient's unit once stock exists is a conversion problem, so this
-                  row says which unit the number is in and the Add form is where one is chosen. */}
-              <span>{unitLabel(item.unit)}</span>
-            </div>
-          </label>
-          <label className="flex min-w-0 grow basis-40 flex-col gap-1 text-xs text-ink-secondary">
-            <span>Notes</span>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} className={FIELD} />
-          </label>
-          {tried && wholeProblem && (
-            <span className="basis-full text-xs text-danger">{wholeProblem}</span>
-          )}
-        </div>
-      </td>
-      <td className={TD_ACTIONS_FIXED}>
-        <div className={ACTIONS_ROW}>
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() => {
-              setTried(true);
-              if (wholeProblem) return;
-              onSave({
-                storageLocation: emptyToNull(location),
-                // No unit travels with it: this box cannot change the unit, so the figure is
-                // already in the ingredient's own one and the server is told nothing to convert.
-                reorderThreshold: threshold.trim() === "" ? null : Number(threshold),
-                notes: emptyToNull(notes),
-              });
-            }}
-          >
-            Save
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-function emptyToNull(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed === "" ? null : trimmed;
 }
