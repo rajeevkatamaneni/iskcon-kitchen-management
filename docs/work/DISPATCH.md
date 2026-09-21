@@ -21270,3 +21270,92 @@ under `docs/`. Neither names `PeriodNav.tsx`, and no other wave is live in this 
 T-435 was also pointed at `scratchpad/T-363.patch` for the reasoning behind both hunks, and told
 **not** to apply it: it is written against an older `main`, it carries eleven files outside T-435's
 contract, and this branch is about to be rebased under it.
+
+## ▶ WAVE DP (2026-09-20): the list → view → edit pattern on Inventory, Ingredients and Supplies — T-440, T-441
+
+**Released 2026-09-20.** Commits `df565f0f` (Inventory) and `04c51437` (Ingredients and Supplies) on
+`main`. See the release record `docs/work/proof/RELEASE-2026-09-20-detail-pattern.md` for the CI run,
+the revisions and the digests. **Nobody has clicked it, on staging or anywhere else** — see
+**What was not verified**, below, because this wave is unusual in how much of it rests on tests.
+
+**Source.** Rajeev's own words, relayed 2026-09-20: *"Inventory, remove the edit button and move the
+functionality the current edit button provides into the edit screen. When the user clicks on the
+Ingrident Name, it open in the view mode, then they see the edit button, Click on that and it goes to
+the edit screen wchi shows save and cancel. The same pattern should be applied to Inventory also."*
+The message names Inventory twice and Ingredients once; read with the sentence about the ingredient
+name, it asks for one pattern across the catalogue and stock lists, which is what was built. Supplies
+was included because it is the same list component over the same table.
+
+**Where it was built.** A worktree of its own at `/Users/Rajeev/Workspace/kms-detail-pattern`, branch
+`wave-detail-pattern`, off `origin/main` `bd8ba467`. `origin/main` had not moved when the release
+agent took it, so there was no rebase.
+
+**State at reservation.** No migration and no new error code were reserved or used: the next free
+migration is still **V156**, the next free 4xx code still **KMS-400192**, and Flyway on staging stays
+at **V159**. **No backend file was opened by either builder**, which is why the backend suite was run
+to confirm it was unchanged rather than to prove anything new.
+
+### Why the two tasks could run side by side in one worktree
+
+Their path sets are disjoint. T-440 owns `frontend/app/inventory/**` and `__tests__/inventory*`;
+T-441 owns `frontend/app/ingredients/**`, `frontend/app/supplies/**`,
+`frontend/components/IngredientForm.tsx`, `frontend/components/ingredient/IngredientFacts.tsx` and
+`__tests__/ingredient*` and `__tests__/supplies*`. Nothing is in both, and the split held: the two
+commits were staged by path with no file appearing in both.
+
+One consequence of sharing a worktree is recorded because it cost time. T-440's builder needed
+`node_modules` to run anything and made `frontend/node_modules` a symlink to the main checkout's.
+`.gitignore` says `node_modules/` with a trailing slash, which **does not match a symlink**, so it
+shows as untracked for ever after. **`git add -A` in that worktree would commit the main checkout's
+entire module tree.** Everything in this wave was staged by explicit path. T-440's builder also saw
+five `tsc` errors from `app/supplies/page.tsx` mid-edit by the other builder, and had to re-run to
+get a clean number — the cost of the shared tree, paid rather than mistaken for a real failure.
+
+### What was not verified, and why it matters more than usual
+
+**Neither builder could sign in to a running application.** The local harness that renders screens
+without a session needs uncommitted stubs in `lib/firebase.ts`, `lib/auth-context.tsx` and a
+catch-all API route — files outside both contracts and shared with the other builder. So:
+
+- **T-440 measured, but not in the app.** The three screens were rendered through their own
+  components, their markup written out, compiled against the project's own `tailwind.config.ts` and
+  `app/globals.css`, and walked element by element in Chrome at exactly 390×844 and 1280×900: no
+  overflow at either width on any of the three, and the column that used to break "Approximately 12
+  days" across two lines at 103px now has 204.8px. That is the real markup with the real stylesheet,
+  but it is not the app — no page shell, no theme pack, and Anek from Google Fonts rather than
+  `next/font`. **No click was made.**
+- **T-441 did not measure at all, and says so.** *"Not verified — I did not measure them."* What it
+  states instead is a fact about the source rather than about the screen: the edit screen is
+  `IngredientForm` inside `FocusScreen`, both already shipping on `/ingredients/new` and
+  `/supplies/new`, with no layout class added; the new Edit button is a default `ButtonLink`
+  (`min-h-touch`, 44px) in `PageHeader`'s actions, which wraps rather than overflowing.
+
+So the whole wave's behaviour rests on the tests and on the rendered markup. **Rajeev is driving it
+on staging himself.** Until he does, treat every screen in it as untested by hand.
+
+### Judgement calls left open rather than settled
+
+1. **Cancel and Save return to the record, not to the list.** Staff's edit screen returns to the
+   register. The builders' reasoning is that Edit is now pressed *on* the detail page, so the detail
+   page is where the person was, and it shows the saved values. If the two should match, it is Staff
+   that is the odd one, and it is one line in two places either way.
+2. **The inventory record's subtitle no longer repeats where the item is stored.** It read "Pulses ·
+   Main store"; the location now has a labelled box in the facts card where it can also say "Not
+   recorded", and the subtitle is the category alone. One fact in one place — but it is a visible
+   change to a screen nobody complained about.
+3. **Saving shows a confirmation on the record** ("Saved. Toor Dal is up to date."), caught from
+   `?saved=` as the list catches `?added=`. Not asked for; the alternative is to return silently.
+4. **"Move to Ingredients" went with "Move to Supplies".** Rajeev named only the one and gave his
+   reason; the reason reads the same in the other direction. Flagged rather than assumed.
+5. **A row's Delete button is 36px tall**, below the 44px touch target. Unchanged by this wave — the
+   Edit button beside it was the same size — but now it is the only button on the row.
+
+### One thing deliberately left dirty in the worktree
+
+`docs/DESIGN_SYSTEM.md` is **modified and uncommitted**, and was not committed by this release. It is
+a locked document; the work manager part-amended §4 for this change and its permissions then refused
+the rest, so the file is half-done: the new rule is in, but the version note inside it says v1.1 where
+it should say v1.15, the Status line still says v1.14, and no `docs/versions/DESIGN_SYSTEM_v1.15.md`
+snapshot exists. Finishing a locked document's amendment needs Rajeev's sign-off (Commandment 8), so
+it was neither completed nor reverted. **It is his to decide, and it is still sitting in
+`/Users/Rajeev/Workspace/kms-detail-pattern`.**

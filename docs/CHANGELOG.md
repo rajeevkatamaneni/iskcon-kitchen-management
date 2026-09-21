@@ -1233,6 +1233,55 @@ it and reopens anything missed. So an item marked done in that file means *a ses
 that Rajeev accepted it, and the file does not go until he says it goes. Where an entry below says a
 thing has not been seen working, take it at its word rather than assuming a later wave settled it.
 
+### 2026-09-20 — The name opens it, the page has Edit, the edit screen has Save and Cancel — on Inventory, Ingredients and Supplies (tasks T-440, T-441)
+
+**No migration** — Flyway stays at V159 and the next free is still V156. **No new error code** — the
+next free is still KMS-400192. **No new permission.** **No backend file changed.** **Deployed to
+staging; not seen working by Rajeev, and not clicked by anyone.**
+
+**Rajeev's instruction, 2026-09-20:** *"Inventory, remove the edit button and move the functionality
+the current edit button provides into the edit screen. When the user clicks on the Ingrident Name, it
+open in the view mode, then they see the edit button, Click on that and it goes to the edit screen
+wchi shows save and cancel. The same pattern should be applied to Inventory also."* It is the shape
+the Staff record already had, now on the three catalogue and stock lists.
+
+**Three lists lose their Edit button, and the row that unfolded in place.** Inventory, Ingredients
+and Supplies each carried an Edit button that opened a form inside the table row. All three are gone,
+along with Inventory's whole actions column. The name is the way in. On Supplies the name was not a
+link at all before; it is one now, to `/ingredients/<id>` — the detail page already served either
+kind and already switched its back link and sidebar on the flag — so a supply has a page of its own
+for the first time, carrying the pack sizes, the market rate, the vendors and Link a vendor.
+
+**Each record reads everything before anything can change it.** Nothing is editable that is not first
+readable, which is what the inline row quietly broke. An inventory item's page gains **where it is
+stored** and **notes** beside the reorder level, each saying "Not recorded" or "None" rather than
+going blank, and the item's location leaves the subtitle so it is stated once. A supply's facts card
+is headed **"About this supply"** and has no Ekadashi row, matching the Add screen, rather than
+printing a row that means nothing for a mop.
+
+**Edit opens a screen of its own, with Cancel and Save changes.** Two new screens,
+`/inventory/<id>/edit` and `/ingredients/<id>/edit`, both shaped like the staff record's: the buttons
+at the top right, nothing repeated at the foot. The ingredient one serves food and supplies alike and
+is `IngredientForm` seeded from the record, so Add and Edit are one form. Cancel returns to the
+record without saving; saving returns to it with the confirmation. The inventory screen saves through
+the endpoint the inline row already used, with the same three fields, and the whole-number refusal
+for a counted ingredient is unchanged, in the server's own words.
+
+**"Move to Supplies" and "Move to Ingredients" are both gone.** Rajeev ruled out the first —
+*"Not needed. they can delete and recreate as a supply"* — and the reason reads the same in the other
+direction. The flag is still sent on every save, because the Java field is a primitive and an absent
+key would mean food.
+
+**Not done.** **Neither screen has been clicked.** Neither builder could sign in to a running app
+from the build worktree, so every behaviour claim rests on the tests and, for Inventory, on the real
+rendered markup walked element by element in Chrome at 390 and 1280 with the project's own compiled
+stylesheet (no overflow at either width; the "Approximately 12 days" column that used to break in two
+now has 204.8px). **Ingredients and Supplies were not measured at either width** — the builder says so
+rather than glossing it. Three judgement calls are open for Rajeev: Cancel and Save return to the
+record rather than to the list, which differs from Staff; the inventory record's subtitle no longer
+repeats where the item is kept; and saving shows a confirmation that was not asked for. A row's
+Delete button is still 36px tall, below the 44px touch target, as the Edit button beside it was.
+
 ### 2026-09-20 — An outside event opens from the day list, a printed row says one unit, and the WhatsApp fact says whose it is (tasks T-363 to T-366)
 
 **No migration** — the next free is still V156, and V160, which this wave reserved, is unused.
