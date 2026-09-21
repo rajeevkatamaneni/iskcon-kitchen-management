@@ -4828,6 +4828,39 @@ answer, not a transcript.
 
 ---
 
+## DESIGN_SYSTEM v1.15 — 2026-09-20
+
+**A record is opened by its name and edited behind Edit, however few fields it has** (§4). Rajeev's
+instruction of 2026-09-20, relayed to the build and quoted in §4 itself, is the sign-off: *"Inventory,
+remove the edit button and move the functionality the current edit button provides into the edit
+screen. When the user clicks on the Ingrident Name, it open in the view mode, then they see the edit
+button, Click on that and it goes to the edit screen wchi shows save and cancel. The same pattern
+should be applied to Inventory also."*
+
+**What changed.** *"Where it stops: five"* — four fields or fewer edited inline, five or more a screen
+— is replaced by a test on what the thing is rather than how big its form is. Anything the
+application keeps a record of (an ingredient, a supply, an inventory item, a vendor, a vendor's price
+for a supply, a kind of meal, a festival occasion, a member of staff) is opened from its list **by
+pressing its name**, gets a screen of its own, and is changed from there behind **Edit**, with
+**Save** and **Cancel**. No Edit button in the row. Inline editing survives only where there is no
+record to open — a cell in a working table that lives for the length of one task: a shopping-list
+line, a delivery's received quantity, a roster's attendance mark.
+
+**This one applies to what is already built**, unlike v1.8, which Rajeev explicitly scoped to future
+work. Inventory, Ingredients, Supplies and Staff were converted on 2026-09-20 and are live on
+staging — commits `df565f0f` and `04c51437`, release record
+`docs/work/proof/RELEASE-2026-09-20-detail-pattern.md`. **The code led the document here:** the
+amendment was started in the build's own worktree, was left half-written when that session's
+permissions refused further edits to a locked file, and is completed by this entry.
+
+**The v1.8 history is kept** in §4's note rather than dropped, because the screens built before
+2026-09-12 were exempted by name and somebody will ask why.
+
+**Nothing else in the file changed** — the status line and §4 only. Snapshot in
+`docs/versions/DESIGN_SYSTEM_v1.15.md`.
+
+---
+
 ## Versioning convention
 
 - Version bumps to a **locked** document require the user's explicit approval, per the Ten Commandments (never silently edit an approved decision).
