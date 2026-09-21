@@ -125,6 +125,66 @@ class PurchaseOrderTranslationIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a filed name reaches the vendor the right way round, not as \"Water Hot\"")
+	void filedNameIsUnInvertedOnTheVendorsSheet() throws Exception {
+		// The defect Rajeev reported from the demo on 2026-09-04. The recipe library files a name
+		// the way a reference book does — "Water, hot" — so everything about water sorts together,
+		// and 882 of its 6,333 names are written that way. Translated faithfully that is "ನೀರು, ಬಿಸಿ",
+		// which reads straight back as "Water Hot". IngredientNames.readable was written for it on
+		// 2026-09-06 and wired into recipe translation only; this sheet kept sending the filed name
+		// until 2026-09-21. It is the worst place to get it wrong, because it goes out over WhatsApp
+		// and the temple cannot correct the copy the vendor is holding.
+		UUID hotWater = admin.queryForObject("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, 'Water, hot', 'Liquids', 'L') RETURNING id
+				""", UUID.class, tenant);
+		UUID poId = admin.queryForObject("""
+				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, created_by)
+				VALUES (?, 'PO-2026-0099', ?, 'SENT', ?) RETURNING id
+				""", UUID.class, tenant, hindiVendor, staffId);
+		admin.update("""
+				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit)
+				VALUES (?, ?, ?, 10, 'L')
+				""", tenant, poId, hotWater);
+
+		mvc.perform(authed(get("/api/v1/purchase-orders/{poId}/print", poId).param("language", "hi")))
+				.andExpect(status().isOk())
+				// The machine was handed "Hot water", so the stub hands back "[hi] Hot water".
+				.andExpect(content().string(Matchers.containsString("[hi] Hot water")))
+				// And never the filed form, which is what the defect looked like.
+				.andExpect(content().string(Matchers.not(Matchers.containsString("[hi] Water, hot"))));
+	}
+
+	@Test
+	@DisplayName("but a temple's own glossary word still wins, matched on the name as it filed it")
+	void glossaryIsMatchedOnTheFiledName() throws Exception {
+		// The glossary is what a temple typed in, against the name on its own screens. Looking it
+		// up on the un-inverted form would miss every entry anybody has ever written.
+		UUID hotWater = admin.queryForObject("""
+				INSERT INTO ingredients (tenant_id, name, category, canonical_unit)
+				VALUES (?, 'Water, hot', 'Liquids', 'L') RETURNING id
+				""", UUID.class, tenant);
+		admin.update("""
+				INSERT INTO translation_glossary (tenant_id, language, source_term, target_term)
+				VALUES (?, 'hi', 'water, hot', 'गरम पानी')
+				""", tenant);
+		UUID poId = admin.queryForObject("""
+				INSERT INTO purchase_orders (tenant_id, po_number, vendor_id, status, created_by)
+				VALUES (?, 'PO-2026-0100', ?, 'SENT', ?) RETURNING id
+				""", UUID.class, tenant, hindiVendor, staffId);
+		admin.update("""
+				INSERT INTO purchase_order_lines (tenant_id, po_id, ingredient_id, quantity, unit)
+				VALUES (?, ?, ?, 10, 'L')
+				""", tenant, poId, hotWater);
+
+		mvc.perform(authed(get("/api/v1/purchase-orders/{poId}/print", poId).param("language", "hi")))
+				.andExpect(status().isOk())
+				// The temple's own word, untagged, so it came from the glossary and not the machine.
+				.andExpect(content().string(Matchers.containsString("गरम पानी")))
+				.andExpect(content().string(Matchers.not(Matchers.containsString("[hi] Hot water"))));
+	}
+
+	@Test
 	@DisplayName("labels cached by another provider are re-translated, not printed")
 	void otherProvidersLabelCacheIsIgnored() throws Exception {
 		// What a previous engine left behind. Served blindly, a vendor's sheet reads "[STALE] TO".

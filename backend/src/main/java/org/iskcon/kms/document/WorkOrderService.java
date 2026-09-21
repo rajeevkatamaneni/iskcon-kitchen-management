@@ -29,6 +29,7 @@ import org.iskcon.kms.inventory.FefoAllocator;
 import org.iskcon.kms.inventory.InventoryUnits;
 import org.iskcon.kms.inventory.StockAllocation;
 import org.iskcon.kms.inventory.StockShortfall;
+import org.iskcon.kms.translation.Translatable;
 import org.iskcon.kms.translation.GlossaryService;
 import org.iskcon.kms.translation.Languages;
 import org.iskcon.kms.translation.TranslationProvider;
@@ -181,18 +182,20 @@ public class WorkOrderService {
 		// One MT round for everything on the sheet that is tenant content — the ingredient names, the
 		// dish names and the reason — rather than one per section. Names are asked for in the order
 		// they are printed in and handed back in the same order.
-		List<String> content = new ArrayList<>();
+		List<Translatable> content = new ArrayList<>();
 		for (IngredientRequestLineView line : view.lines()) {
-			content.add(line.ingredientName());
+			content.add(Translatable.ingredientName(line.ingredientName()));
 		}
 		for (IngredientRequestDishView dish : view.dishes()) {
-			content.add(dish.dishName());
+			content.add(Translatable.text(dish.dishName()));
 		}
 		String purpose = request.purpose();
 		if (purpose != null && !purpose.isBlank()) {
-			content.add(purpose);
+			content.add(Translatable.text(purpose));
 		}
-		List<String> local = translating ? translateContent(content, resolved) : content;
+		List<String> local = translating
+				? translateContent(content, resolved)
+				: content.stream().map(Translatable::glossaryKey).toList();
 
 		Map<UUID, String> localNames = new LinkedHashMap<>();
 		for (int i = 0; i < view.lines().size(); i++) {
@@ -397,21 +400,25 @@ public class WorkOrderService {
 	 * names translated and one in English can do the round. One holding no sheet cannot, and a print
 	 * is not the moment to discover the provider is down.
 	 */
-	private List<String> translateContent(List<String> english, String language) {
+	private List<String> translateContent(List<Translatable> english, String language) {
 		if (english.isEmpty()) {
-			return english;
+			return List.of();
 		}
 		Map<String, String> glossary = glossaryService.lookup(language);
 		String[] out = new String[english.size()];
 		List<String> pending = new ArrayList<>();
 		List<Integer> pendingAt = new ArrayList<>();
 		for (int i = 0; i < english.size(); i++) {
-			String override = glossary.get(english.get(i).toLowerCase(Locale.ROOT));
+			// The glossary sees the string as the temple filed it; the machine sees an ingredient
+			// name un-inverted, and everything else unchanged. This batch is mixed — names, dish
+			// names and the free-text purpose — which is why the distinction is carried per item
+			// rather than applied to the list.
+			String override = english.get(i).override(glossary);
 			if (override != null) {
 				out[i] = override;
 			} else {
 				pendingAt.add(i);
-				pending.add(english.get(i));
+				pending.add(english.get(i).forMachine());
 			}
 		}
 		if (pending.isEmpty()) {
@@ -436,7 +443,10 @@ public class WorkOrderService {
 			} catch (RuntimeException e) {
 				log.warn("Work order keeping the English text for one item in {}: {}",
 						language, e.toString());
-				out[at] = english.get(at);
+				// The name as the temple filed it, not the un-inverted form built for the machine:
+				// a line that falls back to English should read the way it reads on the screens, so
+				// a storekeeper can match it against the list they already know.
+				out[at] = english.get(at).glossaryKey();
 			}
 		}
 		return List.of(out);

@@ -14,6 +14,7 @@ import org.iskcon.kms.ingredient.Quantities;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.purchaseorder.PurchaseOrderService;
 import org.iskcon.kms.recipe.RecipeIngredientView;
+import org.iskcon.kms.translation.Translatable;
 import org.iskcon.kms.translation.GlossaryService;
 import org.iskcon.kms.translation.TranslationProvider;
 import org.iskcon.kms.recipe.RecipeService;
@@ -331,13 +332,18 @@ public class DocumentGenerationService {
 		List<String> mt = new ArrayList<>();
 		int[] mtIndex = new int[names.size()];
 		for (int i = 0; i < names.size(); i++) {
-			String override = glossary.get(names.get(i).toLowerCase());
+			// A purchase-order line's subject is a filed ingredient name, so it is un-inverted before
+			// the machine sees it: "Water, hot" would otherwise reach a vendor as "Water Hot" in
+			// Kannada. This sheet goes out over WhatsApp, so it is the copy the temple cannot correct
+			// after the fact.
+			Translatable line = Translatable.ingredientName(names.get(i));
+			String override = line.override(glossary);
 			if (override != null) {
 				out[i] = override;
 				mtIndex[i] = -1;
 			} else {
 				mtIndex[i] = mt.size();
-				mt.add(names.get(i));
+				mt.add(line.forMachine());
 			}
 		}
 		if (!mt.isEmpty()) {

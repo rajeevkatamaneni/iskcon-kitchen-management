@@ -99,16 +99,18 @@ public class RecipeTranslationService {
 		String[] ingredientNames = new String[lines.size()];
 		int[] ingredientMtIndex = new int[lines.size()];
 		for (int i = 0; i < lines.size(); i++) {
-			String name = lines.get(i).ingredientName();
 			// The glossary is looked up on the name as the temple filed it, because that is what
-			// somebody typed into it. Only the text handed to the machine is un-inverted.
-			String override = glossary.get(name.toLowerCase());
+			// somebody typed into it. Only the text handed to the machine is un-inverted. This was
+			// the first path to get that right and for a fortnight the only one; it now says so the
+			// same way the other two do, so the three can be read against each other.
+			Translatable name = Translatable.ingredientName(lines.get(i).ingredientName());
+			String override = name.override(glossary);
 			if (override != null) {
 				ingredientNames[i] = override;
 				ingredientMtIndex[i] = -1;
 			} else {
 				ingredientMtIndex[i] = mt.size();
-				mt.add(IngredientNames.readable(name));
+				mt.add(name.forMachine());
 			}
 		}
 
