@@ -19,6 +19,7 @@ import { Loading } from "@/components/Loading";
 import { unitLabel } from "@/lib/format";
 import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED, TH_SECOND, TD_SECOND } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 
 /**
  * The label a recipe import leaves on the rows it created (T-119). Rajeev's exact words, chosen
@@ -86,8 +87,9 @@ function IngredientsView() {
   const { data, error, loading, reload } = useAuthedQuery(api.listIngredients);
   const ingredients = data ?? [];
 
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<ApiError | null>(null);
+  // The row whose trash can was pressed. Deleting used to happen on that press with nothing
+  // asked (Rajeev, 2026-09-21); an icon is easier to hit by accident than a word, so it asks.
+  const [confirming, setConfirming] = useState<{ id: string; name: string } | null>(null);
 
   // Adding an ingredient happens on /ingredients/new and ends back here, so the confirmation has to
   // travel in the URL. Captured behind a ref because setting it re-renders, and a router object
@@ -165,20 +167,6 @@ function IngredientsView() {
     screen for both halves of the catalogue.
   */
 
-  async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
-    setBusy(true);
-    setActionError(null);
-    try {
-      await mutation(await getToken());
-      reload();
-      return true;
-    } catch (e) {
-      setActionError(toApiError(e, failure));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="flex min-h-screen">
@@ -207,7 +195,6 @@ function IngredientsView() {
             </div>
           </header>
 
-          {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
           {flash && (
             <div className="mb-6">
@@ -420,7 +407,21 @@ function IngredientsView() {
                       */}
                       <td className={TD_ACTIONS_FIXED}>
                         <div className={ACTIONS_ROW}>
-                          <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.deleteIngredient(ing.id, t), "That ingredient is in use, or couldn’t be removed.")}>Delete</Button>
+                          {/*
+                            A trash can rather than the word (Rajeev, 2026-09-21): with Edit gone
+                            from the row under DESIGN_SYSTEM v1.15, Delete is the only control left
+                            here, and a lone icon reads quieter than a button carrying a word. It
+                            keeps the full 44px target — `size="sm"` is 36px, which this is not
+                            allowed to be — and names the row it belongs to for anybody who cannot
+                            see it, because forty buttons all saying "Delete" name nothing.
+                          */}
+                          <Button
+                            variant="danger"
+                            icon="trash"
+                            size="icon"
+                            aria-label={`Delete ${ing.name}`}
+                            onClick={() => setConfirming(ing)}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -431,6 +432,17 @@ function IngredientsView() {
           )}
         </div>
       </main>
+
+      {confirming && (
+        <ConfirmDelete
+          name={confirming.name}
+          consequence="This takes the ingredient out of the catalogue. Recipes and orders that already name it keep their record, and it cannot be undone."
+          onConfirm={async () => api.deleteIngredient(confirming.id, await getToken())}
+          onDone={() => { setConfirming(null); reload(); }}
+          onCancel={() => setConfirming(null)}
+        />
+      )}
+
     </div>
   );
 }

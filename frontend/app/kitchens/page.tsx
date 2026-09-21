@@ -194,11 +194,11 @@ function KitchensView() {
                           ) : (
                             <Button
                               variant="danger"
-                              size="sm"
+                              icon="trash"
+                              size="icon"
+                              aria-label={`Delete ${k.name}`}
                               onClick={() => { setActionError(null); setConfirming(k); }}
-                            >
-                              Delete
-                            </Button>
+                            />
                           )}
                         </div>
                       </td>

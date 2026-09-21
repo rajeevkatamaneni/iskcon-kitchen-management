@@ -270,8 +270,12 @@ describe("changing a supply starts at its name", () => {
     render(<SuppliesPage />);
     const row = screen.getAllByRole("row")[1] as HTMLTableRowElement;
     expect(within(row).queryByRole("button", { name: /^edit$/i })).not.toBeInTheDocument();
-    // Delete stays: removing a supply is not a change to it.
-    expect(within(row).getAllByRole("button").map((b) => b.textContent)).toEqual(["Delete"]);
+    // Delete stays: removing a supply is not a change to it. It is a trash can rather than the
+    // word since 2026-09-21, so the row carries no visible text for it and the accessible name —
+    // which names the supply — is what is asserted.
+    expect(within(row).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Delete Leaf Plates",
+    ]);
   });
 
   it("offers no move box on either screen, in either direction", () => {

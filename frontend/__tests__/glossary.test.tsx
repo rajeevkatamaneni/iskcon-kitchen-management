@@ -65,9 +65,11 @@ describe("translation glossary", () => {
     expect(reloadMock).toHaveBeenCalled();
   });
 
-  it("deletes a term", async () => {
+  it("deletes a term, once the confirmation is answered", async () => {
     render(<GlossaryPage />);
-    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^delete .+/i }));
+    expect(deleteMock).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("g1", "test-token"));
   });
 

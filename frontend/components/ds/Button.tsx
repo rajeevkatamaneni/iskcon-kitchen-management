@@ -14,7 +14,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
  */
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "warning";
-export type ButtonSize = "sm" | "md";
+export type ButtonSize = "sm" | "md" | "icon";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   // The four materials of THEME-TOKENS §4, by the names §4 gives them. Each is a component class in
@@ -50,6 +50,20 @@ const VARIANTS: Record<ButtonVariant, string> = {
 const SIZES: Record<ButtonSize, string> = {
   sm: "min-h-9 px-3 text-sm",
   md: "min-h-touch px-4 text-base",
+  // A square button carrying an icon and no word — the trash can on a table row (Rajeev,
+  // 2026-09-21: *"swap it out for a trash can icon instead… it will look MUCH nicer and cleaner
+  // than a big old button"*).
+  //
+  // A size of its own rather than `md` with `px-0` passed through `className`. Both classes reach
+  // the element that way, and which one paints is decided by their order in Tailwind's generated
+  // stylesheet, not by the order they appear in the string — `px-0` is emitted before `px-4`, so
+  // the padding override loses and the button is not square. A size that never sets `px` at all
+  // cannot lose that race.
+  //
+  // `min-w-touch` beside `min-h-touch` because 44px is the touch target in both directions and an
+  // icon button is the one shape where the width is not carried by a word. `size="sm"` would be
+  // 36px, which the design system does not allow for something you tap.
+  icon: "min-h-touch min-w-touch text-base",
 };
 
 /** The one place the button's look is defined, shared with {@link ButtonLink}. */

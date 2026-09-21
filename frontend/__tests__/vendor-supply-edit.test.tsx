@@ -182,7 +182,7 @@ describe("editing a supply in place", () => {
 
     const row = rowFor("Curd");
     expect(within(row).getByRole("button", { name: "Edit" })).toBeTruthy();
-    expect(within(row).getByRole("button", { name: "Remove" })).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "Remove Curd" })).toBeTruthy();
   });
 
   it("opens the row holding what it already says", async () => {

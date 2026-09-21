@@ -322,15 +322,15 @@ function OccasionsView() {
                           </Button>
                           <Button
                             variant="danger"
-                            size="sm"
+                            icon="trash"
+                            size="icon"
+                            aria-label={`Delete ${o.name}`}
                             disabled={busy}
                             onClick={() => {
                               setActionError(null);
                               setConfirming(o);
                             }}
-                          >
-                            Delete
-                          </Button>
+                          />
                         </div>
                       </td>
                     </tr>

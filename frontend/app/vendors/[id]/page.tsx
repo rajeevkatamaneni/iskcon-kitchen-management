@@ -8,6 +8,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Badge } from "@/components/ds/Badge";
 import { Button } from "@/components/ds/Button";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { Form } from "@/components/ds/Form";
 import { countedBox } from "@/components/ds/formMessages";
 import { InlineNotice } from "@/components/ds/InlineNotice";
@@ -74,6 +75,9 @@ function VendorDetailView() {
     existed, which is every row a real temple has.
   */
   const [editing, setEditing] = useState<string | null>(null);
+  // The supply whose trash can was pressed. Removing used to happen on that press with nothing
+  // asked (Rajeev, 2026-09-21); an icon is easier to hit by accident than a word, so it asks.
+  const [confirming, setConfirming] = useState<VendorSupplyView | null>(null);
 
   /*
     Other ingredients (R-VEN-1). What has been typed into each row, by ingredient id, held here
@@ -375,9 +379,14 @@ function VendorDetailView() {
                           <td className={TD_ACTIONS_FIXED}>
                             <div className={ACTIONS_ROW}>
                               <Button variant="ghost" size="sm" onClick={() => setEditing(s.ingredientId)}>Edit</Button>
-                              <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.removeVendorSupply(id, s.ingredientId, t), "We couldn’t remove that supply.")}>
-                                Remove
-                              </Button>
+                              <Button
+                                variant="danger"
+                                icon="trash"
+                                size="icon"
+                                aria-label={`Remove ${s.ingredientName}`}
+                                disabled={busy}
+                                onClick={() => setConfirming(s)}
+                              />
                             </div>
                           </td>
                         </tr>
@@ -543,6 +552,18 @@ function VendorDetailView() {
           )}
         </div>
       </main>
+
+      {confirming && (
+        <ConfirmDelete
+          name={confirming.ingredientName}
+          confirmLabel="Remove"
+          consequence="This takes the supply off this vendor's list, along with the price they quoted for it. Orders already placed keep their record, and it cannot be undone."
+          onConfirm={async () => api.removeVendorSupply(id, confirming.ingredientId, await getToken())}
+          onDone={() => { setConfirming(null); reload(); }}
+          onCancel={() => setConfirming(null)}
+        />
+      )}
+
 
       {changingStatus && vendor && (
         <VendorStatusDialog

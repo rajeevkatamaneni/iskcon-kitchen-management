@@ -16,6 +16,7 @@ import { Loading } from "@/components/Loading";
 import { unitLabel } from "@/lib/format";
 import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 
 /**
  * Supplies — the half of the ingredient catalogue that is not food (T-089).
@@ -78,8 +79,9 @@ function SuppliesView() {
   const { data, error, loading, reload } = useAuthedQuery(api.listIngredients);
   const supplies = (data ?? []).filter((i) => i.supply);
 
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<ApiError | null>(null);
+  // The row whose trash can was pressed. Deleting used to happen on that press with nothing
+  // asked (Rajeev, 2026-09-21); an icon is easier to hit by accident than a word, so it asks.
+  const [confirming, setConfirming] = useState<{ id: string; name: string } | null>(null);
 
   // Adding happens on /supplies/new and ends back here, so the confirmation travels in the URL.
   // Captured behind a ref because setting it re-renders, and a router object that is new on each
@@ -104,20 +106,6 @@ function SuppliesView() {
     return () => clearTimeout(timer);
   }, [flash]);
 
-  async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
-    setBusy(true);
-    setActionError(null);
-    try {
-      await mutation(await getToken());
-      reload();
-      return true;
-    } catch (e) {
-      setActionError(toApiError(e, failure));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="flex min-h-screen">
@@ -135,7 +123,6 @@ function SuppliesView() {
             <ButtonLink href="/supplies/new">Add a supply</ButtonLink>
           </header>
 
-          {actionError && <div className="mb-6"><ErrorNotice error={actionError} /></div>}
 
           {flash && (
             <div className="mb-6">
@@ -220,7 +207,13 @@ function SuppliesView() {
                             in the words of the thing being deleted rather than calling a mop an
                             ingredient.
                           */}
-                          <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.deleteIngredient(item.id, t), "That supply is in use, or couldn’t be removed.")}>Delete</Button>
+                          <Button
+                            variant="danger"
+                            icon="trash"
+                            size="icon"
+                            aria-label={`Delete ${item.name}`}
+                            onClick={() => setConfirming(item)}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -231,6 +224,17 @@ function SuppliesView() {
           )}
         </div>
       </main>
+
+      {confirming && (
+        <ConfirmDelete
+          name={confirming.name}
+          consequence="This takes the supply out of the catalogue. Orders and stock records that already name it keep their record, and it cannot be undone."
+          onConfirm={async () => api.deleteIngredient(confirming.id, await getToken())}
+          onDone={() => { setConfirming(null); reload(); }}
+          onCancel={() => setConfirming(null)}
+        />
+      )}
+
     </div>
   );
 }

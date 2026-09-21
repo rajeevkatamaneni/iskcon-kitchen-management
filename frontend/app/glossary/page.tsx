@@ -12,6 +12,7 @@ import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
 import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { Form } from "@/components/ds/Form";
 
 
@@ -31,6 +32,9 @@ function GlossaryView() {
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
+  // The entry whose trash can was pressed. Deleting used to happen on that press with nothing
+  // asked (Rajeev, 2026-09-21); an icon is easier to hit by accident than a word, so it asks.
+  const [confirming, setConfirming] = useState<{ id: string; sourceTerm: string } | null>(null);
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -146,12 +150,12 @@ function GlossaryView() {
                       <td className={TD_ACTIONS_FIXED}>
                         <Button
                           variant="danger"
-                          size="sm"
+                          icon="trash"
+                          size="icon"
+                          aria-label={`Delete ${e.sourceTerm}`}
                           disabled={busy}
-                          onClick={() => run((t) => api.deleteGlossaryEntry(e.id, t), "We couldn’t remove that term.")}
-                        >
-                          Delete
-                        </Button>
+                          onClick={() => setConfirming(e)}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -161,6 +165,17 @@ function GlossaryView() {
           )}
         </div>
       </main>
+
+      {confirming && (
+        <ConfirmDelete
+          name={confirming.sourceTerm}
+          consequence="This removes the term from the glossary, so translations stop being held to it from now on. Cards already produced keep the wording they were made with, and it cannot be undone."
+          onConfirm={async () => api.deleteGlossaryEntry(confirming.id, await getToken())}
+          onDone={() => { setConfirming(null); reload(); }}
+          onCancel={() => setConfirming(null)}
+        />
+      )}
+
     </div>
   );
 }

@@ -250,15 +250,15 @@ function MealKindsView() {
                           </Button>
                           <Button
                             variant="danger"
-                            size="sm"
+                            icon="trash"
+                            size="icon"
+                            aria-label={`Delete ${k.name}`}
                             disabled={busy}
                             onClick={() => {
                               setActionError(null);
                               setConfirming(k);
                             }}
-                          >
-                            Delete
-                          </Button>
+                          />
                         </div>
                       </td>
                     </tr>

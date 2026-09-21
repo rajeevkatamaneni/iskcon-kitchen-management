@@ -1486,3 +1486,177 @@ says so.** The design and answers above stand as recorded.
 **HOLD LIFTED for the next session (2026-09-13):** Rajeev asked for the next session to *"start with the
 meal rebuild and the planner and shift screen changes. Test it thoroughly on the UI and then check in,
 deploy to cloud live."* The build brief is `docs/work/NEXT-SESSION.md`.
+
+---
+
+## D-28 · The six questions of 2026-09-21, and what Rajeev ruled on each
+
+**Ruled by Rajeev, 2026-09-21**, in conversation, one question at a time. The questions came from
+`docs/work/NEXT-SESSION-2026-09-21.md` §2. None of them blocked a build; all six are now answered.
+Recorded here because five of the six produce work.
+
+### D-28a · The cost per plate is right — nothing to build
+
+**Asked:** whether ₹54.79 a plate was plausible for this temple. Nobody but Rajeev could say.
+
+**Re-measured before asking**, rather than repeating the handover's figure: signed in to staging as
+`ikms.temple-admin.1@trading4good.org` and read `GET /api/v1/materials-cost/by-meal-kind` over the
+whole seeded window, 29 August to 26 September 2026. **96 meals, 42,644 servings, ₹23,26,580.16 of
+materials — ₹54.56 a serving.** The handover's ₹54.79 was one day, not the window.
+
+| Meal kind | Meals | Servings | Materials | Per serving |
+|---|---|---|---|---|
+| Breakfast | 29 | 12,899 | ₹4,38,923.78 | ₹34.03 |
+| Dinner | 29 | 12,899 | ₹6,28,176.70 | ₹48.70 |
+| Lunch | 29 | 12,899 | ₹8,79,811.96 | ₹68.21 |
+| Event | 6 | 535 | ₹40,643.47 | ₹75.97 |
+| Festival feast | 3 | 3,412 | ₹3,39,024.60 | ₹99.36 |
+
+The arithmetic holds up: `ingredientsWithoutPrice` is **0** for every kind and
+`mealsWithoutServings` is **0**, so nothing is being dropped from either half of the division. 73 of
+the 96 meals are costed at what was cooked, 23 at what was planned (`MealKindCostService`, T-212).
+Materials only — no gas, labour, packaging or transport; a child counts 0.6 of a serving, a senior
+0.8.
+
+**His answer: yes.** The catalogue's market rates stand. **Nothing to build.**
+
+### D-28b · The Aadhaar scan is encrypted at rest first, then gets its own permission
+
+**Asked:** whether an Aadhaar scan should sit behind a narrower permission than the rest of the
+staff record.
+
+**What the code says.** `MANAGE_STAFF` appears exactly once in `RolePermissions.java` — in the
+Temple Admin's block. The Kitchen Manager does not hold it (*"A manager deciding Thursday's shifts
+has no business reading pay"*). So **only a Temple Admin can open an Aadhaar scan today**, and a
+narrower permission would change nobody's access. That is the honest case against it: the split that
+produced `MANAGE_STAFF_CONDUCT_NOTES` took something away from someone who would otherwise have had
+it; this one takes nothing from anyone. What it buys is future-tense — the audit names the act
+distinctly, and a future role granted `MANAGE_STAFF` does not get Aadhaar with it.
+
+**The bigger gap, found in the same read.** The PAN *number* is AES-encrypted before storage
+(`StaffEmploymentService.java:166`, `panCipher.encrypt`). The Aadhaar *scan* is not —
+`StaffDocumentKind.java:27` says it has *"no encryption at rest beyond the bucket's"*. A scan of the
+card carries the number, the name, the date of birth and the photograph, so the unencrypted thing
+holds strictly more than the encrypted one.
+
+**His answer: *"Yes, encrypt the scan first, then the permission"*.** Two builds, in that order:
+
+1. **Envelope-encrypt stored staff documents at rest** — a key, encryption on write, decryption in
+   `StaffDocumentService.open`, and a migration for the scans already stored. Bigger than a
+   ten-minute change; scope it as its own task.
+2. **A narrower permission for the Aadhaar scan**, granted to the Temple Admin, so it is decidable
+   on its own later.
+
+### D-28c · Reading a staff photograph stops being audited
+
+**Asked:** whether opening a staff photo should write an audit row. It does today.
+
+**Why it does.** `StaffPhoto.tsx` draws the portrait at the top right of a staff record. Nothing in
+this application hands out a URL to a stored file, so it fetches the photo as a Blob through
+`api.staffDocument` in a `useEffect` that fires **as soon as the page renders**. That endpoint is
+`StaffDocumentService.open`, which writes `STAFF_DOCUMENT_VIEWED` before returning the bytes
+(`StaffDocumentService.java:226`). So every open of a staff record with a photo logs
+*"<name>'s photo was opened."* — and nobody opened it; the page drew it.
+
+The same page already reasons about this one floor down: the three upload boxes pass
+`preview={false}`, with the comment *"fetching one writes an audit row for the read — drawing three
+little pictures on every open of a record would record three reads nobody asked for."* The portrait
+bypasses that.
+
+Photo reads will be almost everything `STAFF_DOCUMENT_VIEWED` ever holds, which buries the one row
+the action exists for — a genuine Aadhaar read.
+
+**His answer: yes, exempt it.** **Build:** one condition in `StaffDocumentService.open` so `PHOTO`
+is not audited while `PAN_SCAN` and `AADHAAR_SCAN` still are, plus a test, plus the message wording
+fixed in the same change so a PAN row reads as a deliberate act. Well under an hour.
+
+### D-28d · Links are body ink with an underline, in every theme pack
+
+**Asked:** whether the link colour is wrong. The handover reported a staff name link at
+`rgb(81,86,92)` against body ink `rgb(35,37,40)`, with only weight and hover to mark it.
+
+**Two things the measurement got wrong, and both matter.**
+
+**The colour is not staging's.** `rgb(81,86,92)` is `#51565C`, the **Graphite** pack's
+`--accent-text`. Staging's temple is set to `slate-morning` (read back from the API as
+`{"themeId": "slate-morning"}`), whose link is `#465F76`. That reading was taken under a different
+pack.
+
+**Luminance contrast is the wrong measure, and it hid the real finding.** Every one of the fifteen
+packs scores between 2.07 and 2.44 for link-against-body-text, so by that number they all look
+equally bad. The measure that separates them is **OKLCH chroma** — how colourful the link is next to
+the body text around it:
+
+- **Graphite: 1.9×** (link chroma 0.0117, ink 0.0063). The link and the body text are the same grey;
+  only lightness separates them.
+- **Every other pack: 4.2× to 11.1×.** Slate Morning is 8.3×. Kumkum scores 2.09 on luminance —
+  worse than Graphite — yet its link is bright red and unmistakable.
+
+So it is **not** a theme-wide defect. Fourteen packs are fine and **Graphite is one broken pack**,
+whose own description explains it: *"Flat neutral greys throughout, with colour reserved for status
+and progress."* It took the grey rule into the link colour.
+
+Four treatments were put to him as a canvas he could switch packs on —
+`https://claude.ai/artifact/P8SFh44c2rXRa5yPxpJ1r7`.
+
+**His answer: option D — the link is body ink with a 1px underline at rest**, everywhere, in every
+pack. Chosen over fixing Graphite alone because colour-plus-weight means every new pack has to be
+checked one at a time, and a temple that picks a bad one gets an invisible link with nobody
+noticing. An underline survives any palette. The cost, stated before he chose: tables get busier.
+
+**Build.** `text-accent-text` appears **72 times across 47 files**; **46** of those are links (paired
+with `hover:underline`). The other 26 are the sidebar eyebrow, the avatar initials and the active nav
+row, and **must keep their colour**. So: one shared link style, then 46 conversions — the same
+"one implementation that cannot drift apart" shape `PeriodNav` took. Needs a **DESIGN_SYSTEM v1.16**
+amendment; his go-ahead here is the sign-off.
+
+### D-28e · Everything on a record is changed behind Edit, and Edit takes the highest role the edit needs
+
+**Asked:** three things on an ingredient's record change without pressing Edit — the "Not bought"
+tick, Add pack size, and Change market rate. Do they go behind Edit too?
+
+**What was put to him, including the recommendation he overruled.** Each of the three sits behind a
+**different permission**, from each other and from the Edit form: the page opens on `MANAGE_RECIPES`;
+pack sizes are `MANAGE_RECIPES`; the market rate is `MANAGE_INVENTORY`; the "Not bought" tick is
+`MANAGE_BUYING_POLICY`, the Temple Admin's alone (T-402). A Kitchen Manager holds the first two and
+not the third. Folding all three behind one Edit therefore makes the Edit screen a different shape
+depending on who opens it. "Not bought" had also been deliberately kept off the form —
+`IngredientForm.tsx`: *"the edit screen does not offer this one: `UpdateIngredientInput` has no
+`notBought` key at all, and the flag is set on the ingredient's own page through a route of its own
+that is audited."* And two of the three are appends to sub-records rather than fields: a pack size
+adds a row, a market rate writes a price-history entry.
+
+**The recommendation was to leave them inline and write the exception into §4. Rajeev overruled it,
+and his reason is better than the recommendation:**
+
+> *"I cant fully envision how the roles will impact the functionality BUT that is a task that is on
+> my mind. Roles Review and adjustments to roles and who can view what and who can edit what? For
+> now, make the change so the screens behave the way I want and assign the highest role needed for a
+> full edit. I want it this way so the experience stays consistent across all pages where we have a
+> list of things and they can be drilled down into an individual detail page and then they get to
+> edit. We already do this on several pages. These 2 are outliers which is what I am trying to fix
+> here."*
+
+**So: the three controls move behind Edit, and the Edit screen requires the highest permission any
+part of it needs** — which for an ingredient is `MANAGE_BUYING_POLICY`, the Temple Admin's alone.
+
+**The cost, flagged to him before building.** Today a **Kitchen Manager can add a pack size and
+change a market rate**; after this they can do neither, because they will not be offered Edit at all.
+That is a removal, not a relocation, and the temple's storekeeper — the person at the door when a
+price changes — is a Kitchen Manager. **This goes on the roles-review list as its own item**, not
+fixed here.
+
+### D-28f · A Staff edit screen returns to the record, not to the list
+
+**Asked:** Cancel and Save return to the record on Inventory and Ingredients; Staff's edit screen
+returns to the list. One is wrong.
+
+**Answered by the same ruling as D-28e** — his *"these 2 are outliers"* names Ingredients and Staff,
+and the pattern he states is list → detail → edit → back to the detail. **Staff's edit screen
+returns to the record.**
+
+### What D-28 leaves behind
+
+- **A roles review is on Rajeev's mind and is not scheduled.** *"Roles Review and adjustments to
+  roles and who can view what and who can edit what?"* The Kitchen Manager's loss under D-28e is the
+  first item for it.

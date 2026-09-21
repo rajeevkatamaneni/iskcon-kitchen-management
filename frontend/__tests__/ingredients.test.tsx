@@ -201,7 +201,10 @@ describe("ingredient management", () => {
   it("keeps Delete on the row, which is a removal rather than a change", () => {
     render(<IngredientsPage />);
     const actions = within(screen.getAllByRole("row")[1] as HTMLTableRowElement).getAllByRole("button");
-    expect(actions.map((b) => b.textContent)).toEqual(["Delete"]);
+    // A trash can rather than the word (Rajeev, 2026-09-21), so the row carries no visible text for
+    // it. Asserted on the accessible name, which is what anybody not looking at it gets — and it
+    // names the row, because forty buttons all called "Delete" name nothing.
+    expect(actions.map((b) => b.getAttribute("aria-label"))).toEqual(["Delete Rice"]);
   });
 
   it("offers no way to change anything from the table itself", () => {
@@ -278,10 +281,23 @@ describe("ingredient management", () => {
     sends no update at all (T-441).
   */
 
-  it("deletes an ingredient", async () => {
+  it("deletes an ingredient, once the confirmation is answered", async () => {
     render(<IngredientsPage />);
-    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Rice" }));
+    // The press opens the question and deletes nothing on its own.
+    expect(deleteMock).not.toHaveBeenCalled();
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByRole("heading", { name: "Delete Rice?" })).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("i1", "test-token"));
+  });
+
+  it("deletes nothing when the confirmation is cancelled", () => {
+    render(<IngredientsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete Rice" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(deleteMock).not.toHaveBeenCalled();
   });
 
   /*
