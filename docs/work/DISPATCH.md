@@ -21167,3 +21167,106 @@ untouched at 111 inventory items, 31 purchase orders and 96 meals, counted befor
 Full record: `docs/work/proof/RELEASE-2026-09-20-outside-events.md`. **Nobody has driven the screens
 on staging signed in** — the first verification pass is still owed, and T-366's script has still not
 been run anywhere.
+
+---
+
+## ▶ WAVE TS (2026-09-20): three small things — T-433, T-434, T-435
+
+**Source.** Rajeev's list of 20 September, relayed to the work manager as three items: a day panel
+that says "Nothing planned for this day" when the request was refused or failed; two documents that
+still describe the *Upcoming outside commitments* card removed on 2026-09-19; and the Kitchens page
+heading disagreeing with the menu item that opens it.
+
+**Where it is built.** A worktree of its own at `/Users/Rajeev/Workspace/kms-three-small`, branch
+`wave-three-small`, cut from `origin/main` `a5dd6d97`. Not the main checkout, and not
+`kms-menu-layout`, `kms-staff-inventory`, `kms-outside-events` or any `.claude/worktrees/` tree.
+`npm ci` was run once by the work manager so no builder pays for it.
+
+**The release that lands under this wave.** `wave-outside-events` carries commit `1f023add`
+("an outside event opens from the day list, and no day claims to be empty when it is not"), which was
+not yet on `origin/main` when this worktree was cut. It touches `MealServices.tsx`,
+`planner/page.tsx`, `today/page.tsx`, `RequireRole.tsx`, `lib/api.ts`, `planner.test.tsx`,
+`role-refusals.test.tsx` and `refusal-words-reach-the-reader.test.tsx` — heavy overlap with T-433 and
+the entire premise of T-434. **So T-433 and T-434 are held until that release lands and this branch
+is rebased onto it.** The rebase is the work manager's step and nobody else's: a rebase refuses on a
+dirty tree, and forcing one moves the branch under whoever is still editing.
+
+### Waves, and why they are drawn here
+
+**Wave 1: T-435 alone**, dispatched before the rebase. `frontend/app/kitchens/page.tsx` and
+`frontend/__tests__/kitchens.test.tsx` appear nowhere in `1f023add`, so it rebases clean and the
+wall-clock spent waiting is bought back.
+
+**Wave 2: T-433 and T-434 together**, after the rebase. Their path sets are disjoint — one is
+frontend TypeScript, the other is Markdown under `docs/` — and neither reads anything the other
+writes.
+
+### Reservations
+
+**None needed, and that is a checked claim rather than an assumption.** No migration (no backend
+code in the wave at all). No new permission. `frontend/lib/nav.ts`, `Sidebar.tsx` and `routes.ts` are
+**read-only for every builder in this wave**: T-435 changes a page heading to match a menu label that
+already exists, it does not add a menu row. `frontend/lib/api.ts` is **reserved by the work manager
+and forbidden to all three**; the hook in T-433 consumes `ApiError` and `isUnreachable`, both already
+exported, so it should not need it — if it does, it stops and reports.
+
+A `KMS-nnnnnn` code was offered (`KMS-400192` next free, `V160` next migration) and is expected to go
+unused: T-433 renders failures the server already codes, it does not invent one.
+
+### T-433 — A day that does not know says so, instead of saying the day is empty
+
+- **state** — queued (held for the rebase)
+- **wave** — 2
+- **what** — `MealServices.tsx` destructures `{ data, loading }` from `useAuthedQuery` and drops
+  `error`, so a 403 or a 500 leaves `data` null, `meals.length === 0`, and the day renders
+  *"Nothing planned for this day"*. Consume the error; tell a refused reader they cannot see it and a
+  failed one that it failed, with a way to try again; audit every other caller of the hook and report
+  which ones lie the same way.
+- **paths** — `frontend/lib/use-authed-query.ts`, `frontend/components/planner/MealServices.tsx`,
+  `frontend/components/ErrorNotice.tsx`, `frontend/__tests__/planner.test.tsx`,
+  `frontend/__tests__/meal-kitchen-sections.test.tsx`, `frontend/__tests__/role-refusals.test.tsx`,
+  and one new test file of its own naming.
+- **proof** — `docs/work/proof/T-433.md`
+
+### T-434 — Two documents describe a card that no longer exists
+
+- **state** — queued (held for the rebase)
+- **wave** — 2
+- **what** — `docs/uat/UAT-086-an-event-of-its-own.md` (five places) and
+  `docs/stories/EPIC-4-meal-planning-calendar.md` still describe *Upcoming outside commitments*.
+  Correct them to what the application does after `1f023add`, sweep the rest of `docs/uat` and
+  `docs/stories`, and add one line to the removal rules in `docs/work/README.md` — the project's only
+  removal checklist. Withdraw, never delete; historical records stay.
+- **paths** — `docs/uat/UAT-086-an-event-of-its-own.md`,
+  `docs/stories/EPIC-4-meal-planning-calendar.md`, `docs/uat/TRACEABILITY.md`,
+  `docs/uat/UAT-032-plan-a-meal.md`, `docs/uat/UAT-034-do-we-have-the-ingredients.md`,
+  `docs/work/README.md`. **Not** `docs/work/proof/**` and **not** `docs/CHANGELOG.md` or
+  `docs/WORK_QUEUE.md`.
+- **proof** — `docs/work/proof/T-434.md`
+
+### T-435 — The page says what the menu item that opened it says
+
+- **state** — building (dispatched 2026-09-20, before the rebase)
+- **wave** — 1
+- **what** — `frontend/app/kitchens/page.tsx:100` reads `<h1>Kitchens</h1>`; `frontend/lib/nav.ts:219`
+  labels the item **All kitchens** inside a group titled **Kitchens**. Rajeev settled both words, so
+  the heading follows the item. Then check every other page heading against its menu item and
+  **report** the disagreements without fixing them.
+- **paths** — `frontend/app/kitchens/page.tsx`, `frontend/__tests__/kitchens.test.tsx`, and one new
+  test file of its own naming. `frontend/lib/nav.ts` is read-only.
+- **proof** — `docs/work/proof/T-435.md`
+
+### T-435 widened mid-flight — one stale comment in `PeriodNav.tsx` (2026-09-20)
+
+`frontend/components/ds/PeriodNav.tsx` carries a comment naming a report by its old title. The
+outside-events wave found it beside the kitchens heading and dropped both as out of its scope
+(`docs/work/proof/T-363.md`, lines 75–94). It is the same defect as T-435's — a name in one place
+that no longer matches the name in another — so it goes to the builder already holding that subject.
+
+**Ownership checked before granting**, which is the rule rather than the courtesy: T-433's contract
+is the query hook, `MealServices.tsx`, `ErrorNotice.tsx` and three planner tests; T-434's is Markdown
+under `docs/`. Neither names `PeriodNav.tsx`, and no other wave is live in this worktree. Granted.
+
+T-435 was also pointed at `scratchpad/T-363.patch` for the reasoning behind both hunks, and told
+**not** to apply it: it is written against an older `main`, it carries eleven files outside T-435's
+contract, and this branch is about to be rebased under it.

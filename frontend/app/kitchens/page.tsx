@@ -97,7 +97,15 @@ function KitchensView() {
         <div className="mx-auto max-w-content">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 grow basis-60">
-              <h1>Kitchens</h1>
+              {/*
+                The same words as the menu row that opens this page. `nav.ts` labels it "All
+                kitchens" rather than "Kitchens" so the row is not its group's own heading said
+                twice, and a page that then called itself something else would leave the person
+                wondering whether they had arrived where they clicked. Kept in step by a test
+                (`kitchens-heading-matches-nav.test.tsx`) that reads the label out of `nav.ts`, so
+                renaming the menu row without renaming this heading fails rather than ships.
+              */}
+              <h1>All kitchens</h1>
               <p className="mt-1 text-ink-secondary">
                 The kitchens this temple runs, and how each of them gets its ingredients.
               </p>

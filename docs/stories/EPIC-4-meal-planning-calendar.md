@@ -854,10 +854,24 @@ written at `MealPlanService:431`, filterable at `MealPlanController:50`, and **n
 ever passes `dayType`**; `MealCrewService:140` only ever excludes it. The *Upcoming catering* table
 UAT-033 step 5 describes **was never built.** So nothing is lost, and one thing is gained — see D4.
 
-**D4 — *Upcoming outside commitments* replaces it, and covers more.** The idea behind the unbuilt
+**D4 — a heads-up of what is going out replaces it, and covers more.** The idea behind the unbuilt
 catering table was right: *nobody should discover a booking on the morning.* Keying it off **is this
 going outside** rather than **is this catering** puts the school delivery and the community
 programme in it too, which are exactly as easy to forget as a wedding.
+
+*Amended 2026-09-20.* It was first built as an **Upcoming outside commitments** card at the foot of
+the planner, and that shape was wrong twice over. The card took no date, so it sat under whichever
+day was open and appeared to put an event on a day it was not on; and its rows were plain cells, so
+the one thing a person wanted — open it, adjust it, print its job card — could not be done from the
+only place the event was listed. Rajeev, reporting it: *"Now I cant open it to adjust it OR view
+what is in it, cant print a Job card. NOTHING!!"*
+
+The events were never excluded from the planner's day list; they were simply not being looked for
+there. So the card is gone, the events are read in the day like any other meal — carrying a blue
+**We deliver it** or a **They collect it** pill — and the heads-up lives on **Today** as *Going out
+of the temple*: the fortnight ahead, from tomorrow, soonest first, each row opening the planner on
+its date. From tomorrow, because today's outside meals are already in Today's meals card and
+listing one twice would say the temple has two.
 
 **D5 — Three kind flags collapse into one.** `needs_client`, `needs_venue` and `needs_purpose` each
 existed to describe one corner of the outside-event shape, and `needs_client` existed only to derive
@@ -976,7 +990,8 @@ are what makes D1 survive contact with a kitchen.
 - [ ] An outside event refuses to save without a contact name and phone (`KMS-400076`).
 - [ ] A delivered event refuses to save without an address and a serving time (`KMS-400077`).
 - [ ] Breakfast, Lunch and Dinner ask exactly what they asked before.
-- [ ] Upcoming outside commitments lists future ones in date order, drops cancelled ones, and shows no past ones.
+- [ ] An outside event is in the planner's day list, opens, edits, prints a job card, and shows **We deliver it** or **They collect it**.
+- [ ] **Going out of the temple** on Today lists the fortnight ahead from tomorrow, soonest first, drops cancelled ones, shows nothing past or in-house, and opens the planner on the event's date.
 - [ ] A pre-existing catering plan survives the migration as an outside event with its client, contact and venue intact.
 - [ ] No *Catering order* kind exists for an existing temple or a newly provisioned one.
 - [ ] `CATERING` appears nowhere in the day-type vocabulary.

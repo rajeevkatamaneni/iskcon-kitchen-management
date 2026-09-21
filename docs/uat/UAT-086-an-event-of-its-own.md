@@ -48,10 +48,13 @@ and its own job card. And the *Catering order* kind is gone: a temple that does 
   because a Bhajan Prasadam in the temple hall has no client and a form should not ask a question
   with no answer.
 - **Breakfast, Lunch and Dinner see none of it** and ask exactly what they asked before.
-- **Upcoming outside commitments** lists everything going out of the temple — future only, in date
-  order, with cancelled ones dropping out. It is keyed off *is this going outside*, not off
-  *is this catering*, so the school delivery and the community programme are in it too. Those are
-  exactly as easy to forget on the morning as a wedding.
+- **Going out of the temple**, on Today, lists what leaves the temple in the fortnight ahead —
+  soonest first, from tomorrow, with cancelled ones dropping out. It is keyed off *is this going
+  outside*, not off *is this catering*, so the school delivery and the community programme are in it
+  too. Those are exactly as easy to forget on the morning as a wedding. *(Until 2026-09-20 this was
+  an "Upcoming outside commitments" card at the foot of the planner. It carried no date, so it sat
+  under whichever day you were looking at and appeared to put an event on the wrong day, and its
+  rows did not open. The events themselves are in the day list now, like any other meal.)*
 - **An event repeats as a series**: once every 1 to 12 weeks, until a date no more than a year from
   today. Each occurrence is a plan in its own right and can be edited or cancelled on its own, but the
   occurrences stay linked, so cancelling one that has later ones asks whether to cancel **just this
@@ -136,16 +139,25 @@ and its own job card. And the *Catering order* kind is gone: a temple that does 
 | 32 | Change the phone number on this one and save | Accepted, and it is **this** event's number. It must not reach back and rewrite the earlier one |
 | 33 | Begin typing `Children…` | `Children's Bhagavad-gita Reading` is suggested, and taking it brings **no** contact forward — that one is in-house and never had one |
 
-### Upcoming outside commitments
+### An outside event opens, adjusts and prints, like any other meal
 
 | # | Do this | You should see |
 |---|---|---|
-| 34 | Find the **Upcoming outside commitments** list | Your pickup event and your delivery event are both on it, **in date order** |
-| 35 | Look for the in-house `Children's Bhagavad-gita Reading` on that list | **Not there.** The list is about what leaves the temple |
-| 36 | Plan an outside event on a date **in the past** *(if the planner lets you — past days are read-only, so use one already there)*, and reload the list | **No past commitments.** *Upcoming* means upcoming |
-| 37 | Add a third outside event on a date **between** the other two | It appears **between** them, not at the bottom |
-| 38 | **Cancel** one of the events | It **drops out of the list**. A cancelled commitment is not a commitment |
-| 39 | Read the columns on the list | Enough to act on without opening anything: the date, the event's name, who to ring, and where it is going |
+| 34 | Open the planner on the day of your delivery event | The event is **in the day's list** with the ordinary meals, tagged **Event**, with a blue **We deliver it** pill |
+| 35 | Look at the pickup event's day | Same, with **They collect it** instead. An in-house event such as `Children's Bhagavad-gita Reading` carries **no pill** — nobody was asked about handover |
+| 36 | On the event, press **Edit**, change something and save | It saves, and the day shows the change |
+| 37 | Press **Download job card** on the event | A job card prints for the event, as it does for a meal |
+
+### Going out of the temple, on Today
+
+| # | Do this | You should see |
+|---|---|---|
+| 38 | Open **Today** and find **Going out of the temple** | Your pickup and delivery events are both on it, **soonest first**, each with its date and its pill |
+| 39 | Look for an outside event happening **today** | **Not there.** Today's meals are already in the meals card above; listing one twice would say the temple has two |
+| 40 | Look for the in-house `Children's Bhagavad-gita Reading` | **Not there.** The card is about what leaves the temple |
+| 41 | Look for anything **more than a fortnight away**, and anything in the **past** | Neither is there. It is the days ahead, not the whole diary |
+| 42 | **Cancel** one of the events and reload | It **drops off**. A cancelled commitment is not a commitment |
+| 43 | Press the event's name | The **planner opens on that date**, with the event in the day's list |
 
 ### No catering, anywhere
 
@@ -250,7 +262,8 @@ before the guests eat, and anything under **30 minutes** spare for loading and s
 - [ ] A delivered event cannot be saved without an **address and a serving time** — guarded by the screen, `KMS-400077` behind it.
 - [ ] An event with no name cannot be saved — guarded by the screen, `KMS-400075` behind it.
 - [ ] Breakfast, Lunch and Dinner ask exactly what they asked before, and nothing more.
-- [ ] Upcoming outside commitments lists future ones in date order, drops cancelled ones, and shows no past ones.
+- [ ] An outside event sits in the planner's day list, opens, edits and prints a job card, and carries **We deliver it** or **They collect it**.
+- [ ] **Going out of the temple** on Today lists the fortnight ahead from tomorrow, soonest first, drops cancelled ones, shows nothing past, and its rows open the planner on that date.
 - [ ] A pre-existing catering plan survives as an outside event with its client, contact and venue intact.
 - [ ] No *Catering order* kind exists for an existing temple **or a newly provisioned one**, and `CATERING` appears nowhere as a day type.
 - [ ] An event repeats **once every 1 to 12 weeks until a date**, the sentence says `week` at 1 and `weeks` above it, and the count and last date shown before pressing `Repeat` are what it makes.
@@ -319,8 +332,8 @@ confirm.
   supposed to be recomputed each time it is shown, not remembered.
 - Times reading in a 12-hour form in one place and 24-hour in another. Pick one and note where it
   differs.
-- The **Upcoming outside commitments** list showing another temple's commitments. Check it as the
-  second temple admin if you have one to hand (UAT-006).
+- **Going out of the temple** showing another temple's commitments. Check it as the second temple
+  admin if you have one to hand (UAT-006).
 
 ## Report anything wrong
 

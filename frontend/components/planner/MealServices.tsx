@@ -94,7 +94,7 @@ export function MealServices({
   const [peek, setPeek] = useState<{ recipeId: string; name: string } | null>(null);
   /** The meal just cancelled, said out loud here because its own block has gone from the day. */
   const [cancelled, setCancelled] = useState<string | null>(null);
-  const { data, loading } = useAuthedQuery(
+  const { data, loading, error, reload } = useAuthedQuery(
     useCallback(
       (t?: string) => {
         void nonce;
@@ -147,6 +147,25 @@ export function MealServices({
 
   if (loading && meals.length === 0) {
     return null;
+  }
+
+  // A day that could not be read is not an empty day. Until T-436 this said "Nothing planned for
+  // this day" whether the temple had planned nothing or the request had been refused or had
+  // failed — the same sentence Rajeev objected to on 2026-09-19 for saying something untrue, able
+  // to say it again for a different reason. The hook has always handed back the error; this screen
+  // was the one place that dropped it.
+  if (error && meals.length === 0) {
+    return (
+      <div className="grid gap-4">
+        {cancelledNotice}
+        <ErrorNotice error={error} />
+        <div>
+          <Button variant="secondary" onClick={reload}>
+            Try again
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   if (meals.length === 0) {

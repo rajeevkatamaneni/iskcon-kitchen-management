@@ -105,6 +105,10 @@ cd frontend && npx tsc --noEmit && npm test
 
 Backend tests need Docker running — Testcontainers starts a real PostgreSQL, because Row-Level Security is a database behaviour and mocking it would prove nothing.
 
+**When you remove a screen, a card or an endpoint, grep the docs for its name in the same change.**
+Three separate waves have deleted something and left `docs/uat/` and `docs/stories/` telling a tester
+to go and find it. The code is not the only place a feature exists.
+
 ## How to talk to Rajeev — MANDATORY
 
 **This is a rule, not a preference. It applies to every agent, every reply, every proof and

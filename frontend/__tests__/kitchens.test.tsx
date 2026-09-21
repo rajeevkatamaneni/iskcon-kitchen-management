@@ -98,7 +98,10 @@ describe("kitchens list", () => {
     };
     render(<KitchensPage />);
 
-    expect(screen.getByRole("heading", { name: /kitchens/i, level: 1 })).toBeInTheDocument();
+    // Exact, not /kitchens/i: the heading is the menu row's own words, and a loose match would have
+    // let "Kitchens" and "All kitchens" both pass. What keeps it tied to `nav.ts` is the separate
+    // guard in `kitchens-heading-matches-nav.test.tsx`.
+    expect(screen.getByRole("heading", { name: "All kitchens", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Deity kitchen")).toBeInTheDocument();
     expect(screen.getByText("Main kitchen")).toBeInTheDocument();
     expect(screen.getByText("Prasadam hall")).toBeInTheDocument();
