@@ -240,69 +240,53 @@ describe("one catalogue, split across two screens", () => {
   });
 });
 
-describe("a mis-catalogued row moves, in either direction", () => {
-  it("moves a supply to Ingredients, and states the flag rather than omitting it", async () => {
+/*
+  T-441 — the row no longer moves, and no longer opens either.
+
+  Rajeev on 2026-09-20, asked about the "Move to Supplies" box the Ingredients editing row carried:
+  "Not needed. they can delete and recreate as a supply." Its mirror here ("Move to Ingredients")
+  went with it — the argument reads the same in both directions — and the editing row that held both
+  went with the Edit button, because he also asked for the catalogue to follow Staff: the name opens
+  the thing in view mode, and Edit is on that page.
+
+  So the four tests that used to live here (a supply moving to Ingredients and back, each with the
+  `supply` key read out of the payload rather than matched loosely) are gone with the feature. What
+  replaces them is below, plus the same `supply` assertion on the edit screen's save — see "keeps a
+  supply a supply on save" in `__tests__/ingredient-edit.test.tsx`, which is where a payload is now
+  built. The flag itself is untouched and still decides which of the two screens a row appears on,
+  which the first describe in this file is what holds down.
+*/
+describe("changing a supply starts at its name", () => {
+  it("links the name to the supply's own page, which is the ingredient page (D-1)", () => {
     ingRef.current = { data: [LEAF_PLATES], error: null, loading: false };
     render(<SuppliesPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
-    fireEvent.click(screen.getByLabelText("Move to Ingredients"));
-    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
-
-    await waitFor(() => expect(updateMock).toHaveBeenCalled());
-    const [id, payload] = updateMock.mock.calls[0];
-    expect(id).toBe("i-plates");
-    // Read out rather than matched with `objectContaining`, which cannot tell an explicit `false`
-    // from a key that was never sent — and a key never sent deserialises to `false` on a primitive
-    // Java field, so the two would look identical from here and mean different things on the wire.
-    expect(Object.keys(payload)).toContain("supply");
-    expect(payload.supply).toBe(false);
+    expect(screen.getByRole("link", { name: "Leaf Plates" }).getAttribute("href")).toBe(
+      "/ingredients/i-plates"
+    );
   });
 
-  it("leaves a supply a supply when the box is untouched", async () => {
+  it("offers no Edit button on the row", () => {
     ingRef.current = { data: [LEAF_PLATES], error: null, loading: false };
     render(<SuppliesPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
-    // Unticked is the resting state on both screens and means "leave it where it is". This is the
-    // assertion that catches the box being read the wrong way round: an editor who renamed a
-    // supply and saved must not have moved it.
-    expect(screen.getByLabelText("Move to Ingredients")).not.toBeChecked();
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Leaf Plates (large)" } });
-    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
-
-    await waitFor(() => expect(updateMock).toHaveBeenCalled());
-    const [, payload] = updateMock.mock.calls[0];
-    expect(Object.keys(payload)).toContain("supply");
-    expect(payload.supply).toBe(true);
+    const row = screen.getAllByRole("row")[1] as HTMLTableRowElement;
+    expect(within(row).queryByRole("button", { name: /^edit$/i })).not.toBeInTheDocument();
+    // Delete stays: removing a supply is not a change to it.
+    expect(within(row).getAllByRole("button").map((b) => b.textContent)).toEqual(["Delete"]);
   });
 
-  it("moves an ingredient to Supplies", async () => {
-    ingRef.current = { data: [ingredient()], error: null, loading: false };
-    render(<IngredientsPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
-    fireEvent.click(screen.getByLabelText("Move to Supplies"));
-    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
-
-    await waitFor(() => expect(updateMock).toHaveBeenCalled());
-    const [, payload] = updateMock.mock.calls[0];
-    expect(Object.keys(payload)).toContain("supply");
-    expect(payload.supply).toBe(true);
+  it("offers no move box on either screen, in either direction", () => {
+    ingRef.current = { data: [LEAF_PLATES, ingredient()], error: null, loading: false };
+    render(<SuppliesPage />);
+    expect(screen.queryByLabelText(/Move to Ingredients/i)).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
   });
 
-  it("leaves an ingredient food when the box is untouched", async () => {
-    ingRef.current = { data: [ingredient()], error: null, loading: false };
-    render(<IngredientsPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
-    expect(screen.getByLabelText("Move to Supplies")).not.toBeChecked();
-    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
-
-    await waitFor(() => expect(updateMock).toHaveBeenCalled());
-    const [, payload] = updateMock.mock.calls[0];
-    expect(Object.keys(payload)).toContain("supply");
-    expect(payload.supply).toBe(false);
+  it("changes nothing from the supplies table itself", () => {
+    ingRef.current = { data: [LEAF_PLATES], error: null, loading: false };
+    render(<SuppliesPage />);
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });
 

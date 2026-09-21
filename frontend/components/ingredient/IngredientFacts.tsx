@@ -80,18 +80,35 @@ export function IngredientFacts({
 
   return (
     <section className="card px-6 py-5" aria-labelledby="facts-heading">
-      <h2 id="facts-heading" className="text-lg font-semibold text-ink">About this ingredient</h2>
+      {/*
+        The heading says which half of the catalogue this row is in, because since T-441 this page is
+        a supply's page too, and "About this ingredient" over a can of kerosene is the app calling a
+        mop an ingredient — the thing T-089's two menu items were built to stop. It is not a printing
+        of the `supply` flag, which Rajeev ruled on 2026-09-10 must not be displayed: the word is here
+        because the reader is on a supply's page, the same way the sidebar and the back link above it
+        already say Supplies.
+      */}
+      <h2 id="facts-heading" className="text-lg font-semibold text-ink">
+        {ingredient.supply ? "About this supply" : "About this ingredient"}
+      </h2>
       <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4 text-sm lg:grid-cols-3">
         <Detail label="Category">{ingredient.category}</Detail>
         <Detail label="Stock unit">{unitLabel(ingredient.unit)}</Detail>
-        <Detail label="Ekadashi">
-          {ingredient.ekadashiProhibited ? (
-            // Blue, Ekadashi's colour everywhere: a classification, not a warning (T-227).
-            <span className="rounded-control bg-info-bg px-2 py-1 text-xs font-semibold text-info">Prohibited</span>
-          ) : (
-            "Allowed"
-          )}
-        </Detail>
+        {/*
+          Absent on a supply, exactly as the box for it is absent on `/supplies/new`: Ekadashi says
+          what a fasting rule makes of a food, and there is no fasting rule about dishwashing liquid.
+          Printing "Allowed" beside a broom answers a question nobody asked and implies there was one.
+        */}
+        {!ingredient.supply && (
+          <Detail label="Ekadashi">
+            {ingredient.ekadashiProhibited ? (
+              // Blue, Ekadashi's colour everywhere: a classification, not a warning (T-227).
+              <span className="rounded-control bg-info-bg px-2 py-1 text-xs font-semibold text-info">Prohibited</span>
+            ) : (
+              "Allowed"
+            )}
+          </Detail>
+        )}
         {/*
           Plain text in both states, in the ink the other values use, because this is a neutral fact
           about the ingredient and not a warning about it. Amber means something is low, wrong or

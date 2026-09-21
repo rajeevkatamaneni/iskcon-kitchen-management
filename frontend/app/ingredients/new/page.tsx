@@ -101,12 +101,16 @@ function NewIngredientView() {
           existing={lookalike.existing}
           busy={busy}
           /*
-            "Use Curd" opens Curd's own editing row on the Ingredients list (T-251's choice). Nothing
-            is added, and the row that IS the thing is in front of them — where the spelling they
-            typed can go in as an alias, so the next person who types it finds Curd by it. The list
-            sends a supply on to Supplies, since that half of the catalogue lives there.
+            "Use Curd" opens Curd's own edit screen (T-251's choice, moved there by T-441). Nothing
+            is added, and the thing they meant is in front of them — where the spelling they typed
+            can go in as an alias, so the next person who types it finds Curd by it.
+
+            Straight to the screen rather than through `/ingredients?edit=`, which is what this did
+            while the editing row lived on the list. One hop instead of two, and it is right for a
+            supply without anything having to forward it: `/ingredients/[id]/edit` is one screen for
+            both halves of the catalogue, as `/ingredients/[id]` beside it is.
           */
-          onUse={() => router.push(`/ingredients?edit=${encodeURIComponent(lookalike.existing.id)}`)}
+          onUse={() => router.push(`/ingredients/${encodeURIComponent(lookalike.existing.id)}/edit`)}
           onDifferent={() => add({ ...lookalike.input, confirmDifferent: true })}
           onDismiss={() => setLookalike(null)}
         />

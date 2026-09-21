@@ -41,7 +41,6 @@ vi.mock("@/lib/api", async (orig) => {
 import { DuplicateIngredientPrompt, lookalikeFrom } from "@/components/DuplicateIngredientPrompt";
 import NewIngredientPage from "@/app/ingredients/new/page";
 import NewSupplyPage from "@/app/supplies/new/page";
-import IngredientsPage from "@/app/ingredients/page";
 
 /** What the server answers when "Curd sour" is typed and "Curd" exists. */
 function looksLike(id: string, name: string): ApiError {
@@ -195,13 +194,15 @@ describe("/ingredients/new", () => {
     expect(within(dialog).getByRole("button", { name: "Use Tomato, ripe" })).toBeInTheDocument();
   });
 
-  it("'Use Curd' adds nothing and opens Curd on the Ingredients list", async () => {
+  it("'Use Curd' adds nothing and opens Curd's own edit screen", async () => {
     createMock.mockRejectedValueOnce(looksLike("curd-id", "Curd"));
     render(<NewIngredientPage />);
     fillAndAdd("Curd sour");
 
     fireEvent.click(await screen.findByRole("button", { name: "Use Curd" }));
-    expect(pushMock).toHaveBeenCalledWith("/ingredients?edit=curd-id");
+    // Straight to the screen since T-441; it used to go through `/ingredients?edit=`, which opened
+    // an editing row on the list that no longer exists.
+    expect(pushMock).toHaveBeenCalledWith("/ingredients/curd-id/edit");
     expect(createMock).toHaveBeenCalledTimes(1);
   });
 
@@ -252,7 +253,7 @@ describe("/supplies/new", () => {
     );
   });
 
-  it("'Use Leaf plates' goes to it through the Ingredients list, which forwards a supply", async () => {
+  it("'Use Leaf plates' opens it on the one edit screen both halves share", async () => {
     createMock.mockRejectedValueOnce(looksLike("lp-id", "Leaf plates"));
     render(<NewSupplyPage />);
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Leaf plate" } });
@@ -260,76 +261,20 @@ describe("/supplies/new", () => {
     fireEvent.click(screen.getByRole("button", { name: /add supply/i }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Use Leaf plates" }));
-    expect(pushMock).toHaveBeenCalledWith("/ingredients?edit=lp-id");
+    // No forwarding step any more: `/ingredients/[id]/edit` is one screen for food and supplies,
+    // so a supply lands on its own form rather than being bounced through a list.
+    expect(pushMock).toHaveBeenCalledWith("/ingredients/lp-id/edit");
   });
 });
 
-describe("the inline rename on /ingredients", () => {
-  const curd = ingredient({ id: "curd-id", name: "Curd", category: "Dairy" });
-  const paneer = ingredient({ id: "paneer-id", name: "Paneer", category: "Dairy" });
+/*
+  T-441 — the rename that used to happen in a row on /ingredients happens on the ingredient's own
+  edit screen now, so the five tests that were here moved with it: see "renaming onto a lookalike
+  (R-DUP-2)" in `__tests__/ingredient-edit.test.tsx`, which asserts the same three things (the
+  prompt instead of a save, the confirmed re-send carrying `confirmDifferent`, and "Use Curd"
+  saving nothing) against the screen that now owns the form.
 
-  function renameRow(from: string, to: string) {
-    const row = screen.getByRole("cell", { name: from }).closest("tr") as HTMLElement;
-    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: to } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-  }
-
-  it("a rename to a lookalike is stopped with the prompt, and the row stays open", async () => {
-    queryRef.current = { data: [curd, paneer] };
-    updateMock.mockRejectedValueOnce(looksLike("curd-id", "Curd"));
-    render(<IngredientsPage />);
-    renameRow("Paneer", "Curd sour");
-
-    expect(await screen.findByRole("alertdialog", { name: "Did you mean Curd?" })).toBeInTheDocument();
-    // Not printed as an error at the top of the page as well.
-    expect(screen.queryByText(/KMS-400156/)).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Name")).toHaveValue("Curd sour");
-  });
-
-  it("confirming re-sends the same edit with confirmDifferent, then closes the row", async () => {
-    queryRef.current = { data: [curd, paneer] };
-    updateMock.mockRejectedValueOnce(looksLike("curd-id", "Curd")).mockResolvedValueOnce(undefined);
-    render(<IngredientsPage />);
-    renameRow("Paneer", "Curd sour");
-
-    fireEvent.click(await screen.findByRole("button", { name: "It’s a different ingredient" }));
-    fireEvent.click(screen.getByRole("button", { name: "Keep it separate" }));
-
-    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(2));
-    expect(updateMock.mock.calls[1][0]).toBe("paneer-id");
-    expect(updateMock.mock.calls[1][1]).toEqual(
-      expect.objectContaining({ name: "Curd sour", confirmDifferent: true })
-    );
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
-  });
-
-  it("'Use Curd' drops the rename and opens Curd's own row instead", async () => {
-    queryRef.current = { data: [curd, paneer] };
-    updateMock.mockRejectedValueOnce(looksLike("curd-id", "Curd"));
-    render(<IngredientsPage />);
-    renameRow("Paneer", "Curd sour");
-
-    fireEvent.click(await screen.findByRole("button", { name: "Use Curd" }));
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Name")).toHaveValue("Curd");
-    expect(screen.getByRole("cell", { name: "Paneer" })).toBeInTheDocument();
-    expect(updateMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens the row ?edit= names, and strips the param", () => {
-    queryRef.current = { data: [curd, paneer] };
-    paramsRef.current = new URLSearchParams("edit=curd-id");
-    render(<IngredientsPage />);
-    expect(screen.getByLabelText("Name")).toHaveValue("Curd");
-    expect(replaceMock).toHaveBeenCalledWith("/ingredients");
-  });
-
-  it("sends ?edit= for a supply on to Supplies, where it lives", () => {
-    queryRef.current = { data: [curd, ingredient({ id: "lp-id", name: "Leaf plates", supply: true })] };
-    paramsRef.current = new URLSearchParams("edit=lp-id");
-    render(<IngredientsPage />);
-    expect(pushMock).toHaveBeenCalledWith("/supplies");
-  });
-});
+  The two that cannot move are the `?edit=` ones, and they are gone rather than rewritten: both add
+  screens send "Use Curd" straight to `/ingredients/<id>/edit` now, which is asserted above, so
+  there is no parameter left for this list to read and no supply for it to forward.
+*/

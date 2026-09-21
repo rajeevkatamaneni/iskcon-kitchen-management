@@ -11,25 +11,13 @@ import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { SegmentedControl } from "@/components/ds/SegmentedControl";
 import { Badge } from "@/components/ds/Badge";
-import { splitAliases } from "@/components/IngredientForm";
 import { NOT_BOUGHT } from "@/components/ingredient/IngredientFacts";
-import {
-  DuplicateIngredientPrompt,
-  lookalikeFrom,
-  type Lookalike,
-} from "@/components/DuplicateIngredientPrompt";
-import {
-  api,
-  toApiError,
-  type ApiError,
-  type IngredientView,
-  type UpdateIngredientInput,
-} from "@/lib/api";
+import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { FOOD_UNITS, unitLabel } from "@/lib/format";
-import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
+import { unitLabel } from "@/lib/format";
+import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED, TH_SECOND, TD_SECOND } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 
 /**
@@ -49,19 +37,6 @@ import { Button } from "@/components/ds/Button";
  * one of these rows is how it got here, so that is all it says.
  */
 const ADDED_BY_IMPORT = "Added by a Recipe Import";
-
-/*
-  The editing row's field styling, named once rather than repeated on five controls.
-
-  `FIELD` wraps a control in its `<label>`, which is what puts the word on the screen AND gives the
-  control its accessible name in one element — the reason Rajeev's "a placeholder is not a label"
-  is fixed here rather than by adding a second `aria-label` nobody can see. It matches the pattern
-  `components/IngredientForm.tsx` already uses on the add screen, a size down, because these sit
-  inside a table row rather than on a page.
-*/
-const FIELD = "flex flex-col gap-1 text-xs text-ink-secondary";
-const FIELD_LABEL = "font-medium text-ink";
-const FIELD_INPUT = "min-h-touch w-full rounded-control border border-hairline px-2";
 
 /**
  * Show everything, or only what an import created.
@@ -113,7 +88,6 @@ function IngredientsView() {
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
 
   // Adding an ingredient happens on /ingredients/new and ends back here, so the confirmation has to
   // travel in the URL. Captured behind a ref because setting it re-renders, and a router object
@@ -184,77 +158,12 @@ function IngredientsView() {
   }, [flash]);
 
   /*
-    "Use Curd" from anywhere lands here as `?edit=<id>` (T-251): the existing ingredient's editing
-    row opens, scrolled into view, so the person is looking at the thing they meant and can add the
-    spelling they typed as an alias. Captured once behind a ref, like `added` above, and stripped
-    from the address so a reload does not reopen it.
-
-    A supply is not on this screen — T-089 put that half of the catalogue on /supplies — so a
-    lookalike that turns out to be a supply sends the person there instead of opening nothing.
+    "Use Curd" from an add screen used to land here as `?edit=<id>`, which opened the existing
+    ingredient's editing row on this list (T-251). There is no editing row any more (T-441), so both
+    add screens now send it straight to `/ingredients/<id>/edit` — one hop instead of two, and it
+    works for a supply without this screen having to forward it, because the edit screen is the same
+    screen for both halves of the catalogue.
   */
-  const editParam = params.get("edit");
-  const editCaptured = useRef(false);
-  const [scrollTo, setScrollTo] = useState<string | null>(null);
-  useEffect(() => {
-    if (editCaptured.current || !editParam || !data) return;
-    editCaptured.current = true;
-    openRow(editParam);
-    // The whole catalogue, not the import filter: the row asked for may not carry the label.
-    router.replace("/ingredients");
-    // openRow is a plain function declared below and reads only state setters and `data`.
-  }, [editParam, data, router]);
-
-  useEffect(() => {
-    if (!scrollTo) return;
-    document.getElementById(rowId(scrollTo))?.scrollIntoView?.({ block: "center" });
-    setScrollTo(null);
-  }, [scrollTo]);
-
-  /** Opens an ingredient's editing row and brings it into view, or goes to Supplies for a supply. */
-  function openRow(id: string) {
-    const target = ingredients.find((i) => i.id === id);
-    if (target?.supply) {
-      router.push("/supplies");
-      return;
-    }
-    if (!target) return;
-    setEditing(id);
-    setScrollTo(id);
-  }
-
-  // The rename the server said looks like another ingredient (R-DUP-2), held with what was typed
-  // so the confirmed save sends exactly the same edit again.
-  const [lookalike, setLookalike] = useState<{
-    ingredientId: string;
-    input: UpdateIngredientInput;
-    existing: Lookalike;
-  } | null>(null);
-
-  /**
-   * Saves the editing row. Its own function rather than `run`, because one failure here is not an
-   * error to print at the top of a long page but a question — "Did you mean Curd?" — asked in a
-   * layer that comes to wherever the row is.
-   */
-  async function saveRow(ingredientId: string, input: UpdateIngredientInput) {
-    setBusy(true);
-    setActionError(null);
-    try {
-      await api.updateIngredient(ingredientId, input, await getToken());
-      setLookalike(null);
-      setEditing(null);
-      reload();
-    } catch (e) {
-      const existing = lookalikeFrom(e);
-      if (existing) {
-        setLookalike({ ingredientId, input, existing });
-      } else {
-        setLookalike(null);
-        setActionError(toApiError(e, "We couldn’t save that."));
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function run(mutation: (token: string | undefined) => Promise<unknown>, failure: string) {
     setBusy(true);
@@ -406,8 +315,9 @@ function IngredientsView() {
                       took it out: with supplies on a screen of their own, every row on this one is
                       food, and a column that prints the same word all the way down is the
                       wallpaper the badge was deliberately avoiding when only the exception was
-                      marked. Moving a mis-catalogued row across is now an act on the editing row
-                      rather than a state to read on every row that is fine where it is.
+                      marked. Moving a mis-catalogued row across was an act on the editing row until
+                      T-441, and is now no act at all: Rajeev removed "Move to Supplies" on
+                      2026-09-20 — "Not needed. they can delete and recreate as a supply."
 
                       Rajeev asked for exactly this again on 2026-09-10 (T-121), having seen the
                       column on the deployed build, which is a version behind: "Keep type for
@@ -426,322 +336,101 @@ function IngredientsView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((ing) =>
-                    editing === ing.id ? (
-                      <EditRow
-                        key={ing.id}
-                        ingredient={ing}
-                        canSetEkadashi={isAdmin}
-                        busy={busy}
-                        onCancel={() => setEditing(null)}
-                        onSave={(input) => saveRow(ing.id, input)}
-                      />
-                    ) : (
-                      <tr key={ing.id} id={rowId(ing.id)} className={TR}>
+                  {shown.map((ing) => (
+                    <tr key={ing.id} className={TR}>
+                      {/*
+                        The label sits under the name rather than in a column of its own, and that
+                        is not only about width: a column would print something on every row —
+                        a badge, or the blank where one isn't — and would say of a hand-typed
+                        ingredient that it is *not* import-created, which is a fact nobody needs.
+                        Under the name it is the exception speaking, which is the same call the
+                        Type cell already makes by badging only supplies.
+
+                        It also keeps the header at five columns — Name, Category, Unit, Ekadashi,
+                        Actions — and since T-441 there is no editing row that has to match it.
+                      */}
+                      <td className={TD_PRIMARY}>
+                      {/* The way to the ingredient's own page (Q-10, T-286): its pack sizes, market
+                          rate, vendors and — since T-441 — its Edit button all live there. The name
+                          and not a button, so the link reads as the thing it opens; and since T-441
+                          it is the only way in, which is what Rajeev asked for on 2026-09-20. */}
+                        <Link href={`/ingredients/${ing.id}`} className="text-accent-text hover:underline">
+                          {ing.name}
+                        </Link>
                         {/*
-                          The label sits under the name rather than in a column of its own, and that
-                          is not only about width: a column would print something on every row —
-                          a badge, or the blank where one isn't — and would say of a hand-typed
-                          ingredient that it is *not* import-created, which is a fact nobody needs.
-                          Under the name it is the exception speaking, which is the same call the
-                          Type cell already makes by badging only supplies.
+                          Two labels that can both apply, in one wrapping row under the name
+                          (T-402). Under the name for exactly the reason the import label is —
+                          the exception speaks, and nothing is printed on the rows that are
+                          ordinary — and in a `flex-wrap` so a row carrying both does not push the
+                          cell wider than the column.
 
-                          It also keeps the header at five columns, which is what the editing row's
-                          cell count is measured against — Name, Category, Unit, Ekadashi, Actions.
-                          (It said six until T-121: the Type column had gone in T-089 and this
-                          sentence had not noticed. The test that actually holds the two in step is
-                          "keeps the editing row the same width as the header", which counts both
-                          rather than trusting a number written down here.)
+                          Neutral, like the import badge and unlike the Ekadashi cell. Amber is
+                          for something low, wrong or overdue; a temple that has decided it does
+                          not buy water has nothing wrong with it.
                         */}
-                        <td className={TD_PRIMARY}>
-                          {/* The way to the ingredient's own page (Q-10, T-286): its pack sizes, market
-                              rate and vendors live there. The name, not a new button, so the row keeps
-                              its two actions and the link reads as the thing it opens. */}
-                          <Link href={`/ingredients/${ing.id}`} className="text-accent-text hover:underline">
-                            {ing.name}
-                          </Link>
-                          {/*
-                            Two labels that can both apply, in one wrapping row under the name
-                            (T-402). Under the name for exactly the reason the import label is —
-                            the exception speaks, and nothing is printed on the rows that are
-                            ordinary — and in a `flex-wrap` so a row carrying both does not push the
-                            cell wider than the column.
+                        {(ing.libraryDerived || ing.notBought) && (
+                          <span className="mt-1 flex flex-wrap gap-1">
+                            {ing.libraryDerived && <Badge>{ADDED_BY_IMPORT}</Badge>}
+                            {ing.notBought && <Badge>{NOT_BOUGHT}</Badge>}
+                          </span>
+                        )}
+                      </td>
+                      <td className={`${TD_SECOND} text-ink-secondary`}>{ing.category}</td>
+                      <td className={`${TD_FIXED} text-ink-secondary`}>{unitLabel(ing.unit)}</td>
+                      {/*
+                        The only dietary flag a row carries, since D-18 deleted the other one that
+                        used to sit beside it.
 
-                            The header stays at five columns: Name, Category, Unit, Ekadashi,
-                            Actions. That contract is what the editing row's cell count is measured
-                            against, and this change deliberately does not touch it.
+                        **A LABEL, NOT A CONTROL, AND THAT IS THE WHOLE SHAPE OF IT.** It was a
+                        button here from T-045 until 2026-09-10 — one click on the row flipped the
+                        flag — and Rajeev took it out looking at the deployed screen:
 
-                            Neutral, like the import badge and unlike the Ekadashi cell. Amber is
-                            for something low, wrong or overdue; a temple that has decided it does
-                            not buy water has nothing wrong with it.
-                          */}
-                          {(ing.libraryDerived || ing.notBought) && (
-                            <span className="mt-1 flex flex-wrap gap-1">
-                              {ing.libraryDerived && <Badge>{ADDED_BY_IMPORT}</Badge>}
-                              {ing.notBought && <Badge>{NOT_BOUGHT}</Badge>}
-                            </span>
-                          )}
-                        </td>
-                        <td className={`${TD_SECOND} text-ink-secondary`}>{ing.category}</td>
-                        <td className={`${TD_FIXED} text-ink-secondary`}>{unitLabel(ing.unit)}</td>
-                        {/*
-                          The only dietary flag a row carries, since D-18 deleted the other one that
-                          used to sit beside it.
+                          "Ingredients don't go in and out of Ekadashi restriction EVER. They are
+                           either IN or OUT. Once set CORRECTLY, there is no reason to change it."
 
-                          **A LABEL, NOT A CONTROL, AND THAT IS THE WHOLE SHAPE OF IT.** It was a
-                          button here from T-045 until 2026-09-10 — one click on the row flipped the
-                          flag — and Rajeev took it out looking at the deployed screen:
+                        Which settles two things at once. A permanent fact about an ingredient
+                        should not sit behind a control that one stray click reverses, in a table
+                        somebody is scanning rather than operating; and a thing that reads as a
+                        label should not turn out to be a button, because the only way to discover
+                        that it was is to have already changed something. Setting it is done where
+                        every other fact about the ingredient is set — on `/ingredients/[id]/edit`
+                        since T-441, deliberately, with a Save and a Cancel at the top of it.
 
-                            "Ingredients don't go in and out of Ekadashi restriction EVER. They are
-                             either IN or OUT. Once set CORRECTLY, there is no reason to change it."
-
-                          Which settles two things at once. A permanent fact about an ingredient
-                          should not sit behind a control that one stray click reverses, in a table
-                          somebody is scanning rather than operating; and a thing that reads as a
-                          label should not turn out to be a button, because the only way to discover
-                          that it was is to have already changed something. Setting it is now done
-                          where every other fact about the ingredient is set — inside the editing
-                          row, deliberately, with a Save at the end of it.
-
-                          So this cell renders identically for everybody, admin or not. `isAdmin`
-                          still decides who is *offered* the checkbox in `EditRow`; it no longer
-                          decides what this row looks like, because the state is the same fact
-                          whoever is reading it.
-                        */}
-                        <td className={TD_FIXED}>
-                          {ing.ekadashiProhibited ? (
-                            // Blue, Ekadashi's colour everywhere else: a classification, not a
-                            // warning (Rajeev, 2026-09-18, T-227). The grain confirm is the warning.
-                            <span className="rounded-control bg-info-bg px-2 py-1 text-xs text-info font-semibold">Prohibited</span>
-                          ) : (
-                            <span className="text-xs text-ink-muted">Allowed</span>
-                          )}
-                        </td>
-                        <td className={TD_ACTIONS_FIXED}>
-                          <div className={ACTIONS_ROW}>
-                            <Button variant="ghost" size="sm" onClick={() => setEditing(ing.id)}>Edit</Button>
-                            <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.deleteIngredient(ing.id, t), "That ingredient is in use, or couldn’t be removed.")}>Delete</Button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  )}
+                        So this cell renders identically for everybody, admin or not. Who is
+                        *offered* the checkbox is decided on the edit screen; it does not decide
+                        what this row looks like, because the state is the same fact whoever is
+                        reading it.
+                      */}
+                      <td className={TD_FIXED}>
+                        {ing.ekadashiProhibited ? (
+                          // Blue, Ekadashi's colour everywhere else: a classification, not a
+                          // warning (Rajeev, 2026-09-18, T-227). The grain confirm is the warning.
+                          <span className="rounded-control bg-info-bg px-2 py-1 text-xs text-info font-semibold">Prohibited</span>
+                        ) : (
+                          <span className="text-xs text-ink-muted">Allowed</span>
+                        )}
+                      </td>
+                      {/*
+                        Delete alone since T-441. Rajeev, 2026-09-20: "remove the edit button and
+                        move the functionality the current edit button provides into the edit
+                        screen" — so changing an ingredient starts at its name, which opens it in
+                        view mode, and Edit is on that page. Delete stays on the row because it is
+                        not a change to the thing but a removal of it, and it is the one action a
+                        person does while scanning the list.
+                      */}
+                      <td className={TD_ACTIONS_FIXED}>
+                        <div className={ACTIONS_ROW}>
+                          <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.deleteIngredient(ing.id, t), "That ingredient is in use, or couldn’t be removed.")}>Delete</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
         </div>
       </main>
-
-      {lookalike && (
-        <DuplicateIngredientPrompt
-          candidate={lookalike.input.name}
-          existing={lookalike.existing}
-          busy={busy}
-          /*
-            "Use Curd" on a rename: this row keeps its name — the edit is dropped, nothing is saved —
-            and Curd's own editing row opens instead, which is the same place "Use Curd" lands from
-            the add screens. Merging the two rows is the merge tool's job (R-DUP-3), not a rename's.
-          */
-          onUse={() => {
-            const to = lookalike.existing.id;
-            setLookalike(null);
-            setEditing(null);
-            openRow(to);
-          }}
-          onDifferent={() => saveRow(lookalike.ingredientId, { ...lookalike.input, confirmDifferent: true })}
-          onDismiss={() => setLookalike(null)}
-        />
-      )}
     </div>
-  );
-}
-
-/** The DOM id a row carries, so "Use Curd" can bring it into view. */
-function rowId(ingredientId: string): string {
-  return `ingredient-${ingredientId}`;
-}
-
-/**
- * The editing row, laid out in the order Rajeev gave on 2026-09-10: **Name · Aliases · Units ·
- * Ekadashi**, then Actions.
- *
- * <p><strong>Where Category went, since his list did not mention it.</strong> Under Name, in the
- * same cell. Deleting it was never on the table — it is the one column on this table that says
- * something different on every row, and `/ingredients/new` requires it — so the question was only
- * where it goes in an order that names four fields for the four cells before Actions. It shares
- * Name's cell because they are the pair that answer "what is this thing", because that cell is the
- * wide `WRAP` one and has the room, and because Category is the field a recipe import *guesses*
- * (from the name, which is now directly above it) — so on the rows this screen most wants reviewed,
- * the guess and the thing it was guessed from are read together. Rajeev's four then fall across the
- * remaining cells in exactly his order.
- *
- * <p><strong>Every field is labelled, and the labels are visible.</strong> Aliases in particular
- * used to be a bare input with `placeholder="Aliases"`, which Rajeev called out: a placeholder is
- * not a label. It vanishes the moment somebody types — so the one person who cannot see what the
- * box is for is the one who has already put something in it — and it is not announced as the
- * field's name. The `<label>` wrapper here gives each control the same accessible name it had from
- * `aria-label` while also putting the word on the screen, so nothing that queried these by label
- * has to change.
- *
- * <p><strong>The Ekadashi checkbox is offered only to a Temple Admin, and the row says so.</strong>
- * The permission has not moved: `MANAGE_DIETARY_POLICY` still decides who may set the flag, and
- * `IngredientService.update` still refuses anyone else — the checkbox is not the guard. Everyone
- * else sees the state, unchangeable, exactly as the view row shows it. What that person's save
- * sends is `ekadashiProhibited: undefined`, which `JSON.stringify` omits and the server reads as
- * "leave it alone"; sending `false` on their behalf would ask to un-prohibit a row they were never
- * shown a control for.
- */
-function EditRow({
-  ingredient,
-  canSetEkadashi,
-  busy,
-  onSave,
-  onCancel,
-}: {
-  ingredient: IngredientView;
-  canSetEkadashi: boolean;
-  busy: boolean;
-  onSave: (input: {
-    name: string;
-    category: string;
-    unit: string;
-    supply: boolean;
-    ekadashiProhibited?: boolean;
-    aliases: string[];
-  }) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(ingredient.name);
-  const [category, setCategory] = useState(ingredient.category);
-  const [unit, setUnit] = useState(ingredient.unit);
-  /*
-    Not "is this a supply" any more, but "move it" (T-089).
-
-    The box used to be seeded from the row, because the row could be either thing and
-    `UpdateIngredientInput.supply` is required — an unseeded box turned every edited supply back
-    into food on Save. With the catalogue split across two screens that whole hazard is gone: every
-    row reachable from here is food, so the box starts empty and asks the only question left, which
-    is whether this one belongs on the other screen. Ticking it and saving sends `supply: true` and
-    the row leaves this list on the reload.
-
-    Still sent explicitly on every save, ticked or not. The server field is a primitive `boolean`
-    and an absent key deserialises to `false`, so a payload that leaves it off would be *right* here
-    by luck and wrong the moment this component is copied.
-  */
-  const [move, setMove] = useState(false);
-  const [aliases, setAliases] = useState(ingredient.aliases.join(", "));
-  /*
-    Seeded from the row, unlike the move box above, and the difference is what each one asks. "Move
-    to Supplies" asks a question that is fresh every time the row is opened; this one shows a
-    standing fact, so it has to open holding the value the row already has or Save would silently
-    un-prohibit every prohibited ingredient anybody edited.
-
-    Which is also why nothing here compares it against `ingredient.ekadashiProhibited` to decide
-    whether the save "counted" for the import label. That comparison is the server's — see
-    `IngredientService.update`. A client that scored its own save would be handing the server a
-    verdict to trust, and a raw POST could then clear the label off the whole catalogue without
-    changing a value.
-  */
-  const [ekadashiProhibited, setEkadashiProhibited] = useState(ingredient.ekadashiProhibited);
-
-  return (
-    <tr id={rowId(ingredient.id)} className="border-t border-hairline bg-sunken align-top">
-      {/* Name, with Category beneath it — see the note above this component. */}
-      <td className={TD_PRIMARY}>
-        <label className={FIELD}>
-          <span className={FIELD_LABEL}>Name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} className={FIELD_INPUT} />
-        </label>
-        <label className={`${FIELD} mt-2`}>
-          <span className={FIELD_LABEL}>Category</span>
-          <input value={category} onChange={(e) => setCategory(e.target.value)} className={FIELD_INPUT} />
-        </label>
-      </td>
-      {/*
-        Aliases sits second now, next to the two name fields, because an alias IS a name — it is
-        what the shopping list and the vendor call the same thing. It used to sit in the last cell,
-        borrowed from the Ekadashi column while that column held nothing editable; now that Ekadashi
-        has a control of its own, it takes a cell of its own.
-
-        The hint is in the label rather than in a placeholder, so it survives somebody typing.
-      */}
-      <td className={TD_SECOND}>
-        <label className={FIELD}>
-          <span className={FIELD_LABEL}>Aliases (comma-separated)</span>
-          <input value={aliases} onChange={(e) => setAliases(e.target.value)} className={FIELD_INPUT} />
-        </label>
-      </td>
-      <td className={TD_FIXED}>
-        <label className={FIELD}>
-          <span className={FIELD_LABEL}>Unit</span>
-          <select value={unit} onChange={(e) => setUnit(e.target.value)} className={FIELD_INPUT}>
-            {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
-          </select>
-        </label>
-      </td>
-      {/*
-        The two checkboxes, together in the cell under the Ekadashi header. They read as a pair
-        because they are one: both are standing facts about the ingredient rather than edits to its
-        text, and neither prints anything on a row that does not need it.
-      */}
-      <td className={TD_FIXED}>
-        {canSetEkadashi ? (
-          <label className="flex items-center gap-2 text-xs text-ink-secondary">
-            <input
-              type="checkbox"
-              aria-label="Ekadashi-prohibited"
-              checked={ekadashiProhibited}
-              onChange={(e) => setEkadashiProhibited(e.target.checked)}
-              className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
-            />
-            Ekadashi-prohibited
-          </label>
-        ) : ingredient.ekadashiProhibited ? (
-          // Blue, as in the list above: a classification, not a warning (T-227).
-          <span className="rounded-control bg-info-bg px-2 py-1 text-xs text-info font-semibold">Prohibited</span>
-        ) : (
-          <span className="text-xs text-ink-muted">Allowed</span>
-        )}
-        <label className="mt-2 flex items-center gap-2 text-xs text-ink-secondary">
-          <input
-            type="checkbox"
-            aria-label="Move to Supplies"
-            checked={move}
-            onChange={(e) => setMove(e.target.checked)}
-            className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
-          />
-          Move to Supplies
-        </label>
-      </td>
-      <td className={TD_ACTIONS_FIXED}>
-        <div className={ACTIONS_ROW}>
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              onSave({
-                name,
-                category,
-                unit,
-                supply: move,
-                /*
-                  Spread rather than `ekadashiProhibited: canSetEkadashi ? x : undefined`, which
-                  reads the same and is not: that form still CREATES the key, holding `undefined`.
-                  `JSON.stringify` happens to drop such a key, so the wire would look right — and
-                  every test that inspected the payload object would see a field this person was
-                  never offered. The key is absent or it is a value; there is no third state.
-                */
-                ...(canSetEkadashi ? { ekadashiProhibited } : {}),
-                aliases: splitAliases(aliases),
-              })
-            }
-          >
-            Save
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
-        </div>
-      </td>
-    </tr>
   );
 }

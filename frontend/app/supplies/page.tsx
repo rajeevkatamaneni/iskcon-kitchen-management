@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
@@ -8,12 +9,11 @@ import { RequireRole } from "@/components/RequireRole";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { EmptyState } from "@/components/ds/EmptyState";
 import { InlineNotice } from "@/components/ds/InlineNotice";
-import { splitAliases } from "@/components/IngredientForm";
-import { api, toApiError, type ApiError, type IngredientView } from "@/lib/api";
+import { api, toApiError, type ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
-import { FOOD_UNITS, unitLabel } from "@/lib/format";
+import { unitLabel } from "@/lib/format";
 import { RULED_TABLE, THEAD, TR, ACTIONS_ROW, TH_PRIMARY, TD_PRIMARY, TH_SECOND, TD_SECOND, TH_FIXED, TD_FIXED, TH_ACTIONS_FIXED, TD_ACTIONS_FIXED } from "@/components/ds/table";
 import { Button } from "@/components/ds/Button";
 
@@ -48,6 +48,19 @@ import { Button } from "@/components/ds/Button";
  * <p>Simpler than `/ingredients` by two things, both on purpose. There is no Ekadashi column: a
  * fasting rule has nothing to say about hand soap. And there is no "added by an import" filter: an
  * import creates the ingredients a recipe names, and a recipe never names a broom.
+ *
+ * <p><strong>Changing one starts at its name (T-441).</strong> Rajeev, 2026-09-20: "Supplies needs
+ * the same treatment… We have the same setup in several pages. I want it all to be the same." So the
+ * editing row that used to open in place is gone, the name opens the supply's own page — the same
+ * `/ingredients/[id]` an ingredient opens, since D-1 keeps them in one table — and Edit is there,
+ * leading to a form with Save and Cancel. The pack sizes, price, vendors and Link a vendor he asked
+ * for on that page are the ones an ingredient already had; nothing had to be built twice.
+ *
+ * <p>The "Move to Ingredients" box went with the row, and not merely by omission. Asked about its
+ * mirror on Ingredients, Rajeev said: "Not needed. they can delete and recreate as a supply." The
+ * argument reads the same in this direction, so a mis-catalogued row is now deleted and re-added
+ * rather than flipped. The flag itself is untouched and still load-bearing — this screen IS the
+ * `supply` half of `GET /ingredients`.
  */
 export default function SuppliesPage() {
   return (
@@ -67,7 +80,6 @@ function SuppliesView() {
 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiError | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
 
   // Adding happens on /supplies/new and ends back here, so the confirmation travels in the URL.
   // Captured behind a ref because setting it re-renders, and a router object that is new on each
@@ -169,45 +181,50 @@ function SuppliesView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {supplies.map((item) =>
-                    editing === item.id ? (
-                      <EditRow
-                        key={item.id}
-                        supply={item}
-                        busy={busy}
-                        onCancel={() => setEditing(null)}
-                        onSave={async (input) => {
-                          const ok = await run((t) => api.updateIngredient(item.id, input, t), "We couldn’t save that.");
-                          if (ok) setEditing(null);
-                        }}
-                      />
-                    ) : (
-                      <tr key={item.id} className={TR}>
-                        <td className={TD_PRIMARY}>{item.name}</td>
-                        <td className={`${TD_SECOND} text-ink-secondary`}>{item.category}</td>
-                        <td className={`${TD_SECOND} text-ink-secondary`}>
-                          {item.aliases.length > 0 ? (
-                            item.aliases.join(", ")
-                          ) : (
-                            <span className="text-ink-muted">—</span>
-                          )}
-                        </td>
-                        <td className={`${TD_FIXED} text-ink-secondary`}>{unitLabel(item.unit)}</td>
-                        <td className={TD_ACTIONS_FIXED}>
-                          <div className={ACTIONS_ROW}>
-                            <Button variant="ghost" size="sm" onClick={() => setEditing(item.id)}>Edit</Button>
-                            {/*
-                              The same endpoint and the same refusal food gets. A supply that is on
-                              a purchase order or in the store cannot be deleted, and the message
-                              says so in the words of the thing being deleted rather than calling
-                              a mop an ingredient.
-                            */}
-                            <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.deleteIngredient(item.id, t), "That supply is in use, or couldn’t be removed.")}>Delete</Button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  )}
+                  {supplies.map((item) => (
+                    <tr key={item.id} className={TR}>
+                      {/*
+                        The name opens the supply's own page, exactly as an ingredient's does
+                        (T-441). Rajeev, 2026-09-20: "Supplies needs the same treatment… We have the
+                        same setup in several pages. I want it all to be the same." That page is
+                        `/ingredients/[id]` for both halves of the catalogue — D-1 keeps a supply as
+                        an `ingredients` row, so there is one page, and it already knew to send its
+                        back link and its sidebar here for a supply. Its pack sizes, price, vendors
+                        and Link a vendor are the ones he asked for, and they are the same controls
+                        an ingredient gets because they are the same rows underneath.
+                      */}
+                      <td className={TD_PRIMARY}>
+                        <Link href={`/ingredients/${item.id}`} className="text-accent-text hover:underline">
+                          {item.name}
+                        </Link>
+                      </td>
+                      <td className={`${TD_SECOND} text-ink-secondary`}>{item.category}</td>
+                      <td className={`${TD_SECOND} text-ink-secondary`}>
+                        {item.aliases.length > 0 ? (
+                          item.aliases.join(", ")
+                        ) : (
+                          <span className="text-ink-muted">—</span>
+                        )}
+                      </td>
+                      <td className={`${TD_FIXED} text-ink-secondary`}>{unitLabel(item.unit)}</td>
+                      {/*
+                        Delete alone, as on Ingredients (T-441): changing a supply starts at its
+                        name now. Removing one is not a change to the thing but a removal of it, and
+                        it is the one act a person does while scanning the list.
+                      */}
+                      <td className={TD_ACTIONS_FIXED}>
+                        <div className={ACTIONS_ROW}>
+                          {/*
+                            The same endpoint and the same refusal food gets. A supply that is on a
+                            purchase order or in the store cannot be deleted, and the message says so
+                            in the words of the thing being deleted rather than calling a mop an
+                            ingredient.
+                          */}
+                          <Button variant="danger" size="sm" disabled={busy} onClick={() => run((t) => api.deleteIngredient(item.id, t), "That supply is in use, or couldn’t be removed.")}>Delete</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -215,69 +232,5 @@ function SuppliesView() {
         </div>
       </main>
     </div>
-  );
-}
-
-function EditRow({
-  supply,
-  busy,
-  onSave,
-  onCancel,
-}: {
-  supply: IngredientView;
-  busy: boolean;
-  onSave: (input: {
-    name: string;
-    category: string;
-    unit: string;
-    supply: boolean;
-    aliases: string[];
-  }) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(supply.name);
-  const [category, setCategory] = useState(supply.category);
-  const [unit, setUnit] = useState(supply.unit);
-  /*
-    The mirror of the box on /ingredients, and unticked here means "leave it where it is" exactly as
-    it does there (T-089). A temple that catalogued its rice as a supply fixes it by ticking this
-    and saving, and the row moves to Ingredients on the reload.
-
-    Which is why the payload below sends `supply: !move` rather than a stored value: the flag is
-    required on the update body and the server field is a primitive, so every save has to state it,
-    and on this screen the true statement is "still a supply unless the box says otherwise".
-  */
-  const [move, setMove] = useState(false);
-  const [aliases, setAliases] = useState(supply.aliases.join(", "));
-
-  return (
-    <tr className="border-t border-hairline bg-sunken align-top">
-      <td className={TD_PRIMARY}><input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
-      <td className={TD_SECOND}><input aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="min-h-touch w-full rounded-control border border-hairline px-2" /></td>
-      <td className={TD_SECOND}>
-        <input aria-label="Aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases" className="min-h-touch w-full rounded-control border border-hairline px-2" />
-        <label className="mt-2 flex items-center gap-2 text-xs text-ink-secondary">
-          <input
-            type="checkbox"
-            aria-label="Move to Ingredients"
-            checked={move}
-            onChange={(e) => setMove(e.target.checked)}
-            className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
-          />
-          Move to Ingredients
-        </label>
-      </td>
-      <td className={TD_FIXED}>
-        <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value)} className="min-h-touch rounded-control border border-hairline px-2">
-          {FOOD_UNITS.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
-        </select>
-      </td>
-      <td className={TD_ACTIONS_FIXED}>
-        <div className={ACTIONS_ROW}>
-          <Button size="sm" disabled={busy} onClick={() => onSave({ name, category, unit, supply: !move, aliases: splitAliases(aliases) })}>Save</Button>
-          <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
-        </div>
-      </td>
-    </tr>
   );
 }

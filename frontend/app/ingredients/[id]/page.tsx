@@ -8,6 +8,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { Loading } from "@/components/Loading";
 import { Badge } from "@/components/ds/Badge";
+import { ButtonLink } from "@/components/ds/ButtonLink";
 import { PageHeader } from "@/components/ds/PageHeader";
 import { IngredientFacts } from "@/components/ingredient/IngredientFacts";
 import { IngredientVendors } from "@/components/ingredient/IngredientVendors";
@@ -117,6 +118,26 @@ function IngredientDetailView() {
                 // label (`ADDED_BY_IMPORT` on /ingredients, Rajeev's wording of 2026-09-10), neutral as
                 // it is there.
                 subtitle={ingredient.libraryDerived ? <Badge>Added by a Recipe Import</Badge> : undefined}
+                /*
+                  Edit, top right, and it is the only way to change the name, category, unit, aliases
+                  or Ekadashi flag now (T-441). Rajeev, 2026-09-20: the name on the list opens the
+                  thing in view mode, "then they see the edit button, Click on that and it goes to the
+                  edit screen wchi shows save and cancel". The same three screens as Staff.
+
+                  Secondary, as Staff's is: this page is the destination, and the button is the way on
+                  from it rather than the thing it was opened for.
+
+                  No permission test around it. `GET /ingredients/{id}` and `PUT /ingredients/{id}`
+                  both declare MANAGE_RECIPES, and this page is gated on exactly that — so everyone
+                  who can read this page can press it. The pack sizes, market rate and vendors keep
+                  their own controls in the cards below: each is a separate endpoint with a separate
+                  permission, and none of them is undone by the Cancel on the edit screen.
+                */
+                actions={
+                  <ButtonLink href={`/ingredients/${ingredient.id}/edit`} variant="secondary">
+                    Edit
+                  </ButtonLink>
+                }
               />
 
               <IngredientFacts

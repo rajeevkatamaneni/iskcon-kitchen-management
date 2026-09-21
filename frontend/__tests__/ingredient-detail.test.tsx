@@ -228,6 +228,59 @@ describe("the page", () => {
     expect(within(facts).queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
+  /*
+    T-441 — the way on from reading to changing.
+
+    Rajeev, 2026-09-20: the name on the list opens the thing in view mode, "then they see the edit
+    button, Click on that and it goes to the edit screen wchi shows save and cancel". So the button
+    is here, it is the only one of its kind on the page, and it goes to the screen that holds the
+    four fields the list's editing row used to hold.
+  */
+  it("offers Edit, top right, going to the ingredient's edit screen", async () => {
+    await renderPage();
+    const edit = screen.getByRole("link", { name: "Edit" });
+    expect(edit.getAttribute("href")).toBe("/ingredients/rice/edit");
+    // In the header beside the title, not loose in a card below it.
+    expect(edit.closest("header")).not.toBeNull();
+  });
+
+  it("offers it to a Kitchen Manager too, because the read and the write declare one permission", async () => {
+    setRole("KITCHEN_MANAGER");
+    await renderPage();
+    expect(screen.getByRole("link", { name: "Edit" }).getAttribute("href")).toBe("/ingredients/rice/edit");
+  });
+
+  /*
+    The same page is a supply's page (D-1 keeps them in one table), and since T-441 it is reached by
+    the name on /supplies. Two things have to be true of it there, and neither is about the `supply`
+    flag being printed — it is not: the words have to say supply rather than ingredient, and the
+    fasting rule has to be absent, exactly as the box for it is absent on /supplies/new.
+  */
+  it("heads a supply's facts as a supply, and asks no Ekadashi question of it", async () => {
+    mocks.getIngredient.mockResolvedValue(
+      rice({ id: "lpg", name: "LPG cylinder", supply: true, ekadashiProhibited: false, libraryDerived: false })
+    );
+    render(<IngredientDetailPage />);
+    await screen.findByRole("heading", { level: 1, name: "LPG cylinder" });
+    const facts = section("About this supply");
+    expect(within(facts).queryByText("Ekadashi")).not.toBeInTheDocument();
+    expect(within(facts).queryByText("Allowed")).not.toBeInTheDocument();
+    // And still no printing of the flag itself (Rajeev, 2026-09-10).
+    expect(screen.queryByText(/^(Supply|Food)$/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the pack sizes, the price and the vendors on a supply's page", async () => {
+    mocks.getIngredient.mockResolvedValue(rice({ id: "lpg", name: "LPG cylinder", supply: true }));
+    render(<IngredientDetailPage />);
+    await screen.findByRole("heading", { level: 1, name: "LPG cylinder" });
+    // Rajeev asked for these by name: "For the Supplies detail page, we need the same stuff as
+    // ingridents. Pack sizes, Price, Vendors, Link a vendor."
+    expect(section("Pack sizes")).toBeInTheDocument();
+    expect(section("Price")).toBeInTheDocument();
+    expect(section("Vendors")).toBeInTheDocument();
+    expect(within(section("Vendors")).getByRole("heading", { name: "Link a vendor" })).toBeInTheDocument();
+  });
+
   it("draws no price history: the chart is after UAT", async () => {
     await renderPage();
     expect(screen.queryByText(/price history/i)).not.toBeInTheDocument();

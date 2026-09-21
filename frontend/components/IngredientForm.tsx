@@ -4,7 +4,7 @@ import { ErrorNotice } from "@/components/ErrorNotice";
 import { Form } from "@/components/ds/Form";
 import { NOT_BOUGHT_LABEL } from "@/components/ingredient/IngredientFacts";
 import { FOOD_UNITS, unitLabel } from "@/lib/format";
-import type { ApiError, CreateIngredientInput } from "@/lib/api";
+import type { ApiError, CreateIngredientInput, IngredientView } from "@/lib/api";
 
 const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 
@@ -24,6 +24,7 @@ const FIELD = "min-h-touch rounded-control border border-hairline px-3";
 export function IngredientForm({
   formId,
   kind = "FOOD",
+  ingredient,
   isAdmin = false,
   canMarkNotBought = false,
   busy,
@@ -32,6 +33,21 @@ export function IngredientForm({
 }: {
   /** The id the screen's own commit button points at with `form={formId}`. */
   formId: string;
+  /**
+   * The row being changed, on `/ingredients/[id]/edit`; absent when something is being added (T-441).
+   *
+   * <p>One form for adding and for changing, and the reason is Rajeev's instruction of 2026-09-20 —
+   * the editing row on the list is gone, "the same pattern should be applied" everywhere, and the
+   * fields the row used to offer (aliases, unit, the Ekadashi flag, category) have to be somewhere.
+   * Two forms would have been two sets of labels asking the same four questions, and they would have
+   * drifted the first time one was reworded.
+   *
+   * <p>Defaults rather than controlled values, which is what lets one component do both: every box
+   * here is uncontrolled and read out of the `FormData` on submit, so seeding it is a `defaultValue`
+   * and nothing else about the component changes. The screen above still owns the call, the error and
+   * where Save goes.
+   */
+  ingredient?: IngredientView;
   /**
    * Which half of the catalogue this form is adding to (T-089).
    *
@@ -96,13 +112,25 @@ export function IngredientForm({
       <Form
         id={formId}
         className="grid grid-cols-2 gap-4"
-        aria-label={supply ? "Add a supply" : "Add an ingredient"}
+        /*
+          Named for what pressing the button will do, which is the one thing that differs between
+          the two uses of this form. Tests and screen readers both reach it by this name.
+        */
+        aria-label={
+          ingredient
+            ? supply
+              ? "Edit supply"
+              : "Edit ingredient"
+            : supply
+              ? "Add a supply"
+              : "Add an ingredient"
+        }
         aria-busy={busy}
         onSubmit={submit}
       >
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Name</span>
-          <input name="name" required className={FIELD} />
+          <input name="name" required defaultValue={ingredient?.name} className={FIELD} />
         </label>
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
@@ -116,6 +144,7 @@ export function IngredientForm({
           <input
             name="category"
             required
+            defaultValue={ingredient?.category}
             placeholder={supply ? "Fuel, Cleaning, Disposables…" : "Grains, Pulses, Spices…"}
             className={FIELD}
           />
@@ -123,7 +152,7 @@ export function IngredientForm({
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Unit</span>
-          <select name="unit" className={FIELD}>
+          <select name="unit" defaultValue={ingredient?.unit} className={FIELD}>
             {FOOD_UNITS.map((u) => (
               <option key={u} value={u}>
                 {unitLabel(u)}
@@ -134,7 +163,14 @@ export function IngredientForm({
 
         <label className="flex flex-col gap-1 text-sm text-ink-secondary">
           <span className="pl-field-inset font-medium text-ink">Aliases (comma-separated)</span>
-          <input name="aliases" placeholder="Arhar Dal" className={FIELD} />
+          {/* The stored list back as the comma-separated line it was typed as. `splitAliases` below
+              is the exact inverse, so opening this form and saving it unchanged is a no-op. */}
+          <input
+            name="aliases"
+            defaultValue={ingredient?.aliases.join(", ")}
+            placeholder="Arhar Dal"
+            className={FIELD}
+          />
         </label>
 
         {/*
@@ -161,7 +197,10 @@ export function IngredientForm({
           sweeping and a stool is not, so the broom is here and the stool is under Equipment,
           however cheap and however breakable it is.
         */}
-        {supply && (
+        {/* Only while something is being added. On a supply that was catalogued months ago the rule
+            has already been applied, and repeating it over an edit reads as a challenge to a
+            decision somebody already made. */}
+        {supply && !ingredient && (
           <p className="col-span-2 text-sm text-ink-secondary">
             Anything the temple uses up that is not food. Things it keeps and re-uses — stools,
             ladders, extension boxes — belong under Equipment.
@@ -175,7 +214,15 @@ export function IngredientForm({
         */}
         {!supply && isAdmin && (
           <label className="col-span-2 flex items-center gap-2 text-sm">
-            <input name="ekadashiProhibited" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong accent-accent" />
+            {/* Seeded from the row when one is being changed, or Save would quietly un-prohibit
+                every prohibited ingredient anybody opened. The list's editing row had the same
+                hazard and solved it the same way. */}
+            <input
+              name="ekadashiProhibited"
+              type="checkbox"
+              defaultChecked={ingredient?.ekadashiProhibited}
+              className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
+            />
             <span>Ekadashi-prohibited (rice, wheat, dal, chickpeas…)</span>
           </label>
         )}
@@ -193,7 +240,15 @@ export function IngredientForm({
         */}
         {!supply && canMarkNotBought && (
           <label className="col-span-2 flex items-center gap-2 text-sm">
-            <input name="notBought" type="checkbox" className="h-5 w-5 rounded-sm border-hairline-strong accent-accent" />
+            {/* Seeded for the same reason the box above it is, although the edit screen does not
+                offer this one: `UpdateIngredientInput` has no `notBought` key at all, and the flag
+                is set on the ingredient's own page through a route of its own that is audited. */}
+            <input
+              name="notBought"
+              type="checkbox"
+              defaultChecked={ingredient?.notBought}
+              className="h-5 w-5 rounded-sm border-hairline-strong accent-accent"
+            />
             <span>{NOT_BOUGHT_LABEL}</span>
           </label>
         )}
