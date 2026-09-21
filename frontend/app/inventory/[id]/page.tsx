@@ -197,7 +197,7 @@ function ItemView() {
       <Sidebar activeHref="/inventory" />
       <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <Link href="/inventory" className="text-sm text-accent-text hover:underline">← Inventory</Link>
+          <Link href="/inventory" className="text-sm link">← Inventory</Link>
 
           {loading ? (
             <Loading />
@@ -481,7 +481,7 @@ function ItemView() {
                                   day can hold two events, and the meal is what claims the stock. */}
                               <Link
                                 href={`/planner/meal/${c.mealId}`}
-                                className="text-accent-text hover:underline"
+                                className="link"
                               >
                                 {dateWithYear(c.planDate)}
                               </Link>

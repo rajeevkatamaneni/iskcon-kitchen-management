@@ -379,6 +379,39 @@ input:disabled      { background: var(--sunken); color: var(--ink-muted); }
 input[aria-invalid="true"],
 select[aria-invalid="true"],
 textarea[aria-invalid="true"] { border-color: rgb(var(--kms-danger) / 1); }
+/* ---------------------------------------------------------------------------
+   A link in running text or a table — DESIGN_SYSTEM v1.16, Rajeev 2026-09-21.
+
+   Body ink with an underline at rest, rather than a colour with the underline
+   arriving on hover. The colour it used to rely on is `--accent-text`, and how
+   far that stands out from the body text is the temple's choice, not ours: in
+   the fifteen packs it ranges from 4.2x more colourful than the surrounding ink
+   to 1.9x, and at 1.9x — Graphite, whose own description is "flat neutral greys
+   throughout" — a link and a sentence are the same grey. Luminance contrast
+   hides this, because every pack scores between 2.07 and 2.44 against body text;
+   the measure that separates them is OKLCH chroma.
+
+   So the resting signal stops being colour. An underline survives any palette,
+   which means a pack can be added without anyone checking its links one at a
+   time. Colour moves to hover, where `--accent-text` still does useful work and
+   a pack that makes it faint costs nobody the ability to see the link at all.
+
+   Not `a { }` on the element: buttons, cards, sidebar rows and tiles are anchors
+   too, and underlining all of them would be wallpaper. This is the class the
+   46 text links carry.
+   --------------------------------------------------------------------------- */
+.link {
+  color: var(--ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color theme(transitionDuration.state) theme(transitionTimingFunction.out);
+}
+@media (hover: hover) {
+  .link:hover {
+    color: var(--accent-text);
+  }
+}
 }
 
 @layer base {

@@ -341,7 +341,7 @@ function IngredientsView() {
                           rate, vendors and — since T-441 — its Edit button all live there. The name
                           and not a button, so the link reads as the thing it opens; and since T-441
                           it is the only way in, which is what Rajeev asked for on 2026-09-20. */}
-                        <Link href={`/ingredients/${ing.id}`} className="text-accent-text hover:underline">
+                        <Link href={`/ingredients/${ing.id}`} className="link">
                           {ing.name}
                         </Link>
                         {/*

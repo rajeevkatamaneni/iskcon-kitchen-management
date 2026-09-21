@@ -339,7 +339,7 @@ function MealDate({ meal }: { meal: MealOfShift }) {
       <span className="pl-field-inset text-ink-muted">
         <i aria-hidden="true" className="ti ti-lock" /> For {meal.name}. The date and the meal cannot be
         changed here.{" "}
-        <Link href={`/planner/meal/${meal.mealId}`} className="text-accent-text underline">
+        <Link href={`/planner/meal/${meal.mealId}`} className="link">
           Open this meal
         </Link>
       </span>

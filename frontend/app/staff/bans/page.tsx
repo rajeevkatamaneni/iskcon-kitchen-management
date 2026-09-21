@@ -78,7 +78,7 @@ function BansView() {
                         it came out of. */}
                     <Link
                       href={`/staff/${ban.staffProfileId}`}
-                      className="font-medium hover:text-accent-text hover:underline"
+                      className="font-medium hover:link"
                     >
                       {ban.personName}
                     </Link>

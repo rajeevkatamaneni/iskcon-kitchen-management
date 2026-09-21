@@ -101,7 +101,7 @@ export function TemplePicker({
               setQuery("");
               setResults([]);
             }}
-            className="text-sm text-accent-text hover:underline"
+            className="text-sm link"
           >
             Change
           </button>
@@ -133,7 +133,7 @@ export function TemplePicker({
           type="button"
           onClick={useMyLocation}
           disabled={locating}
-          className="justify-self-start text-sm text-accent-text hover:underline disabled:text-ink-muted"
+          className="justify-self-start text-sm link disabled:text-ink-muted"
         >
           {locating ? "Finding temples near you…" : "Use my location to find temples near me"}
         </button>

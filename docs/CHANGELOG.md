@@ -4861,6 +4861,43 @@ permissions refused further edits to a locked file, and is completed by this ent
 
 ---
 
+## DESIGN_SYSTEM v1.16 — 2026-09-21
+
+**A text link is body ink with an underline; colour moves to hover** (§4). Rajeev chose it on
+2026-09-21 from four treatments shown to him on a canvas he could switch theme packs on
+(`https://claude.ai/artifact/P8SFh44c2rXRa5yPxpJ1r7`): *"Ok, Let us go with your recommendation
+Option D."*
+
+**What prompted it.** The handover reported a staff name link at `rgb(81,86,92)` against body ink
+`rgb(35,37,40)`. Two things about that were wrong and both changed the answer. `rgb(81,86,92)` is
+**Graphite's** `--accent-text`, and staging's temple is set to `slate-morning` (read back from the
+API), so the reading was taken under a different pack. And **luminance contrast is the wrong
+measure**: all fifteen packs score between 2.07 and 2.44 for link-against-body-text, so by that
+number they look equally poor, yet Kumkum at 2.09 is bright red on near-black and unmistakable.
+
+**The measure that works is OKLCH chroma** — how colourful the link is next to the body text
+around it. Fourteen packs run 4.2x to 11.1x. **Graphite is 1.9x** (link chroma 0.0117, ink 0.0063):
+link and sentence are the same grey, separated only by lightness. Its own description explains it
+— *"Flat neutral greys throughout, with colour reserved for status and progress"* — it took the
+grey rule into the link colour.
+
+**Why the whole rule changed rather than the one pack.** Colour-as-signal means every pack has to be
+audited one at a time, and a temple that picks a bad one gets an invisible link with nobody
+noticing. An underline survives any palette. The cost was stated before he chose: tables carry more
+rule than they did.
+
+**The build.** One class, `.link` in `globals.css`, inside `@layer components` so a utility can still
+override it — which is what keeps a banned former employee's name in the danger ink. 49 text links
+across 33 files now carry it. `--accent-text` appeared 72 times; the 24 that are not links keep it
+(badges, chips, the sidebar eyebrow, avatar initials, active nav rows). Verified in a browser
+against the compiled stylesheet: in all fifteen packs the link's computed colour equals its pack's
+body ink exactly, with a 1px underline at 3px offset.
+
+**Nothing else in the file changed** — the status line and §4 only. Snapshot in
+`docs/versions/DESIGN_SYSTEM_v1.16.md`.
+
+---
+
 ## Versioning convention
 
 - Version bumps to a **locked** document require the user's explicit approval, per the Ten Commandments (never silently edit an approved decision).

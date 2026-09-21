@@ -281,7 +281,7 @@ function ItemRow({ item: i }: { item: StockItemView }) {
     <tr className={TR}>
       <td className={TD_PRIMARY}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Link href={`/inventory/${i.itemId}`} className="font-medium text-accent-text hover:underline">
+          <Link href={`/inventory/${i.itemId}`} className="font-medium link">
             {i.ingredientName}
           </Link>
           {i.belowThreshold && (

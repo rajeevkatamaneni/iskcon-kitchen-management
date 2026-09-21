@@ -246,7 +246,7 @@ function NextStep({ role }: { role: string | undefined }) {
     return (
       <>
         The roster is set on the{" "}
-        <Link href="/staff-schedule" className="text-accent-text hover:underline">
+        <Link href="/staff-schedule" className="link">
           staff schedule
         </Link>
         .

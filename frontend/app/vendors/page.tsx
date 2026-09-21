@@ -115,7 +115,7 @@ function VendorsView() {
                   {vendors.map((v) => (
                     <tr key={v.id} className={TR}>
                       <td className={TD_PRIMARY}>
-                        <Link href={`/vendors/${v.id}`} className="font-medium text-accent-text hover:underline">
+                        <Link href={`/vendors/${v.id}`} className="font-medium link">
                           {v.name}
                         </Link>
                         {v.contactPerson && <span className="ml-2 text-xs text-ink-muted">{v.contactPerson}</span>}

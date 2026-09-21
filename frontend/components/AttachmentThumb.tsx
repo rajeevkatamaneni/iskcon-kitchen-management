@@ -279,7 +279,7 @@ function AttachmentView({
     body = (
       <div className="grid gap-3 rounded-control border border-hairline bg-sunken px-4 py-4">
         <p className="text-ink">This photo can’t be shown in the browser.</p>
-        <a href={url} download={name} className="justify-self-start text-accent-text hover:underline">
+        <a href={url} download={name} className="justify-self-start link">
           Save {name}
         </a>
       </div>

@@ -189,7 +189,7 @@ function IngredientRequestsView() {
                       <td className={TD_LEAD}>
                         <Link
                           href={`/ingredient-requests/${row.id}`}
-                          className="font-mono font-medium hover:text-accent-text hover:underline"
+                          className="font-mono font-medium hover:link"
                         >
                           {row.reference}
                         </Link>

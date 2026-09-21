@@ -267,7 +267,7 @@ function EquipmentList() {
                             says what the thing is. */}
                         <Link
                           href={`/equipment/${i.id}`}
-                          className="font-medium text-accent-text hover:underline"
+                          className="font-medium link"
                         >
                           {i.name}
                         </Link>

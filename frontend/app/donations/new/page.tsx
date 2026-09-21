@@ -292,7 +292,7 @@ function NewDonationView() {
               type="button"
               onClick={addIngredientLine}
               disabled={hasCash}
-              className="min-h-touch text-sm text-accent-text hover:underline disabled:opacity-60 disabled:no-underline"
+              className="min-h-touch text-sm link disabled:opacity-60 disabled:no-underline"
             >
               Add a food item
             </button>
@@ -383,7 +383,7 @@ function NewDonationView() {
               type="button"
               onClick={addEquipmentLine}
               disabled={hasCash}
-              className="min-h-touch text-sm text-accent-text hover:underline disabled:opacity-60 disabled:no-underline"
+              className="min-h-touch text-sm link disabled:opacity-60 disabled:no-underline"
             >
               Add a piece of equipment
             </button>

@@ -272,7 +272,7 @@ function StaffScheduleView() {
                     {rows.map((r) => (
                       <tr key={r.staffProfileId} className={TR}>
                         <td className={`${TD_TEXT} ${WRAP}`}>
-                          <Link href={`/staff-schedule/${r.staffProfileId}`} className="font-medium text-accent-text hover:underline">{r.fullName}</Link>
+                          <Link href={`/staff-schedule/${r.staffProfileId}`} className="font-medium link">{r.fullName}</Link>
                           {r.jobTitleLabel && <div className="text-xs text-ink-muted">{r.jobTitleLabel}</div>}
                         </td>
                         {r.days.map((d) => (
@@ -394,7 +394,7 @@ function StackedWeek({
                           card wider than the phone (measured: 378px of card in a 358px box with
                           `break-words`, at 390). */}
                       <span className="min-w-0 [overflow-wrap:anywhere]">
-                        <Link href={`/staff-schedule/${r.staffProfileId}`} className="font-medium text-accent-text hover:underline">{r.fullName}</Link>
+                        <Link href={`/staff-schedule/${r.staffProfileId}`} className="font-medium link">{r.fullName}</Link>
                         {r.jobTitleLabel && <span className="block text-xs text-ink-muted">{r.jobTitleLabel}</span>}
                       </span>
                       <span className="w-32 shrink-0">

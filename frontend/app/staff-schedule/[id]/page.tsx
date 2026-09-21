@@ -84,7 +84,7 @@ function StaffProfileView() {
       <Sidebar activeHref="/staff-schedule" />
       <main className="min-w-0 flex-1 px-8 py-10">
         <div className="mx-auto max-w-content">
-          <Link href="/staff-schedule" className="text-sm text-accent-text hover:underline">← All staff</Link>
+          <Link href="/staff-schedule" className="text-sm link">← All staff</Link>
 
           {loading ? (
             <Loading />
@@ -107,7 +107,7 @@ function StaffProfileView() {
                 <h2 className="text-lg">Weekly template</h2>
                 <p className="mt-1 max-w-prose text-sm text-ink-secondary">
                   To change a single date, open the{" "}
-                  <Link href="/staff-schedule" className="text-accent-text hover:underline">week grid</Link>{" "}
+                  <Link href="/staff-schedule" className="link">week grid</Link>{" "}
                   and click that day.
                 </p>
                 <Form className="mt-4 space-y-2" aria-label="Weekly template" onSubmit={saveTemplate}>

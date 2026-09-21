@@ -140,7 +140,7 @@ export function IngredientVendors({
               ) : (
                 <tr key={s.vendorId} className={TR}>
                   <td className={TD_PRIMARY}>
-                    <Link href={`/vendors/${s.vendorId}`} className="text-accent-text hover:underline">
+                    <Link href={`/vendors/${s.vendorId}`} className="link">
                       {s.vendorName}
                     </Link>
                   </td>

@@ -309,7 +309,7 @@ function MyLeave() {
         <button
           type="button"
           onClick={() => setAsking((open) => !open)}
-          className="text-sm text-accent-text hover:underline"
+          className="text-sm link"
         >
           {asking ? "Cancel" : "Ask for time off"}
         </button>

@@ -181,7 +181,7 @@ function SuppliesView() {
                         an ingredient gets because they are the same rows underneath.
                       */}
                       <td className={TD_PRIMARY}>
-                        <Link href={`/ingredients/${item.id}`} className="text-accent-text hover:underline">
+                        <Link href={`/ingredients/${item.id}`} className="link">
                           {item.name}
                         </Link>
                       </td>

@@ -178,7 +178,7 @@ function StaffView() {
                   {banCount > 0 && (
                     <Link
                       href="/staff/bans"
-                      className="mt-3 inline-block text-sm text-accent-text hover:underline"
+                      className="mt-3 inline-block text-sm link"
                     >
                       Records we have raised · {banCount}
                     </Link>
@@ -256,7 +256,7 @@ function StaffTable({
                         the danger ink: which record this is matters more than which link colour. */}
                     <Link
                       href={`/staff/${s.id}`}
-                      className={`font-medium hover:underline ${banned ? "text-danger" : "text-accent-text"}`}
+                      className={`link font-medium ${banned ? "text-danger" : ""}`}
                     >
                       {s.fullName}
                     </Link>

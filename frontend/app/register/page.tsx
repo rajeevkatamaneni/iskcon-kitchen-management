@@ -334,7 +334,7 @@ export default function RegisterPage() {
                     type="button"
                     onClick={() => setShowPassword((shown) => !shown)}
                     aria-pressed={showPassword}
-                    className="absolute inset-y-0 right-0 px-3 text-sm text-accent-text hover:underline"
+                    className="absolute inset-y-0 right-0 px-3 text-sm link"
                   >
                     {showPassword ? "Hide" : "Show"}
                   </button>
@@ -411,7 +411,7 @@ export default function RegisterPage() {
 
       <p className="text-sm text-ink-muted">
         Already registered?{" "}
-        <Link href="/sign-in" className="text-accent-text hover:underline">
+        <Link href="/sign-in" className="link">
           Sign in
         </Link>
       </p>

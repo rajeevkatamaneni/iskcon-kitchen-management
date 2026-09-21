@@ -143,7 +143,7 @@ function TenantsView() {
                       <td className={TD_PRIMARY}>
                         <Link
                           href={`/tenants/${tenant.id}`}
-                          className="font-medium hover:text-accent-text hover:underline"
+                          className="font-medium hover:link"
                         >
                           {tenant.name}
                         </Link>

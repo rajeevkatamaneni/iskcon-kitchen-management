@@ -149,7 +149,7 @@ function VolunteerShiftsView() {
                   {shifts.map((s) => (
                     <tr key={s.id} className={TR}>
                       <td className={TD_PRIMARY}>
-                        <Link href={`/volunteers/${s.id}`} className="font-medium text-accent-text hover:underline">{s.title}</Link>
+                        <Link href={`/volunteers/${s.id}`} className="font-medium link">{s.title}</Link>
                         {s.location && <span className="ml-2 text-xs text-ink-muted">{s.location}</span>}
                         {mealLabel(s) && <span className="block text-sm text-ink-secondary">{mealLabel(s)}</span>}
                       </td>

@@ -189,7 +189,7 @@ export default function SignInPage() {
           only be added by a temple admin, which is not how a devotee arrives. */}
       <p className="mt-8 text-center text-sm text-ink-secondary">
         New here?{" "}
-        <Link href="/register" className="text-accent-text hover:underline">
+        <Link href="/register" className="link">
           Register as a devotee
         </Link>
       </p>

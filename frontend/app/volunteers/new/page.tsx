@@ -67,7 +67,7 @@ function NewShiftView() {
       {error && <ErrorNotice error={error} />}
       <p className="text-sm text-ink-secondary">
         Kitchen help for a meal? Ask from that meal{" "}
-        <Link href="/planner" className="text-accent-text underline">
+        <Link href="/planner" className="link">
           in the planner
         </Link>
         .

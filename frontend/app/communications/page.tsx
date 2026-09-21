@@ -164,7 +164,7 @@ function CommunicationTable({
               {rows.map((c) => (
                 <tr key={c.id} className={TR}>
                   <td className={TD_PRIMARY}>
-                    <Link href={hrefFor(c)} className="font-medium text-accent-text hover:underline">
+                    <Link href={hrefFor(c)} className="font-medium link">
                       {c.subject}
                     </Link>
                     {c.author && <div className="text-xs text-ink-muted">by {c.author}</div>}
@@ -255,7 +255,7 @@ function SentDetail({ communication }: { communication: CommunicationView }) {
             href={`/c/${communication.publicToken}`}
             target="_blank"
             rel="noreferrer"
-            className="text-accent-text hover:underline"
+            className="link"
           >
             /c/{communication.publicToken.slice(0, 8)}…
           </a>{" "}

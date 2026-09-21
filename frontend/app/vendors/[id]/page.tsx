@@ -210,7 +210,7 @@ function VendorDetailView() {
       <Sidebar activeHref="/vendors" />
       <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <Link href="/vendors" className="text-sm text-accent-text hover:underline">← All vendors</Link>
+          <Link href="/vendors" className="text-sm link">← All vendors</Link>
 
           {/* Only the first load replaces the page. A reload after a save keeps it on screen, so a
               long Other ingredients list does not blank out and lose its scroll position. */}

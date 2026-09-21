@@ -707,7 +707,7 @@ function PurchaseOrderDetailView() {
       <Sidebar activeHref="/orders" />
       <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <Link href="/orders" className="text-sm text-accent-text hover:underline">← All purchase orders</Link>
+          <Link href="/orders" className="text-sm link">← All purchase orders</Link>
 
           {loading ? (
             <Loading label="Loading purchase order…" />
@@ -1167,7 +1167,7 @@ function PurchaseOrderDetailView() {
                     {canRecordDelivery && (
                       <Link
                         href={`/deliveries?order=${encodeURIComponent(po.id)}`}
-                        className="inline-flex min-h-touch items-center rounded-control text-sm text-accent-text hover:underline"
+                        className="inline-flex min-h-touch items-center rounded-control text-sm link"
                       >
                         Record a delivery on the Deliveries screen →
                       </Link>

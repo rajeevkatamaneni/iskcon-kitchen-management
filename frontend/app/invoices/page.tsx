@@ -265,7 +265,7 @@ function InvoicesView() {
                   {invoices.map((inv) => (
                     <tr key={inv.id} className={TR}>
                       <td className={TD_LEAD}>
-                        <Link href={`/invoices/${inv.id}`} className="font-medium text-accent-text hover:underline">
+                        <Link href={`/invoices/${inv.id}`} className="font-medium link">
                           {inv.invoiceNumber}
                         </Link>
                       </td>

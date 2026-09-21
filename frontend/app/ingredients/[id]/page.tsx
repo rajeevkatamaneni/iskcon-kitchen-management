@@ -102,7 +102,7 @@ function IngredientDetailView() {
       <Sidebar activeHref={ingredient?.supply ? "/supplies" : "/ingredients"} />
       <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <Link href={back.href} className="text-sm text-accent-text hover:underline">{back.label}</Link>
+          <Link href={back.href} className="text-sm link">{back.label}</Link>
 
           {/* Only the first load replaces the page; a reload after a save keeps it on screen. */}
           {loading && !ingredient ? (

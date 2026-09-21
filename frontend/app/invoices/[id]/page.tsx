@@ -162,7 +162,7 @@ function InvoiceDetailView() {
       <Sidebar activeHref="/invoices" />
       <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <Link href="/invoices" className="text-sm text-accent-text hover:underline">← All invoices</Link>
+          <Link href="/invoices" className="text-sm link">← All invoices</Link>
 
           {loading && !invoice ? (
             <Loading label="Loading invoice…" />
@@ -174,7 +174,7 @@ function InvoiceDetailView() {
                 title={invoice.invoiceNumber}
                 subtitle={
                   <span className="flex flex-wrap items-center gap-2">
-                    <Link href={`/vendors/${invoice.vendorId}`} className="text-accent-text hover:underline">
+                    <Link href={`/vendors/${invoice.vendorId}`} className="link">
                       {invoice.vendorName}
                     </Link>
                     {voided ? (
@@ -370,7 +370,7 @@ function Summary({ invoice }: { invoice: VendorInvoiceDetailView }) {
                 <ul className="grid gap-1">
                   {invoice.deliveries.map((d) => (
                     <li key={d.receiptId} className="tabular-nums">
-                      <Link href={`/orders/${d.purchaseOrderId}`} className="text-accent-text hover:underline">
+                      <Link href={`/orders/${d.purchaseOrderId}`} className="link">
                         {d.poNumber}
                       </Link>
                       {` · delivered ${shortDate(d.receivedOn)}`}
@@ -419,7 +419,7 @@ function BillCopy({ invoiceId, bill }: { invoiceId: string; bill: AttachmentView
             type="button"
             // The accessible name is the file's own; the thumbnail beside it says "Open …".
             onClick={() => box.current?.querySelector<HTMLButtonElement>("button[data-attachment-thumb]")?.click()}
-            className="min-h-touch text-left text-accent-text [overflow-wrap:anywhere] hover:underline"
+            className="link min-h-touch text-left [overflow-wrap:anywhere]"
           >
             {name}
           </button>
@@ -1047,7 +1047,7 @@ function against(invoice: VendorInvoiceView) {
     return <span className="text-ink-muted">—</span>;
   }
   return (
-    <Link href={`/orders/${invoice.purchaseOrderId}`} className="text-accent-text hover:underline tabular-nums">
+    <Link href={`/orders/${invoice.purchaseOrderId}`} className="link tabular-nums">
       {invoice.poNumber ?? "Purchase order"}
     </Link>
   );

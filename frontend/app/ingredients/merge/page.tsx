@@ -76,7 +76,7 @@ function MergeView() {
       <Sidebar activeHref="/ingredients" />
       <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <Link href="/ingredients" className="text-sm text-accent-text hover:underline">← Ingredients</Link>
+          <Link href="/ingredients" className="text-sm link">← Ingredients</Link>
           <header className="mb-6 mt-3">
             <h1>Merge duplicate ingredients</h1>
             <p className="mt-1 max-w-prose text-ink-secondary">

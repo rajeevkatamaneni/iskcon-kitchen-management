@@ -131,7 +131,7 @@ function StaffRecordScreen() {
       <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto grid max-w-content gap-6">
           <div>
-            <Link href="/staff" className="text-sm text-accent-text hover:underline">
+            <Link href="/staff" className="text-sm link">
               ← Staff
             </Link>
           </div>

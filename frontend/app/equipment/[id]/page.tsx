@@ -148,7 +148,7 @@ function EquipmentItemView() {
       <Sidebar activeHref="/equipment" />
       <main className="min-w-0 flex-1 px-4 py-10 sm:px-8">
         <div className="mx-auto max-w-content">
-          <Link href="/equipment" className="text-sm text-accent-text hover:underline">
+          <Link href="/equipment" className="text-sm link">
             ← Equipment
           </Link>
 

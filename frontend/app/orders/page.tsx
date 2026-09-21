@@ -146,7 +146,7 @@ function PurchaseOrdersView() {
             <div className="card px-6 py-14 text-center">
               <p className="text-lg">No purchase orders</p>
               <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                Generate orders from the <Link href="/shopping-list" className="text-accent-text hover:underline">shopping list</Link>, or <Link href="/orders/new" className="text-accent-text hover:underline">create a purchase order</Link> by hand.
+                Generate orders from the <Link href="/shopping-list" className="link">shopping list</Link>, or <Link href="/orders/new" className="link">create a purchase order</Link> by hand.
               </p>
             </div>
           ) : (
@@ -180,7 +180,7 @@ function PurchaseOrdersView() {
                   {orders.map((po) => (
                     <tr key={po.id} className={TR}>
                       <td className={TD_LEAD}>
-                        <Link href={`/orders/${po.id}`} className="font-medium text-accent-text hover:underline tabular-nums">
+                        <Link href={`/orders/${po.id}`} className="font-medium link tabular-nums">
                           {po.poNumber}
                         </Link>
                       </td>
