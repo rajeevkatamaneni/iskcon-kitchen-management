@@ -143,7 +143,13 @@ interface AuthState {
   switchTemple: (tenantId: string) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthState>({
+/**
+ * Exported for one reason only: a local playground under `app/dev-<name>` can wrap itself in a
+ * `AuthContext.Provider` and render the real Sidebar with a real menu, without a session and
+ * without a look-alike nav. Nothing in the application supplies this context but {@link AuthProvider}
+ * below, and nothing should. Added 2026-09-21 for `app/dev-type`.
+ */
+export const AuthContext = createContext<AuthState>({
   user: null,
   appUser: null,
   status: "loading",

@@ -415,10 +415,19 @@ textarea[aria-invalid="true"] { border-color: rgb(var(--kms-danger) / 1); }
 }
 
 @layer base {
-  html {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+  /* ---------------------------------------------------------------------------
+     No font-smoothing override — removed 2026-09-21.
+
+     `-webkit-font-smoothing: antialiased` tells macOS to drop subpixel rendering
+     and draw grey-scale instead, which makes every glyph in the application
+     thinner than the browser would draw it. Combined with a 14px body, weight
+     400, and a narrow typeface, that is the "the fonts are not very legible"
+     the demo audience reported. Rajeev, 2026-09-21: "A lot of people complained
+     that the fonts are not very legible across the whole app."
+
+     It is left to the browser now. Nothing in DESIGN_SYSTEM asked for the
+     override — it was never a design decision, only a default somebody copied.
+     --------------------------------------------------------------------------- */
 
   body {
     @apply text-ink font-sans text-base;

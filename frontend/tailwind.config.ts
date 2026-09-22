@@ -111,11 +111,26 @@ const config: Config = {
       // ingredient name on that same screen is Anek Devanagari — matched by design,
       // not coincidence.
       fontFamily: {
+        // Every script the application's 22 scheduled languages need, in one stack. A browser
+        // resolves a missing glyph family by family, left to right, so English lands in Anek Latin,
+        // Kannada in Anek Kannada, Santali in Noto Ol Chiki, and nothing in application code ever
+        // switches fonts. Ten Anek families plus three Noto ones for the scripts Anek does not draw
+        // (2026-09-21) — before that only the first four were here, and the other nine fell through
+        // to `system-ui`.
         sans: [
           "var(--font-anek-latin)",
           "var(--font-anek-devanagari)",
           "var(--font-anek-telugu)",
           "var(--font-anek-tamil)",
+          "var(--font-anek-kannada)",
+          "var(--font-anek-bangla)",
+          "var(--font-anek-gujarati)",
+          "var(--font-anek-malayalam)",
+          "var(--font-anek-odia)",
+          "var(--font-anek-gurmukhi)",
+          "var(--font-noto-ol-chiki)",
+          "var(--font-noto-meetei-mayek)",
+          "var(--font-noto-nastaliq)",
           "system-ui",
           "sans-serif",
         ],

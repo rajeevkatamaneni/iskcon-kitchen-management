@@ -62,6 +62,45 @@
 > been sending every session to look for a defect that was closed a fortnight earlier.*
 
 
+> ## 🖼 A mockup is the real app, not a picture of it — MANDATORY
+>
+> Added 2026-09-21 at Rajeev's instruction, after a session answered a question about type
+> legibility with a hand-drawn artifact canvas — its own markup, its own spacing, its own copy of the
+> colours. His words: *"I HATE the mockup you built, It is not a mockup."*
+>
+> **When he asks to see options, build a throwaway page inside the real application.** Not an
+> artifact, not an image, not an HTML file that imitates the product. `docs/work/mocks/` holds the
+> three that set the standard — `dev-po`, `dev-invoices`, `dev-deliveries` — and every one of them
+> says the same thing in its header: *"built from the app's own parts … so the table fitter and the
+> phone card layout in `globals.css` apply to it exactly as they would on the real screen."*
+>
+> **How one is built:**
+>
+> - It lives at **`frontend/app/dev-<name>/page.tsx`** and he opens it at
+>   **`http://localhost:3000/dev-<name>`**.
+> - It imports **the app's own components** — `Sidebar`, `PageHeader`, `Button`, `Badge`,
+>   `InlineNotice`, `Form`, the `components/ds/table` constants, the field classes. Never a
+>   look-alike, never a copied class string, never a hand-typed hex.
+> - **Nothing shared is changed for it.** No token, no component, no stylesheet. If a mock needs a
+>   change to a shared part, that is the thing to discuss first.
+> - **Sample data in component state.** No API call, no session, nothing saved.
+> - **Several options side by side**, lettered A, B, C, so he chooses *by using them* rather than by
+>   reading about them.
+> - It opens with **`// LOCAL PLAYGROUND — delete before any commit or deploy`** and stays out of
+>   both: `frontend/app/dev-*/` is in `.git/info/exclude`, and `app/dev-*/` is in
+>   `frontend/.gcloudignore` — that `.gcloudignore` line **is** committed, on purpose.
+> - When it has served its purpose it is **retired to `docs/work/mocks/<name>.page.tsx`**, not
+>   deleted, because an approved mock is the specification of what was built.
+>
+> **Why it has to be the real app.** The question is almost always how something looks *in the
+> product* — type, density, spacing, a table at a real width with real names in it. An approximation
+> answers a different question, and a decision taken on it is taken on the wrong evidence. This is
+> the same rule as *Verify, never estimate*, applied to showing rather than measuring.
+>
+> **An artifact is still right for a question that is not a screen** — a table of numbers, a
+> decision with options, a comparison of measurements. It is wrong the moment the answer depends on
+> what the application looks like.
+
 > ## ✅ Verify, never estimate — MANDATORY, for every agent and every check
 >
 > Added 2026-09-18 at Rajeev's instruction, after a layout was reported "even" from an eyeballed
