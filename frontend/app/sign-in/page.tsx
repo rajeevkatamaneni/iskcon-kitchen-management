@@ -76,17 +76,22 @@ export default function SignInPage() {
       <p>Below a wide screen the painting cannot show that empty right-hand column at all, so the
       card centres over a scrim instead of hiding half the image behind itself.
       <p>"Wide" is `xl`, and from there the painting is anchored to its right edge rather than its
-      centre (T-232). It is 16:9 (1672×941) and covers the window, so on anything squarer the sides
-      are cropped. Its words end at x=1041 of 1672 (measured on the file). Cropped evenly, at
+      centre (T-232). It is 16:9 (1671×941) and covers the window, so on anything squarer the sides
+      are cropped. Its words end at x≈1045 of 1671 (measured on the file). Cropped evenly, at
       1280×800 that edge landed at 814px and the card started at 806px, over it. Anchored right,
-      with the card 4vw rather than 7vw from the edge, the card clears it by 101px at 1280×800,
-      162px at 1440×900 and 264px at 1920×1080 (measured in the browser). At 1024×768 anchoring
-      right would crop 418px of the painting's left, so the card centres there as below it.
+      with the card 4vw rather than 7vw from the edge, the card clears it comfortably at every
+      width from 1280 up (re-measured in the browser). At 1024×768 anchoring right would crop the
+      painting's left, so the card centres there as below it.
+      <p>The image was replaced on 2026-09-21. The new one keeps the same composition and very
+      nearly the same frame — 1671×941 against 1672×941, artwork left, the four captions down the
+      middle, empty gold right — so every measurement above still holds. What it no longer carries
+      is the Gita 9.27 band along the foot, so there is nothing at the bottom for the card to stay
+      clear of any more.
     */
     <div className="relative min-h-screen">
       <div
         aria-hidden
-        className="fixed inset-0 bg-[url('/brand/sign-in.jpg')] bg-cover bg-center xl:bg-right"
+        className="fixed inset-0 bg-[url('/brand/sign-in.png')] bg-cover bg-center xl:bg-right"
       />
       {/* Only where the card has to sit over the painting rather than beside it. */}
       <div aria-hidden className="fixed inset-0 bg-ink/40 xl:hidden" />
