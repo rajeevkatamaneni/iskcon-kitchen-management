@@ -87,11 +87,13 @@ export default function SignInPage() {
       middle, empty gold right — so every measurement above still holds. What it no longer carries
       is the Gita 9.27 band along the foot, so there is nothing at the bottom for the card to stay
       clear of any more.
+      <p>It is served as WebP with a JPEG fallback through the `.sign-in-art` class in globals.css,
+      which is where the sizes and the reasoning are written down.
     */
     <div className="relative min-h-screen">
       <div
         aria-hidden
-        className="fixed inset-0 bg-[url('/brand/sign-in.png')] bg-cover bg-center xl:bg-right"
+        className="sign-in-art fixed inset-0 bg-cover bg-center xl:bg-right"
       />
       {/* Only where the card has to sit over the painting rather than beside it. */}
       <div aria-hidden className="fixed inset-0 bg-ink/40 xl:hidden" />

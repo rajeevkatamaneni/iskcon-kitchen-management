@@ -442,6 +442,33 @@ textarea[aria-invalid="true"] { border-color: rgb(var(--kms-danger) / 1); }
     -moz-osx-font-smoothing: auto;
   }
 
+  /* ---------------------------------------------------------------------------
+     The painting behind the sign-in, served as WebP with a JPEG fallback.
+
+     Two declarations, on purpose. A browser that does not understand `image-set`
+     ignores the second and keeps the first, so it always has a picture; one that
+     does understand it picks by `type()` and takes the WebP. No script, no
+     <picture>, and it stays a background rather than becoming an <img>, which is
+     what lets `bg-cover` and the `xl:bg-right` anchoring keep working.
+
+     What it saves, measured at 1671×941 on 2026-09-22: the PNG was 2265 KB, the
+     JPEG is 436 KB and the WebP 197 KB — a ninth of the original, at PSNR 42.0 dB,
+     which is past the point the difference shows. It is the first paint of the
+     first screen anybody sees, so this is the one image on the site where that
+     matters most.
+
+     The lossless master is kept out of `public/` at `docs/brand/sign-in-master.png`
+     so it is never served or shipped in the image; regenerate from it with
+     `cwebp -q 82` and `sips -s format jpeg -s formatOptions 82`.
+     --------------------------------------------------------------------------- */
+  .sign-in-art {
+    background-image: url("/brand/sign-in.jpg");
+    background-image: image-set(
+      url("/brand/sign-in.webp") type("image/webp"),
+      url("/brand/sign-in.jpg") type("image/jpeg")
+    );
+  }
+
   body {
     @apply text-ink font-sans text-base;
     /* Not `bg-canvas`. §8.3: that paints the flat colour and loses the finish — and §6 is
