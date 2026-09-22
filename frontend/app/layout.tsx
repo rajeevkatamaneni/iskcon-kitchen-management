@@ -36,28 +36,24 @@ import "./globals.css";
  */
 const anekLatin = Anek_Latin({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
   variable: "--font-anek-latin",
   display: "swap",
 });
 
 const anekDevanagari = Anek_Devanagari({
   subsets: ["devanagari"],
-  weight: ["400", "500", "600"],
   variable: "--font-anek-devanagari",
   display: "swap",
 });
 
 const anekTelugu = Anek_Telugu({
   subsets: ["telugu"],
-  weight: ["400", "500", "600"],
   variable: "--font-anek-telugu",
   display: "swap",
 });
 
 const anekTamil = Anek_Tamil({
   subsets: ["tamil"],
-  weight: ["400", "500", "600"],
   variable: "--font-anek-tamil",
   display: "swap",
 });
@@ -78,7 +74,6 @@ const anekTamil = Anek_Tamil({
  */
 const anekKannada = Anek_Kannada({
   subsets: ["kannada"],
-  weight: ["400", "500", "600"],
   variable: "--font-anek-kannada",
   display: "swap",
   preload: false,
@@ -86,7 +81,6 @@ const anekKannada = Anek_Kannada({
 
 const anekBangla = Anek_Bangla({
   subsets: ["bengali"],
-  weight: ["400", "500", "600"],
   variable: "--font-anek-bangla",
   display: "swap",
   preload: false,
@@ -94,7 +88,6 @@ const anekBangla = Anek_Bangla({
 
 const anekGujarati = Anek_Gujarati({
   subsets: ["gujarati"],
-  weight: ["400", "500", "600"],
   variable: "--font-anek-gujarati",
   display: "swap",
   preload: false,
@@ -102,7 +95,6 @@ const anekGujarati = Anek_Gujarati({
 
 const anekMalayalam = Anek_Malayalam({
   subsets: ["malayalam"],
-  weight: ["400", "500", "600"],
   variable: "--font-anek-malayalam",
   display: "swap",
   preload: false,
@@ -110,7 +102,6 @@ const anekMalayalam = Anek_Malayalam({
 
 const anekOdia = Anek_Odia({
   subsets: ["oriya"],
-  weight: ["400", "500", "600"],
   variable: "--font-anek-odia",
   display: "swap",
   preload: false,
@@ -118,7 +109,6 @@ const anekOdia = Anek_Odia({
 
 const anekGurmukhi = Anek_Gurmukhi({
   subsets: ["gurmukhi"],
-  weight: ["400", "500", "600"],
   variable: "--font-anek-gurmukhi",
   display: "swap",
   preload: false,

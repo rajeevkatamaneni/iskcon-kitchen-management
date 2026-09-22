@@ -371,12 +371,14 @@ describe("Today offers no door into the planner to a kitchen that does not plan 
     expect(screen.getByText(/meals appear here once they are planned/i)).toBeInTheDocument();
   });
 
-  it("still offers all seven to a kitchen manager whose kitchen does plan here", async () => {
+  it("still offers all six to a kitchen manager whose kitchen does plan here", async () => {
     signedInWithPlanner("KITCHEN_MANAGER", true);
     render(<TodayPage />);
     await screen.findByText(/servings today/i);
 
-    expect(screen.getByRole("link", { name: /open planner/i })).toHaveAttribute("href", "/planner");
+    // Six, not seven: the header's "Open planner" and "Record a delivery" went on 2026-09-21 at
+    // Rajeev's instruction. Every remaining door is still gated on the same flag, which is what
+    // this test is really about — the one above proves a refused kitchen gets none of them.
     expect(screen.getByRole("link", { name: /servings today/i })).toHaveAttribute("href", "/planner");
     expect(screen.getByRole("link", { name: /cost of materials/i })).toHaveAttribute("href", "/planner");
     expect(screen.getByRole("link", { name: /review menu/i })).toHaveAttribute("href", "/planner");
@@ -392,7 +394,9 @@ describe("Today offers no door into the planner to a kitchen that does not plan 
     signedInAs("KITCHEN_MANAGER");
     render(<TodayPage />);
 
-    expect(await screen.findByRole("link", { name: /open planner/i })).toHaveAttribute(
+    // Asserted on a tile rather than the header's old button, which no longer exists. The point is
+    // unchanged: an older session still reaches the planner.
+    expect(await screen.findByRole("link", { name: /servings today/i })).toHaveAttribute(
       "href", "/planner");
   });
 });

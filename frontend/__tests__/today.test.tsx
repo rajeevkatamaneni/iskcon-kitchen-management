@@ -596,8 +596,9 @@ describe("today", () => {
 
     expect(screen.getByText(/nothing planned for today/i)).toBeInTheDocument();
     expect(screen.getByText(/nothing due today/i)).toBeInTheDocument();
-    // The header's and the empty state's: one label for one action.
-    expect(screen.getAllByRole("link", { name: /^open planner$/i }).length).toBeGreaterThan(1);
+    // The empty state's, and only that one now: the header's pair of buttons went on 2026-09-21
+    // at Rajeev's instruction ("remove the two buttons in the top right corner. Not needed").
+    expect(screen.getAllByRole("link", { name: /^open planner$/i })).toHaveLength(1);
 
     // A zero that means "nothing is tracked yet" must not read as "everything is fine".
     expect(screen.getByRole("link", { name: /items below reorder level/i })).toHaveTextContent(

@@ -137,10 +137,23 @@ const config: Config = {
       },
 
       fontSize: {
-        xs: ["0.75rem", { lineHeight: "1rem" }],
-        sm: ["0.875rem", { lineHeight: "1.25rem" }],
-        base: ["1rem", { lineHeight: "1.625rem" }],
+        // The small end moved up with the base on 2026-09-21. The scale used to step 16 / 14 / 12;
+        // raising the body to 18 without these left the first drop twice as big as it had been, and
+        // things you are meant to READ — an InlineNotice, a field hint, a job title under a name —
+        // came out four pixels under the text around them. Rajeev, pointing at the fasting notice on
+        // Today: "the text in some parts is way too small". So the steps are 18 / 16 / 14 again.
+        xs: ["0.875rem", { lineHeight: "1.4" }],
+        sm: ["1rem", { lineHeight: "1.5" }],
+        // 18px on 1.5 leading — Rajeev's choice of 2026-09-21, settled by reading the real screen
+        // in the type playground rather than from a specimen. No tracking: he tried +0.012em and
+        // sent it back to the default. The leading is unitless on purpose so it stays 1.5x if the
+        // size is ever moved again.
+        base: ["1.125rem", { lineHeight: "1.5" }],
         lg: ["1.125rem", { lineHeight: "1.75rem" }],
+        // The left menu, a step above the body so it stands out and reads easily across the day.
+        // Rajeev, 2026-09-21: "I want the left menu to have larger text than the general text size
+        // and stand out so it is easier to read. How about 20PX?"
+        nav: ["1.25rem", { lineHeight: "1.75rem" }],
         xl: ["1.375rem", { lineHeight: "1.875rem" }],
         "2xl": ["1.75rem", { lineHeight: "2.25rem", letterSpacing: "-0.02em" }],
         "3xl": ["2.25rem", { lineHeight: "2.75rem", letterSpacing: "-0.02em" }],

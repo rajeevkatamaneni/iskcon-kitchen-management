@@ -95,16 +95,6 @@ function TodayScreen() {
           <PageHeader
             title={data ? longDay(data.date) : "Today"}
             subtitle={data ? summarise(data) : undefined}
-            actions={
-              <>
-                {mayPlan && (
-                  <ButtonLink href="/planner" variant="secondary">
-                    Open planner
-                  </ButtonLink>
-                )}
-                <ButtonLink href="/orders">Record a delivery</ButtonLink>
-              </>
-            }
           />
 
           {error && <ErrorNotice error={error} />}

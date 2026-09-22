@@ -468,7 +468,7 @@ export function Sidebar({ activeHref }: { activeHref: string }) {
                       href={item.href}
                       aria-current={active ? "page" : undefined}
                       className={[
-                        "flex min-h-touch items-center gap-3 rounded px-3 text-base",
+                        "flex min-h-touch items-center gap-3 rounded px-3 text-nav",
                         "transition-[transform,box-shadow,background-color,color] duration-state ease-out",
                         active
                           ? "bg-accent-bg font-semibold text-accent-text"

@@ -127,11 +127,11 @@ function CalendarScreen() {
           <PageHeader
             title="Vaishnava calendar"
             subtitle={subtitle(selectedDay)}
-            // Today used to sit here, beside the primary. It has moved into the stepper, which is
-            // where it is actually used and where the planner can share it — the planner's header
-            // is shaped differently and could never have copied this, which is how it came to have
-            // no way back to today at all. One control, one component, both screens.
-            actions={<ButtonLink href={`/planner?date=${selected}`}>Open planner</ButtonLink>}
+            // No actions here. Today used to sit beside an "Open planner" primary; Today moved into
+            // the stepper (where it is actually used, and where the planner shares it), and the
+            // primary went on 2026-09-21 at Rajeev's instruction — "From Calendar same thing,
+            // remove the button from the top right. Not needed." A day still opens the planner by
+            // being pressed in the grid.
             tabs={
               <PeriodNav
                 label="Calendar view"

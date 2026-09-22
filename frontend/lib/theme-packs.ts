@@ -79,6 +79,17 @@ export interface ThemePack {
  */
 export const DEFAULT_THEME_ID = "terracotta";
 
+/*
+ * `ink-muted` equals `ink-secondary` in every pack since 2026-09-21.
+ *
+ * Rajeev chose the darker of the two for secondary text, reading the real screen in the type
+ * playground: "secondary text to dark. i like it like that." Applied by moving the token rather
+ * than by editing the ~400 class names that name it, so nothing on any screen had to change.
+ *
+ * The two levels are therefore collapsed into one on purpose, and `ink-muted` survives as a name
+ * rather than as a distinct colour. If a third, lighter level is ever wanted back, it is one value
+ * per pack here and no change anywhere else.
+ */
 export const THEME_PACKS: ThemePack[] = [
   {
     id: "kumkum",
@@ -95,7 +106,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#E6C7C2",
       "ink": "#2D2221",
       "ink-secondary": "#5A4E4C",
-      "ink-muted": "#6C605E",
+      "ink-muted": "#5A4E4C",
       "ink-inverse": "#FFFDFD",
       "accent-bg": "#FFE0DA",
       "accent-border": "#FEC4BA",
@@ -158,7 +169,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#C0D6C2",
       "ink": "#202721",
       "ink-secondary": "#4B544C",
-      "ink-muted": "#5F6760",
+      "ink-muted": "#4B544C",
       "ink-inverse": "#FAFFFA",
       "accent-bg": "#C2F8C8",
       "accent-border": "#A7E7AF",
@@ -221,7 +232,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#BED2E7",
       "ink": "#1F262D",
       "ink-secondary": "#4B525A",
-      "ink-muted": "#5D646C",
+      "ink-muted": "#4B525A",
       "ink-inverse": "#FCFDFF",
       "accent-bg": "#D7EAFF",
       "accent-border": "#B4D8FF",
@@ -284,7 +295,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#D5CAE3",
       "ink": "#27232C",
       "ink-secondary": "#534F58",
-      "ink-muted": "#65616B",
+      "ink-muted": "#534F58",
       "ink-inverse": "#FEFDFE",
       "accent-bg": "#EEE2FF",
       "accent-border": "#E0C8FE",
@@ -347,7 +358,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#E3C6D3",
       "ink": "#2C2226",
       "ink-secondary": "#584E52",
-      "ink-muted": "#6B6064",
+      "ink-muted": "#584E52",
       "ink-inverse": "#FFFDFE",
       "accent-bg": "#FFDDEC",
       "accent-border": "#FFBFDC",
@@ -410,7 +421,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#DCCBC7",
       "ink": "#2A2422",
       "ink-secondary": "#564F4E",
-      "ink-muted": "#6D6564",
+      "ink-muted": "#564F4E",
       "ink-inverse": "#FFFDFD",
       "accent-bg": "#FEE7E2",
       "accent-border": "#FED0C6",
@@ -473,7 +484,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#C8D3C8",
       "ink": "#222722",
       "ink-secondary": "#4E534E",
-      "ink-muted": "#656A65",
+      "ink-muted": "#4E534E",
       "ink-inverse": "#FCFEFC",
       "accent-bg": "#DAF6DA",
       "accent-border": "#C5E7C5",
@@ -536,7 +547,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#C1D4D3",
       "ink": "#202727",
       "ink-secondary": "#4B5353",
-      "ink-muted": "#636B6B",
+      "ink-muted": "#4B5353",
       "ink-inverse": "#FBFEFE",
       "accent-bg": "#C9F8F7",
       "accent-border": "#B0E9E8",
@@ -599,7 +610,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#CACFDD",
       "ink": "#23252A",
       "ink-secondary": "#4F5157",
-      "ink-muted": "#66696F",
+      "ink-muted": "#4F5157",
       "ink-inverse": "#FDFDFF",
       "accent-bg": "#E5EDFF",
       "accent-border": "#CEDCFF",
@@ -662,7 +673,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#D7CBD6",
       "ink": "#282428",
       "ink-secondary": "#544F54",
-      "ink-muted": "#6B656A",
+      "ink-muted": "#544F54",
       "ink-inverse": "#FFFCFF",
       "accent-bg": "#FFE3FB",
       "accent-border": "#F3CFEF",
@@ -725,7 +736,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#D3CECC",
       "ink": "#282423",
       "ink-secondary": "#54504F",
-      "ink-muted": "#706C6B",
+      "ink-muted": "#54504F",
       "ink-inverse": "#FFFDFC",
       "accent-bg": "#FEEDE7",
       "accent-border": "#F5DCD3",
@@ -788,7 +799,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#CDD0CD",
       "ink": "#232624",
       "ink-secondary": "#4F524F",
-      "ink-muted": "#696D6A",
+      "ink-muted": "#4F524F",
       "ink-inverse": "#FCFEFD",
       "accent-bg": "#E6F6E9",
       "accent-border": "#D5E8D8",
@@ -851,7 +862,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#CCD0D3",
       "ink": "#232628",
       "ink-secondary": "#4E5254",
-      "ink-muted": "#696C6F",
+      "ink-muted": "#4E5254",
       "ink-inverse": "#FCFEFF",
       "accent-bg": "#E7F3FE",
       "accent-border": "#D2E5F5",
@@ -914,7 +925,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#CFCFD3",
       "ink": "#252528",
       "ink-secondary": "#515054",
-      "ink-muted": "#6C6B6F",
+      "ink-muted": "#515054",
       "ink-inverse": "#FDFDFF",
       "accent-bg": "#F2EFFF",
       "accent-border": "#E3DEF4",
@@ -977,7 +988,7 @@ export const THEME_PACKS: ThemePack[] = [
       "hairline-strong": "#CECFD0",
       "ink": "#232528",
       "ink-secondary": "#4F5154",
-      "ink-muted": "#6B6D71",
+      "ink-muted": "#4F5154",
       "ink-inverse": "#FCFDFF",
       "accent-bg": "#EEF1F5",
       "accent-border": "#DEE2E7",
