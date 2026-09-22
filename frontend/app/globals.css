@@ -429,6 +429,19 @@ textarea[aria-invalid="true"] { border-color: rgb(var(--kms-danger) / 1); }
      override — it was never a design decision, only a default somebody copied.
      --------------------------------------------------------------------------- */
 
+  /* The icon font carried the same override, and it is taken off for the same reason: the page is
+     uniform, or it is not. `@tabler/icons-webfont` ships `-webkit-font-smoothing: antialiased` on
+     `.ti`, which reached 40 elements on Today and no text at all — measured, not assumed. Rajeev
+     asked for it gone anyway, 2026-09-21: "page perfectly uniform."
+
+     Worth knowing if anyone reverses this: the override is conventional on an icon font, because a
+     monochrome glyph gets colour fringing from subpixel rendering on its thinnest strokes. Taking
+     it off makes the icons a shade fuller. That is the trade he chose. */
+  .ti {
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
+  }
+
   body {
     @apply text-ink font-sans text-base;
     /* Not `bg-canvas`. §8.3: that paints the flat colour and loses the finish — and §6 is
