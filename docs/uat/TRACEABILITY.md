@@ -3,8 +3,16 @@
 Why this file exists: a defect found in UAT should point straight back at the story that produced it,
 so we can ask *why* it went wrong and not merely fix it. It also proves nothing is silently untested.
 
-Each UAT test is mirrored to a GitHub issue labelled `uat` — **#64 (UAT-001) … #124 (UAT-061)**, in
-order, so the issue number is always 63 + the test number.
+Each UAT test is mirrored to a GitHub issue labelled `uat`. **Find it by its title, not by a
+number.** On `rajeevkatamaneni/iskcon-kitchen-management` the numbers happen to run #64 (UAT-001)
+to #124 (UAT-061), and that arithmetic — 63 + the test number — held for as long as there was one
+repository.
+
+*Corrected 2026-09-22.* The issues were copied to `SuperPiLabs/iskcon-kitchen-management` with
+`tools/mirror-issues.sh`, and GitHub assigns its own numbers: UAT-061 is **#119** there, not #124.
+Every title, label, milestone and open/closed state came across exactly; only the numbering is the
+new repository's own. A rule that turns a test id into an issue number can only ever be true of one
+repository, so it is withdrawn rather than rewritten for two.
 
 Root-cause codes used throughout the pack (defined in [README](README.md) §7):
 **R1** story unclear · **R2** story misread · **R3** developer oversight · **R4** conflicts with a locked

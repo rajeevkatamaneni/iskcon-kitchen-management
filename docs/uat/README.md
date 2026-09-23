@@ -184,8 +184,14 @@ tests cover it — so nothing is silently untested.
 
 ## 8. The running order
 
-Each test is also a GitHub issue labelled `uat` (**#64–#124**), linked from its row below. Record the
-run there, or on paper and then there — whichever suits you.
+Each test is also a GitHub issue labelled `uat`, linked from its row below. Record the run there, or
+on paper and then there — whichever suits you.
+
+**The links below point at `rajeevkatamaneni/iskcon-kitchen-management`.** The issues were copied to
+`SuperPiLabs/iskcon-kitchen-management` on 2026-09-22 and GitHub numbered them itself, so on that
+repository the same test has a different number — search its title instead of following the link.
+The numbers here are left as they are rather than doubled up, because a table with two issue links
+per row is harder to read than a sentence saying which repository these belong to.
 
 ### Part 1 — The platform operator
 
