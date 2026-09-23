@@ -129,3 +129,16 @@ __pycache__/
 # build protocol and everyone needs the same ones.
 .claude/settings.json
 .claude/settings.local.json
+
+# === Local playground pages ===
+#
+# `frontend/app/dev-<name>/` is a throwaway mock built inside the real application so Rajeev can
+# judge a change by using it — see the mockup rule at the top of CLAUDE.md, and the retired ones in
+# docs/work/mocks/. They are never committed and never deployed.
+#
+# This moved here from `.git/info/exclude` on 2026-09-22. That file is PER CLONE: it is not part of
+# the repository and does not travel, so the exclusion existed on one machine only. The moment the
+# code was pushed to a second remote, a clone there had no exclusion at all and the next playground
+# would have been committed by the first person who ran `git add -A`. The deploy side was already
+# safe — `frontend/.gcloudignore` holds `app/dev-*/` and that line IS committed, on purpose.
+frontend/app/dev-*/
