@@ -36,6 +36,15 @@ export function plannerUrl(view: PlannerView, date: string): string {
 }
 
 /**
+ * One meal on the planner: its day, opened and scrolled so that meal is the first thing under the
+ * date (Rajeev, 2026-09-29: a meal pressed on Today "SHOULD land on EXACTLY that meal"). The id,
+ * not the kind's name, because two events on one day share a kind.
+ */
+export function plannerMealUrl(date: string, mealId: string): string {
+  return `${plannerUrl("day", date)}&meal=${encodeURIComponent(mealId)}`;
+}
+
+/**
  * `from`, if it is somewhere under the planner on this site; otherwise null.
  *
  * <p>Parsed against a stand-in origin rather than matched with a pattern, because the browser's own

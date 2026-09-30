@@ -82,6 +82,8 @@ function PlannerView() {
   // planner came to change its whole screen without the URL ever moving.
   const view = asView(params.get("view"));
   const anchor = asDate(params.get("date")) ?? todayIso();
+  // The meal a link asked to land on, from Today (plannerMealUrl). Day view only.
+  const focusMeal = params.get("meal");
 
   const [nonce, setNonce] = useState(0);
   const [error, setError] = useState<ApiError | null>(null);
@@ -157,6 +159,24 @@ function PlannerView() {
 
       <main className="min-w-0 flex-1">
         <Screen>
+          {/*
+            In Day, everything down to the date card stays put and the meals scroll under it
+            (Rajeev, 2026-09-29: "Everything till the date card should be fixed inplace"), so the
+            day being planned is never off screen while you work down a long list of meals.
+            From `lg` only: on a phone the header and the date card together are most of the
+            screen, and freezing them would leave the meals a letterbox to scroll through. The
+            negative top margin and matching padding carry the page's top gutter inside the
+            block, and `pb-6 -mb-6` covers the 24px gap beneath it, so a meal passing under
+            it disappears behind page colour rather than touching the card's edge.
+          */}
+          <div
+            data-planner-frozen={view === "day" ? "" : undefined}
+            className={
+              view === "day"
+                ? "grid gap-6 lg:sticky lg:top-0 lg:z-20 lg:-mb-6 lg:-mt-8 lg:bg-canvas lg:pb-6 lg:pt-8"
+                : "contents"
+            }
+          >
           <PageHeader
             title="Meal planner"
             subtitle={subtitle(view, anchor, appUser?.tenantName ?? null)}
@@ -193,11 +213,27 @@ function PlannerView() {
           {error && <ErrorNotice error={error} />}
 
           {view === "day" && (
+            <DayCard date={anchor} isToday={isToday} workforce={workforce.get(anchor)} day={calendar.get(anchor)} />
+          )}
+          {/* Straight under the date card, and inside the frozen block so it stays on screen however
+              far down the meals someone has scrolled (Rajeev, 2026-09-29). A link, not an expand:
+              planning a meal is the same screen as correcting one — see app/planner/compose. */}
+          {view === "day" && anchor >= today && (
+            <Link
+              href={withReturn(`/planner/compose?date=${anchor}`, plannerUrl(view, anchor))}
+              className="flex min-h-[3.5rem] items-center justify-center gap-2 rounded-lg border border-dashed border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-raised"
+            >
+              <span aria-hidden className="text-lg leading-none">+</span>
+              Add a meal
+            </Link>
+          )}
+          </div>
+
+          {view === "day" && (
             <DayPanel
               date={anchor}
-              isToday={isToday}
-              workforce={workforce.get(anchor)}
               day={calendar.get(anchor)}
+              focusMealId={focusMeal}
               sufficiency={sufficiency}
               recipes={recipes ?? []}
               readOnly={anchor < today}
@@ -243,6 +279,68 @@ function PlannerView() {
         </Screen>
       </main>
     </div>
+  );
+}
+
+/**
+ * Which day this is, who is in to cook it, and what the Vaishnava calendar says about it. Drawn
+ * apart from the meals so it can sit in the frozen block at the top of Day.
+ */
+function DayCard({
+  date, isToday, workforce, day,
+}: {
+  date: string;
+  isToday: boolean;
+  workforce: WorkforceCount | undefined;
+  day: CalendarDayView | undefined;
+}) {
+  const festivals = day?.festivals ?? [];
+
+  return (
+      <Card tone="canvas">
+        <div className="flex flex-wrap items-start gap-6">
+          {/* Two columns, and each holds one kind of thing. On the left, which day this is and who
+              is in to cook it; on the right, everything the Vaishnava calendar says about it, read
+              downwards from the widest fact to the narrowest: where the day falls, when its light
+              begins and ends, and what it asks of the kitchen.
+
+              The two "Open this day" and "Open the calendar" links that used to sit under the
+              festival line are gone. They read as plain text until the pointer touched them and
+              then grew a box, which is a button pretending not to be one, and neither went
+              anywhere this screen does not already reach. */}
+          <span className="grid min-w-[16rem] flex-1 gap-1">
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {isToday && <Badge tone="accent">Today</Badge>}
+              <span className="text-xl font-semibold text-ink sm:text-2xl">{longDay(date)}</span>
+            </span>
+            {/* Directly under the date, because "is there anyone to cook this?" is the question a
+                planner asks straight after "what day is it?" (B3). */}
+            <WorkforcePebbles workforce={workforce} />
+          </span>
+
+          {/* Right-aligned only while it sits beside the date. Once the row wraps on a phone it is
+              under the date, and right-aligned lines there read as a ragged column to nowhere. */}
+          <span className="grid max-w-[26rem] justify-items-start gap-2 sm:justify-items-end sm:text-right">
+            {day && <span className="text-ink-secondary">{dayLabel(day)}</span>}
+            {day?.sunrise && day?.sunset && (
+              <span className="text-xs tabular-nums text-ink-muted">
+                Sunrise {hhmm(day.sunrise)} &middot; Sunset {hhmm(day.sunset)}
+              </span>
+            )}
+            {/* Blue, as the week above and the Vaishnava calendar draw it (DESIGN_SYSTEM v1.2). This
+                badge was still amber, so the same Ekadashi changed colour between Week and Day. */}
+            {day?.isEkadashi && <Badge tone="info">{ekadashiLabel(day.ekadashiName)}</Badge>}
+            {festivals.map((f) => (
+              <Badge key={f.text} tone="festival">
+                {ekadashiSpelling(f.text)}
+              </Badge>
+            ))}
+            {!day?.isEkadashi && festivals.length === 0 && (
+              <span className="text-xs text-ink-muted">No festival or fast on this day</span>
+            )}
+          </span>
+        </div>
+      </Card>
   );
 }
 
@@ -300,13 +398,13 @@ function WorkforcePebbles({
  * per preparation with an `Open` button on each, so a three-preparation lunch was three lunches.
  */
 function DayPanel({
-  date, isToday, workforce, day, sufficiency, recipes, readOnly, returnTo, nonce,
+  date, day, focusMealId, sufficiency, recipes, readOnly, returnTo, nonce,
   onChanged, onError,
 }: {
   date: string;
-  isToday: boolean;
-  workforce: WorkforceCount | undefined;
   day: CalendarDayView | undefined;
+  /** A meal to scroll to once the day is drawn, when a link named one. */
+  focusMealId: string | null;
   sufficiency: Map<string, MealSufficiency>;
   recipes: RecipeSummary[];
   readOnly: boolean;
@@ -317,54 +415,8 @@ function DayPanel({
   onChanged: () => void;
   onError: (e: ApiError) => void;
 }) {
-  const festivals = day?.festivals ?? [];
-
   return (
     <>
-      <Card tone="canvas">
-        <div className="flex flex-wrap items-start gap-6">
-          {/* Two columns, and each holds one kind of thing. On the left, which day this is and who
-              is in to cook it; on the right, everything the Vaishnava calendar says about it, read
-              downwards from the widest fact to the narrowest: where the day falls, when its light
-              begins and ends, and what it asks of the kitchen.
-
-              The two "Open this day" and "Open the calendar" links that used to sit under the
-              festival line are gone. They read as plain text until the pointer touched them and
-              then grew a box, which is a button pretending not to be one, and neither went
-              anywhere this screen does not already reach. */}
-          <span className="grid min-w-[16rem] flex-1 gap-1">
-            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              {isToday && <Badge tone="accent">Today</Badge>}
-              <span className="text-xl font-semibold text-ink sm:text-2xl">{longDay(date)}</span>
-            </span>
-            {/* Directly under the date, because "is there anyone to cook this?" is the question a
-                planner asks straight after "what day is it?" (B3). */}
-            <WorkforcePebbles workforce={workforce} />
-          </span>
-
-          {/* Right-aligned only while it sits beside the date. Once the row wraps on a phone it is
-              under the date, and right-aligned lines there read as a ragged column to nowhere. */}
-          <span className="grid max-w-[26rem] justify-items-start gap-2 sm:justify-items-end sm:text-right">
-            {day && <span className="text-ink-secondary">{dayLabel(day)}</span>}
-            {day?.sunrise && day?.sunset && (
-              <span className="text-xs tabular-nums text-ink-muted">
-                Sunrise {hhmm(day.sunrise)} &middot; Sunset {hhmm(day.sunset)}
-              </span>
-            )}
-            {/* Blue, as the week above and the Vaishnava calendar draw it (DESIGN_SYSTEM v1.2). This
-                badge was still amber, so the same Ekadashi changed colour between Week and Day. */}
-            {day?.isEkadashi && <Badge tone="info">{ekadashiLabel(day.ekadashiName)}</Badge>}
-            {festivals.map((f) => (
-              <Badge key={f.text} tone="festival">
-                {ekadashiSpelling(f.text)}
-              </Badge>
-            ))}
-            {!day?.isEkadashi && festivals.length === 0 && (
-              <span className="text-xs text-ink-muted">No festival or fast on this day</span>
-            )}
-          </span>
-        </div>
-      </Card>
 
       {/* Blue like every other Ekadashi mark: the day is information, not a warning. The warning
           comes when someone picks a grain dish, in the composer (Rajeev, 2026-09-18, T-227). */}
@@ -384,6 +436,7 @@ function DayPanel({
       <div className="grid gap-3">
         <MealServices
           date={date}
+          focusMealId={focusMealId}
           refreshKey={nonce}
           sufficiency={sufficiency}
           recipes={recipes}
@@ -392,18 +445,6 @@ function DayPanel({
           onChanged={onChanged}
           onError={onError}
         />
-
-        {!readOnly && (
-          // A link, not an expand. Planning a meal is the same screen as correcting one, and it is
-          // that screen — see app/planner/compose/page.tsx for why that is worth a navigation.
-          <Link
-            href={withReturn(`/planner/compose?date=${date}`, returnTo)}
-            className="flex min-h-[3.5rem] items-center justify-center gap-2 rounded-lg border border-dashed border-hairline-strong text-ink-secondary transition-colors duration-state hover:bg-raised"
-          >
-            <span aria-hidden className="text-lg leading-none">+</span>
-            Add a meal
-          </Link>
-        )}
       </div>
     </>
   );

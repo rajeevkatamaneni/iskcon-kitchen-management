@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ApiError, TodayView } from "@/lib/api";
 
 // Today is role-gated and reads a single assembled payload. Drive the guard and the query from
@@ -396,15 +396,15 @@ describe("today", () => {
 
     const lunch = screen.getByRole("link", { name: "Lunch at 12:00" });
     // In the order sent, joined with "and", after the occasion and in its style.
-    const line = within(lunch).getByText("820 servings · Sunday feast · Sweets kitchen and Main kitchen");
+    const line = within(lunch).getByText("· 820 servings · Sunday feast · Sweets kitchen and Main kitchen");
     expect(line.className).toContain("text-ink-muted");
     // A one-kitchen meal names its one kitchen too.
     expect(
-      within(screen.getByRole("link", { name: "Dinner at 19:30" })).getByText("420 servings · Main kitchen")
+      within(screen.getByRole("link", { name: "Dinner at 19:30" })).getByText("· 420 servings · Main kitchen")
     ).toBeInTheDocument();
   });
 
-  it("groups the day's dishes under their meal, and links each meal to that day's planner", () => {
+  it("groups the day's dishes under their meal, and links each meal to itself on that day's planner", () => {
     queryRef.current = { data: today(), error: null, loading: false };
     callRef.i = 0;
     render(<TodayPage />);
@@ -412,14 +412,48 @@ describe("today", () => {
     expect(screen.getByText("Meals planned for today")).toBeInTheDocument();
 
     const lunch = screen.getByRole("link", { name: "Lunch at 12:00" });
-    expect(lunch).toHaveAttribute("href", "/planner?date=2026-08-14");
+    expect(lunch).toHaveAttribute("href", "/planner?view=day&date=2026-08-14&meal=meal-lunch");
     expect(within(lunch).getByText("Khichdi")).toBeInTheDocument();
     expect(within(lunch).getByText("Kesari")).toBeInTheDocument();
     // The truth, not a badge.
     expect(within(lunch).getByText(/not yet recorded/i)).toBeInTheDocument();
 
     const dinner = screen.getByRole("link", { name: "Dinner at 19:30" });
-    expect(within(dinner).getByText(/395 Kg cooked/i)).toBeInTheDocument();
+    // A recorded meal shows what was cooked, under a "Cooked" heading rather than "Planned".
+    expect(within(dinner).getByText("Cooked")).toBeInTheDocument();
+    expect(within(dinner).getByText("395 Kg")).toBeInTheDocument();
+    expect(within(lunch).getByText("Planned")).toBeInTheDocument();
+  });
+
+  it("shows the meals side by side until someone switches to vertical, and remembers it here", () => {
+    window.localStorage.removeItem("kms.today.mealLayout");
+    queryRef.current = { data: today(), error: null, loading: false };
+    callRef.i = 0;
+    const { unmount } = render(<TodayPage />);
+
+    const across = screen.getByRole("button", { name: "Horizontal" });
+    const down = screen.getByRole("button", { name: "Vertical" });
+    expect(across).toHaveAttribute("aria-pressed", "true");
+    expect(down).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(down);
+    expect(down).toHaveAttribute("aria-pressed", "true");
+    // Vertical draws each meal's recipes as rows of the card-wide grid, not as a table of its own.
+    expect(screen.getAllByRole("table").length).toBe(today().meals.length);
+    unmount();
+
+    render(<TodayPage />);
+    expect(screen.getByRole("button", { name: "Vertical" })).toHaveAttribute("aria-pressed", "true");
+    window.localStorage.removeItem("kms.today.mealLayout");
+  });
+
+  it("makes each expected delivery's order number a link straight to that order", () => {
+    queryRef.current = { data: today(), error: null, loading: false };
+    callRef.i = 0;
+    render(<TodayPage />);
+
+    const deliveries = screen.getByRole("region", { name: /^Deliveries/ });
+    expect(within(deliveries).getByRole("link", { name: "PO-2026-0001" })).toHaveAttribute("href", "/orders/po1");
   });
 
   it("puts the platform notice band above everything else on the screen", () => {
@@ -883,14 +917,14 @@ describe("today", () => {
       expect(inside.getByText("We deliver it")).toHaveClass("bg-info-bg", "text-info");
       expect(inside.getByText("They collect it")).toHaveClass("bg-info-bg", "text-info");
 
-      // Every row goes somewhere. The dead end was the defect: the deleted section printed the
+      // Every row goes to its own meal. The dead end was the defect: the deleted section printed the
       // event's name in a table cell although the server sent the meal's own id with it.
       expect(
         inside.getByRole("link", { name: /Children's Bhagavad-gita Reading on Sat 22 Aug/ })
-      ).toHaveAttribute("href", "/planner?date=2026-08-22");
+      ).toHaveAttribute("href", "/planner?view=day&date=2026-08-22&meal=meal-bhajan");
       expect(
         inside.getByRole("link", { name: /Community programme on Sat 29 Aug/ })
-      ).toHaveAttribute("href", "/planner?date=2026-08-29");
+      ).toHaveAttribute("href", "/planner?view=day&date=2026-08-29&meal=meal-community");
     });
 
     it("draws nothing at all when nothing is going out", () => {

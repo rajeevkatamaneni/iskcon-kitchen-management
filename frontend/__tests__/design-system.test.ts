@@ -255,6 +255,10 @@ describe("item 12 — a table row answers the pointer", () => {
         if (!inBody || !/<tr[\s>]/.test(line)) return;
         // Since `components/ds/table.ts`, the hover is one of the things `TR` carries, so a row on
         // the shared rule names the constant rather than repeating the class. Both satisfy this.
+        // One exception, marked on the row itself: a row inside a card that is a link as a whole
+        // (Today's meal cards, 2026-09-29), where the whole card answers the pointer and a row
+        // lighting up on its own would say the row goes somewhere different.
+        if (/data-card-row/.test(line)) return;
         if (!/hover:bg-sunken|\bTR\b/.test(line)) offenders.push(`${file}:${i + 1}`);
       });
     }

@@ -5390,11 +5390,17 @@ export const api = {
     request<RecipeDetail>(`/api/v1/recipes/${id}`, { method: "GET", token }),
 
   /** The Recipes page's one box: the temple's own recipes and the shared library, together. */
-  searchRecipes: (query: string, token?: string) =>
-    request<RecipeSearchResult[]>(
-      `/api/v1/recipes/search${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ""}`,
-      { method: "GET", token }
-    ),
+  searchRecipes: (query: string, token?: string, categoryIds: string[] = []) => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    // The filter pills: recipes in ANY of these categories. None means every category.
+    for (const id of categoryIds) params.append("categoryId", id);
+    const qs = params.toString();
+    return request<RecipeSearchResult[]>(`/api/v1/recipes/search${qs ? `?${qs}` : ""}`, {
+      method: "GET",
+      token,
+    });
+  },
 
   /**
    * Takes this temple's own copy of a library recipe. The id in, the temple's new id out.

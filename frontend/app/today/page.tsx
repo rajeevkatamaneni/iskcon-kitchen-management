@@ -1,8 +1,10 @@
 "use client";
 
+import { plannerMealUrl } from "@/components/planner/plannerAddress";
 import Link from "next/link";
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ds/Badge";
+import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import { Card } from "@/components/ds/Card";
 import { EmptyState } from "@/components/ds/EmptyState";
@@ -169,17 +171,17 @@ function TodayScreen() {
                 />
               </div>
 
-              <div className="grid items-start gap-4 xl:grid-cols-[1.4fr_1fr]">
-                <MealsCard meals={data.meals} date={data.date} mayPlan={mayPlan} />
-                {/* The narrow column stacks what is coming: today's deliveries in, and then what the
-                    temple has promised to send out in the days ahead. Both are lists of things
-                    arriving or leaving that nobody has to act on this minute, and the space under
-                    Deliveries was empty on every temple whose morning has fewer than a dozen of
-                    them. */}
-                <div className="grid gap-4">
-                  <DeliveriesCard deliveries={data.deliveries} />
-                  <GoingOutCard commitments={data.upcomingOutside} mayPlan={mayPlan} />
-                </div>
+              {/* The whole width of the page (Rajeev, 2026-09-29), and Deliveries below it. What is
+                  going out sits beside Deliveries when there is any; without it, Deliveries takes the
+                  row rather than leaving half of it empty. */}
+              <MealsCard meals={data.meals} date={data.date} mayPlan={mayPlan} />
+              <div
+                className={`grid items-start gap-4 ${
+                  data.upcomingOutside.length > 0 ? "xl:grid-cols-2" : ""
+                }`}
+              >
+                <DeliveriesCard deliveries={data.deliveries} />
+                <GoingOutCard commitments={data.upcomingOutside} mayPlan={mayPlan} />
               </div>
             </>
           )}
@@ -307,8 +309,13 @@ function aheadNotice(data: TodayView) {
  *
  * Grouped by meal kind, with the dishes beneath (A3). A lunch of three preparations is one lunch,
  * and listing it as three rows made the screen say the kitchen had nine meals on a normal Tuesday.
- * Each meal is a link through to that day's planner (A2) — a number nobody can act on is
+ * Each meal is a link through to that meal on the planner (A2) — a number nobody can act on is
  * decoration, and the planner is where the acting happens.
+ *
+ * <p>Laid out as Rajeev approved it in the mock on 2026-09-29 (`docs/work/mocks/dev-today-meals`):
+ * the whole width of the page, one card per meal, side by side by default with a switch to one
+ * under another, and each meal's recipes and figures as a real table with no rules — the figure on a
+ * grey pill so it is the first thing the eye finds.
  */
 function MealsCard({
   meals,
@@ -317,11 +324,43 @@ function MealsCard({
 }: {
   meals: TodayMeal[];
   date: string;
-  /** Whether this reader may open the planner at all (T-363). A row is a link only if they may. */
+  /** Whether this reader may open the planner at all (T-363). A card is a link only if they may. */
   mayPlan: boolean;
 }) {
+  const [layout, setLayout] = useMealLayout();
+
   return (
-    <Card title="Meals planned for today" meta="In the order they are due">
+    <Card
+      title="Meals planned for today"
+      meta="In the order they are due"
+      action={
+        meals.length > 0 && (
+          // Two icon buttons, the one in use filled. Each names itself on hover and to a screen reader.
+          <span role="group" aria-label="Meal layout" className="flex gap-1">
+            <Button
+              size="icon"
+              variant={layout === "across" ? "primary" : "ghost"}
+              aria-pressed={layout === "across"}
+              aria-label="Horizontal"
+              title="Horizontal"
+              onClick={() => setLayout("across")}
+            >
+              <i className="ti ti-layout-columns" aria-hidden="true" />
+            </Button>
+            <Button
+              size="icon"
+              variant={layout === "down" ? "primary" : "ghost"}
+              aria-pressed={layout === "down"}
+              aria-label="Vertical"
+              title="Vertical"
+              onClick={() => setLayout("down")}
+            >
+              <i className="ti ti-layout-rows" aria-hidden="true" />
+            </Button>
+          </span>
+        )
+      }
+    >
       {meals.length === 0 ? (
         <EmptyState
           title="Nothing planned for today"
@@ -331,64 +370,39 @@ function MealsCard({
             ? "Plan a meal and it will appear here."
             : "Meals appear here once they are planned."}
         </EmptyState>
-      ) : (
-        <div className="grid">
+      ) : layout === "across" ? (
+        // As many across as fit at 16rem each; four on a laptop. Each card is two rows of the shared
+        // grid (subgrid), so a heading that wraps — an event's long name — makes the heading row
+        // taller for every card beside it, and the recipe tables still start level.
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))]">
           {meals.map((meal) => (
-            // The divider lives on a square wrapper, not on the rounded link: a top border on a
-            // rounded box bends down at both ends, which drew every divider as a shallow bracket.
-            <div key={meal.mealId} className="border-t border-hairline first:border-t-0">
-            {/* A row is a link to the day's plan for anybody who can open it, and plain text for
-                anybody who cannot (T-363). `MealRow` is one body drawn either way, rather than the
-                whole block written twice and drifting. */}
-            <MealRow
-              href={mayPlan ? `/planner?date=${date}` : null}
-              // An event is announced by its name, the same as the heading it stands for.
+            <MealCard
+              key={meal.mealId}
+              href={mayPlan ? plannerMealUrl(date, meal.mealId) : null}
               label={`${mealName(meal)} at ${hhmm(meal.readyBy)}`}
+              className="row-span-2 grid grid-rows-subgrid gap-3"
             >
-              <span className="flex items-center gap-4">
-                <span className="w-14 flex-none text-sm tabular-nums text-ink-secondary">
-                  {hhmm(meal.readyBy)}
-                </span>
-                <span className="grid flex-1">
-                  <span className="text-base font-medium text-ink">{mealName(meal)}</span>
-                  <span className="text-xs text-ink-muted">
-                    {meal.plates.toLocaleString("en-IN")} servings
-                    {meal.occasionName ? ` · ${meal.occasionName}` : ""}
-                    {/* Who is cooking it (Epic 12), in the planner's order for this person and in
-                        the same quiet words as the occasion: a fact about the meal, not an alert. */}
-                    {meal.kitchenNames?.length ? ` · ${meal.kitchenNames.join(" and ")}` : ""}
-                  </span>
-                </span>
-                {/* The truth, not a badge (§2): a meal nobody has recorded is stock that never
-                    left the store room, and saying so is more use than colouring it. */}
-                {meal.recorded ? (
-                  // Neutral: green is kept for the moment the user's own action succeeds (the
-                  // recording toast), not a standing state seen every morning (T-227).
-                  <Badge>
-                    Recorded
-                  </Badge>
-                ) : (
-                  <span className="text-xs text-ink-muted">Not yet recorded</span>
-                )}
-              </span>
-
-              <span className="grid gap-0.5 pl-[4.5rem]">
-                {meal.dishes.map((dish) => (
-                  <span key={dish.id} className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                    <span className={dish.notMade ? "text-ink-muted line-through" : "text-ink-secondary"}>
-                      {dish.recipeName}
-                    </span>
-                    <span className="whitespace-nowrap tabular-nums text-xs text-ink-muted">
-                      {dish.notMade
-                        ? "not made"
-                        : dish.actualServings != null
-                          ? `${dishAmount(dish, dish.actualServings)} cooked`
-                          : `${dishAmount(dish, dish.targetYield)} planned`}
-                    </span>
-                  </span>
-                ))}
-              </span>
-            </MealRow>
+              <MealHeading meal={meal} />
+              <DishTable meal={meal} />
+            </MealCard>
+          ))}
+        </div>
+      ) : (
+        // One grid for the whole card, shared by every meal through subgrid: the heading, the recipe
+        // and the figure are columns as wide as their widest entry in ANY meal, so every figure lines
+        // up down the page. 6rem after the heading, 2.25rem between a recipe and its figure; the last
+        // column takes what is left so each card runs the full width. 12px between cards.
+        <div className="grid gap-3 md:grid-cols-[max-content_max-content_max-content_1fr] md:gap-x-24">
+          {meals.map((meal) => (
+            <div key={meal.mealId} className="md:col-span-full md:grid md:grid-cols-subgrid">
+              <MealCard
+                href={mayPlan ? plannerMealUrl(date, meal.mealId) : null}
+                label={`${mealName(meal)} at ${hhmm(meal.readyBy)}`}
+                className="grid gap-3 md:col-span-full md:grid-cols-subgrid md:gap-x-24"
+              >
+                <MealHeading meal={meal} />
+                <DishRows meal={meal} />
+              </MealCard>
             </div>
           ))}
         </div>
@@ -397,24 +411,149 @@ function MealsCard({
   );
 }
 
+type MealLayout = "across" | "down";
+const MEAL_LAYOUT_KEY = "kms.today.mealLayout";
+
 /**
- * One meal's row on Today: a link into that day's plan, or the same row as plain text.
- *
- * <p>The hover tone and the pulled-out padding belong to the link and are dropped with it, because a
- * block that lights up under the pointer and then does nothing is the same lie as a link that refuses
- * you. The `aria-label` goes too: without a link there is nothing for a screen reader to announce a
- * destination for, and the row's own words already say what it is.
+ * Side by side unless this person switched, remembered in this browser only. A convenience, so a
+ * blocked or empty storage simply means side by side.
  */
-function MealRow({
+function useMealLayout(): [MealLayout, (next: MealLayout) => void] {
+  const [layout, setLayout] = useState<MealLayout>("across");
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(MEAL_LAYOUT_KEY) === "down") setLayout("down");
+    } catch {
+      // Storage refused: stay side by side.
+    }
+  }, []);
+  const choose = useCallback((next: MealLayout) => {
+    setLayout(next);
+    try {
+      window.localStorage.setItem(MEAL_LAYOUT_KEY, next);
+    } catch {
+      // Not remembered this time; the switch still works.
+    }
+  }, []);
+  return [layout, choose];
+}
+
+/**
+ * Three lines in every meal, always the same three — what it is, when and how much, and whether the
+ * card came back — so side by side the recipe tables start level across the row.
+ */
+function MealHeading({ meal }: { meal: TodayMeal }) {
+  const facts = [
+    `${meal.plates.toLocaleString("en-IN")} servings`,
+    meal.occasionName,
+    // Who is cooking it (Epic 12), in the planner's order for this person.
+    meal.kitchenNames?.length ? meal.kitchenNames.join(" and ") : null,
+  ].filter(Boolean);
+  return (
+    <span className="grid content-start gap-1">
+      <span className="flex flex-wrap items-baseline gap-x-2">
+        <span className="text-base font-semibold text-ink">{mealName(meal)}</span>
+        {/* An event is named by its own name, so its kind goes beside it, as the planner shows it. */}
+        {meal.eventName && <span className="text-sm text-ink-secondary">{meal.mealKind}</span>}
+      </span>
+      <span className="text-sm text-ink-secondary">
+        Ready by <span className="font-semibold tabular-nums text-ink">{hhmm(meal.readyBy)}</span>
+        <span className="text-ink-muted"> · {facts.join(" · ")}</span>
+      </span>
+      {/* The truth, not a badge (§2): a meal nobody has recorded is stock that never left the store
+          room. Neutral once it has: green is for the moment the user's own action succeeds. */}
+      <span>
+        {meal.recorded ? <Badge>Recorded</Badge> : <span className="text-xs text-ink-muted">Not yet recorded</span>}
+      </span>
+    </span>
+  );
+}
+
+/** What the figure column says: what was cooked once the card is back, what was planned before. */
+function figureHeading(meal: TodayMeal): string {
+  return meal.recorded ? "Cooked" : "Planned";
+}
+
+function DishName({ dish }: { dish: TodayDish }) {
+  return <span className={dish.notMade ? "text-ink-muted line-through" : "text-ink"}>{dish.recipeName}</span>;
+}
+
+/** The figure on its grey pill (option A in the mock), or "Not made" in plain muted text. */
+function DishFigure({ dish }: { dish: TodayDish }) {
+  if (dish.notMade) return <span className="text-ink-muted">Not made</span>;
+  const value = dish.actualServings != null ? dish.actualServings : dish.targetYield;
+  return (
+    <span className="inline-block rounded-control bg-sunken px-2.5 py-1 font-semibold tabular-nums text-ink">
+      {dishAmount(dish, value)}
+    </span>
+  );
+}
+
+const DISH_HEAD = "pb-1 text-xs font-semibold uppercase tracking-wide text-ink-secondary";
+
+/**
+ * Side by side: recipe and figure as a real table. The app's table defaults put a hairline on every
+ * cell and lift a row under the pointer; neither belongs inside a card, so both are off here.
+ */
+function DishTable({ meal }: { meal: TodayMeal }) {
+  return (
+    <table className="w-full text-left text-sm [&_td]:border-0 [&_tr:hover]:!transform-none [&_tr:hover]:!shadow-none">
+      <thead>
+        <tr>
+          <th scope="col" className={`pr-4 ${DISH_HEAD}`}>Recipe</th>
+          <th scope="col" className={`w-0 whitespace-nowrap px-3 ${DISH_HEAD}`}>{figureHeading(meal)}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {meal.dishes.map((dish) => (
+          // The card is the link and answers the pointer; the row does not (see design-system.test).
+          <tr key={dish.id} data-card-row>
+            <td className="py-1.5 pr-4"><DishName dish={dish} /></td>
+            <td className="w-0 whitespace-nowrap px-3 py-1.5"><DishFigure dish={dish} /></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** One under another: the same table, as two columns of the card-wide grid so figures align. */
+function DishRows({ meal }: { meal: TodayMeal }) {
+  return (
+    <div role="table" className="grid grid-cols-[1fr_auto] items-center gap-x-6 gap-y-1 text-sm md:col-span-2 md:grid-cols-subgrid md:gap-x-9">
+      <div role="row" className="contents">
+        <span role="columnheader" className={DISH_HEAD}>Recipe</span>
+        <span role="columnheader" className={DISH_HEAD}>{figureHeading(meal)}</span>
+      </div>
+      {meal.dishes.map((dish) => (
+        <div role="row" key={dish.id} className="contents">
+          <span role="cell" className="py-1"><DishName dish={dish} /></span>
+          <span role="cell" className="whitespace-nowrap py-1"><DishFigure dish={dish} /></span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One meal's card on Today: a link to that meal on the planner, or the same card as plain text.
+ *
+ * <p>The hover tone belongs to the link and is dropped with it, because a block that lights up under
+ * the pointer and then does nothing is the same lie as a link that refuses you. The `aria-label` goes
+ * too: without a link there is nothing for a screen reader to announce a destination for.
+ */
+function MealCard({
   href,
   label,
+  className,
   children,
 }: {
   href: string | null;
   label: string;
+  className: string;
   children: ReactNode;
 }) {
-  const body = "grid gap-2 py-3";
+  const body = `rounded-card border border-hairline p-4 ${className}`;
   if (!href) {
     return <div className={body}>{children}</div>;
   }
@@ -422,12 +561,9 @@ function MealRow({
     <Link
       href={href}
       // Named for what it is, so a screen reader announces "Lunch at 12:00" rather than reading the
-      // whole block of dishes before saying where the link goes.
+      // whole list of dishes before saying where the link goes.
       aria-label={label}
-      // Item 14. Pulled out and padded back, so the hover tone gains 12px each side and a radius
-      // rather than hugging the words. Nothing on the row moves: the negative margin and the padding
-      // cancel, and only the highlight is bigger.
-      className={`-mx-3 rounded px-3 transition-colors duration-state hover:bg-sunken ${body}`}
+      className={`transition-colors duration-state hover:bg-sunken ${body}`}
     >
       {children}
     </Link>
@@ -493,7 +629,7 @@ function GoingOutCard({
             <div key={c.mealId} className="border-t border-hairline first:border-t-0">
               {mayPlan ? (
                 <Link
-                  href={`/planner?date=${c.planDate}`}
+                  href={plannerMealUrl(c.planDate, c.mealId)}
                   aria-label={`${name} on ${dayAndDate(c.planDate)}`}
                   className="-mx-3 flex items-start justify-between gap-3 rounded px-3 py-2.5 transition-colors duration-state hover:bg-sunken"
                 >
@@ -578,9 +714,17 @@ function DeliveriesCard({ deliveries }: { deliveries: TodayDelivery[] }) {
               <span className="grid">
                 <span className="text-sm font-medium text-ink">{delivery.vendorName}</span>
                 <span className="text-xs text-ink-muted">
-                  {[delivery.poNumber, delivery.neededBy ? shortDate(delivery.neededBy) : null]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  {/* The order number is the way to the order (Rajeev, 2026-09-29): there was no
+                      route from "this is due today" to the order itself but the orders list. */}
+                  {delivery.poNumber && delivery.purchaseOrderId ? (
+                    <Link href={`/orders/${delivery.purchaseOrderId}`} className="link tabular-nums">
+                      {delivery.poNumber}
+                    </Link>
+                  ) : (
+                    delivery.poNumber
+                  )}
+                  {delivery.poNumber && delivery.neededBy ? " · " : null}
+                  {delivery.neededBy ? shortDate(delivery.neededBy) : null}
                 </span>
               </span>
               <Badge tone={delivery.state === "AWAITED" ? "neutral" : "danger"}>

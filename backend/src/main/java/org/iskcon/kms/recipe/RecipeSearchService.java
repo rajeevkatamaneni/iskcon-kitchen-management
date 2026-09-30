@@ -49,8 +49,24 @@ public class RecipeSearchService {
 
 	@Transactional(readOnly = true)
 	public List<RecipeSearchResult> search(String query) {
+		return search(query, List.of());
+	}
+
+	/**
+	 * The same search, narrowed to recipes in any of {@code categoryIds} — the filter pills under
+	 * the box. Empty means every category. Narrowed in SQL, before the limits, so a filter finds
+	 * recipes the unfiltered list would have cut off.
+	 *
+	 * <p>A library row carries its category as a name, not one of this temple's ids, so it is kept
+	 * when its name is the name of a chosen category. Where the library spells a category
+	 * differently ("Kadhi / Raita" against a temple's "Kadhi &amp; Raita"), its rows drop out of the
+	 * filtered search.
+	 */
+	@Transactional(readOnly = true)
+	public List<RecipeSearchResult> search(String query, List<UUID> categoryIds) {
 		List<String> terms = SearchQuery.terms(query);
-		List<RecipeSearchResult> results = new ArrayList<>(mine(terms));
+		String categories = categoryIds.isEmpty() ? null : pgUuidArray(categoryIds);
+		List<RecipeSearchResult> results = new ArrayList<>(mine(terms, categories));
 
 		if (!terms.isEmpty()) {
 			// A library row whose name the temple already holds under a different provenance must
@@ -60,7 +76,7 @@ public class RecipeSearchService {
 			for (RecipeSearchResult r : results) {
 				shown.add(r.name().toLowerCase(Locale.ROOT));
 			}
-			for (RecipeSearchResult row : library(SearchQuery.toTsQuery(query))) {
+			for (RecipeSearchResult row : library(SearchQuery.toTsQuery(query), categories)) {
 				if (shown.add(row.name().toLowerCase(Locale.ROOT))) {
 					results.add(row);
 				}
@@ -76,7 +92,7 @@ public class RecipeSearchService {
 	 * and a substring match is what people expect of their own list — typing "idl" should find
 	 * "Rave Idli" whether or not a stemmer agrees.
 	 */
-	private List<RecipeSearchResult> mine(List<String> terms) {
+	private List<RecipeSearchResult> mine(List<String> terms, String categories) {
 		StringBuilder sql = new StringBuilder("""
 				SELECT r.id, r.name, r.subtitle, c.name AS category_name, r.status, r.badge
 				FROM recipes r
@@ -112,6 +128,11 @@ public class RecipeSearchService {
 			sql.append(")\n");
 		}
 
+		if (categories != null) {
+			sql.append("AND r.category_id = ANY (?::uuid[])\n");
+			args.add(categories);
+		}
+
 		sql.append("ORDER BY (r.status = 'ACTIVE') DESC, r.name LIMIT ").append(MINE_LIMIT);
 
 		return jdbc.query(sql.toString(), (rs, n) -> new RecipeSearchResult(
@@ -128,10 +149,19 @@ public class RecipeSearchService {
 	}
 
 	/** The library's half, matched on the weighted document V68 builds and ordered for reading. */
-	private List<RecipeSearchResult> library(String tsQuery) {
+	private List<RecipeSearchResult> library(String tsQuery, String categories) {
 		if (tsQuery.isEmpty()) {
 			return List.of();
 		}
+		List<Object> args = new ArrayList<>();
+		args.add(tsQuery);
+		// The chosen categories, by the temple's name for them (see search above).
+		String byCategory = "";
+		if (categories != null) {
+			byCategory = "AND m.category_name IN (SELECT c.name FROM recipe_categories c WHERE c.id = ANY (?::uuid[]))";
+			args.add(categories);
+		}
+		args.add(LIBRARY_LIMIT);
 		return jdbc.query("""
 				SELECT m.id, m.display_name, m.subtitle, m.category_name, m.state, m.badge,
 				       m.disambiguated_by,
@@ -142,12 +172,13 @@ public class RecipeSearchService {
 				       ) AS already_added
 				FROM master_recipes m
 				WHERE m.search_doc @@ to_tsquery('simple', ?)
+				%s
 				-- State A–Z then name A–Z, the one order used everywhere recipes are listed
 				-- (Rajeev, 2026-09-07). Not by rank: the reader is scanning, and a list that
 				-- reorders itself as they type cannot be scanned.
 				ORDER BY m.state, m.display_name
 				LIMIT ?
-				""", (rs, n) -> new RecipeSearchResult(
+				""".formatted(byCategory), (rs, n) -> new RecipeSearchResult(
 				"LIBRARY",
 				rs.getObject("id", UUID.class),
 				rs.getString("display_name"),
@@ -157,6 +188,18 @@ public class RecipeSearchService {
 				rs.getInt("disambiguated_by") == 0,
 				rs.getString("badge"),
 				rs.getBoolean("already_added"),
-				null), tsQuery, LIBRARY_LIMIT);
+				null), args.toArray());
+	}
+
+	/** A Postgres array literal of ids, bound as one parameter and cast in the SQL. */
+	private static String pgUuidArray(List<UUID> ids) {
+		StringBuilder out = new StringBuilder("{");
+		for (int i = 0; i < ids.size(); i++) {
+			if (i > 0) {
+				out.append(',');
+			}
+			out.append(ids.get(i));
+		}
+		return out.append('}').toString();
 	}
 }

@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
 import { InlineNotice } from "@/components/ds/InlineNotice";
+import { Button } from "@/components/ds/Button";
 import { ButtonLink } from "@/components/ds/ButtonLink";
 import {
   api,
@@ -15,6 +16,7 @@ import {
   type ApiError,
   type ImportCloseMatchDecision,
   type ImportCloseMatchView,
+  type RecipeCategory,
   type RecipeSearchResult,
 } from "@/lib/api";
 import { ImportCloseMatches, closeMatchesFrom } from "@/components/ImportCloseMatches";
@@ -61,6 +63,10 @@ function RecipesView() {
   // entry is replaced rather than pushed, so nothing can drive the caret from outside and back does
   // not walk letter by letter through a word.
   const [search, setSearch] = useState(params.get("q") ?? "");
+  // The filter pills chosen, by category id, kept in the address beside the search so Back from a
+  // recipe lands on the same filtered list.
+  const [cats, setCats] = useState<string[]>(() => (params.get("cat") ?? "").split(",").filter(Boolean));
+  const pills = useCategoryPills();
   const [results, setResults] = useState<RecipeSearchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
@@ -120,10 +126,10 @@ function RecipesView() {
   const latest = useRef(0);
 
   const run = useCallback(
-    async (query: string) => {
+    async (query: string, categoryIds: string[]) => {
       const mine = ++latest.current;
       try {
-        const rows = await api.searchRecipes(query, await getToken());
+        const rows = await api.searchRecipes(query, await getToken(), categoryIds);
         if (latest.current === mine) {
           setResults(rows);
           setError(null);
@@ -139,15 +145,41 @@ function RecipesView() {
 
   useEffect(() => {
     setLoading(true);
-    const timer = setTimeout(() => run(search), DEBOUNCE_MS);
+    const timer = setTimeout(() => run(search, cats), DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [search, run]);
+  }, [search, cats, run]);
+
+  function writeAddress(value: string, categoryIds: string[]) {
+    const q = new URLSearchParams();
+    if (value.trim()) q.set("q", value);
+    if (categoryIds.length) q.set("cat", categoryIds.join(","));
+    router.replace(q.toString() ? `/recipes?${q}` : "/recipes");
+  }
 
   function onType(value: string) {
     setSearch(value);
-    const q = new URLSearchParams();
-    if (value.trim()) q.set("q", value);
-    router.replace(q.toString() ? `/recipes?${q}` : "/recipes");
+    writeAddress(value, cats);
+  }
+
+  /**
+   * A pill pressed (Rajeev, 2026-09-29). On its own it filters to that category, and pressed again
+   * it lets go. With Ctrl or ⌘ held it is added to (or taken out of) the ones already chosen, and
+   * the list shows recipes in any of them.
+   */
+  function pick(id: string, together: boolean) {
+    let next: string[];
+    if (together) {
+      next = cats.includes(id) ? cats.filter((c) => c !== id) : [...cats, id];
+    } else {
+      next = cats.length === 1 && cats[0] === id ? [] : [id];
+    }
+    setCats(next);
+    writeAddress(search, next);
+  }
+
+  function clearPills() {
+    setCats([]);
+    writeAddress(search, []);
   }
 
   /*
@@ -303,8 +335,51 @@ function RecipesView() {
             onChange={(e) => onType(e.target.value)}
             placeholder="Search recipes…"
             aria-label="Search recipes"
-            className="mb-6 min-h-touch w-full rounded-control border border-hairline px-4"
+            className="mb-3 min-h-touch w-full rounded-control border border-hairline px-4"
           />
+
+          {/*
+            The temple's own categories as filter pills, under the box (Rajeev, 2026-09-29). Only
+            the ones that hold a recipe: a pill that can only ever show an empty list is noise, and
+            the seeded list has a dozen of those. "All recipes" is the reset, pressed when nothing
+            else is.
+          */}
+          {pills.length > 0 && (
+            <div role="group" aria-label="Filter by category" className="mb-6 flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant={cats.length === 0 ? "primary" : "ghost"}
+                aria-pressed={cats.length === 0}
+                className="!rounded-full"
+                onClick={clearPills}
+              >
+                All recipes
+              </Button>
+              {pills.map((p) => {
+                const on = cats.includes(p.id);
+                return (
+                  <Button
+                    key={p.id}
+                    size="sm"
+                    variant={on ? "primary" : "ghost"}
+                    aria-pressed={on}
+                    className="!rounded-full"
+                    onClick={(e) => pick(p.id, e.ctrlKey || e.metaKey || e.shiftKey)}
+                    // On a Mac, Ctrl-click opens the context menu and never arrives as a click.
+                    onContextMenu={(e) => {
+                      if (!e.ctrlKey) return;
+                      e.preventDefault();
+                      pick(p.id, true);
+                    }}
+                  >
+                    {p.name}
+                    <span className="tabular-nums opacity-70">{p.count}</span>
+                  </Button>
+                );
+              })}
+              <span className="text-xs text-ink-muted">Hold Ctrl or ⌘ to choose more than one.</span>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4">
@@ -316,11 +391,23 @@ function RecipesView() {
             <Loading label="Loading recipes…" />
           ) : results.length === 0 ? (
             <div className="card px-6 py-14 text-center">
-              <p className="text-lg">{search ? `No recipes match “${search}”` : "No recipes yet"}</p>
-              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
-                {search ? "Try another name." : "Add one, or pick from the shared library."}
+              <p className="text-lg">
+                {search
+                  ? `No recipes match “${search}”`
+                  : cats.length
+                    ? "No recipes in the categories you chose"
+                    : "No recipes yet"}
               </p>
-              {!search && (
+              <p className="mx-auto mt-2 max-w-prose text-ink-secondary">
+                {search
+                  ? cats.length
+                    ? "Try another name, or choose All recipes."
+                    : "Try another name."
+                  : cats.length
+                    ? "Choose All recipes to see every one."
+                    : "Add one, or pick from the shared library."}
+              </p>
+              {!search && !cats.length && (
                 <div className="mt-4 flex justify-center">
                   <ButtonLink href="/recipes/new">New recipe</ButtonLink>
                 </div>
@@ -478,4 +565,40 @@ function keptBody(names: string[]): string {
 function nameList(names: string[]): string {
   if (names.length < 2) return names.join("");
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * The categories that hold at least one of the temple's active recipes, A–Z, each with how many.
+ * Read once; a pill that goes stale by a recipe added in another tab is harmless.
+ */
+function useCategoryPills(): { id: string; name: string; count: number }[] {
+  const { getToken } = useAuth();
+  const [pills, setPills] = useState<{ id: string; name: string; count: number }[]>([]);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const token = await getToken();
+        const [categories, recipes]: [RecipeCategory[], { categoryName: string }[]] = await Promise.all([
+          api.listRecipeCategories(token),
+          api.listRecipes({}, token),
+        ]);
+        const counts = new Map<string, number>();
+        for (const r of recipes) counts.set(r.categoryName, (counts.get(r.categoryName) ?? 0) + 1);
+        if (!live) return;
+        setPills(
+          categories
+            .map((c) => ({ id: c.id, name: c.name, count: counts.get(c.name) ?? 0 }))
+            .filter((c) => c.count > 0)
+            .sort((a, b) => a.name.localeCompare(b.name))
+        );
+      } catch {
+        // No pills is a working page: the search box still searches everything.
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [getToken]);
+  return pills;
 }

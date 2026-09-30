@@ -384,7 +384,7 @@ describe("Today offers no door into the planner to a kitchen that does not plan 
     expect(screen.getByRole("link", { name: /review menu/i })).toHaveAttribute("href", "/planner");
     expect(screen.getByRole("link", { name: /record them/i })).toHaveAttribute(
       "href", "/planner/catch-up");
-    expect(screen.getByLabelText("Lunch at 12:00")).toHaveAttribute("href", "/planner?date=2026-08-14");
+    expect(screen.getByLabelText("Lunch at 12:00")).toHaveAttribute("href", "/planner?view=day&date=2026-08-14&meal=meal-lunch");
   });
 
   it("is unchanged for a session from before Epic 12, which carries no flag at all", async () => {

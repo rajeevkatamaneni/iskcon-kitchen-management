@@ -228,10 +228,14 @@ body                { background: var(--canvas-bg); color: var(--ink); }
 .dropdown-item:hover{ background: var(--sunken); }
 
 /* --- table --------------------------------------------------------- */
+/* 16px semibold in full ink, 16px above and below (Rajeev, 2026-09-29). It was 11px in
+   `ink-secondary` over 18px body text, so every heading read smaller and fainter than the data
+   under it: "the table data has a bigger font than the table header and it looks weird". */
 .table thead th     { background: var(--table-header-bg);
-                      color: var(--ink-secondary);
-                      font-size: 11px; font-weight: 600;
-                      letter-spacing: .09em; text-transform: uppercase;
+                      color: var(--ink);
+                      font-size: 16px; line-height: 1.4; font-weight: 600;
+                      letter-spacing: .05em; text-transform: uppercase;
+                      padding-top: 16px; padding-bottom: 16px;
                       border-bottom: 1px solid var(--hairline); }
 .table tbody td     { color: var(--ink);
                       border-top: 1px solid var(--hairline); }
@@ -312,6 +316,27 @@ input:disabled      { background: var(--sunken); color: var(--ink-muted); }
  * opaque background. This application's tables are sticky-headed.
  */
 .table thead.sticky th { background: var(--sunken); }
+
+/*
+ * Every table's header row stays at the top of the window while its rows scroll under it
+ * (Rajeev, 2026-09-29: "ALL tables should have freeze headers"). From `lg` only: below that a
+ * table is a stack of cards and its header row is not drawn.
+ *
+ * The `thead` is what sticks, not each `th`, so the row can carry an opaque `sunken` under the
+ * pack's header band — the frosted packs paint that band at 78% opacity, and rows passing under
+ * it would show through (§6). `sunken` is the same tint as the band in every pack. The bottom
+ * rule is a shadow because a collapsed border stays behind with the table when its row sticks.
+ *
+ * The box around a table scrolls sideways (`overflow-x-auto`) or hides its overflow, and either
+ * makes it a scrolling box, which is what a sticky header sticks to — so it would stick to the box and never move. `clip` still trims the
+ * rounded corners but is not a scrolling box, so the header sticks to the window. The fitter in
+ * `table.ts` sizes every table to its box at these widths, so there is nothing to scroll to.
+ */
+@media (min-width: 1024px) {
+  :where(.overflow-x-auto, .overflow-auto, .overflow-hidden):has(table.table) { overflow: clip; }
+  .table > thead { position: sticky; top: 0; z-index: 10; background: var(--sunken); }
+  .table > thead th { border-bottom: 0; box-shadow: inset 0 -1px 0 var(--hairline); }
+}
 
 /*
  * The nav column, which is the largest surface on any screen and was the last one still painted a

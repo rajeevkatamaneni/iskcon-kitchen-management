@@ -46,8 +46,11 @@ public class RecipeController {
 	 */
 	@GetMapping("/search")
 	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
-	public List<RecipeSearchResult> search(@RequestParam(name = "q", required = false) String query) {
-		return searchService.search(query);
+	public List<RecipeSearchResult> search(
+			@RequestParam(name = "q", required = false) String query,
+			// The filter pills under the box (Rajeev, 2026-09-29): recipes in ANY of these categories.
+			@RequestParam(name = "categoryId", required = false) List<UUID> categoryIds) {
+		return searchService.search(query, categoryIds == null ? List.of() : categoryIds);
 	}
 
 	/**

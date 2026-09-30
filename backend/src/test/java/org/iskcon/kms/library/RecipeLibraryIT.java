@@ -404,6 +404,35 @@ class RecipeLibraryIT extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$[?(@.origin=='LIBRARY')]").doesNotExist());
 	}
 
+	@Test
+	@DisplayName("the filter pills narrow the search to any of the chosen categories, the library's rows by name")
+	void searchByCategory() throws Exception {
+		loader.load();
+		signIn("uid-admin-a");
+		mvc.perform(authed(post("/api/v1/recipes/import/{id}", libraryId(IMPORTED)))).andExpect(status().isCreated());
+		String rice = admin.queryForObject(
+				"SELECT id::text FROM recipe_categories WHERE tenant_id = ? AND name = 'Rice'", String.class, templeA);
+		String sweets = admin.queryForObject(
+				"SELECT id::text FROM recipe_categories WHERE tenant_id = ? AND name = 'Sweets'", String.class, templeA);
+
+		// Rice: the temple's own Chitranna, and library rows only where the library files them as Rice.
+		mvc.perform(authed(get("/api/v1/recipes/search").param("q", "chitranna").param("categoryId", rice)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[?(@.origin=='MINE')]").exists())
+				.andExpect(jsonPath("$[?(@.categoryName != 'Rice')]").doesNotExist());
+
+		// Sweets alone: no Chitranna of the temple's.
+		mvc.perform(authed(get("/api/v1/recipes/search").param("q", "chitranna").param("categoryId", sweets)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[?(@.origin=='MINE')]").doesNotExist());
+
+		// Both: any of them, so the Rice recipe is back.
+		mvc.perform(authed(get("/api/v1/recipes/search")
+						.param("categoryId", sweets).param("categoryId", rice)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[?(@.origin=='MINE' && @.categoryName=='Rice')]").exists());
+	}
+
 	// ------------------------------------------------------------------ E2-S12
 
 	@Test

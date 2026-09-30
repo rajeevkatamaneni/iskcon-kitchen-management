@@ -59,6 +59,7 @@ export function MealServices({
   recipes,
   readOnly,
   refreshKey = 0,
+  focusMealId = null,
   only,
   returnTo,
   onChanged,
@@ -75,6 +76,11 @@ export function MealServices({
    * already chosen here, such as the language their job card prints in.
    */
   refreshKey?: number;
+  /**
+   * A meal to bring into view once the day has loaded — a link from Today names the meal it was
+   * pressed on. Once only, so a later re-read does not pull the page back while someone scrolls.
+   */
+  focusMealId?: string | null;
   /**
    * Narrows the day to the meals still waiting to be written down — what the catching-up screen
    * shows. Absent, the day shows every meal on it, which is what the planner means by a day.
@@ -141,6 +147,20 @@ export function MealServices({
         (!meal.recorded && meal.dishes.some((dish) => dish.status === "PLANNED"))
     );
 
+  // Parked just under the planner's frozen header rather than at the top of the window, where the
+  // header would sit on top of it. Measured, not assumed: the header's height depends on the day.
+  const focused = useRef<string | null>(null);
+  const loaded = meals.length > 0;
+  useEffect(() => {
+    if (!focusMealId || !loaded || focused.current === focusMealId) return;
+    const el = document.querySelector<HTMLElement>(`[data-meal-id="${CSS.escape(focusMealId)}"]`);
+    if (!el) return;
+    focused.current = focusMealId;
+    const frozen = document.querySelector<HTMLElement>("[data-planner-frozen]");
+    const cover = frozen && getComputedStyle(frozen).position === "sticky" ? frozen.offsetHeight : 0;
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - cover });
+  }, [focusMealId, loaded]);
+
   const cancelledNotice = cancelled && (
     <InlineNotice tone="success" autoDismiss title={cancelled} />
   );
@@ -185,8 +205,8 @@ export function MealServices({
     <div className="grid gap-4">
       {cancelledNotice}
       {meals.map((meal) => (
+        <div key={meal.mealId} data-meal-id={meal.mealId} className="grid">
         <MealBlock
-          key={meal.mealId}
           meal={meal}
           crew={(crew ?? []).find((c) => c.mealId === meal.mealId) ?? null}
           sufficiency={sufficiency}
@@ -201,6 +221,7 @@ export function MealServices({
           onError={onError}
           onReadRecipe={(recipeId, name) => setPeek({ recipeId, name })}
         />
+        </div>
       ))}
 
       {/* One layer for the whole day rather than one per meal: only one recipe is ever being read. */}

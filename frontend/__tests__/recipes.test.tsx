@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { RecipeSearchResult } from "@/lib/api";
 
-const { authRef, searchMock, importMock, countMock, closeMatchesMock } = vi.hoisted(() => ({
+const { authRef, searchMock, importMock, countMock, closeMatchesMock, categoriesMock, listMock } = vi.hoisted(() => ({
   authRef: {
     current: {
       status: "signed-in",
@@ -18,6 +18,9 @@ const { authRef, searchMock, importMock, countMock, closeMatchesMock } = vi.hois
   importMock: vi.fn(),
   countMock: vi.fn(),
   closeMatchesMock: vi.fn(),
+  // The filter pills read the categories and the temple's recipes to count them.
+  categoriesMock: vi.fn(),
+  listMock: vi.fn(),
 }));
 
 // The screen reads its own address bar, so the stub answers both halves of next/navigation.
@@ -45,6 +48,8 @@ vi.mock("@/lib/api", async (orig) => {
       // T-119. Stubbed for every test in this file, not only the ones that read it: without it the
       // real wrapper would reach for `fetch` on every render of this screen.
       countIngredientsAddedByImport: countMock,
+      listRecipeCategories: categoriesMock,
+      listRecipes: listMock,
     },
   };
 });
@@ -311,7 +316,71 @@ describe("recipe browse", () => {
     render(<RecipesPage />);
 
     expect(screen.getByLabelText(/search recipes/i)).toHaveValue("majjige");
-    await vi.waitFor(() => expect(searchMock).toHaveBeenCalledWith("majjige", "token"));
+    await vi.waitFor(() => expect(searchMock).toHaveBeenCalledWith("majjige", "token", []));
+  });
+
+  describe("filter pills (Rajeev, 2026-09-29)", () => {
+    beforeEach(() => {
+      paramsRef.current = new URLSearchParams();
+      searchMock.mockReset().mockResolvedValue([mine()]);
+      categoriesMock.mockReset().mockResolvedValue([
+        { id: "c-rice", name: "Rice", fastingCompatible: false },
+        { id: "c-dal", name: "Dal", fastingCompatible: false },
+        { id: "c-empty", name: "Beverages", fastingCompatible: true },
+      ]);
+      listMock.mockReset().mockResolvedValue([
+        { categoryName: "Rice" },
+        { categoryName: "Rice" },
+        { categoryName: "Dal" },
+      ]);
+      replaceMock.mockReset();
+    });
+
+    it("offers only the categories that hold a recipe, A to Z with their counts, and All recipes pressed", async () => {
+      render(<RecipesPage />);
+      const group = await screen.findByRole("group", { name: "Filter by category" });
+      const names = Array.from(group.querySelectorAll("button")).map((b) => b.textContent);
+      expect(names).toEqual(["All recipes", "Dal1", "Rice2"]);
+      expect(screen.getByRole("button", { name: "All recipes" })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("filters on a press, lets go on a second press, and adds a second category with Ctrl or ⌘", async () => {
+      render(<RecipesPage />);
+      const rice = await screen.findByRole("button", { name: /^Rice/ });
+      const dal = screen.getByRole("button", { name: /^Dal/ });
+
+      fireEvent.click(rice);
+      await vi.waitFor(() => expect(searchMock).toHaveBeenLastCalledWith("", "token", ["c-rice"]));
+      expect(rice).toHaveAttribute("aria-pressed", "true");
+      expect(replaceMock).toHaveBeenLastCalledWith("/recipes?cat=c-rice");
+
+      fireEvent.click(dal, { ctrlKey: true });
+      await vi.waitFor(() => expect(searchMock).toHaveBeenLastCalledWith("", "token", ["c-rice", "c-dal"]));
+
+      fireEvent.click(dal, { metaKey: true });
+      await vi.waitFor(() => expect(searchMock).toHaveBeenLastCalledWith("", "token", ["c-rice"]));
+
+      fireEvent.click(rice);
+      await vi.waitFor(() => expect(searchMock).toHaveBeenLastCalledWith("", "token", []));
+      expect(screen.getByRole("button", { name: "All recipes" })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("takes a Mac's Ctrl-click, which arrives as a context menu, as choosing one more", async () => {
+      render(<RecipesPage />);
+      const rice = await screen.findByRole("button", { name: /^Rice/ });
+      fireEvent.click(rice);
+      fireEvent.contextMenu(screen.getByRole("button", { name: /^Dal/ }), { ctrlKey: true });
+      await vi.waitFor(() => expect(searchMock).toHaveBeenLastCalledWith("", "token", ["c-rice", "c-dal"]));
+    });
+
+    it("resets with All recipes, and opens on the categories a deep link names", async () => {
+      paramsRef.current = new URLSearchParams("cat=c-rice,c-dal");
+      render(<RecipesPage />);
+      await vi.waitFor(() => expect(searchMock).toHaveBeenCalledWith("", "token", ["c-rice", "c-dal"]));
+      fireEvent.click(await screen.findByRole("button", { name: "All recipes" }));
+      await vi.waitFor(() => expect(searchMock).toHaveBeenLastCalledWith("", "token", []));
+      expect(replaceMock).toHaveBeenLastCalledWith("/recipes");
+    });
   });
 
   it("shows an empty state when a search matches nothing", async () => {
