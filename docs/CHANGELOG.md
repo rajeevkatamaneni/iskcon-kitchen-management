@@ -458,6 +458,28 @@ Approved by Rajeev. Stage 1 (Requirements & Wireframes) complete.
 
 ## SYSTEM_DESIGN.md
 
+### v1.6 — 2026-10-03 — A PDF is made in the request, not as a background job (approved by Rajeev)
+
+**Approved by Rajeev, 2026-10-03:** *"yes, amend SYSTEM_DESIGN"*, after choosing the change itself:
+*"go ahead with option 1"* — render every document in the request.
+
+**What changed in the product.** Every Generate PDF button used to queue a Quartz job and the screen
+asked once a second whether it was ready. On staging that took 5 to 37 seconds when it worked, and
+from 27 September it did not work at all, because the worker had been set to get CPU only during
+requests and it never receives any. The API now writes the document row, renders it, and answers READY
+or FAILED in one response: about 2 seconds measured on staging (5.2 for the first after a quiet spell),
+and under 3 seconds from click to file in Rajeev's own test.
+
+**§2 diagram and §5 Background jobs.** PDF generation comes off the list of background work, with a
+note under the job list saying why. **§9 Scale.** The sentence that called every heavy operation a
+background job now names the PDF render as the exception and gives the reason.
+
+**What is not changed.** The worker still runs the scheduled jobs and the notification sends, and the
+Postgres-backed queue is still the right choice for them. PDFs are still kept in object storage, which
+§5 already says.
+
+- Snapshot: `docs/versions/SYSTEM_DESIGN_v1.6.md`
+
 ### v1.5 — 2026-09-10 — `recurring_plans` comes off the entity list and §6 stops promising mandates (approved by Rajeev, task T-113)
 
 **Following REQUIREMENTS.md v1.6 and under the same sign-off** — Rajeev, 2026-09-10, quoted in full
