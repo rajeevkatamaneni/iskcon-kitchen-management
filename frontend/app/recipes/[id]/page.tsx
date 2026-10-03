@@ -102,7 +102,6 @@ function RecipeDetailView() {
             { language: translated ? translated.language : undefined },
             token
           ),
-        status: (documentId) => api.getDocument(documentId, token),
         download: (documentId) => api.downloadDocument(documentId, token),
         filename: `${recipe!.name}.pdf`,
       })

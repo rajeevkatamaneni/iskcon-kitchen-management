@@ -609,8 +609,8 @@ class WorkOrderIT extends AbstractIntegrationTest {
 
 	private UUID queue(String id) throws Exception {
 		String body = queueRaw(id)
-				.andExpect(status().isAccepted())
-				.andExpect(jsonPath("$.status").value("PENDING"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("READY"))
 				.andReturn().getResponse().getContentAsString();
 		return UUID.fromString(body.replaceAll(".*\"documentId\"\\s*:\\s*\"([^\"]+)\".*", "$1"));
 	}

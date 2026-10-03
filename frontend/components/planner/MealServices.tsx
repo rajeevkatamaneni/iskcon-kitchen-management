@@ -1326,7 +1326,6 @@ function KitchenSection({
       const token = await getToken();
       await generateAndDownload({
         request: () => api.requestJobCard(meal.mealId, printLanguage, token, kitchen.kitchenId),
-        status: (documentId) => api.getJobCardDocument(documentId, token),
         download: (documentId) => api.downloadJobCardDocument(documentId, token),
         // The kitchen in the file's name: the card number is the meal's, one for every kitchen, so
         // two kitchens' cards saved from one meal would otherwise overwrite or number each other.

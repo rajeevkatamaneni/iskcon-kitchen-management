@@ -235,15 +235,11 @@ class OwnAccountsAtOtherTemplesIT extends AbstractIntegrationTest {
 		// queryForObject threw IncorrectResultSizeDataAccessException before anything was written:
 		// every document request by anybody with a second temple failed.
 		//
-		// This context has no scheduler, so a request that gets past the lookup then fails to enqueue.
-		// Run inside an outer transaction, the documents row it inserted is still readable on the same
-		// connection before everything is rolled back, and that row says whose account was recorded.
+		// Run inside an outer transaction that is rolled back, so the documents row is read on the
+		// same connection and nothing is left behind; the row says whose account was recorded.
 		UUID createdBy = new TransactionTemplate(transactionManager).execute(status -> {
 			status.setRollbackOnly();
-			assertThatThrownBy(() -> documents.requestRecipePdf(recipe, null, "en"))
-					.as("past the author lookup, and stopped only for want of a worker")
-					.isInstanceOf(IllegalStateException.class)
-					.hasMessageContaining("No scheduler available");
+			documents.requestRecipePdf(recipe, null, "en");
 			return jdbc.queryForObject(
 					"SELECT created_by FROM documents WHERE recipe_id = ?", UUID.class, recipe);
 		});

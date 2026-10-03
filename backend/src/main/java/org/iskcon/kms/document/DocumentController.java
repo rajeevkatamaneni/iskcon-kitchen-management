@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,19 +15,21 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Recipe documents (E2-S5), behind {@code MANAGE_RECIPES}. Request a PDF (queued off the request
- * thread), poll its status, and download it through an authorized backend stream.
+ * Recipe documents (E2-S5), behind {@code MANAGE_RECIPES}. Request a PDF (made in the request, see
+ * {@link DocumentService}), read its status, and download it through an authorized backend stream.
  */
 @RestController
 public class DocumentController {
 
 	private final DocumentService documentService;
+	private final DocumentGenerationService generationService;
 
-	public DocumentController(DocumentService documentService) {
+	public DocumentController(DocumentService documentService, DocumentGenerationService generationService) {
 		this.documentService = documentService;
+		this.generationService = generationService;
 	}
 
-	/** Queues a recipe PDF at the given scale (omit targetYield for the base yield). */
+	/** Makes a recipe PDF at the given scale (omit targetYield for the base yield). */
 	@PostMapping("/api/v1/recipes/{recipeId}/pdf")
 	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
 	public ResponseEntity<Map<String, Object>> requestPdf(
@@ -37,8 +38,8 @@ public class DocumentController {
 			@RequestParam(name = "language", required = false) String language) {
 
 		UUID id = documentService.requestRecipePdf(recipeId, targetYield, language);
-		return ResponseEntity.status(HttpStatus.ACCEPTED)
-				.body(Map.of("documentId", id, "status", "PENDING"));
+		generationService.generate(id);
+		return ResponseEntity.ok(Map.of("documentId", id, "status", documentService.get(id).status()));
 	}
 
 	@GetMapping("/api/v1/documents/{id}")

@@ -434,7 +434,6 @@ function PurchaseOrderDetailView() {
       const token = await getToken();
       await generateAndDownload({
         request: () => api.requestPurchaseOrderPdf(id, docLanguage || undefined, token),
-        status: (documentId) => api.getPurchaseOrderDocument(id, documentId, token),
         download: (documentId) => api.downloadPurchaseOrderDocument(id, documentId, token),
         filename: `${po?.poNumber ?? "purchase-order"}.pdf`,
       });

@@ -6,7 +6,7 @@
 | **Technical stories** | E11-S3 (one way to say a quantity), E11-S4 (every screen says it the same way), E11-S5 (documents and emails say it the same way), E11-S6 (every dropdown offers the one list) |
 | **Roles exercised** | Kitchen staff, temple admin |
 | **Depends on** | UAT-015 (the recipes), UAT-017 (scaling), UAT-022 (inventory), UAT-032 (a planned meal) |
-| **Environment needs** | **None** for the screens. The job-card and work-order steps need the **background worker and a real document renderer**; the low-stock email step needs a **live message channel** — see §4 of the README |
+| **Environment needs** | **None** for the screens. The job-card and work-order steps need a **real document renderer**; the low-stock email step needs a **live message channel** — see §4 of the README |
 
 ## What this feature is for
 
@@ -141,7 +141,7 @@ rows do not. So there are two modes, and this test checks that each is used wher
 
 ### F. What gets printed, and what gets emailed
 
-*(These steps need the background worker and a real document renderer.)*
+*(These steps need a real document renderer.)*
 
 | # | Do this | You should see |
 |---|---|---|

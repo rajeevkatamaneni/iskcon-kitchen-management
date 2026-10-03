@@ -37,8 +37,8 @@ import org.springframework.test.context.TestPropertySource;
  * inherent to the thing under test, so assertions await outcomes rather than assuming them.
  */
 // Re-enables Quartz (the base test excludes it) and starts the scheduler. The empty exclude overrides
-// the base's. RecipeDocumentE2EIT uses exactly this property set, so it shares this context and this
-// scheduler. NotificationSendE2EIT cannot — its @MockBean alone gives it a context of its own — so it
+// the base's. (RecipeDocumentE2EIT shared this property set until documents stopped being queued on
+// 2026-10-02.) NotificationSendE2EIT cannot — its @MockBean alone gives it a context of its own — so it
 // runs its scheduler under a different name (T-152). Keep it that way: two contexts whose schedulers
 // share a name are two clustered nodes, each free to run the other's triggers with its own beans. For
 // this class that would mean a probe job counted as parked or abandoned in a meter registry these

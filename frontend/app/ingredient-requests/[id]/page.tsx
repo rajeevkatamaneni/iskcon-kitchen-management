@@ -681,7 +681,6 @@ function WorkOrder({ requestId, reference }: { requestId: string; reference: str
       const token = await getToken();
       await generateAndDownload({
         request: () => api.requestWorkOrder(requestId, chosen, token),
-        status: (documentId) => api.getWorkOrderDocument(documentId, token),
         download: (documentId) => api.downloadWorkOrderDocument(documentId, token),
         filename: `${reference}.pdf`,
       });

@@ -6,7 +6,7 @@
 | **Technical stories** | E10-S11 (the work order: template, PDF, print, 23 languages) |
 | **Roles exercised** | Temple admin, kitchen staff |
 | **Depends on** | UAT-069 (a request must be approved), UAT-070 (so you know what issuing actually draws) |
-| **Environment needs** | **Background worker on** (the PDF is built by a job) **and a real document renderer**. For the language steps, **a real translation provider** as well. With the stub renderer you get a placeholder file, not a work order; with the stub translator, text comes back tagged rather than translated — see §4 of the README |
+| **Environment needs** | A **real document renderer**. For the language steps, **a real translation provider** as well. With the stub renderer you get a placeholder file, not a work order; with the stub translator, text comes back tagged rather than translated — see §4 of the README |
 
 ## What this feature is for
 
@@ -34,8 +34,8 @@ auditor reads six months later.
 ## Before you start
 
 - **Sign in as:** `ikms.temple-admin.1@trading4good.org` (temple admin)
-- **Confirm with the environment owner** that the background worker and the real document renderer are
-  both on, and whether the translation provider is real. If the worker or renderer is off, run steps
+- **Confirm with the environment owner** that the real document renderer is
+  on, and whether the translation provider is real. If the renderer is off, run steps
   1–4 and 14 only, and mark the rest *blocked by environment*.
 - **Give Rice a second batch**, so the sheet has something to put in expiry order. Record a gift
   (UAT-028) of **15 Kg of Rice expiring 31 October 2026**. After UAT-070 that leaves Rice holding
@@ -82,7 +82,7 @@ auditor reads six months later.
 |---|---|---|
 | 12 | Go to **/inventory** → Rice and record a **spoilage adjustment** of `-15` against the batch expiring 31 October (UAT-024) | The October batch is emptied. Rice is 30 Kg, all in the March batch |
 | 13 | Download the work order for request **W** again | The new sheet names **only the March batch**, for the full 20 Kg. The old lot is gone from it — the sheet was rebuilt, not remembered |
-| 14 | Use **Print** (or your browser's print preview) on the same request | A clean A4 layout: no menu, no buttons, nothing cut off. **This path should work even with the background worker off** — say in your report which of the two you were able to use |
+| 14 | Use **Print** (or your browser's print preview) on the same request | A clean A4 layout: no menu, no buttons, nothing cut off. **This path should work even without the real renderer** — say in your report which of the two you were able to use |
 
 ### In the kitchen's own language
 
@@ -106,12 +106,12 @@ auditor reads six months later.
 - [ ] Quantities are cook's figures — `500 ml` and `120 gm`, never `0.5 L` or `0.12 Kg`.
 - [ ] The requester and the approver are named with dates, and there are two ruled signature boxes.
 - [ ] Changing the stock and re-downloading produces a different batch list.
-- [ ] Both the print view and the PDF produce the same sheet, and the print view works without the worker.
+- [ ] Both the print view and the PDF produce the same sheet, and the print view works without the renderer.
 - [ ] It renders in Devanagari and in a southern script without missing characters, with numbers and the reference untouched.
 
 ## Watch out for
 
-- **The most likely failure here is environmental**, not a product fault: with the worker off, the button spins and fails; with the stub renderer, a file downloads containing a placeholder; with the stub translator, "translated" text comes back tagged. In each case write *environment* and name which one — that is root cause R5, not a bug.
+- **The most likely failure here is environmental**, not a product fault: with the stub renderer, a file downloads containing a placeholder; with the stub translator, "translated" text comes back tagged. In each case write *environment* and name which one — that is root cause R5, not a bug.
 - A sheet that names a batch that **is not there any more**. Step 13 is the test for it. If the second download names the October batch, the sheet is being remembered rather than computed, and a storekeeper will be sent to an empty shelf. Major.
 - **Missing dishes.** This is the half of the sheet most likely to be dropped, because it is the half a picker does not strictly need. It is also the half the audit turns on.
 - Batches listed in received-date order, or in no order at all, rather than by expiry.

@@ -6,7 +6,6 @@ import java.util.UUID;
 import org.iskcon.kms.meal.ServedMealService;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -50,7 +49,7 @@ public class JobCardController {
 	}
 
 	/**
-	 * Queues one kitchen's card for one meal, issuing the meal's number if this is its first print.
+	 * Makes one kitchen's card for one meal, issuing the meal's number if this is its first print.
 	 *
 	 * <p>{@code language} is the recipes appendix's language, not the sheet's — the worksheet is
 	 * always English. {@code none} asks for the worksheet on its own, and no language at all means
@@ -71,8 +70,10 @@ public class JobCardController {
 		JobCardService.CardKitchen kitchen = jobCardService.kitchenFor(mealId, kitchenId);
 		String cardNumber = servedMealService.issueCardNumber(mealId);
 		UUID documentId = documentService.requestJobCardPdf(mealId, kitchen.id(), language);
-		return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
-				"documentId", documentId, "cardNumber", cardNumber, "status", "PENDING"));
+		generationService.generate(documentId);
+		return ResponseEntity.ok(Map.of(
+				"documentId", documentId, "cardNumber", cardNumber,
+				"status", documentService.get(documentId).status()));
 	}
 
 	/** What languages this meal's recipes can be printed in, and which the picker opens on (item 17). */

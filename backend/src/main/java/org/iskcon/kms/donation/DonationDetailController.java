@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.auth.AuthenticatedUser;
+import org.iskcon.kms.document.DocumentGenerationService;
 import org.iskcon.kms.document.DocumentService;
 import org.iskcon.kms.document.DocumentView;
 import org.springframework.core.io.InputStreamResource;
@@ -48,13 +49,15 @@ public class DonationDetailController {
 	private final DonationLedgerService ledgerService;
 	private final DonationReceiptService receiptService;
 	private final DocumentService documentService;
+	private final DocumentGenerationService generationService;
 
 	public DonationDetailController(
 			DonationLedgerService ledgerService, DonationReceiptService receiptService,
-			DocumentService documentService) {
+			DocumentService documentService, DocumentGenerationService generationService) {
 		this.ledgerService = ledgerService;
 		this.receiptService = receiptService;
 		this.documentService = documentService;
+		this.generationService = generationService;
 	}
 
 	/** The gift itself — everything the screen needs before anybody decides to receipt it. */
@@ -77,9 +80,11 @@ public class DonationDetailController {
 	public Map<String, Object> issueReceipt(
 			@PathVariable UUID donationId, @AuthenticationPrincipal AuthenticatedUser actor) {
 		UUID documentId = documentService.requestDonationReceiptPdf(donationId, actor);
+		// Leaves a READY receipt untouched, so pressing this again never reissues the document.
+		generationService.generate(documentId);
 		DocumentView document = documentService.get(documentId);
-		// LinkedHashMap rather than Map.of: the receipt number is null until the worker has caught up
-		// on a freshly issued row in a context with no scheduler, and Map.of will not carry a null.
+		// LinkedHashMap rather than Map.of, so a null receipt number would arrive as a null rather than
+		// as an exception from Map.of.
 		Map<String, Object> body = new LinkedHashMap<>();
 		body.put("documentId", documentId);
 		body.put("status", document.status());
@@ -138,7 +143,7 @@ public class DonationDetailController {
 	@PreAuthorize("hasAuthority('VIEW_DONATIONS')")
 	public Map<String, Object> sendReceipt(
 			@PathVariable UUID donationId, @AuthenticationPrincipal AuthenticatedUser actor) {
-		documentService.requestDonationReceiptPdf(donationId, actor);
+		generationService.generate(documentService.requestDonationReceiptPdf(donationId, actor));
 		return Map.of("sent", receiptService.send(donationId));
 	}
 }

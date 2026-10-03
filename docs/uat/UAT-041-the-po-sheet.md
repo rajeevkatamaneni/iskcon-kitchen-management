@@ -6,7 +6,7 @@
 | **Technical stories** | E5-S4 (PO document: PDF and print); procurement release 2026-09-19: R-SL-1 and R-SL-3 on the sheet (T-260, T-268, T-312) |
 | **Roles exercised** | Kitchen staff |
 | **Depends on** | UAT-040 |
-| **Environment needs** | **Background worker on** and a **real document renderer**. With the stub renderer the file downloads but contains a placeholder |
+| **Environment needs** | A **real document renderer**. With the stub renderer the file downloads but contains a placeholder |
 
 ## What this feature is for
 
@@ -29,7 +29,7 @@ misunderstanding here becomes a wrong delivery.
 
 - **Sign in as:** `ikms.kitchen-staff.1@trading4good.org` (kitchen staff)
 - **Start at:** **/orders** → open the **Sent** Sri Balaji order from UAT-040, and later **order A** (UAT-039)
-- **Confirm with the environment owner** that the worker and the real renderer are on. If not, run steps
+- **Confirm with the environment owner** that the real renderer is on. If not, run steps
   1–2 and 8 (the print view does not need the renderer) and mark the rest *blocked by environment*.
   **The real PDF can only be checked on staging.**
 

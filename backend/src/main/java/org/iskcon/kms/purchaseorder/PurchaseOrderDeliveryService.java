@@ -19,6 +19,8 @@ import org.iskcon.kms.notification.NotificationService;
 import org.iskcon.kms.notification.NotificationTemplate;
 import org.iskcon.kms.user.User.NotificationChannel;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PurchaseOrderDeliveryService {
 
+	private static final Logger log = LoggerFactory.getLogger(PurchaseOrderDeliveryService.class);
 	private static final int RATE_LIMIT_SECONDS = 120;
 	private static final int SUMMARY_ITEMS = 3;
 
@@ -60,6 +63,22 @@ public class PurchaseOrderDeliveryService {
 		this.auditService = auditService;
 		this.documentService = documentService;
 		this.documentGeneration = documentGeneration;
+	}
+
+	/**
+	 * The vendor sheet a sent order gets automatically (E5-S4), made once the send has committed.
+	 *
+	 * <p>Best-effort, as it was when the worker made it: the order has already gone to SENT, and a sheet
+	 * that will not render must not turn that into an error. The order's own Generate PDF button makes
+	 * one on demand, and a WhatsApp send makes its own in {@link #sheetToSend}. Not transactional, for
+	 * the reason {@link DocumentGenerationService#generate} gives.
+	 */
+	public void sheetAfterSend(UUID poId) {
+		try {
+			documentGeneration.generate(documentService.requestPurchaseOrderPdf(poId, null));
+		} catch (RuntimeException e) {
+			log.warn("The vendor sheet for sent order {} was not made", poId, e);
+		}
 	}
 
 	/**
@@ -112,7 +131,7 @@ public class PurchaseOrderDeliveryService {
 		guardRate(poId);
 
 		if (status == PoStatus.DRAFT) {
-			// Sending a draft transitions it to SENT (and generates its sheet) as part of delivering.
+			// Sending a draft transitions it to SENT as part of delivering; sheetToSend makes its sheet.
 			purchaseOrders.send(actor, poId);
 			po = purchaseOrders.get(poId);
 		}
@@ -177,23 +196,21 @@ public class PurchaseOrderDeliveryService {
 	 * </ol>
 	 *
 	 * <p><strong>Made now, not left to the worker, and why.</strong> A draft sent straight to WhatsApp has no
-	 * READY sheet: sending it has only just asked for one, and the worker renders it in its own time. Naming
+	 * READY sheet: sending it had only just asked for one, and the worker rendered it in its own time. Naming
 	 * that PENDING sheet and letting the message go meant the message job often ran before the sheet was
 	 * READY, and the WhatsApp adapter, which never sends without the PDF, then failed it in the background
 	 * with nothing said to the person who pressed the button. The brief was "generate one or refuse clearly".
-	 * So the sheet is rendered here, synchronously, through the same {@link DocumentGenerationService#generate}
-	 * the worker calls: the newest PENDING sheet, preferring the vendor's language, or a new one asked for in
-	 * the vendor's language when there is none. The press takes as long as one render, which the order's own
-	 * Generate PDF button already asks of the worker.
+	 * So the sheet is rendered here, synchronously, through {@link DocumentGenerationService#generate}: the newest PENDING sheet, preferring the vendor's language, or a new one asked for in
+	 * the vendor's language when there is none. The press takes as long as one render, as the order's own
+	 * Generate PDF button does.
 	 *
-	 * <p><strong>Inside this transaction, and what that costs.</strong> The PENDING row the draft transition
-	 * just inserted is not committed, so only this transaction can see it, and rendering it here is the only
+	 * <p><strong>Inside this transaction, and what that costs.</strong> A PENDING row inserted here is not
+	 * committed, so only this transaction can see it, and rendering it here is the only
 	 * way to render it before the message is queued. {@code generate} is written to run outside a
 	 * transaction, because a read that throws inside a surrounding one marks it rollback-only. Here that is
 	 * exactly the wanted outcome: whenever the sheet does not come out READY, this throws
-	 * {@link ErrorCode#PO_SHEET_NOT_READY} and the whole send rolls back, the DRAFT transition, the queued
+	 * {@link ErrorCode#PO_SHEET_NOT_READY} and the whole send rolls back, the DRAFT transition, the new
 	 * sheet and everything else with it. Nothing is changed or queued, and the person is told at the press.
-	 * The worker's own job for the same row later finds it READY and does nothing, as it always has.
 	 *
 	 * <p>The WhatsApp adapter still refuses any sheet that is not READY when the message goes, as the second
 	 * line of defence. A FAILED sheet is never chosen.
@@ -215,8 +232,8 @@ public class PurchaseOrderDeliveryService {
 					.orElseGet(() -> documentService.requestPurchaseOrderPdf(poId, null));
 			documentGeneration.generate(toRender);
 		} catch (RuntimeException e) {
-			// No scheduler to queue a sheet with, or a render that threw past generate's own catch. Either way
-			// there is no PDF, and the answer is the same refusal.
+			// A render that threw past generate's own catch. There is no PDF, and the answer is the same
+			// refusal.
 			throw new ApplicationException(ErrorCode.PO_SHEET_NOT_READY, Map.of("purchaseOrderId", poId), e);
 		}
 		boolean readyNow = sheetsOf(poId).stream().anyMatch(s -> s.id().equals(toRender) && s.ready());

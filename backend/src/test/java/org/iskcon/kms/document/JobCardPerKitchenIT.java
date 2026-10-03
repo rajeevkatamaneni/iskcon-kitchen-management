@@ -461,7 +461,7 @@ class JobCardPerKitchenIT extends AbstractIntegrationTest {
 		if (kitchenId != null) {
 			call = call.param("kitchenId", kitchenId.toString());
 		}
-		String body = mvc.perform(call).andExpect(status().isAccepted())
+		String body = mvc.perform(call).andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();
 		return UUID.fromString(body.replaceAll(".*\"documentId\"\\s*:\\s*\"([^\"]+)\".*", "$1"));
 	}

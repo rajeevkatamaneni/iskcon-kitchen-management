@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, type DocumentView } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { generateAndDownload } from "@/lib/document-download";
-
-function doc(status: string): DocumentView {
-  return { id: "d1", kind: "RECIPE_PDF", status } as DocumentView;
-}
 
 describe("generating a document", () => {
   beforeEach(() => {
@@ -12,26 +8,19 @@ describe("generating a document", () => {
     URL.revokeObjectURL = vi.fn();
   });
 
-  it("waits for the worker and then hands over the file", async () => {
+  it("hands over the file the moment the server says it is ready", async () => {
     const blob = new Blob(["%PDF"]);
-    const statuses = [doc("PENDING"), doc("PENDING"), doc("READY")];
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
-    vi.useFakeTimers();
-    const finished = generateAndDownload({
-      request: async () => ({ documentId: "d1" }),
-      status: async () => statuses.shift()!,
+    await generateAndDownload({
+      request: async () => ({ documentId: "d1", status: "READY" }),
       download: async () => blob,
       filename: "Khichdi.pdf",
     });
-    await vi.runAllTimersAsync();
-    await finished;
-    vi.useRealTimers();
 
     // The point of the whole exercise: the user gets a download, not a row to come back to.
     expect(click).toHaveBeenCalledOnce();
     expect(URL.createObjectURL).toHaveBeenCalledWith(blob);
-    expect(statuses).toHaveLength(0);
   });
 
   it("says so plainly when the render fails, and downloads nothing", async () => {
@@ -39,8 +28,7 @@ describe("generating a document", () => {
 
     await expect(
       generateAndDownload({
-        request: async () => ({ documentId: "d1" }),
-        status: async () => doc("FAILED"),
+        request: async () => ({ documentId: "d1", status: "FAILED" }),
         download,
         filename: "Khichdi.pdf",
       })

@@ -29,8 +29,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * so this class always built a second context, with a second clustered Quartz node — and both nodes
  * were called {@code kms-scheduler}, polling the same {@code qrtz_} tables in the same database.
  * Clustered Quartz treats every node with the same scheduler name as interchangeable, which in
- * production they are. Here they are not: the other node belongs to {@code BackgroundJobIT} and
- * {@code RecipeDocumentE2EIT}'s context, which has no mail sender and no from address.
+ * production they are. Here they are not: the other node belongs to {@code BackgroundJobIT}'s
+ * context, which has no mail sender and no from address.
  *
  * <p>What then happened, measured rather than supposed (the proof is docs/work/proof/T-152.md):
  * <ol>

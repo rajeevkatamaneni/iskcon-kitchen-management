@@ -6,56 +6,49 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.donation.DonationReceiptService;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
-import org.iskcon.kms.observability.LogContext;
-import org.iskcon.kms.jobs.KmsJob;
 import org.iskcon.kms.recipe.RecipeService;
-import org.iskcon.kms.tenancy.TenantContext;
-import org.quartz.JobBuilder;
-import org.quartz.JobDetail;
-import org.quartz.Scheduler;
-import org.quartz.Trigger;
-import org.quartz.TriggerBuilder;
-import org.slf4j.MDC;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Requesting and fetching generated documents (E2-S5). Requesting a recipe PDF creates a PENDING
- * record and enqueues the work off the request thread; the UI polls {@link #get} until READY, then
- * downloads through {@link #openForDownload} — an authorized backend stream, so a temple's documents
- * stay behind the same access control as its data (no public URLs).
+ * Requesting and fetching generated documents (E2-S5). Requesting one writes its PENDING record and
+ * returns its id; the caller then renders it with {@link DocumentGenerationService#generate} once
+ * this transaction has committed, and the UI downloads it through {@link #openForDownload} — an
+ * authorized backend stream, so a temple's documents stay behind the same access control as its
+ * data (no public URLs).
+ *
+ * <p><strong>Rendered in the request, not on the worker</strong> (changed 2026-10-02). It used to be
+ * queued as a Quartz job and the screen asked every second whether it was ready. When it worked that
+ * took 5 to 37 seconds on staging, and when the worker was starved of CPU no PDF was made at all.
+ * The request now holds for the render and nothing about a download depends on the scheduler. The two steps stay separate because the
+ * render must see a committed row: {@code generate} is deliberately not transactional, so it has to
+ * run after this method returns rather than inside it.
  */
 @Service
 public class DocumentService {
 
 	private static final BigDecimal MAX_TARGET_YIELD = BigDecimal.valueOf(50_000);
-	private static final Logger log = LoggerFactory.getLogger(DocumentService.class);
 
 	private final JdbcTemplate jdbc;
 	private final RecipeService recipeService;
 	private final DocumentStorage storage;
-	private final ObjectProvider<Scheduler> scheduler;
 	private final JobCardService jobCardService;
 	private final WorkOrderService workOrderService;
 	private final DonationReceiptService donationReceiptService;
 
 	public DocumentService(
 			JdbcTemplate jdbc, RecipeService recipeService, DocumentStorage storage,
-			ObjectProvider<Scheduler> scheduler, JobCardService jobCardService,
+			JobCardService jobCardService,
 			WorkOrderService workOrderService, DonationReceiptService donationReceiptService) {
 		this.jdbc = jdbc;
 		this.recipeService = recipeService;
 		this.storage = storage;
-		this.scheduler = scheduler;
 		this.jobCardService = jobCardService;
 		this.workOrderService = workOrderService;
 		this.donationReceiptService = donationReceiptService;
@@ -63,7 +56,7 @@ public class DocumentService {
 
 	@Transactional
 	public UUID requestRecipePdf(UUID recipeId, BigDecimal targetYield, String language) {
-		// Confirms the recipe exists in this tenant (RLS) before we queue anything.
+		// Confirms the recipe exists in this tenant (RLS) before anything is written.
 		recipeService.get(recipeId);
 		if (targetYield != null && (targetYield.signum() <= 0 || targetYield.compareTo(MAX_TARGET_YIELD) > 0)) {
 			throw new ApplicationException(
@@ -79,14 +72,12 @@ public class DocumentService {
 						'RECIPE_PDF', ?, ?, ?, 'PENDING', ?)
 				""", id, recipeId, lang, targetYield, createdBy);
 
-		enqueue(id);
 		return id;
 	}
 
 	/**
 	 * Requests a PO sheet (E5-S4). Versioned: each request is a new version so a re-render after a
-	 * post-SENT correction keeps the earlier sheets retrievable. The on-demand path — requires a
-	 * scheduler/worker, like a recipe PDF.
+	 * post-SENT correction keeps the earlier sheets retrievable.
 	 */
 	@Transactional
 	public UUID requestPurchaseOrderPdf(UUID purchaseOrderId, String language) {
@@ -106,7 +97,6 @@ public class DocumentService {
 						'PURCHASE_ORDER_PDF', ?, ?, ?, 'PENDING', ?)
 				""", id, purchaseOrderId, version, lang, createdBy);
 
-		enqueue(id);
 		return id;
 	}
 
@@ -117,13 +107,12 @@ public class DocumentService {
 	 *
 	 * <p>The language is the recipes appendix's, not the sheet's — the worksheet is always English
 	 * (item 17). No explicit choice means the temple's own where this meal's recipes are actually
-	 * translated into it, so a queued PDF and a browser print of the same meal come out the same.
+	 * translated into it, so a PDF and a browser print of the same meal come out the same.
 	 * Print it twice if the head cook wants English and the line cooks do not.
 	 *
 	 * <p>{@code kitchenId} is whose card this is (Epic 12), already resolved by
-	 * {@link JobCardService#kitchenFor} — named or not — so the worker renders exactly the kitchen
-	 * that was checked here rather than working it out again later, when the meal may have gained a
-	 * second kitchen. The document's version stays one sequence per meal: it numbers the PDFs made
+	 * {@link JobCardService#kitchenFor} — named or not — and stored on the row, so the render draws
+	 * exactly the kitchen that was checked here rather than working it out a second time. The document's version stays one sequence per meal: it numbers the PDFs made
 	 * for the meal, and the per-kitchen card version is the one printed on the sheet.
 	 */
 	@Transactional
@@ -144,7 +133,6 @@ public class DocumentService {
 						'JOB_CARD_PDF', ?, ?, ?, ?, 'PENDING', ?)
 				""", id, mealId, kitchenId, version, lang, createdBy);
 
-		enqueue(id);
 		return id;
 	}
 
@@ -155,11 +143,11 @@ public class DocumentService {
 	 * somebody in the store room is already holding. Both were true when they were printed, and the
 	 * version number on the paper is how you tell which is which.
 	 *
-	 * <p>Refused before anything is queued where the request has no work order — a draft, a submitted
-	 * request or a denied one. Queueing a document that the worker would only fail to render would
-	 * turn a clear "this has not been approved" into a FAILED row somebody has to interpret.
+	 * <p>Refused before anything is written where the request has no work order — a draft, a
+	 * submitted request or a denied one. Writing a document that would only fail to render would turn
+	 * a clear "this has not been approved" into a FAILED row somebody has to interpret.
 	 *
-	 * <p>No explicit language means the temple's own, so a queued PDF and a browser print of the same
+	 * <p>No explicit language means the temple's own, so a PDF and a browser print of the same
 	 * request come out as the same sheet.
 	 */
 	@Transactional
@@ -180,7 +168,6 @@ public class DocumentService {
 						'WORK_ORDER_PDF', ?, ?, ?, 'PENDING', ?)
 				""", id, ingredientRequestId, version, lang, createdBy);
 
-		enqueue(id);
 		return id;
 	}
 
@@ -198,10 +185,11 @@ public class DocumentService {
 	 * difference from a recipe card, which overwrites in place quite happily. Re-rendering would
 	 * quietly reissue the document with whatever the donor's details say today, so a donor who
 	 * changed address in June would find their April receipt had changed under them. A row still
-	 * PENDING, or one that FAILED, is re-enqueued: there are no bytes to protect in either case.
+	 * PENDING, or one that FAILED, is put back to PENDING for the caller to render again: there are no
+	 * bytes to protect in either case.
 	 *
 	 * <p>{@link DonationReceiptService#issueNumber} runs first and does two jobs — it refuses a
-	 * struck gift, and it issues the permanent number. Refusing before anything is queued keeps a
+	 * struck gift, and it issues the permanent number. Refusing before anything is written keeps a
 	 * clear "this gift was voided" from arriving as a FAILED row somebody has to interpret.
 	 */
 	@Transactional
@@ -219,7 +207,6 @@ public class DocumentService {
 				jdbc.update("""
 						UPDATE documents SET status = 'PENDING', error = NULL, updated_at = now() WHERE id = ?
 						""", id);
-				enqueue(id);
 			}
 			return id;
 		}
@@ -232,7 +219,6 @@ public class DocumentService {
 						'DONATION_RECEIPT_PDF', ?, 'en', 'PENDING', ?)
 				""", id, donationId, createdBy);
 
-		enqueue(id);
 		return id;
 	}
 
@@ -261,20 +247,6 @@ public class DocumentService {
 	public List<DocumentView> listForMeal(UUID mealId) {
 		return jdbc.query(SELECT_COLUMNS + " WHERE meal_id = ? ORDER BY version DESC",
 				MAPPER, mealId);
-	}
-
-	/**
-	 * Auto-generation on a state change (a PO being sent, E5-S3). Best-effort: where no scheduler is
-	 * available — the hermetic test context, or an API node without a worker — it logs and skips
-	 * rather than failing the send. The sheet can still be produced on demand.
-	 */
-	@Transactional
-	public void autoGeneratePurchaseOrderPdf(UUID purchaseOrderId) {
-		if (scheduler.getIfAvailable() == null) {
-			log.info("No scheduler available; skipping auto PO sheet for {}", purchaseOrderId);
-			return;
-		}
-		requestPurchaseOrderPdf(purchaseOrderId, null);
 	}
 
 	/** Every generated sheet for a PO, latest version first — the latest is the current sheet. */
@@ -340,35 +312,6 @@ public class DocumentService {
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("documentId", id, "status", row.get("status")));
 		}
 		return storage.open((String) row.get("storage_key"));
-	}
-
-	private void enqueue(UUID documentId) {
-		Scheduler quartz = scheduler.getIfAvailable();
-		if (quartz == null) {
-			throw new IllegalStateException(
-					"No scheduler available to generate the document — is the worker enabled?");
-		}
-		UUID tenantId = TenantContext.get().orElseThrow(() ->
-				new IllegalStateException("requestRecipePdf must run within a tenant context"));
-
-		JobBuilder builder = JobBuilder.newJob(GenerateDocumentJob.class)
-				.withIdentity("generate-document-" + documentId)
-				.usingJobData(GenerateDocumentJob.DOCUMENT_ID_KEY, documentId.toString())
-				.usingJobData(KmsJob.TENANT_KEY, tenantId.toString())
-				.requestRecovery();
-
-		String requestId = MDC.get(LogContext.REQUEST_ID);
-		if (requestId != null) {
-			builder.usingJobData(KmsJob.REQUEST_ID_KEY, requestId);
-		}
-
-		JobDetail job = builder.build();
-		Trigger trigger = TriggerBuilder.newTrigger().forJob(job).startNow().build();
-		try {
-			quartz.scheduleJob(job, trigger);
-		} catch (org.quartz.SchedulerException e) {
-			throw new ApplicationException(ErrorCode.UNEXPECTED_FAILURE, Map.of(), e);
-		}
 	}
 
 	private static final String SELECT_COLUMNS = """

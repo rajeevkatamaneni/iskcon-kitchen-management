@@ -229,7 +229,8 @@ class PurchaseOrderDocumentIT extends AbstractIntegrationTest {
 
 	private String requestVersion(UUID poId) throws Exception {
 		String body = mvc.perform(authed(post("/api/v1/purchase-orders/{poId}/pdf", poId)))
-				.andExpect(status().isAccepted())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("READY"))
 				.andReturn().getResponse().getContentAsString();
 		return JSON.readTree(body).get("documentId").asText();
 	}

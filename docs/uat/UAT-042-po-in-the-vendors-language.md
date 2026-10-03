@@ -6,7 +6,7 @@
 | **Technical stories** | E5-S5 (PO translation) |
 | **Roles exercised** | Kitchen staff |
 | **Depends on** | UAT-041, UAT-021 (glossary) |
-| **Environment needs** | **A real translation provider**, plus the worker and renderer from UAT-041 |
+| **Environment needs** | **A real translation provider**, plus the renderer from UAT-041 |
 
 ## What this feature is for
 

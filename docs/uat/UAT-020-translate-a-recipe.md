@@ -6,7 +6,7 @@
 | **Technical stories** | E2-S6 (recipe translation and translated PDF) |
 | **Roles exercised** | Kitchen staff |
 | **Depends on** | UAT-015, UAT-019 |
-| **Environment needs** | **A real translation provider**, and for the PDF steps, the **background worker and real renderer**. With the stub, translated text comes back tagged rather than genuinely translated |
+| **Environment needs** | **A real translation provider**, and for the PDF steps, the **real renderer**. With the stub, translated text comes back tagged rather than genuinely translated |
 
 ## What this feature is for
 

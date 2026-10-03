@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Purchase-order documents (E5-S4), behind {@code MANAGE_PURCHASE_ORDERS}. Request a versioned PDF
- * (queued off the request thread), list versions latest-first, download through an authorized
+ * (made in the request), list versions latest-first, download through an authorized
  * backend stream, or get the browser print view rendered inline.
  */
 @RestController
@@ -32,14 +31,15 @@ public class PurchaseOrderDocumentController {
 		this.generationService = generationService;
 	}
 
-	/** Queues a new version of the PO sheet on demand. */
+	/** Makes a new version of the PO sheet on demand. */
 	@PostMapping("/api/v1/purchase-orders/{poId}/pdf")
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public ResponseEntity<Map<String, Object>> requestPdf(
 			@PathVariable UUID poId,
 			@RequestParam(name = "language", required = false) String language) {
 		UUID id = documentService.requestPurchaseOrderPdf(poId, language);
-		return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("documentId", id, "status", "PENDING"));
+		generationService.generate(id);
+		return ResponseEntity.ok(Map.of("documentId", id, "status", documentService.get(id).status()));
 	}
 
 	/** Every generated sheet for the PO, latest version first. */

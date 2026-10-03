@@ -119,9 +119,9 @@ class DonationReceiptIT extends AbstractIntegrationTest {
 
 		UUID document = issue(gift);
 		assertThat(receiptNumber(gift)).startsWith("R-" + today.getYear() + "-");
-		assertThat(documentStatus(document)).isEqualTo("PENDING");
+		assertThat(documentStatus(document)).as("made in the request").isEqualTo("READY");
 
-		// What the worker will actually lay out, asserted before it is squashed into the stub
+		// What the renderer actually lays out, asserted before it is squashed into the stub
 		// renderer's placeholder bytes. The renderer in CI has no browser, so the sheet's own text is
 		// the only place these facts can be proved to have reached the page.
 		String html = within(() -> receiptService.render(gift));

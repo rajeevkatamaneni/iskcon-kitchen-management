@@ -70,7 +70,7 @@ schedule both go, or neither does.
 
 | # | Do this | You should see |
 |---|---|---|
-| 9 | **Ask the environment owner** to search the worker's log for anything mentioning the deleted temple, from the moment in step 8 onward | **Nothing.** No `calendar-precompute` for it, no `generate-document`, no send. In particular **no repeating failure quoting `KMS-400029`** (*temple not found*) — that is the exact noise this change removes, and seeing it is the finding |
+| 9 | **Ask the environment owner** to search the worker's log for anything mentioning the deleted temple, from the moment in step 8 onward | **Nothing.** No `calendar-precompute` for it, no send. In particular **no repeating failure quoting `KMS-400029`** (*temple not found*) — that is the exact noise this change removes, and seeing it is the finding |
 | 10 | Open **/operations** and read **System health** | **Database — Reachable**. **Background worker — Running.** Deleting a temple does not disturb the worker |
 | 11 | Write down **Failed today** | The figure, now |
 | 12 | Leave it **fifteen minutes**, doing nothing, then reload **/operations** | **Background worker** still **Running**, and **Failed today** has not climbed on its own |

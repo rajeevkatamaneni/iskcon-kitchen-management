@@ -274,7 +274,7 @@ class PurchaseOrderTranslationIT extends AbstractIntegrationTest {
 		if (language != null) {
 			req = req.param("language", language);
 		}
-		String body = mvc.perform(req).andExpect(status().isAccepted())
+		String body = mvc.perform(req).andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();
 		return JSON.readTree(body).get("documentId").asText();
 	}

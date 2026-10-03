@@ -20,9 +20,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Document generation and download (E2-S5), the worker-side core plus the HTTP surface — without a
- * scheduler (the async request→job path is {@link RecipeDocumentE2EIT}). Uses the default stub
- * renderer + local storage, so it is fully hermetic.
+ * Document generation and download (E2-S5), the render itself plus the HTTP surface. Uses the
+ * default stub renderer + local storage, so it is fully hermetic.
  */
 @AutoConfigureMockMvc
 class DocumentGenerationIT extends AbstractIntegrationTest {

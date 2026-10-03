@@ -107,6 +107,7 @@ public class PurchaseOrderController {
 			@RequestBody(required = false) SendPurchaseOrderRequest request,
 			@AuthenticationPrincipal AuthenticatedUser actor) {
 		service.send(actor, id, request != null && request.sendAnyway());
+		deliveryService.sheetAfterSend(id);
 		return ResponseEntity.noContent().build();
 	}
 

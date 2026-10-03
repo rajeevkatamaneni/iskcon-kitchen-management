@@ -431,21 +431,31 @@ class PurchaseOrderWhatsAppIT extends AbstractIntegrationTest {
 
 	/**
 	 * When no sheet can be made, the press is refused with KMS-400155, and the whole send rolls back: no
-	 * notification, no trail event, no audit entry, and no sheet row left behind. Made to fail by refusing to
-	 * queue the new sheet, the one lever a test has without replacing the renderer; it reaches the same refusal
-	 * as a render that does not come out READY.
+	 * notification, no trail event, no audit entry, and no sheet row left behind. Made to fail by a trigger that
+	 * refuses to let a sheet become READY, the one lever a test has without replacing the renderer (a mocked
+	 * renderer would give this class a test context of its own): the render runs, its READY write throws, and
+	 * the sheet ends FAILED, exactly as a render that does not come out would.
 	 */
 	@Test
 	@DisplayName("when no sheet can be made, Send on WhatsApp answers 409 KMS-400155 and nothing is queued or changed")
 	void noSheetCanBeMadeIsRefusedAtThePress() throws Exception {
 		UUID poId = sentPo("PO-2026-0205");
-		org.mockito.Mockito.doThrow(new org.quartz.SchedulerException("no worker"))
-				.when(scheduler).scheduleJob(org.mockito.ArgumentMatchers.any(org.quartz.JobDetail.class),
-						org.mockito.ArgumentMatchers.any(org.quartz.Trigger.class));
-
-		mvc.perform(whatsapp(poId))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("KMS-400155"));
+		admin.execute("""
+				CREATE FUNCTION test_no_ready_sheet() RETURNS trigger LANGUAGE plpgsql AS $$
+				BEGIN RAISE EXCEPTION 'test: no sheet may become READY'; END $$
+				""");
+		admin.execute("""
+				CREATE TRIGGER test_no_ready_sheet BEFORE UPDATE ON documents
+				FOR EACH ROW WHEN (NEW.status = 'READY') EXECUTE FUNCTION test_no_ready_sheet()
+				""");
+		try {
+			mvc.perform(whatsapp(poId))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.code").value("KMS-400155"));
+		} finally {
+			admin.execute("DROP TRIGGER test_no_ready_sheet ON documents");
+			admin.execute("DROP FUNCTION test_no_ready_sheet()");
+		}
 
 		assertThat(admin.queryForObject("SELECT status FROM purchase_orders WHERE id = ?", String.class, poId)).isEqualTo("SENT");
 		assertThat(admin.queryForObject("SELECT count(*) FROM notifications", Integer.class)).isZero();

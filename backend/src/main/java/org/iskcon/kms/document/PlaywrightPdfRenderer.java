@@ -11,6 +11,8 @@ import org.iskcon.kms.error.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,6 +30,11 @@ import org.springframework.stereotype.Component;
  * no service at all. A missing browser should cost you your PDFs, not your temple's kitchen — so a
  * failure to launch is reported as a document failure, with the incident id, and the rest of the
  * product carries on.
+ *
+ * <p><strong>But it is started early, off to one side.</strong> Since documents are made in the request
+ * (2026-10-02), the person who presses Download waits for the launch, so it is begun on a background
+ * thread as soon as the application is ready. Nothing waits for it, and a launch that fails there is
+ * logged and tried again by the first render, exactly as before.
  */
 @Component
 @ConditionalOnProperty(name = "kms.documents.renderer", havingValue = "playwright")
@@ -94,6 +101,23 @@ public class PlaywrightPdfRenderer implements PdfRenderer, AutoCloseable {
 			return "";
 		}
 		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+	}
+
+	@EventListener(ApplicationReadyEvent.class)
+	public void startEarly() {
+		Thread starter = new Thread(() -> {
+			try {
+				warm();
+			} catch (RuntimeException e) {
+				// Already logged by browser(); the first render tries again.
+			}
+		}, "pdf-browser-start");
+		starter.setDaemon(true);
+		starter.start();
+	}
+
+	private synchronized void warm() {
+		browser();
 	}
 
 	/** Launched once, on first use. Retried on the next request if the launch failed. */

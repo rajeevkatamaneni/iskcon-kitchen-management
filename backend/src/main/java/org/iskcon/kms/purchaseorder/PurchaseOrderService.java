@@ -45,7 +45,6 @@ public class PurchaseOrderService {
 	private final TempleClock clock;
 	private final JdbcTemplate jdbc;
 	private final AuditService auditService;
-	private final org.iskcon.kms.document.DocumentService documentService;
 	private final IngredientUnits ingredientUnits;
 	/**
 	 * Only ever asked one question: has this temple's WhatsApp ever actually sent anything (T-136)?
@@ -83,7 +82,6 @@ public class PurchaseOrderService {
 	private final VendorPerformanceService vendorPerformance;
 
 	public PurchaseOrderService(JdbcTemplate jdbc, AuditService auditService,
-			org.iskcon.kms.document.DocumentService documentService,
 			IngredientUnits ingredientUnits,
 			TenantWhatsAppSettingsService whatsappSettings,
 			LeadTimes leadTimes,
@@ -94,7 +92,6 @@ public class PurchaseOrderService {
 		this.vendorPerformance = vendorPerformance;
 		this.jdbc = jdbc;
 		this.auditService = auditService;
-		this.documentService = documentService;
 		this.ingredientUnits = ingredientUnits;
 		this.whatsappSettings = whatsappSettings;
 	}
@@ -499,10 +496,8 @@ public class PurchaseOrderService {
 		after.put("sentAfterLeadTime", tooLate);
 		auditService.record(actor, AuditAction.PO_SENT, AuditEntityType.PURCHASE_ORDER, id,
 				Map.of("status", "DRAFT"), after, null);
-
-		// A sent PO gets its vendor sheet automatically (E5-S4); best-effort, so a worker-less
-		// context (or node) never blocks the send.
-		documentService.autoGeneratePurchaseOrderPdf(id);
+		// The vendor sheet a sent order gets (E5-S4) is made once this has committed, by the caller:
+		// PurchaseOrderController.send and PurchaseOrderDeliveryService.sendViaWhatsApp.
 	}
 
 	/**

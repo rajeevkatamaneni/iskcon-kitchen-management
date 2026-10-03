@@ -30,8 +30,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 /**
- * Turns a PENDING document into a rendered file (E2-S5). This is the worker-side core the background
- * job calls; kept separate so it can be tested synchronously without Quartz.
+ * Turns a PENDING document into a rendered file (E2-S5). Called by the request that asked for the
+ * document, once the row is committed (see {@link DocumentService}); kept separate from it so it can
+ * be tested on its own.
  *
  * <p>Idempotent, as every job must be: a document already READY is left alone, and a re-run
  * overwrites the same storage key. Renders the recipe card (base or scaled), produces the PDF via
@@ -128,7 +129,7 @@ public class DocumentGenerationService {
 				html = PurchaseOrderSheetTemplate.render(buildSheetModel((UUID) doc.get("po_id"), language));
 				path = "generated/purchase-orders/" + documentId + ".pdf";
 			} else if ("JOB_CARD_PDF".equals(kind)) {
-				// The kitchen rides on the row (V152), as the language does: the worker is handed only
+				// The kitchen rides on the row (V152), as the language does: the render is handed only
 				// the document's id. Null on a card requested before V152, which means the meal's only
 				// kitchen, and JobCardService resolves it by the same rule the request did.
 				JobCardService.RenderedCard card = jobCardService.renderForPdf(

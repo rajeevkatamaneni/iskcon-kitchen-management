@@ -6,7 +6,7 @@
 | **Technical stories** | E2-S5 (recipe PDF and print) |
 | **Roles exercised** | Kitchen staff |
 | **Depends on** | UAT-017 |
-| **Environment needs** | **Background worker on** (the PDF is built by a job) **and a real document renderer**. With the stub renderer you get a placeholder file, not a real recipe card — see §4 of the README |
+| **Environment needs** | A **real document renderer**. With the stub renderer you get a placeholder file, not a real recipe card — see §4 of the README |
 
 ## What this feature is for
 
@@ -27,8 +27,8 @@ is being cooked today, has to come out as a clean printed card.
 
 - **Sign in as:** `ikms.kitchen-staff.1@trading4good.org` (kitchen staff)
 - **Start at:** **/recipes** → open **Khichdi**
-- **Confirm with the environment owner** that the background worker and the real document renderer are
-  both switched on. If they are not, run steps 1–3 only and mark the rest *blocked by environment*.
+- **Confirm with the environment owner** that the real document renderer is
+  switched on. If they are not, run steps 1–3 only and mark the rest *blocked by environment*.
 
 ## Steps
 
@@ -54,7 +54,7 @@ is being cooked today, has to come out as a clean printed card.
 
 ## Watch out for
 
-- **The most likely failure here is environmental**, not a product fault: with the background worker off, the button will spin and then fail; with the stub renderer, the file downloads but contains a placeholder. In both cases write *environment* in your report and name which one — that is root cause R5, not a bug.
+- **The most likely failure here is environmental**, not a product fault: with the stub renderer, the file downloads but contains a placeholder. Write *environment* in your report — that is root cause R5, not a bug.
 - The message *"The PDF couldn't be generated"* — record what you had done just before it.
 - A PDF that shows base quantities when you had scaled the screen. That is a real product defect (Major).
 - Garbled or boxed characters in the PDF. English should be clean here; the same check for Indian scripts is UAT-020.

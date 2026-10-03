@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -32,9 +31,8 @@ import org.springframework.web.bind.annotation.RestController;
  * they can read the request on its own screen, and the paper that walks into the store room belongs
  * to the person who works there.
  *
- * <p><strong>Both paths, one control.</strong> A synchronous print view returning HTML — which works
- * with the worker down, and is what the UI's Download button falls back to — and a queued, versioned
- * PDF. Both render the same template from the same model, so what is printed and what is filed
+ * <p><strong>Both paths, one control.</strong> A print view returning HTML — which needs no
+ * browser on the server, and is what the UI's Download button falls back to — and a versioned PDF. Both render the same template from the same model, so what is printed and what is filed
  * cannot come apart.
  */
 @RestController
@@ -54,11 +52,11 @@ public class WorkOrderController {
 	}
 
 	/**
-	 * Queues a work order for one approved request.
+	 * Makes a work order for one approved request.
 	 *
-	 * <p>No language at all means the temple's own, so a queued PDF and a browser print of the same
-	 * request come out as the same sheet. A request that has not been approved is refused here rather
-	 * than left to fail in the worker.
+	 * <p>No language at all means the temple's own, so a PDF and a browser print of the same request
+	 * come out as the same sheet. A request that has not been approved is refused here rather than
+	 * left to fail in the render.
 	 */
 	@PostMapping
 	@PreAuthorize("hasAuthority('ISSUE_INGREDIENTS')")
@@ -67,8 +65,9 @@ public class WorkOrderController {
 			@RequestParam(name = "language", required = false) String language) {
 
 		UUID documentId = documentService.requestWorkOrderPdf(requestId, language);
-		return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
-				"documentId", documentId, "status", "PENDING"));
+		generationService.generate(documentId);
+		return ResponseEntity.ok(Map.of(
+				"documentId", documentId, "status", documentService.get(documentId).status()));
 	}
 
 	/**

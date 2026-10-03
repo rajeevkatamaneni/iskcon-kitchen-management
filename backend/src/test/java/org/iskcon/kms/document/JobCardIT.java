@@ -642,18 +642,12 @@ class JobCardIT extends AbstractIntegrationTest {
 		String body = mvc.perform(post("/api/v1/job-cards")
 						.param("mealId", mealIdFor("Lunch").toString())
 						.header("Authorization", "Bearer valid-token"))
-				.andExpect(status().isAccepted())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("READY"))
 				.andExpect(jsonPath("$.cardNumber").value("LC-2025-0001"))
 				.andReturn().getResponse().getContentAsString();
 		UUID documentId = UUID.fromString(
 				body.replaceAll(".*\"documentId\"\\s*:\\s*\"([^\"]+)\".*", "$1"));
-
-		TenantContext.set(tenant);
-		try {
-			generationService.generate(documentId);
-		} finally {
-			TenantContext.clear();
-		}
 
 		mvc.perform(get("/api/v1/job-cards/documents/{id}", documentId)
 						.header("Authorization", "Bearer valid-token"))
@@ -670,7 +664,7 @@ class JobCardIT extends AbstractIntegrationTest {
 		mvc.perform(post("/api/v1/job-cards")
 						.param("mealId", mealIdFor("Lunch").toString())
 						.header("Authorization", "Bearer valid-token"))
-				.andExpect(status().isAccepted())
+				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.cardNumber").value("LC-2025-0001"));
 
 		mvc.perform(get("/api/v1/job-cards/documents")
@@ -1025,7 +1019,7 @@ class JobCardIT extends AbstractIntegrationTest {
 		String body = mvc.perform(post("/api/v1/job-cards")
 						.param("mealId", mealIdFor(mealKind).toString())
 						.header("Authorization", "Bearer valid-token"))
-				.andExpect(status().isAccepted())
+				.andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();
 		return body.replaceAll(".*\"cardNumber\"\\s*:\\s*\"([^\"]+)\".*", "$1");
 	}

@@ -86,7 +86,7 @@ wastes everyone's time.
 
 | Switch | What breaks while it is off | Tests affected |
 |---|---|---|
-| **Background worker** (`KMS_WORKER_ENABLED`) | Nothing scheduled runs: Vaishnava calendar build, PDF generation, shift reminders, low-stock digest, shopping-list refresh, payment reconciliation | UAT-019, 020, 023, 029, 030, 031, 032, 034, 036, 041, 052 (UAT-038 no longer needs it: the shopping list is worked out when the page opens) |
+| **Background worker** (`KMS_WORKER_ENABLED`) | Nothing scheduled runs: Vaishnava calendar build, shift reminders, low-stock digest, shopping-list refresh, payment reconciliation | UAT-023, 029, 030, 031, 032, 034, 036, 052 (UAT-038 no longer needs it: the shopping list is worked out when the page opens; nor do the PDF steps of UAT-019, 020, 041, 071 and 074, since a PDF is made the moment it is asked for) |
 | **Document renderer** (`DOCUMENTS_RENDERER`) | PDFs come out as placeholders, not real documents | UAT-019, 020, 041, 042, 043, 092 |
 | **Translation provider** (`TRANSLATION_PROVIDER`) | "Translated" text comes back tagged, not really translated | UAT-020, 021, 042 |
 | **Message channels** (WhatsApp / SMS / email adapters) | No message ever actually arrives — sends are only recorded | UAT-009, 028, 043, 047, 052, 053, 055, 092 |
