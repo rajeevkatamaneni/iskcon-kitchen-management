@@ -45,6 +45,9 @@ class ReusePlanIT extends AbstractIntegrationTest {
 	private MealKindService mealKindService;
 
 	@Autowired
+	private ServedMealService servedMealService;
+
+	@Autowired
 	private StubTokenVerifier stubVerifier;
 
 	private JdbcTemplate admin;
@@ -138,6 +141,29 @@ class ReusePlanIT extends AbstractIntegrationTest {
 		// Fourteen days landed on fourteen days. The seventh, which the week-shaped tool could never
 		// have reached, is there.
 		assertThat(plannedOn(TARGET.plusDays(13))).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("a meal's dishes read A to Z by recipe name, on the source and on its copy alike")
+	void dishesReadByRecipeName() throws Exception {
+		UUID aloo = admin.queryForObject("""
+				INSERT INTO recipes (tenant_id, name, category_id, base_yield_qty, base_yield_unit)
+				SELECT ?, 'aloo Sabji', category_id, 100, 'KG' FROM recipes WHERE id = ? RETURNING id
+				""", UUID.class, tenant, rice);
+		// Added out of name order, and the lower-case name proves the sort ignores case.
+		UUID meal = MealFixture.meal(admin, tenant, SOURCE, "Lunch", LocalTime.NOON);
+		MealFixture.headCount(admin, meal, 100, 0, 0);
+		for (UUID recipe : java.util.List.of(sago, rice, aloo)) {
+			MealFixture.dish(admin, tenant, meal, recipe, BigDecimal.valueOf(100), planner());
+		}
+
+		// The copy is written in one transaction, so its dishes share one created_at: the order they
+		// used to be read in could not survive it, which is the defect this order replaced.
+		mvc.perform(reuse("/reuse", 1)).andExpect(status().isOk()).andExpect(jsonPath("$.copied").value(3));
+
+		java.util.List<String> expected = java.util.List.of("aloo Sabji", "Plain Rice", "Sabudana Khichadi");
+		assertThat(dishNamesOn(SOURCE)).isEqualTo(expected);
+		assertThat(dishNamesOn(TARGET)).isEqualTo(expected);
 	}
 
 	@Test
@@ -329,6 +355,17 @@ class ReusePlanIT extends AbstractIntegrationTest {
 				JOIN meal_kinds k ON k.id = m.meal_kind_id
 				WHERE pd.tenant_id = ? AND pd.plan_date = ? AND d.status <> 'CANCELLED' ORDER BY k.name
 				""", String.class, tenant, date);
+	}
+
+	/** The dish names of a day's one meal, in the order the application reads them. */
+	private java.util.List<String> dishNamesOn(LocalDate date) {
+		TenantContext.set(tenant);
+		try {
+			return servedMealService.list(date, date).get(0).dishes().stream()
+					.map(MealDishView::recipeName).toList();
+		} finally {
+			TenantContext.clear();
+		}
 	}
 
 	/** How many meal rows a day holds — a reuse writes meals, not loose dishes (D-27). */

@@ -883,8 +883,17 @@ public class ServedMealService {
 			JOIN recipes r ON r.id = d.recipe_id
 			""";
 
-	/** The order the planner added them in; the id breaks a tie inside one statement's now(). */
-	private static final String DISH_ORDER = " ORDER BY d.created_at, d.id";
+	/**
+	 * By recipe name, A to Z, ignoring case (Rajeev, 2026-10-03: "Sort by recipe name"), so a dish is
+	 * where somebody looking for it expects it on every meal. The id only breaks a tie between two
+	 * dishes of the same recipe.
+	 *
+	 * <p>It used to be the order the planner added them in, by {@code created_at}. That never held:
+	 * {@code now()} is the time the transaction started, so every dish saved together, a meal composed
+	 * in one save or a whole plan reused, shared one timestamp and came back in the order of its
+	 * random id.
+	 */
+	private static final String DISH_ORDER = " ORDER BY lower(r.name), r.name, d.id";
 
 	/**
 	 * A meal's kitchens (Epic 12, V150), with each kitchen's name and whether it is the main one read
