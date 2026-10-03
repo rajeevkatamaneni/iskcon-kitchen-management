@@ -770,25 +770,17 @@ resource "google_cloud_run_v2_service" "worker" {
           # As the API: a JVM and a headless browser together need more than a gigabyte.
           memory = "2Gi"
         }
-        # CPU only while there is work, not around the clock. Changed 2026-09-22 after the worker
-        # billed $57.15 in thirty days on staging.
+        # Billed for a running instance rather than per request, since this one is always up and
+        # must have CPU between requests — there are no requests.
         #
-        # `cpu_idle = false` rents a full vCPU for all 720 hours of a month whether anything is
-        # running or not, and almost nothing is: five jobs that finish in seconds (02:00 heartbeat,
-        # 03:00 low-stock digest, 04:30 PO auto-cancel, 05:00 wish-list archive, 06:00 shift
-        # reminders), plus whatever a person asks for. Over the same thirty days that was **24
-        # documents and 264 notifications** — a few minutes of real compute out of 43,200 paid for.
-        #
-        # The instance still never scales to zero (min_instance_count = 1 below), so a queued job is
-        # still picked up the moment it is queued and a cook pressing "Download job card" waits no
-        # longer than before. What stops is paying for an idle vCPU.
-        #
-        # **The one thing to watch**, and the reason this wants a day of observation rather than a
-        # shrug: with CPU throttled, Cloud Run allocates it during request processing, and Quartz
-        # notices a new trigger on a background poll thread rather than on a request. If that thread
-        # is starved the nightly jobs run late or not at all. The 02:00 HeartbeatJob exists exactly
-        # to make that visible — if it stops appearing in the logs, put this back to false.
-        cpu_idle = true
+        # Tried `cpu_idle = true` on 2026-09-22 to save the ~$57 a month staging paid for an idle
+        # vCPU, and reverted 2026-10-02: every document from 27 Sept on failed. With CPU throttled
+        # outside requests, Chromium could not start inside Playwright's launch timeout (KMS-500004)
+        # and the translation calls ran past their deadline (KMS-500003). The 02:00 heartbeat kept
+        # firing throughout, so it is not a sufficient check for this setting: it needs neither a
+        # browser nor the network. Making this cheaper means giving the worker real requests to
+        # run its work inside (a push queue), not throttling it.
+        cpu_idle = false
       }
 
       env {
