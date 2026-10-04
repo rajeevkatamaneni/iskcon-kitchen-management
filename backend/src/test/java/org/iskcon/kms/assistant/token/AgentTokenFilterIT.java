@@ -58,12 +58,17 @@ import org.springframework.web.bind.annotation.RestController;
  * below rides on that one extra context rather than adding another. It is fixed so this class can
  * mint an already-expired token with its own clock; with the in-memory default the key would be
  * unknowable from outside the bean.
+ *
+ * <p><strong>{@code McpEndToEndIT} reuses this exact configuration</strong> — the same
+ * {@code @Import} and the same property — so the two share one cached context rather than each
+ * building its own. That is why the endpoint, the key and {@link #expiredReadToken} are public.
+ * Change one class's annotations and change the other's to match, or the suite grows a context.
  */
 @Import(AgentTokenFilterIT.EchoEndpoint.class)
 @TestPropertySource(properties = "kms.assistant.token.key=" + AgentTokenFilterIT.KEY_BASE64)
-class AgentTokenFilterIT extends AbstractIntegrationTest {
+public class AgentTokenFilterIT extends AbstractIntegrationTest {
 
-	static final String KEY_BASE64 = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
+	public static final String KEY_BASE64 = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
 
 	@Autowired
 	private TestRestTemplate rest;
@@ -186,11 +191,7 @@ class AgentTokenFilterIT extends AbstractIntegrationTest {
 	@DisplayName("an expired agent token: 401")
 	void expiredToken() {
 		UUID userId = insertUser("uid-manager", "KITCHEN_MANAGER", "ACTIVE", tenantId);
-		AgentTokenService tenMinutesAgo = new AgentTokenService(
-				Base64.getDecoder().decode(KEY_BASE64),
-				Duration.ofMinutes(5),
-				Clock.fixed(Instant.now().minus(Duration.ofMinutes(10)), ZoneOffset.UTC));
-		String expired = tenMinutesAgo.mint(userId, tenantId, UUID.randomUUID(), Set.of(AgentTokenService.SCOPE_READ));
+		String expired = expiredReadToken(userId, tenantId);
 
 		assertThat(get("/mcp/test-echo", expired).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
 	}
@@ -236,6 +237,20 @@ class AgentTokenFilterIT extends AbstractIntegrationTest {
 	}
 
 	// ---------------------------------------------------------------------
+
+	/**
+	 * A read token signed with this context's key, minted by a clock ten minutes behind, so it
+	 * expired five minutes ago. Public because {@code McpEndToEndIT} shares this class's context
+	 * configuration and needs the same token; the service's clock-taking constructor is
+	 * package-private, and this keeps it that way.
+	 */
+	public static String expiredReadToken(UUID userId, UUID tenant) {
+		AgentTokenService tenMinutesAgo = new AgentTokenService(
+				Base64.getDecoder().decode(KEY_BASE64),
+				Duration.ofMinutes(5),
+				Clock.fixed(Instant.now().minus(Duration.ofMinutes(10)), ZoneOffset.UTC));
+		return tenMinutesAgo.mint(userId, tenant, UUID.randomUUID(), Set.of(AgentTokenService.SCOPE_READ));
+	}
 
 	private String readToken(UUID userId, UUID tenant) {
 		return tokens.mint(userId, tenant, UUID.randomUUID(), Set.of(AgentTokenService.SCOPE_READ));
@@ -290,7 +305,7 @@ class AgentTokenFilterIT extends AbstractIntegrationTest {
 	 */
 	@RestController
 	@RequestMapping("/mcp/test-echo")
-	static class EchoEndpoint {
+	public static class EchoEndpoint {
 
 		private final JdbcTemplate jdbc;
 
