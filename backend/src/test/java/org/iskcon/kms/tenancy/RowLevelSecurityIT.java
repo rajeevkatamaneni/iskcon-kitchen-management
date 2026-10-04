@@ -663,6 +663,202 @@ class RowLevelSecurityIT extends AbstractIntegrationTest {
 		}
 	}
 
+	// ---------------------------------------------------------------------
+	// The Kitchen Assistant's tables (V160, E10-S2)
+	//
+	// everyTenantOwnedTableIsProtected already proves these four are ENABLEd and FORCEd. That says
+	// the policy is attached; it does not say it is the right one, or that the composite keys V160
+	// uses between the tables actually refuse a cross-temple link. The reader on the far side of
+	// these rows is a model acting on a token, so the isolation is proved here on real rows, through
+	// the application's own unprivileged connection.
+	// ---------------------------------------------------------------------
+
+	private static final List<String> ASSISTANT_TABLES = List.of(
+			"assistant_conversations", "assistant_runs", "assistant_messages", "assistant_pending_actions");
+
+	@Test
+	@DisplayName("the Kitchen Assistant's four tables show each temple only its own rows")
+	void assistantTablesAreIsolated() {
+		AssistantRows a = seedAssistantRows(templeA, "uid-e10-a", "+919800000161");
+		AssistantRows b = seedAssistantRows(templeB, "uid-e10-b", "+919800000162");
+		try {
+			TenantContext.set(templeA);
+			assertThat(assistantIdsVisible())
+					.as("temple A sees exactly its own conversation, run, two messages and proposal")
+					.containsExactlyInAnyOrderElementsOf(a.all())
+					.doesNotContainAnyElementsOf(b.all());
+
+			TenantContext.set(templeB);
+			assertThat(assistantIdsVisible())
+					.as("temple B sees exactly its own, and none of A's")
+					.containsExactlyInAnyOrderElementsOf(b.all())
+					.doesNotContainAnyElementsOf(a.all());
+
+			TenantContext.clear();
+			assertThat(assistantIdsVisible())
+					.as("no tenant context sees nothing in any of the four tables")
+					.isEmpty();
+
+			// Unfiltered UPDATE and DELETE from A touch none of B's rows. Messages are left out of the
+			// DELETE: they are append-only, which is the next test's subject, and a refusal there
+			// would prove the trigger rather than the policy.
+			TenantContext.set(templeA);
+			assertThat(jdbc.update("UPDATE assistant_conversations SET title = 'Hijacked' WHERE id = ?", b.conversation()))
+					.isZero();
+			assertThat(jdbc.update("UPDATE assistant_runs SET tool_calls = 99 WHERE id = ?", b.run())).isZero();
+			assertThat(jdbc.update("DELETE FROM assistant_pending_actions WHERE id = ?", b.action())).isZero();
+			assertThat(admin.queryForObject(
+					"SELECT title FROM assistant_conversations WHERE id = ?", String.class, b.conversation()))
+					.as("the other temple's conversation is untouched")
+					.isEqualTo("Rice for Sunday");
+		} finally {
+			TenantContext.clear();
+			discardAssistantRows();
+		}
+	}
+
+	@Test
+	@DisplayName("the Kitchen Assistant's tables refuse a row that points at another temple's conversation or run")
+	void assistantTablesRefuseCrossTempleLinks() {
+		AssistantRows a = seedAssistantRows(templeA, "uid-e10-a", "+919800000161");
+		AssistantRows b = seedAssistantRows(templeB, "uid-e10-b", "+919800000162");
+		try {
+			TenantContext.set(templeA);
+
+			// Writing under A's own tenant_id, so the policy's WITH CHECK passes: what refuses these
+			// is V160's composite key, which a plain conversation_id key would not have done — a
+			// foreign key is checked by the owner, and row-level security does not apply to it.
+			assertThatThrownBy(() -> jdbc.update("""
+					INSERT INTO assistant_messages (tenant_id, conversation_id, role, content)
+					VALUES (?, ?, 'USER', 'smuggled')
+					""", templeA, b.conversation()))
+					.as("a message in A pointing at B's conversation")
+					.hasStackTraceContaining("assistant_messages_conversation_same_tenant");
+
+			assertThatThrownBy(() -> jdbc.update("""
+					INSERT INTO assistant_messages (tenant_id, conversation_id, role, content, run_id)
+					VALUES (?, ?, 'ASSISTANT', 'smuggled', ?)
+					""", templeA, a.conversation(), b.run()))
+					.as("a reply in A naming B's run")
+					.hasStackTraceContaining("assistant_messages_run_same_tenant");
+
+			assertThatThrownBy(() -> jdbc.update("""
+					INSERT INTO assistant_pending_actions
+						(tenant_id, conversation_id, run_id, kind, payload, payload_sha256, idempotency_key, expires_at)
+					VALUES (?, ?, ?, 'SHOPPING_LIST', '{}'::jsonb, repeat('a', 64), 'smuggled', now() + interval '1 hour')
+					""", templeA, a.conversation(), b.run()))
+					.as("a proposal in A naming B's run")
+					.hasStackTraceContaining("assistant_pending_actions_run_same_tenant");
+
+			// And the plain policy check: a row claiming to be B's, written from A.
+			assertThatThrownBy(() -> jdbc.update("""
+					INSERT INTO assistant_conversations (tenant_id, user_id) VALUES (?, ?)
+					""", templeB, b.user()))
+					.as("WITH CHECK refuses a conversation attributed to the other temple")
+					.hasStackTraceContaining("row-level security");
+		} finally {
+			TenantContext.clear();
+			discardAssistantRows();
+		}
+	}
+
+	@Test
+	@DisplayName("a Kitchen Assistant message cannot be changed or removed, and a run can be finished in place")
+	void assistantMessagesAreAppendOnlyAndRunsFinishInPlace() {
+		AssistantRows a = seedAssistantRows(templeA, "uid-e10-a", "+919800000161");
+		try {
+			TenantContext.set(templeA);
+
+			assertThatThrownBy(() -> jdbc.update(
+					"UPDATE assistant_messages SET content = 'rewritten' WHERE id = ?", a.reply()))
+					.as("a transcript is a record: no edit")
+					.hasStackTraceContaining("append-only");
+			assertThatThrownBy(() -> jdbc.update("DELETE FROM assistant_messages WHERE id = ?", a.reply()))
+					.as("and no removal")
+					.hasStackTraceContaining("append-only");
+
+			// The run row is written RUNNING at start (so the daily budgets count it) and finished
+			// when claude -p exits. That second write has to be allowed, which is why V160 did not
+			// make runs append-only — and the CHECK has to accept the finished shape.
+			UUID running = jdbc.queryForObject("""
+					INSERT INTO assistant_runs (tenant_id, conversation_id, user_id, model)
+					VALUES (?, ?, ?, 'sonnet') RETURNING id
+					""", UUID.class, templeA, a.conversation(), a.user());
+			int finished = jdbc.update("""
+					UPDATE assistant_runs
+					   SET status = 'SUCCEEDED', finished_at = started_at + interval '3 seconds',
+					       duration_ms = 3000, input_tokens = 1200, output_tokens = 300,
+					       notional_cost_usd = 0.0081, tool_calls = 2
+					 WHERE id = ?
+					""", running);
+			assertThat(finished).as("the application finishes its own run").isEqualTo(1);
+
+			assertThatThrownBy(() -> jdbc.update(
+					"UPDATE assistant_runs SET status = 'RUNNING' WHERE id = ?", running))
+					.as("a run cannot go back to RUNNING while it carries a finish time")
+					.hasStackTraceContaining("assistant_runs_finish_matches_status");
+		} finally {
+			TenantContext.clear();
+			discardAssistantRows();
+		}
+	}
+
+	/** One temple's worth of assistant rows, seeded through the privileged connection. */
+	private record AssistantRows(UUID user, UUID conversation, UUID run, UUID question, UUID reply, UUID action) {
+		List<UUID> all() {
+			return List.of(conversation, run, question, reply, action);
+		}
+	}
+
+	private AssistantRows seedAssistantRows(UUID tenantId, String uid, String phone) {
+		UUID user = insertPerson(tenantId, uid, phone);
+		UUID conversation = admin.queryForObject("""
+				INSERT INTO assistant_conversations (tenant_id, user_id, title)
+				VALUES (?, ?, 'Rice for Sunday') RETURNING id
+				""", UUID.class, tenantId, user);
+		UUID run = admin.queryForObject("""
+				INSERT INTO assistant_runs (tenant_id, conversation_id, user_id, model, status,
+				                            finished_at, duration_ms, input_tokens, output_tokens,
+				                            notional_cost_usd, tool_calls)
+				VALUES (?, ?, ?, 'sonnet', 'SUCCEEDED', now(), 2500, 900, 200, 0.0057, 1) RETURNING id
+				""", UUID.class, tenantId, conversation, user);
+		UUID question = admin.queryForObject("""
+				INSERT INTO assistant_messages (tenant_id, conversation_id, role, content)
+				VALUES (?, ?, 'USER', 'How much rice do we have?') RETURNING id
+				""", UUID.class, tenantId, conversation);
+		UUID reply = admin.queryForObject("""
+				INSERT INTO assistant_messages (tenant_id, conversation_id, role, content, run_id)
+				VALUES (?, ?, 'ASSISTANT', '42 kg of rice is on hand.', ?) RETURNING id
+				""", UUID.class, tenantId, conversation, run);
+		UUID action = admin.queryForObject("""
+				INSERT INTO assistant_pending_actions
+					(tenant_id, conversation_id, run_id, kind, payload, payload_sha256, idempotency_key, expires_at)
+				VALUES (?, ?, ?, 'SHOPPING_LIST', '{"date":"2026-10-04"}'::jsonb, repeat('0', 64), ?,
+				        now() + interval '15 minutes')
+				RETURNING id
+				""", UUID.class, tenantId, conversation, run, "key-" + uid);
+		return new AssistantRows(user, conversation, run, question, reply, action);
+	}
+
+	/** Every id the application's connection can see across the four tables. */
+	private List<UUID> assistantIdsVisible() {
+		return jdbc.queryForList(String.join(" UNION ALL ",
+				ASSISTANT_TABLES.stream().map(t -> "SELECT id FROM " + t).toList()), UUID.class);
+	}
+
+	/**
+	 * The privileged connection is not kms_app, so the append-only trigger lets it through. Children
+	 * first: every key between these tables is RESTRICT, and tearDown's DELETE FROM tenants would
+	 * otherwise be refused by them and by the users the seed added.
+	 */
+	private void discardAssistantRows() {
+		admin.update("DELETE FROM assistant_pending_actions");
+		admin.update("DELETE FROM assistant_messages");
+		admin.update("DELETE FROM assistant_runs");
+		admin.update("DELETE FROM assistant_conversations");
+		admin.update("DELETE FROM users WHERE firebase_uid LIKE 'uid-e10-%'");
+	}
+
 	@Test
 	@DisplayName("switching tenants on a pooled connection does not leak the previous tenant")
 	void pooledConnectionDoesNotLeakTenant() {
