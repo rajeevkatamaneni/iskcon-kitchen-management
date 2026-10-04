@@ -85,6 +85,12 @@ dependencies {
 	// Pinned because the Spring Boot BOM does not manage it.
 	implementation("com.nimbusds:nimbus-jose-jwt:10.10")
 
+	// Kitchen Assistant MCP server (E10-T6). The SDK's core carries a plain-servlet Streamable HTTP
+	// transport, so no Spring WebMVC adapter is needed — the 1.x WebMVC adapter moved to Spring AI and
+	// wants Spring 6.2. mcp-json-jackson2 rather than the `mcp` bundle, which pulls Jackson 3.
+	implementation("io.modelcontextprotocol.sdk:mcp-core:1.1.4")
+	implementation("io.modelcontextprotocol.sdk:mcp-json-jackson2:1.1.4")
+
 	runtimeOnly("org.postgresql:postgresql")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
