@@ -75,6 +75,11 @@ class UnitLabelAgreementTest {
 			// no count beside it.
 			"recipe/PortionFitsYieldValidator.java|\"A recipe measured in \" + yield.label() + \" takes its portion in \" + fits + \".\")",
 
+			// The Kitchen Assistant's get_inventory tool (E10-T6). The "unit" field of each JSON row is
+			// a column heading for four figures at once — on hand, available, reorder level, on order —
+			// so it names the unit with no single count to agree with.
+			"assistant/mcp/InventoryTools.java|unit.label(),",
+
 			// The merge tool's refusal and preview when a group mixes kinds of unit (T-270, KMS-400171):
 			// "Curd is in Kg, Curd pieces is in pieces". It names each ingredient's unit, with no count
 			// beside it; the same word goes in the refusal's details.
