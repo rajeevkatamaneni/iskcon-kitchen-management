@@ -2,15 +2,22 @@ package org.iskcon.kms.auth;
 
 import java.util.Arrays;
 import java.util.List;
+import org.iskcon.kms.assistant.token.AgentTokenFilter;
+import org.iskcon.kms.assistant.token.AgentTokenService;
+import org.iskcon.kms.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -29,6 +36,74 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfiguration {
+
+	/**
+	 * The Kitchen Assistant's tool endpoint, {@code /mcp}, and nothing else (E10-S2).
+	 *
+	 * <p>A chain of its own, ordered ahead of the one below, because what may call {@code /mcp} is a
+	 * different kind of caller altogether: {@code claude -p}, holding a five-minute agent token the
+	 * API minted for one person's message — never a person holding a Firebase token. So the two must
+	 * not overlap in either direction. A Firebase token is refused here, because a browser session
+	 * has no business calling the agent's tools directly; and an agent token is refused everywhere
+	 * else, because the chain below never looks at one and {@link AgentTokenFilter} is not a bean, so
+	 * it is not installed on any other path.
+	 *
+	 * <p>Everything here is the strictest form of what the chain below does: stateless, no CSRF (no
+	 * cookies to forge), no CORS (no browser should ever call this, so a browser is given nothing to
+	 * allow it), and a bodyless 401 when the token is missing or refused. Every request needs
+	 * {@code agent:read}; what a particular tool may then do is decided by the person's own
+	 * permissions, which the filter adds alongside the scopes.
+	 */
+	@Bean
+	@Order(1)
+	public SecurityFilterChain agentFilterChain(
+			HttpSecurity http,
+			AgentTokenService agentTokenService,
+			UserRepository userRepository,
+			LoggingAccessDeniedHandler accessDeniedHandler)
+			throws Exception {
+
+		http
+				// "/mcp/**" matches "/mcp" itself too, which is where the MCP server is mounted.
+				.securityMatcher("/mcp/**")
+				.csrf(AbstractHttpConfigurer::disable)
+				.cors(AbstractHttpConfigurer::disable)
+				.sessionManagement(session ->
+						session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.authorizeHttpRequests(auth -> auth
+						.anyRequest().hasAuthority(AgentTokenService.SCOPE_READ))
+				.exceptionHandling(handling -> handling
+						.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+						.accessDeniedHandler(accessDeniedHandler))
+				.addFilterBefore(
+						new AgentTokenFilter(agentTokenService, userRepository),
+						UsernamePasswordAuthenticationFilter.class);
+
+		return http.build();
+	}
+
+	/**
+	 * Stops Spring Boot installing {@link AuthenticationFilter} a second time, as a plain servlet
+	 * filter on every path.
+	 *
+	 * <p>Boot does that for every {@code Filter} bean, and {@code AuthenticationFilter} is one. Until
+	 * {@code /mcp} existed the copy was inert: every path went through the chain below first, which
+	 * runs the filter and marks the request as done, so the servlet copy always stood aside. A request
+	 * to {@code /mcp} never reaches that chain, so the copy would have run there, after the agent's
+	 * own chain — handing the agent token to Firebase to verify on every tool call. That is harmless
+	 * today (Firebase refuses it and the filter does nothing), but it is a second sign-in path running
+	 * on a request it was never meant to see, and the contract for {@code /mcp} is that the Firebase
+	 * side does not see it at all. The filter inside the chain below is untouched; only the duplicate
+	 * is switched off.
+	 */
+	@Bean
+	public FilterRegistrationBean<AuthenticationFilter> authenticationFilterServletRegistration(
+			AuthenticationFilter authenticationFilter) {
+		FilterRegistrationBean<AuthenticationFilter> registration =
+				new FilterRegistrationBean<>(authenticationFilter);
+		registration.setEnabled(false);
+		return registration;
+	}
 
 	@Bean
 	public SecurityFilterChain filterChain(

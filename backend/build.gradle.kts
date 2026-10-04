@@ -77,6 +77,14 @@ dependencies {
 	// developer — see the story's D7.
 	implementation("org.apache.poi:poi-ooxml:5.3.0")
 
+	// Kitchen Assistant agent token (E10-S2 T5): a five-minute HS256 JWT that lets `claude -p` call
+	// our own /mcp tools as the person it is acting for. Signing and verifying a JWT is exactly the
+	// kind of code that should come from a maintained library rather than be written here — the
+	// classic mistakes (accepting alg "none", comparing MACs in non-constant time) are all solved in
+	// it. Nothing already on the classpath provides it: Firebase's verifier is RS256-only and private.
+	// Pinned because the Spring Boot BOM does not manage it.
+	implementation("com.nimbusds:nimbus-jose-jwt:10.10")
+
 	runtimeOnly("org.postgresql:postgresql")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")

@@ -243,6 +243,18 @@ kms:
     # GCP project for cloud clients (GCS, Translation). Empty falls back to the ADC default project.
     project-id: ${GCP_PROJECT_ID:}
 
+  assistant:
+    token:
+      # The Kitchen Assistant's agent token (E10-S2): an HS256 key, base64, at least 256 bits, that
+      # signs the five-minute token `claude -p` uses to call /mcp as the person it acts for. Empty
+      # means a random key in memory — right for tests and local development, and fail-closed
+      # anywhere else, because a token minted by one instance is refused by another. Deployed
+      # environments mount it from Secret Manager (E10-S6). Generate one with
+      # `openssl rand -base64 32`.
+      key: ${KMS_ASSISTANT_TOKEN_KEY:}
+      # How long a token lives. One is minted per message and a run is killed at 60 s.
+      ttl: ${KMS_ASSISTANT_TOKEN_TTL:PT5M}
+
 management:
   health:
     # Whether the mail relay is answering is not whether this service is healthy. Left on, a relay
