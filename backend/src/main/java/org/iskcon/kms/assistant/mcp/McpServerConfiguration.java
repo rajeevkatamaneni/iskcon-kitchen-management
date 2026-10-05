@@ -98,8 +98,10 @@ public class McpServerConfiguration {
 			many. Each item:
 			- name: the English name as the temple files it. Some are written catalogue-style, \
 			"Water, hot", meaning hot water.
-			- name_kn: the Kannada name from the temple's glossary. Absent when the temple has not \
-			recorded one; do not invent one in that case, translate if you must and say it is yours.
+			- name_kn: the item's Kannada name from the temple's glossary, the same word its recipe \
+			sheets and orders use. Use it exactly as given, every time. Absent when the temple has no \
+			Kannada name for the item yet; then give the English name only and never translate the \
+			name yourself.
 			- category: e.g. "Pulses", "Dairy".
 			- on_hand: what is physically on the shelf now, in unit. Never negative.
 			- available: on_hand minus what saved meal plans have already claimed, in unit. Can be \
@@ -144,7 +146,7 @@ public class McpServerConfiguration {
 
 			Returns JSON in exactly the shape get_inventory returns ({items, returned, total_matching, \
 			truncated}, at most 50 items, sorted by name, every item with low: true), with the same \
-			fields and units: name, name_kn (absent when the glossary has none), category, on_hand, \
+			fields and units: name, name_kn (use exactly as given; absent when the glossary has none, and then give the English name only), category, on_hand, \
 			available, unit ("Kg", "gm", "L", "ml" or "pieces"), reorder_level, on_order (absent when \
 			nothing is on order: worth saying, because something low that is already on order may \
 			not need buying again) and cover. An empty items list means nothing is low.""";

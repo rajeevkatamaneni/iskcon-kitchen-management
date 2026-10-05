@@ -38,14 +38,22 @@ public class GlossaryService {
 				""", MAPPER, language);
 	}
 
-	/** Adds or updates a term (upsert on language + term), returning its id. */
+	/**
+	 * Adds or updates a term (upsert on language + term), returning its id.
+	 *
+	 * <p>This is the person's path, so an update also clears the machine mark (V161): once somebody
+	 * has typed the name, it is theirs, even if they typed back exactly what the machine wrote —
+	 * saving it is the check the mark exists to ask for.
+	 */
 	@Transactional
 	public UUID upsert(AddGlossaryEntryRequest request) {
 		return jdbc.queryForObject("""
 				INSERT INTO translation_glossary (tenant_id, language, source_term, target_term)
 				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?, ?, ?)
 				ON CONFLICT (tenant_id, language, lower(source_term))
-				DO UPDATE SET target_term = EXCLUDED.target_term
+				DO UPDATE SET target_term = EXCLUDED.target_term,
+				              machine_translated_at = NULL,
+				              machine_provider = NULL
 				RETURNING id
 				""", UUID.class, request.language(), request.sourceTerm().trim(), request.targetTerm().trim());
 	}

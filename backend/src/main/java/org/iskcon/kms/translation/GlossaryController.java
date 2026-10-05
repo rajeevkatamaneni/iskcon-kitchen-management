@@ -22,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class GlossaryController {
 
 	private final GlossaryService glossaryService;
+	private final StockNameFillService stockNameFillService;
 
-	public GlossaryController(GlossaryService glossaryService) {
+	public GlossaryController(GlossaryService glossaryService, StockNameFillService stockNameFillService) {
 		this.glossaryService = glossaryService;
+		this.stockNameFillService = stockNameFillService;
 	}
 
 	@GetMapping
@@ -38,6 +40,21 @@ public class GlossaryController {
 	public ResponseEntity<Map<String, Object>> add(@Valid @RequestBody AddGlossaryEntryRequest request) {
 		UUID id = glossaryService.upsert(request);
 		return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
+	}
+
+	/**
+	 * Names every stock item in Kannada that the glossary has no name for, by machine, once
+	 * (E10-T8c). Never replaces a name that is there; running it again adds nothing. The Kitchen
+	 * Assistant reads these names rather than making its own up.
+	 *
+	 * <p>Kannada only, because that is the one language anything reads stock names in today; another
+	 * language is a parameter away when something needs it. {@code MANAGE_RECIPES}, the permission for
+	 * adding a glossary entry by hand, because this adds glossary entries.
+	 */
+	@PostMapping("/fill-stock-names")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public StockNameFillService.FillResult fillStockNames() {
+		return stockNameFillService.fillStockNames("kn");
 	}
 
 	@DeleteMapping("/{id}")

@@ -58,10 +58,16 @@ import org.springframework.stereotype.Component;
  * the Kannada name than when it is left to translate one. The catalogue's Kannada names are the
  * temple's own glossary entries ({@code translation_glossary}, language {@code kn}), the same ones
  * recipe sheets and purchase orders use. They are looked up through {@link Translatable}, keyed on
- * the name as the temple filed it, because that is how the temple typed them in. There is no
- * machine translation here on purpose: it costs money per call, takes a network round trip, and a
- * model can translate a name as well as the API can. Where the glossary is silent, the field is left
- * out and the model is told so in the tool description.
+ * the name as the temple filed it, because that is how the temple typed them in.
+ *
+ * <p>There is no machine translation here, and that is a rule rather than an economy. T6 first left
+ * an unnamed item for the model to translate; measured in E10-T8b, it spelt 12 of 28 items more than
+ * one way across five repeats of the same question, and a cook matching a word to a sack needs the
+ * same word every time. So since E10-T8c the names come only from the app: a person, or the
+ * glossary's one-off machine fill ({@code StockNameFillService}), writes each name once, and these
+ * tools read it — machine-written rows included, because to the reader they are the temple's name
+ * until somebody corrects them. A tool call never translates or writes. Where the glossary is still
+ * silent, the field is left out and the description tells the model to give the English name only.
  */
 @Component
 public class InventoryTools {
