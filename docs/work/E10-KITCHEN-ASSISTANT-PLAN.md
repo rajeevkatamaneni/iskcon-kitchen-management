@@ -191,7 +191,7 @@ Rajeev's words: the assistant should "chain together multiple tool calls and acc
 
 Endpoint research (2026-10-05, read-only) is summarised per stage below. All six writes need permissions every cook role has (Temple Admin, Kitchen Manager, Kitchen Staff) and no volunteer has; the agent token carries the user's own permissions, so this holds automatically.
 
-**How writes happen (pending Rajeev's confirmation):** every write is a draft card the server runs only when the user presses Confirm (S4, generalised: a pending action stores the exact call and its hash; Confirm runs it through the existing service with the user's own login). Asking questions and gathering details happens in the conversation; nothing is saved until Confirm.
+**How writes happen (decided D-a):** every write is a draft card the server runs only when the user presses Confirm (S4, generalised: a pending action stores the exact call and its hash; Confirm runs it through the existing service with the user's own login). Asking questions and gathering details happens in the conversation; nothing is saved until Confirm.
 
 ### Order
 
@@ -224,7 +224,7 @@ S3 (runner + chat page) and S4 (draft/confirm, generalised) and S5 (evals) stay 
 - Mobile app on the same chat API.
 - Not chosen now: leave requests, notices/Today summary, the rest of the API.
 
-### Decisions open for Rajeev
-- D-a: writes by Confirm button (recommended) vs a typed "yes".
-- D-b: head counts → dish amounts: move the rule to the server so the screen and the assistant share one copy (recommended) vs a second copy in the tool.
-- D-c: "raise a request for volunteers": create the shift only (volunteers see it) vs also send an announcement (Temple Admin only).
+### Decisions taken (Rajeev, 2026-10-05)
+- D-a: every write is a draft card the server runs only when the user presses **Confirm**.
+- D-b: head counts → dish amounts moves to the **server**, one copy shared by the meal composer and the assistant.
+- D-c: "raise a request for volunteers" **creates the shift only** (volunteers see it in available shifts); announcing it is later.
