@@ -115,4 +115,11 @@ public enum AuditEntityType {
 	 * (T-205): until then nothing done to a wish-list item was audited, so no entity type named one.
 	 */
 	WISHLIST_ITEM,
+
+	/**
+	 * One Kitchen Assistant run: one message answered by one {@code claude -p} (E10-T10). The entity
+	 * of {@link AuditAction#ASSISTANT_RUN}; its id is the {@code assistant_runs} row, which holds the
+	 * tokens, duration and tool calls.
+	 */
+	ASSISTANT_RUN,
 }

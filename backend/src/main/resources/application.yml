@@ -254,6 +254,25 @@ kms:
       key: ${KMS_ASSISTANT_TOKEN_KEY:}
       # How long a token lives. One is minted per message and a run is killed at 60 s.
       ttl: ${KMS_ASSISTANT_TOKEN_TTL:PT5M}
+    # The runner (E10-T9) that runs `claude -p` for one message (E10-T10). Locally `cd runner && npm
+    # start`; in a deployed environment the Cloud Run service's URL (E10-S6, which also adds the
+    # identity token — see RunnerCredentials).
+    runner:
+      url: ${KMS_ASSISTANT_RUNNER_URL:http://localhost:8090}
+      # Where `claude -p` calls back for tools: this api's /mcp, as the runner reaches it.
+      mcp-url: ${KMS_ASSISTANT_MCP_URL:http://localhost:${server.port}/mcp}
+      # The api's own deadline for a run. Longer than the runner's 60 s kill, which is the normal
+      # path; this one is for a runner that has stopped answering.
+      timeout: ${KMS_ASSISTANT_RUNNER_TIMEOUT:PT75S}
+      connect-timeout: PT5S
+      profile: kitchen-assistant
+      # Written on the run row at start; replaced by the model the CLI reports it used.
+      model: sonnet
+    # Daily runs (E10-T11, plan §9), counting runs still going. Platform-wide for now: a per-temple
+    # value, set by a Temple Admin, needs a tenant_settings column and its migration (follow-up).
+    budget:
+      per-person-daily: ${KMS_ASSISTANT_RUNS_PER_PERSON_DAILY:100}
+      per-temple-daily: ${KMS_ASSISTANT_RUNS_PER_TEMPLE_DAILY:500}
 
 management:
   health:
