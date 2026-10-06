@@ -1268,6 +1268,72 @@ public enum ErrorCode {
 			"Some of these are counted one by one, so a part of one can't be entered.",
 			"Round the amounts marked below to a whole number and try again."),
 
+	// --- The Kitchen Assistant (E10 Phase 1b, T-12) -------------------
+	//
+	// Reserved before anything throws them, per docs/work/E10-KITCHEN-ASSISTANT-PLAN.md §5, so that
+	// the budget task (T11) and the confirm task (T17) can be built in parallel without two agents
+	// taking the same number. Nothing raises these yet. The two that are not the reader's doing —
+	// the assistant being down, and it running out of time — are in the 5xx family further down.
+	//
+	// "Draft" in every one of them, never "proposal" or "pending action". Those are the plan's and the
+	// schema's words (assistant_pending_actions, status PROPOSED). What the person sees is a card with
+	// Confirm on it, and the decision recorded in the plan calls it a draft (D-a, 2026-10-05: "every
+	// write is a draft card the server runs only when the user presses Confirm"). A reader who has
+	// just been shown a draft must not be told about a proposal, or they will wonder whether it is a
+	// different thing.
+
+	// The daily run budget, in two codes rather than one. The obvious objection is that it is one
+	// rule, "the assistant has a daily allowance", and so should be one code. It is two because the
+	// person reading it has two different things to do. When their own allowance is used up the
+	// assistant is still working for everybody else in the kitchen, and the fix, if there is one, is
+	// the per-person limit. When the temple's is used up nobody can use it until tomorrow, the person
+	// who hit it is very likely not the one who used it up, and the only lever is the temple's limit.
+	// One message would have to say both, and support could not tell from a quoted code which of the
+	// two had happened.
+	//
+	// 429 rather than 409: nothing conflicts, the person has simply asked more times than today
+	// allows, which is exactly what 429 says. The first use of 429 in this enum; GlobalExceptionHandler
+	// takes the status as a plain number, so nothing else has to know.
+	//
+	// Neither next step names where the limit is set. The setting does not exist yet (T11 adds it),
+	// and the menu rule of 2026-09-19 forbids naming a path anyway. "Ask a Temple Admin to raise" is
+	// true wherever the setting ends up.
+	ASSISTANT_YOUR_DAILY_LIMIT_REACHED(400192, 429,
+			"You've asked the assistant as much as one person can in a day.",
+			"It's available to you again tomorrow. Until then, use the app's own pages, or ask a "
+					+ "Temple Admin to raise the daily limit for each person."),
+
+	ASSISTANT_TEMPLE_DAILY_LIMIT_REACHED(400193, 429,
+			"The assistant has done all it can for this temple today.",
+			"It's available again tomorrow. Until then, use the app's own pages, or ask a Temple Admin "
+					+ "to raise the temple's daily limit."),
+
+	// A draft is only good for a while (the plan says 24 hours), because the stock, prices and head
+	// counts it was worked out from move on. The text does not state the duration: it is a setting
+	// in waiting, and a message that says "a day" goes wrong the day somebody changes it. 409, not
+	// 410: this enum answers every "that record is in the wrong state for this" with 409, and Gone
+	// would be the only one of its kind for no benefit to the reader.
+	ASSISTANT_DRAFT_EXPIRED(400194, 409,
+			"This draft is too old to confirm.",
+			"Ask the assistant again for a fresh one. The figures may have changed since this one was made."),
+
+	// The stored draft no longer hashes to what it hashed to when the assistant made it (T17
+	// re-hashes before running anything). The person did nothing to cause this and cannot fix it by
+	// editing anything, so the text does not ask them to look for a mistake. It tells them the one
+	// fact that matters, that nothing was saved, and asks for the code, because a draft that changed
+	// underneath its own hash is something support needs to hear about every time.
+	ASSISTANT_DRAFT_CHANGED(400195, 409,
+			"This draft changed after the assistant made it, so it can't be confirmed.",
+			"Nothing was saved. Ask the assistant for a fresh draft. If it happens again, quote the code below."),
+
+	// Confirm or Reject pressed on a draft that is already decided: a second tab, a second manager, a
+	// double press on a slow phone. The plan makes a repeat of the SAME decision a quiet no-op (T17),
+	// so this is for the crossed case: confirming what somebody rejected, or the reverse. The next
+	// step points at the conversation because that is where the card shows its final state.
+	ASSISTANT_DRAFT_ALREADY_HANDLED(400196, 409,
+			"This draft has already been confirmed or rejected.",
+			"Open the conversation again to see what happened to it. Nothing more was saved."),
+
 	// --- Internal -----------------------------------------------------
 	UNEXPECTED_FAILURE(500001, 500,
 			"Something went wrong at our end.",
@@ -1320,7 +1386,30 @@ public enum ErrorCode {
 			"WhatsApp didn't send the test message to that number.",
 			"Check the number has its country code. If you connected in the last day, Meta may still "
 					+ "be approving the message, so try again later. On a test account, add the number as "
-					+ "a recipient in your Meta account first.");
+					+ "a recipient in your Meta account first."),
+
+	// The Kitchen Assistant's runner, which is somebody we depend on in exactly the sense this family
+	// means (E10 Phase 1b, T-12; reserved with the four 4xx assistant codes above). Both texts lead
+	// with "Nothing was changed", and that is a guarantee rather than a hope: every write the
+	// assistant can make is a draft that runs only when the person presses Confirm (decision D-a), so
+	// a run that died part-way cannot have half-done anything. Saying so is what stops someone going
+	// to check the stock by hand.
+	//
+	// These status numbers only reach the browser when the failure happens before the reply starts
+	// streaming. Once the stream is open the response is already a 200, and the code has to travel
+	// inside the stream instead. The reference and the words are the same either way.
+
+	// The runner could not be reached, or refused to start a run.
+	ASSISTANT_UNAVAILABLE(500008, 503,
+			"The assistant isn't available right now.",
+			"Nothing was changed. Try again in a few minutes. The rest of the app works as usual."),
+
+	// The run was stopped at the time limit (60 seconds in the plan). The next step suggests asking
+	// for less at once, because the usual way to run out of time is a question that needs many
+	// lookups, and splitting it is the one thing the reader can actually change.
+	ASSISTANT_TOOK_TOO_LONG(500009, 504,
+			"The assistant took too long to answer, so it was stopped.",
+			"Nothing was changed. Try again, or ask for one thing at a time.");
 
 	private final int number;
 	private final int httpStatus;

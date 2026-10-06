@@ -200,6 +200,24 @@ class RolePermissionsTest {
 				denied(User.Role.VOLUNTEER, Permission.MERGE_INGREDIENTS),
 				denied(User.Role.SUPER_ADMIN, Permission.MERGE_INGREDIENTS),
 
+				// --- The Kitchen Assistant is for the two roles that run the kitchen (E10, plan §9) ---
+				// Asking it and confirming what it drafts are separate permissions held by the same two
+				// roles today. Kitchen Staff are out for now ("read-only later" in the plan), and when
+				// they come in it is meant to be with USE_KITCHEN_ASSISTANT alone: asking how much ghee
+				// is left is not accepting a purchase order. Both rows are asserted for every role so
+				// that widening either one is a deliberate change to this file.
+				allowed(User.Role.TEMPLE_ADMIN, Permission.USE_KITCHEN_ASSISTANT),
+				allowed(User.Role.TEMPLE_ADMIN, Permission.CONFIRM_ASSISTANT_ACTION),
+				allowed(User.Role.KITCHEN_MANAGER, Permission.USE_KITCHEN_ASSISTANT),
+				allowed(User.Role.KITCHEN_MANAGER, Permission.CONFIRM_ASSISTANT_ACTION),
+				denied(User.Role.KITCHEN_STAFF, Permission.USE_KITCHEN_ASSISTANT),
+				denied(User.Role.KITCHEN_STAFF, Permission.CONFIRM_ASSISTANT_ACTION),
+				denied(User.Role.VOLUNTEER, Permission.USE_KITCHEN_ASSISTANT),
+				denied(User.Role.VOLUNTEER, Permission.CONFIRM_ASSISTANT_ACTION),
+				// The operator provisions temples and asks no temple's kitchen anything.
+				denied(User.Role.SUPER_ADMIN, Permission.USE_KITCHEN_ASSISTANT),
+				denied(User.Role.SUPER_ADMIN, Permission.CONFIRM_ASSISTANT_ACTION),
+
 				// Kitchen staff run the roster for nobody, and answer nobody's leave.
 				denied(User.Role.KITCHEN_STAFF, Permission.MANAGE_STAFF_SCHEDULE),
 				denied(User.Role.KITCHEN_STAFF, Permission.APPROVE_LEAVE),

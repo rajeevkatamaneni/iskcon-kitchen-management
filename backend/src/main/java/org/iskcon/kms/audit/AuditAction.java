@@ -700,4 +700,32 @@ public enum AuditAction {
 
 	/** A draft was deleted — by its author, by an admin, or by the meal-planner cascade. */
 	INGREDIENT_REQUEST_DELETED,
+
+	// --- The Kitchen Assistant (E10 Phase 1b) ---
+	//
+	// Reserved by T-12 before anything writes them (plan §5), so the run task and the confirm task
+	// do not each invent a name. No migration came with them: audit_events.action is free text with
+	// only a non-empty check (V3), as this file's header explains.
+
+	/**
+	 * The assistant answered one message: one {@code claude -p} run, whatever it ended in. Recorded so
+	 * the temple can see who is using it and how much, which is what the daily limits are argued
+	 * from. The {@code after} carries the run's id and outcome; the run row itself holds the tokens,
+	 * duration and tool calls, so they are not copied here.
+	 */
+	ASSISTANT_RUN,
+
+	/**
+	 * A person pressed Confirm on a draft the assistant made, and it was carried out under their own
+	 * sign-in. Audited on its own, beside whatever the carried-out service records, because the
+	 * question somebody will ask later is not only "who created this order" but "did a person write
+	 * it, or accept it from the assistant".
+	 */
+	ASSISTANT_ACTION_CONFIRMED,
+
+	/**
+	 * A person pressed Reject on a draft. Nothing was changed, and it is recorded anyway: a log that
+	 * holds only the drafts people accepted cannot show how often the assistant got it wrong.
+	 */
+	ASSISTANT_ACTION_REJECTED,
 }

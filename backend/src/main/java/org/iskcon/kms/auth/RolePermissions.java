@@ -106,6 +106,9 @@ public final class RolePermissions {
 					REQUEST_INGREDIENTS,
 					APPROVE_INGREDIENT_REQUESTS,
 					ISSUE_INGREDIENTS,
+					// The Kitchen Assistant (E10, plan §9): asking it, and confirming what it drafts.
+					USE_KITCHEN_ASSISTANT,
+					CONFIRM_ASSISTANT_ACTION,
 					OVERRIDE_CALENDAR_DATE),
 
 			// Runs the kitchen's people. Everything kitchen staff hold, and the two decisions that
@@ -137,7 +140,13 @@ public final class RolePermissions {
 					// it is what the role was appointed to do (E10 design D4).
 					REQUEST_INGREDIENTS,
 					APPROVE_INGREDIENT_REQUESTS,
-					ISSUE_INGREDIENTS),
+					ISSUE_INGREDIENTS,
+					// The Kitchen Assistant (E10, plan §9). The manager runs the kitchen day to day,
+					// which is what the assistant is for. A confirmed draft is meant to still go
+					// through the permission of whatever it does (plan D-a, T17), so this hands the
+					// manager nothing they could not already do on the page.
+					USE_KITCHEN_ASSISTANT,
+					CONFIRM_ASSISTANT_ACTION),
 
 			// Day-to-day kitchen work. Note what is absent: no payments, no donations, no user
 			// management, and not the calendar override. Correcting a Vaishnava date is a decision

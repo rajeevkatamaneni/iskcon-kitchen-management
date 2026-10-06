@@ -251,6 +251,26 @@ public enum Permission {
 	// entirely theirs from that moment.
 	MANAGE_RECIPE_LIBRARY,
 
+	// --- The Kitchen Assistant (E10 Phase 1b, plan §9) ---
+
+	// Asking the assistant anything at all: opening /assistant and sending it a message. Temple Admin
+	// and Kitchen Manager only. That is the proposal in the plan's §9, and the task that added this
+	// (T-12) was handed over as Rajeev's decision; no quotation of his is on file. Kitchen Staff are
+	// left out for now rather than for good; the plan's note is "Kitchen Staff read-only later". Same
+	// asymmetry as CORRECT_RECORDED_MEAL: widening is one line here, narrowing after a kitchen has
+	// come to rely on it is a conversation.
+	USE_KITCHEN_ASSISTANT,
+
+	// Pressing Confirm on a draft the assistant made, which is the moment anything is written
+	// (decision D-a). Held apart from USE_KITCHEN_ASSISTANT although the same two roles hold both
+	// today, because they are different acts and the obvious next step separates them: a cook given
+	// the assistant to ask "how much ghee is left" should not by that grant be able to accept a
+	// purchase order it drafts. By the plan's design (D-a, T17) confirming also still needs the
+	// permission of whatever is being done: a confirmed purchase order goes through the existing
+	// service under MANAGE_PURCHASE_ORDERS, as if the person had saved it on the order page. So this
+	// one adds a door and never widens one. T17 has to keep that true.
+	CONFIRM_ASSISTANT_ACTION,
+
 	// --- Overrides that carry religious or financial weight ---
 	//
 	// OVERRIDE_SATTVIC_ENFORCEMENT stood here until 2026-09-08. D-18 deleted the block it was the
