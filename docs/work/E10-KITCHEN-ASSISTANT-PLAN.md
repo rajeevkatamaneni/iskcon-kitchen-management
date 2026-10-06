@@ -11,7 +11,9 @@
 
 - **2026-10-03 — S1 built** as `tools/assistant-spike/` (proof: `docs/work/proof/E10-S1.md`). Cloud-workspace run: 10/10 schema-valid and correct (5 EN, 5 KN), p50 3.2 s, p95 6.2 s, process overhead median 981 ms. Lockdown: shell refused; working-folder CLAUDE.md not loaded; token and home-folder checks still need Rajeev's laptop run. Findings: pass `claude` an allow-listed environment; return Kannada item names from tools.
 - Decisions taken (Rajeev, 2026-10-03): build S1 + S2 first and stop; use the §9 proposals as given.
-- **S2 not started**: Rajeev's computer was not reachable from the session, and S2 changes backend code that must be read first (`TenantContext`, `AuthenticationFilter`, `SecurityConfiguration`).
+- **2026-10-04 — S2 built** on branch `agentic-mvp` (T4–T8, proofs `docs/work/proof/E10-T4..T8.md`). 20/20 correct tool, EN + KN; p50 5.6 s, p95 7.6 s wall clock. Agent authorities = scopes + the user's own permissions.
+- **2026-10-04 — Kannada names fixed at the source** (T8b–T8d). Baseline drift 12 of 28 items; after storing one Claude-made name per item in the glossary (V161, marked machine), 0 of 28. ~10 names await a human check. Fill is a one-off script for now (Rajeev's choice); a terminal chat (`tools/assistant-dev/try.sh`, `chat.py`) lets Rajeev try it locally.
+- **2026-10-05 — Scope widened by Rajeev.** Goal: a chat (web, later mobile, typed or dictated) that both answers questions and does tasks with the user, asking for missing details, chaining tool calls. Rajeev chose six capabilities rather than the whole API (§11). Running on his subscription is deliberate: this is a learning test bed; a KMS API key comes at go-live.
 
 ## 0. Where this sits in the project
 
@@ -180,3 +182,49 @@ Staging adds the runner as a third Cloud Run service. The subscription token liv
 ## 10. What the plan does not do, on purpose
 
 No LangGraph, no vector store, no OCR, no second agent, no mobile. Each of those is a later ladder step with its own plan, and each reuses everything built here (tools, token, propose/confirm, evals).
+
+---
+
+## 11. Phase 1b — the six things the assistant must do (added 2026-10-05)
+
+Rajeev's words: the assistant should "chain together multiple tool calls and accomplish the user's request. If there is missing information … interactively chat with the user and get the information, and when it has everything it needs, then do the necessary tool call/s." He then chose six capabilities instead of exposing the whole API (350 endpoints): create a meal plan; check stock; create a shopping list; create a purchase order; give me the PO to send to my vendor; raise a request for volunteers for a day's meal preparation.
+
+Endpoint research (2026-10-05, read-only) is summarised per stage below. All six writes need permissions every cook role has (Temple Admin, Kitchen Manager, Kitchen Staff) and no volunteer has; the agent token carries the user's own permissions, so this holds automatically.
+
+**How writes happen (pending Rajeev's confirmation):** every write is a draft card the server runs only when the user presses Confirm (S4, generalised: a pending action stores the exact call and its hash; Confirm runs it through the existing service with the user's own login). Asking questions and gathering details happens in the conversation; nothing is saved until Confirm.
+
+### Order
+
+S3 (runner + chat page) and S4 (draft/confirm, generalised) and S5 (evals) stay as written and come first: every capability below needs them. Then:
+
+### S7 — Stock and sufficiency (read only)
+- Existing `get_inventory`, `list_low_stock`; fix the 50-row cut on the full list (paging or filter).
+- Add `check_meal_sufficiency(from, to)` → `GET /meal-plans/sufficiency` (per dish: short by how much, order by when) and `get_shortfall()` → `GET /meal-plans/shortfall`.
+
+### S8 — Meal planning
+- Lookups: meal kinds, kitchens (fetch list, match by name — no search endpoint), recipe search, day context (Ekadashi, existing meals).
+- `propose_meal(date, meal kind, dishes, head counts, ready-by?)` → draft of `POST /meals`.
+- **Gap:** head counts → dish amounts is calculated only in the browser today (`MealComposer.tsx`: adults + 0.6 × children + 0.8 × seniors, × recipe per-head quantity, unit conversion, round up for pieces). The tool needs the same rule (decision D-b below).
+- Second-step confirmations to carry through the card: Ekadashi (KMS-400048), adding dishes to a meal that already exists.
+
+### S9 — Shopping list, purchase order, sending it
+- There is no "create shopping list": the list is worked out fresh each time. `get_shopping_list()` reads it grouped by vendor; `propose_shopping_list_change` adds, unticks or changes a line.
+- `propose_purchase_order(vendor, lines | from the vendor's shopping-list lines, needed by?)` → draft of `POST /purchase-orders` (starts as DRAFT). Vendors: fetch list, match by name.
+- `propose_send_po(po)` → draft of `POST /purchase-orders/{id}/whatsapp` (sends the PDF to the vendor on WhatsApp in the vendor's language). The PDF itself is a download behind login, so chat gives a link to the order's page rather than the file. No email sending exists for POs.
+- **Possible defect to check first:** the WhatsApp route sends a draft without the lead-time check (KMS-400148) the Send button applies.
+
+### S10 — Volunteers for a meal
+- A volunteer shift lives inside its meal. `propose_volunteer_shift(meal, title?, start, end, people needed)` → draft of `PUT /meals/{id}` with `volunteerShift`, using the UI's defaults (title "{meal} preparation on {date}", ends at ready-by, people still needed from meal crew).
+- Creating a shift tells nobody; volunteers see it in their available shifts. Announcing it is a separate communication that only the Temple Admin can send (decision D-c below).
+
+### S6 — Staging (unchanged, last)
+
+### Later stages (agreed in principle, not scheduled)
+- Dictation (microphone on the chat page; browser speech or Bhashini, EN + KN).
+- Mobile app on the same chat API.
+- Not chosen now: leave requests, notices/Today summary, the rest of the API.
+
+### Decisions open for Rajeev
+- D-a: writes by Confirm button (recommended) vs a typed "yes".
+- D-b: head counts → dish amounts: move the rule to the server so the screen and the assistant share one copy (recommended) vs a second copy in the tool.
+- D-c: "raise a request for volunteers": create the shift only (volunteers see it) vs also send an announcement (Temple Admin only).
