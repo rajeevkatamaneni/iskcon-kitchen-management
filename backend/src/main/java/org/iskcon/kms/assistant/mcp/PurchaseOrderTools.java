@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.iskcon.kms.assistant.action.AssistantProposal;
+import org.iskcon.kms.assistant.names.ConversationNames;
 import org.iskcon.kms.assistant.action.PendingActionService;
 import org.iskcon.kms.assistant.action.PurchaseOrderAction;
 import org.iskcon.kms.assistant.action.PurchaseOrderAction.RequestedLine;
@@ -16,8 +17,6 @@ import org.iskcon.kms.assistant.token.AgentPrincipal;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.shoppinglist.ShoppingListLineView;
 import org.iskcon.kms.shoppinglist.ShoppingListService;
-import org.iskcon.kms.translation.GlossaryService;
-import org.iskcon.kms.translation.Translatable;
 import org.iskcon.kms.vendor.VendorView;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -38,9 +37,11 @@ import org.springframework.stereotype.Component;
  *
  * <h2>Names</h2>
  *
- * <p>Kannada names come from the temple's glossary only, never from a translation at call time, for
- * the reason {@link InventoryTools} gives (E10-T8b: a model translating names spells them differently
- * each time).
+ * <p>Item names in the conversation's language ({@code name_local}, or {@code name_pending: true} while
+ * the temple has none yet) come from the temple's glossary only, never from a translation at call
+ * time, for the reason {@link InventoryTools} gives (E10-T8b: a model translating names spells them
+ * differently each time). {@link ConversationNames} reads them, for the shopping list here and for the
+ * draft card in {@link PurchaseOrderAction}, so the list and the card can never disagree.
  */
 @Component
 public class PurchaseOrderTools {
@@ -49,13 +50,13 @@ public class PurchaseOrderTools {
 	static final int MAX_LINES = 60;
 
 	private final ShoppingListService shoppingList;
-	private final GlossaryService glossary;
+	private final ConversationNames names;
 	private final PurchaseOrderAction purchaseOrders;
 
-	public PurchaseOrderTools(ShoppingListService shoppingList, GlossaryService glossary,
+	public PurchaseOrderTools(ShoppingListService shoppingList, ConversationNames names,
 			PurchaseOrderAction purchaseOrders) {
 		this.shoppingList = shoppingList;
-		this.glossary = glossary;
+		this.names = names;
 		this.purchaseOrders = purchaseOrders;
 	}
 
@@ -65,7 +66,7 @@ public class PurchaseOrderTools {
 	 */
 	@PreAuthorize("hasAuthority('MANAGE_PURCHASE_ORDERS')")
 	public Map<String, Object> getShoppingList() {
-		Map<String, String> kannada = glossary.lookup(InventoryTools.KANNADA);
+		ConversationNames.Names local = names.forCurrentAgent();
 		List<ShoppingListLineView> all = shoppingList.list();
 		Map<String, List<Map<String, Object>>> groups = new LinkedHashMap<>();
 		List<Map<String, Object>> noVendor = new ArrayList<>();
@@ -76,10 +77,7 @@ public class PurchaseOrderTools {
 			}
 			Map<String, Object> row = new LinkedHashMap<>();
 			row.put("name", line.ingredientName());
-			String kn = Translatable.ingredientName(line.ingredientName()).override(kannada);
-			if (kn != null) {
-				row.put("name_kn", kn);
-			}
+			local.putInto(row, line.ingredientName());
 			// In the unit it reads in, as the screen shows it: 2792 gm is 2.792 Kg (R-SL-1).
 			PurchaseOrderAction.Shown readable = PurchaseOrderAction.Shown.of(line.suggestedQty(), Unit.valueOf(line.unit()));
 			row.put("quantity", readable.value());
@@ -111,6 +109,7 @@ public class PurchaseOrderTools {
 		result.put("returned", shown);
 		result.put("total_lines", all.size());
 		result.put("truncated", all.size() > shown);
+		local.fillIfMissing();
 		return result;
 	}
 
@@ -167,7 +166,8 @@ public class PurchaseOrderTools {
 		result.put("status", "DRAFT_READY_TO_CONFIRM");
 		result.put("vendor", drafted.vendor().name());
 		result.put("needed_by", drafted.neededBy());
-		result.put("lines", proposal.lines().stream().map(PurchaseOrderAction::lineSummary).toList());
+		result.put("lines", proposal.lines().stream()
+				.map(line -> PurchaseOrderAction.lineSummary(line, drafted.english())).toList());
 		result.put("total", drafted.total());
 		if (drafted.note() != null) {
 			result.put("note", drafted.note());

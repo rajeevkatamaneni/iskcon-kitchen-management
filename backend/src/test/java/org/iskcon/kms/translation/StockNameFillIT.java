@@ -90,6 +90,7 @@ class StockNameFillIT extends AbstractIntegrationTest {
 		admin.execute("DELETE FROM translation_glossary");
 		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM ingredients");
+		admin.execute("DELETE FROM assistant_conversations");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
 	}
@@ -195,24 +196,30 @@ class StockNameFillIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("get_inventory and list_low_stock hand the model the machine names as name_kn")
+	@DisplayName("get_inventory and list_low_stock hand the model the machine names as name_local in a Kannada conversation")
 	void toolsReturnMachineNames() throws Exception {
 		signIn("uid-fill-a");
 		mvc.perform(authed(post(FILL))).andExpect(status().isOk());
 
+		// The tools name items in the conversation's language (E10-NAMES-B): a Kannada one here.
+		UUID user = admin.queryForObject("SELECT id FROM users WHERE firebase_uid = 'uid-fill-a'", UUID.class);
+		UUID conversation = admin.queryForObject("""
+				INSERT INTO assistant_conversations (tenant_id, user_id, language) VALUES (?, ?, 'kn') RETURNING id
+				""", UUID.class, templeA, user);
 		TenantContext.set(templeA);
 		SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-				"assistant", null, AuthorityUtils.createAuthorityList("MANAGE_INVENTORY")));
+				new org.iskcon.kms.assistant.token.AgentPrincipal(user, templeA, conversation, java.util.Set.of("agent:read")),
+				null, AuthorityUtils.createAuthorityList("MANAGE_INVENTORY")));
 
 		InventoryResult all = inventoryTools.getInventory(null);
-		assertThat(all.items()).extracting(InventoryRow::name, InventoryRow::nameKn).containsExactly(
+		assertThat(all.items()).extracting(InventoryRow::name, InventoryRow::nameLocal).containsExactly(
 				org.assertj.core.groups.Tuple.tuple("Ghee", "ತುಪ್ಪ"),
 				org.assertj.core.groups.Tuple.tuple("Mace", "[kn] Mace"),
 				org.assertj.core.groups.Tuple.tuple("Rice, broken", "[kn] Broken rice"));
 
 		// Every item is stocked at nothing against a level of 1, so every one is low.
 		InventoryResult low = inventoryTools.listLowStock();
-		assertThat(low.items()).extracting(InventoryRow::nameKn)
+		assertThat(low.items()).extracting(InventoryRow::nameLocal)
 				.containsExactly("ತುಪ್ಪ", "[kn] Mace", "[kn] Broken rice");
 
 		// And the tools wrote nothing: still exactly the three rows the fill left.

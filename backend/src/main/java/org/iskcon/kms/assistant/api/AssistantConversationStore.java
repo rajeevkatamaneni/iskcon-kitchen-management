@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.assistant.action.AssistantProposal;
 import org.iskcon.kms.assistant.action.PendingActionService;
+import org.iskcon.kms.assistant.names.ConversationNames;
 import org.iskcon.kms.assistant.api.AssistantViews.ConversationSummary;
 import org.iskcon.kms.assistant.api.AssistantViews.ConversationView;
 import org.iskcon.kms.assistant.api.AssistantViews.MessageView;
@@ -58,13 +59,15 @@ public class AssistantConversationStore {
 	private final AssistantBudget budget;
 	private final AuditService audit;
 	private final PendingActionService actions;
+	private final ConversationNames names;
 
 	public AssistantConversationStore(JdbcTemplate jdbc, AssistantBudget budget, AuditService audit,
-			PendingActionService actions) {
+			PendingActionService actions, ConversationNames names) {
 		this.jdbc = jdbc;
 		this.budget = budget;
 		this.audit = audit;
 		this.actions = actions;
+		this.names = names;
 	}
 
 	/**
@@ -72,15 +75,22 @@ public class AssistantConversationStore {
 	 * assistant starts in English unless the person's account says otherwise. Read from their row in
 	 * the same statement, so there is no window in which a change of preference lands between the
 	 * read and the insert; 'en' if the row cannot be read, which under RLS it always can.
+	 *
+	 * <p>A conversation in a language other than English also asks for the temple's item names in
+	 * that language (E10-NAMES-B), without waiting: the first temple to talk Telugu gets its names
+	 * filled in the minute or so before the first stock question, usually. The service does nothing
+	 * when they are already stored.
 	 */
 	@Transactional
 	public ConversationSummary create(AuthenticatedUser actor) {
-		return jdbc.queryForObject("""
+		ConversationSummary created = jdbc.queryForObject("""
 				INSERT INTO assistant_conversations (tenant_id, user_id, language)
 				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?,
 				        COALESCE((SELECT preferred_language FROM users WHERE id = ?), 'en'))
 				RETURNING id, title, language, created_at, updated_at
 				""", AssistantConversationStore::summary, actor.getUserId(), actor.getUserId());
+		names.ensure(actor.getTenantId(), created.language());
+		return created;
 	}
 
 	@Transactional(readOnly = true)

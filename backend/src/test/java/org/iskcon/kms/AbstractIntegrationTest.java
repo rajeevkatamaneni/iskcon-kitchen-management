@@ -215,5 +215,13 @@ public abstract class AbstractIntegrationTest {
 		// production boot (it did once — a CHAR(3) column mapped as a plain String).
 		registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
 		registry.add("spring.flyway.enabled", () -> "true");
+
+		// No test may reach a real runner by default (E10-NAMES-B). The default is localhost:8090,
+		// which on a developer's Mac is their own runner, logged in to a paid Claude account: since
+		// the assistant tools started asking for item names in a conversation's language, any test
+		// that reads stock in a non-English conversation starts a background name fill. Port 9 is
+		// refused at once, so that fill fails quietly in milliseconds. Tests that want a runner set a
+		// fake one on the client (FakeRunner, ClaudeNameFillIT) and put this value back afterwards.
+		registry.add("kms.assistant.runner.url", () -> "http://127.0.0.1:9");
 	}
 }

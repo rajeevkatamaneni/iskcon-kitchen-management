@@ -89,8 +89,8 @@ public class McpServerConfiguration {
 			one ingredient; leave it out to list everything. For "what is running low / what should we \
 			buy", call list_low_stock instead.
 
-			item_name matches any part of the name, ignoring case, in English or Kannada: "dal" finds \
-			"Toor Dal" and "Moong Dal". If nothing matches, items is empty; try a shorter or more \
+			item_name matches any part of the name, ignoring case, in English or in the conversation's \
+			language when the item has a stored name in it: "dal" finds "Toor Dal" and "Moong Dal". If nothing matches, items is empty; try a shorter or more \
 			general word, or an English name, before saying the temple does not stock it.
 
 			Returns JSON: {items: [...], returned, total_matching, truncated}. At most 50 items are \
@@ -98,10 +98,12 @@ public class McpServerConfiguration {
 			many. Each item:
 			- name: the English name as the temple files it. Some are written catalogue-style, \
 			"Water, hot", meaning hot water.
-			- name_kn: the item's Kannada name from the temple's glossary, the same word its recipe \
-			sheets and orders use. Use it exactly as given, every time. Absent when the temple has no \
-			Kannada name for the item yet; then give the English name only and never translate the \
-			name yourself.
+			- name_local: the item's name in the conversation's language, stored by the temple, the \
+			same word every time. Use it exactly as given, letter for letter. Absent in an English \
+			conversation, where name is the name.
+			- name_pending: true when the conversation is not in English and the temple has no stored \
+			name for this item in its language yet (it is being filled). Then write your own \
+			translation followed by the English name in brackets, e.g. "పెరుగు (Curd)".
 			- category: e.g. "Pulses", "Dairy".
 			- on_hand: what is physically on the shelf now, in unit. Never negative.
 			- available: on_hand minus what saved meal plans have already claimed, in unit. Can be \
@@ -126,7 +128,7 @@ public class McpServerConfiguration {
 			  "properties": {
 			    "item_name": {
 			      "type": "string",
-			      "description": "Part of an ingredient name, in English or Kannada, e.g. \\"rice\\" or \\"ತುಪ್ಪ\\". Leave out to list every item."
+			      "description": "Part of an ingredient name, in English or the conversation's language, e.g. \\"rice\\" or \\"ತುಪ್ಪ\\". Leave out to list every item."
 			    }
 			  },
 			  "additionalProperties": false
@@ -146,7 +148,9 @@ public class McpServerConfiguration {
 
 			Returns JSON in exactly the shape get_inventory returns ({items, returned, total_matching, \
 			truncated}, at most 50 items, sorted by name, every item with low: true), with the same \
-			fields and units: name, name_kn (use exactly as given; absent when the glossary has none, and then give the English name only), category, on_hand, \
+			fields and units: name, name_local (the stored name in the conversation's language: use it \
+			exactly as given), name_pending (true when there is no stored name yet: give your own \
+			translation with the English in brackets), category, on_hand, \
 			available, unit ("Kg", "gm", "L", "ml" or "pieces"), reorder_level, on_order (absent when \
 			nothing is on order: worth saying, because something low that is already on order may \
 			not need buying again) and cover. An empty items list means nothing is low.""";
@@ -209,8 +213,10 @@ public class McpServerConfiguration {
 			be ordered until someone picks a vendor on the screen). At most 60 lines are returned; \
 			truncated says whether there were more. Each line:
 			- name: the English name as the temple files it.
-			- name_kn: the Kannada name from the temple's glossary. Use it exactly as given; absent when \
-			there is none, and then give the English name only and never translate it yourself.
+			- name_local: the stored name in the conversation's language. Use it exactly as given. \
+			Absent in an English conversation.
+			- name_pending: true when there is no stored name in the conversation's language yet. \
+			Then give your own translation with the English name in brackets, e.g. "పెరుగు (Curd)".
 			- quantity and unit: how much to buy. unit is "Kg", "gm", "L", "ml" or "pieces".
 			- buy: the packs it is bought in, e.g. "4 × Bag (25 Kg)", when it is bought in packs.
 			- needed_by: the date the earliest meal needs it (YYYY-MM-DD). order_by: the last day to \
@@ -270,8 +276,8 @@ public class McpServerConfiguration {
 			- needed_by (optional): YYYY-MM-DD, today or later. Left out, it is the earliest date the \
 			shopping list needs those lines by (or today if that has passed), or none for named lines.
 
-			Returns JSON {draft_id, status, vendor, needed_by, lines: [{name, name_kn, quantity, unit, \
-			rate, amount}], total, note, summary}. rate and amount are rupees at the vendor's list \
+			Returns JSON {draft_id, status, vendor, needed_by, lines: [{name, name_local or name_pending, \
+			quantity, unit, rate, amount}] (names as in get_shopping_list), total, note, summary}. rate and amount are rupees at the vendor's list \
 			price, absent when none is known. Tell the person, in a sentence or two, who it is for, how \
 			many lines and the total, and that it is ready to confirm below; do not repeat every line. \
 			If it refuses, the message says why and what to ask the person.""";

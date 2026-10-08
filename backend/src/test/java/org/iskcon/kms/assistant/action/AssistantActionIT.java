@@ -53,6 +53,7 @@ class AssistantActionIT extends AbstractIntegrationTest {
 	private static final String VOLUNTEER_A = "uid-act-volunteer-a";
 	private static final String ADMIN_B = "uid-act-admin-b";
 	private static final String RICE_KN = "ಅಕ್ಕಿ";
+	private static final String RICE_TE = "సోనా మసూరి బియ్యం";
 
 	@LocalServerPort
 	private int port;
@@ -125,7 +126,7 @@ class AssistantActionIT extends AbstractIntegrationTest {
 		listLine(dal, "10", "KG", false);
 
 		conversation = admin.queryForObject("""
-				INSERT INTO assistant_conversations (tenant_id, user_id) VALUES (?, ?) RETURNING id
+				INSERT INTO assistant_conversations (tenant_id, user_id, language) VALUES (?, ?, 'kn') RETURNING id
 				""", UUID.class, templeA, adminA);
 		run = admin.queryForObject("""
 				INSERT INTO assistant_runs (tenant_id, conversation_id, user_id, model) VALUES (?, ?, ?, 'sonnet')
@@ -160,6 +161,7 @@ class AssistantActionIT extends AbstractIntegrationTest {
 
 	@Test
 	@DisplayName("propose: the vendor's ticked shopping-list lines, the card built server-side, nothing ordered")
+	@SuppressWarnings("unchecked")
 	void proposeFromShoppingList() {
 		Map<String, Object> answer = propose("balaji", null, null);
 
@@ -186,12 +188,65 @@ class AssistantActionIT extends AbstractIntegrationTest {
 		assertThat(riceLine.amount()).isEqualByComparingTo("1125");
 		AssistantProposal.Line sugarLine = card.lines().get(1);
 		assertThat(sugarLine.localName()).isNull();
+		List<Map<String, Object>> answerLines = (List<Map<String, Object>>) answer.get("lines");
+		assertThat(answerLines.get(0)).containsEntry("name_local", RICE_KN);
+		assertThat(answerLines.get(1)).containsEntry("name_pending", true).doesNotContainKey("name_local");
 		assertThat(sugarLine.quantity()).isEqualByComparingTo("2.5");
 		assertThat(sugarLine.unit()).isEqualTo("Kg");
 		assertThat(sugarLine.rate()).as("₹0.05 / gm said per Kg").isEqualByComparingTo("50");
 		assertThat(sugarLine.amount()).isEqualByComparingTo("125");
 		assertThat(card.facts()).extracting(AssistantProposal.Fact::label).containsExactly("Vendor", "Needed by", "Total");
 		assertThat(card.facts().get(2).value()).isEqualTo("₹1,250");
+	}
+
+	@Test
+	@DisplayName("the card, the tool's lines and the shopping list name items in the conversation's language: Telugu here, not the Kannada also stored")
+	@SuppressWarnings("unchecked")
+	void namesFollowTheConversationLanguage() {
+		admin.update("UPDATE assistant_conversations SET language = 'te' WHERE id = ?", conversation);
+		admin.update("""
+				INSERT INTO translation_glossary (tenant_id, language, source_term, target_term)
+				VALUES (?, 'te', 'Rice, Sona Masoori', ?)
+				""", templeA, RICE_TE);
+
+		Map<String, Object> answer = propose("balaji", null, null);
+
+		AssistantProposal card = cards().get(0);
+		assertThat(card.lines()).extracting(AssistantProposal.Line::localName).containsExactly(RICE_TE, null);
+		List<Map<String, Object>> lines = (List<Map<String, Object>>) answer.get("lines");
+		assertThat(lines.get(0)).containsEntry("name_local", RICE_TE).doesNotContainKey("name_pending");
+		assertThat(lines.get(1)).as("sugar has no Telugu name yet").containsEntry("name_pending", true)
+				.doesNotContainKey("name_local");
+
+		actAsAgent("agent:read", "MANAGE_PURCHASE_ORDERS");
+		Map<String, Object> list;
+		try {
+			list = tools.getShoppingList();
+		} finally {
+			TenantContext.clear();
+			SecurityContextHolder.clearContext();
+		}
+		List<Map<String, Object>> listed = ((List<Map<String, Object>>) list.get("vendors")).stream()
+				.flatMap(v -> ((List<Map<String, Object>>) v.get("lines")).stream()).toList();
+		assertThat(listed).filteredOn(l -> "Rice, Sona Masoori".equals(l.get("name")))
+				.singleElement().satisfies(l -> assertThat(l).containsEntry("name_local", RICE_TE));
+		assertThat(listed).filteredOn(l -> "Sugar".equals(l.get("name")))
+				.singleElement().satisfies(l -> assertThat(l).containsEntry("name_pending", true));
+		assertThat(listed).noneMatch(l -> RICE_KN.equals(l.get("name_local")));
+	}
+
+	@Test
+	@DisplayName("in an English conversation the card and the tool carry no local name and nothing pending")
+	@SuppressWarnings("unchecked")
+	void englishConversationHasNoLocalNames() {
+		admin.update("UPDATE assistant_conversations SET language = 'en' WHERE id = ?", conversation);
+
+		Map<String, Object> answer = propose("balaji", null, null);
+
+		assertThat(cards().get(0).lines()).extracting(AssistantProposal.Line::localName).containsOnlyNulls();
+		for (Map<String, Object> line : (List<Map<String, Object>>) answer.get("lines")) {
+			assertThat(line).doesNotContainKeys("name_local", "name_pending");
+		}
 	}
 
 	@Test

@@ -28,6 +28,8 @@ final class McpStockFixture {
 
 	final UUID templeA;
 	final UUID templeB;
+	final UUID userA;
+	final UUID userB;
 
 	private final JdbcTemplate admin;
 
@@ -37,6 +39,8 @@ final class McpStockFixture {
 		templeB = tenant("mcp-temple-b", "MCP Temple B");
 		UUID adminA = user(templeA, "uid-mcp-a", "mcp-a@example.com");
 		UUID adminB = user(templeB, "uid-mcp-b", "mcp-b@example.com");
+		userA = adminA;
+		userB = adminB;
 
 		// Temple A: Toor Dal low (2 of 5), Ghee fine (40 of 10), and 53 fillers holding nothing
 		// against a level of 1, so all of them are low.
@@ -55,12 +59,35 @@ final class McpStockFixture {
 	}
 
 	static void tearDown(JdbcTemplate admin) {
+		admin.execute("DELETE FROM assistant_pending_actions");
+		admin.execute("DELETE FROM assistant_messages");
+		admin.execute("DELETE FROM assistant_runs");
+		admin.execute("DELETE FROM assistant_conversations");
 		admin.execute("DELETE FROM translation_glossary");
 		admin.execute("DELETE FROM stock_movements");
 		admin.execute("DELETE FROM inventory_items");
 		admin.execute("DELETE FROM ingredients");
 		admin.execute("DELETE FROM users");
 		admin.execute("DELETE FROM tenants");
+	}
+
+	/**
+	 * A conversation for {@code user} in {@code language}: the tools name items in the language of
+	 * the conversation the agent token names (E10-NAMES-B), so a test of the Kannada names needs a
+	 * Kannada conversation behind its token.
+	 */
+	UUID conversation(UUID tenant, UUID user, String language) {
+		return admin.queryForObject("""
+				INSERT INTO assistant_conversations (tenant_id, user_id, language) VALUES (?, ?, ?) RETURNING id
+				""", UUID.class, tenant, user, language);
+	}
+
+	/** A glossary name in any language, as a person or the fill would have stored it. */
+	void name(UUID tenant, String language, String source, String target) {
+		admin.update("""
+				INSERT INTO translation_glossary (tenant_id, language, source_term, target_term)
+				VALUES (?, ?, ?, ?)
+				""", tenant, language, source, target);
 	}
 
 	private UUID tenant(String slug, String name) {

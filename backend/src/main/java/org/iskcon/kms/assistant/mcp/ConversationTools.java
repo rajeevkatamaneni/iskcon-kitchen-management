@@ -2,6 +2,7 @@ package org.iskcon.kms.assistant.mcp;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.iskcon.kms.assistant.names.ConversationNames;
 import org.iskcon.kms.assistant.token.AgentPrincipal;
 import org.iskcon.kms.translation.Languages;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -54,9 +55,11 @@ public class ConversationTools {
 					+ "Carry on in the current language and tell the person which languages are available.";
 
 	private final JdbcTemplate jdbc;
+	private final ConversationNames names;
 
-	public ConversationTools(JdbcTemplate jdbc) {
+	public ConversationTools(JdbcTemplate jdbc, ConversationNames names) {
 		this.jdbc = jdbc;
+		this.names = names;
 	}
 
 	/** What the model is handed back: the language now in force, by code and by name. */
@@ -74,6 +77,10 @@ public class ConversationTools {
 		if (changed == 0) {
 			throw new McpServerConfiguration.ToolRefusal(NOT_FOUND_MESSAGE);
 		}
+		// The item names for the new language, if the temple has none yet (E10-NAMES-B). Started now,
+		// without waiting, so they are usually stored by the time the person asks about stock; until
+		// then the tools mark the items pending and the model gives a bracketed stand-in.
+		names.ensure(agent.tenantId(), language);
 		Map<String, Object> result = new LinkedHashMap<>();
 		result.put("language", language);
 		result.put("language_name", Languages.englishName(language));

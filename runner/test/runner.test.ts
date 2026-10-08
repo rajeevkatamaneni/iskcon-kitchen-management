@@ -136,7 +136,9 @@ describe("credential and environment", () => {
     assert.equal(flag("--permission-mode"), "dontAsk");
     assert.equal(flag("--output-format"), "stream-json");
     assert.equal(flag("--mcp-config"), "/w/mcp.json");
-    assert.match(flag("--system-prompt")!, /name_kn/);
+    assert.match(flag("--system-prompt")!, /name_local/);
+    assert.match(flag("--system-prompt")!, /name_pending/);
+    assert.doesNotMatch(flag("--system-prompt")!, /name_kn/);
   });
 
   it("gives name-fill no tools at all, the schema, and its own model", () => {

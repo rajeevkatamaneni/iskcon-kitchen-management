@@ -8,14 +8,13 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
+import org.iskcon.kms.assistant.names.ConversationNames;
+import org.iskcon.kms.assistant.names.ConversationNames.Names;
 import org.iskcon.kms.ingredient.IngredientNames;
 import org.iskcon.kms.ingredient.Unit;
 import org.iskcon.kms.inventory.InventoryItemService;
 import org.iskcon.kms.inventory.StockCover;
 import org.iskcon.kms.inventory.StockItemView;
-import org.iskcon.kms.translation.GlossaryService;
-import org.iskcon.kms.translation.Translatable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Component;
 
@@ -52,22 +51,21 @@ import org.springframework.stereotype.Component;
  * have it read out to them either. The {@code agent:read} scope is checked once, on the
  * {@code /mcp} endpoint itself.
  *
- * <h2>Names in two languages</h2>
+ * <h2>Names in the conversation's language</h2>
  *
  * <p>The S1 spike found that a model answering in Kannada does far better when the tool hands it
- * the Kannada name than when it is left to translate one. The catalogue's Kannada names are the
- * temple's own glossary entries ({@code translation_glossary}, language {@code kn}), the same ones
- * recipe sheets and purchase orders use. They are looked up through {@link Translatable}, keyed on
- * the name as the temple filed it, because that is how the temple typed them in.
+ * the Kannada name than when it is left to translate one, and E10-T8b measured why it matters: left
+ * to translate, it spelt 12 of 28 items more than one way across five repeats of the same question,
+ * and a cook matching a word to a sack needs the same word every time. So each item carries
+ * {@code name_local}, the temple's stored name in the <em>conversation's</em> language (E10-NAMES-B;
+ * until then it was {@code name_kn}, Kannada only, whatever language the conversation was in). The
+ * name is read from the temple's glossary through {@link ConversationNames}, keyed on the name as the
+ * temple filed it, because that is how the temple typed them in; machine-written rows included,
+ * because to the reader they are the temple's name until somebody corrects them.
  *
- * <p>There is no machine translation here, and that is a rule rather than an economy. T6 first left
- * an unnamed item for the model to translate; measured in E10-T8b, it spelt 12 of 28 items more than
- * one way across five repeats of the same question, and a cook matching a word to a sack needs the
- * same word every time. So since E10-T8c the names come only from the app: a person, or the
- * glossary's one-off machine fill ({@code StockNameFillService}), writes each name once, and these
- * tools read it — machine-written rows included, because to the reader they are the temple's name
- * until somebody corrects them. A tool call never translates or writes. Where the glossary is still
- * silent, the field is left out and the description tells the model to give the English name only.
+ * <p>A tool call never translates or writes. Where the glossary has no name yet the item says
+ * {@code name_pending: true}, the description tells the model what to do then, and the call asks the
+ * fill to run without waiting for it. In an English conversation neither field is sent.
  */
 @Component
 public class InventoryTools {
@@ -75,14 +73,12 @@ public class InventoryTools {
 	/** Every tool result is capped, so one call cannot fill the model's context (plan §3). */
 	static final int MAX_ROWS = 50;
 
-	static final String KANNADA = "kn";
-
 	private final InventoryItemService inventoryItemService;
-	private final GlossaryService glossaryService;
+	private final ConversationNames names;
 
-	public InventoryTools(InventoryItemService inventoryItemService, GlossaryService glossaryService) {
+	public InventoryTools(InventoryItemService inventoryItemService, ConversationNames names) {
 		this.inventoryItemService = inventoryItemService;
-		this.glossaryService = glossaryService;
+		this.names = names;
 	}
 
 	/**
@@ -90,44 +86,51 @@ public class InventoryTools {
 	 * blank.
 	 *
 	 * <p>The match is a case-insensitive substring of the filed English name, the same name read
-	 * aloud ({@code "Water, hot"} also answers to {@code "hot water"}), and the Kannada name. Filtered
+	 * aloud ({@code "Water, hot"} also answers to {@code "hot water"}), and the stored name in the
+	 * conversation's language. Filtered
 	 * in Java over the whole list rather than in SQL, because the list is the service's own read and
 	 * it is already one pass for the whole temple — a second query shape for one item would be the
 	 * "second way of reading the ledger" this package keeps refusing.
 	 */
 	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")
 	public InventoryResult getInventory(String itemName) {
-		Map<String, String> kannada = glossaryService.lookup(KANNADA);
+		Names local = names.forCurrentAgent();
 		String needle = itemName == null ? "" : itemName.trim().toLowerCase(Locale.ROOT);
 
 		List<InventoryRow> matching = inventoryItemService.list(null, null, null).stream()
-				.map(view -> toRow(view, kannada))
+				.map(view -> toRow(view, local))
 				.filter(row -> needle.isEmpty() || matches(row, needle))
 				.toList();
-		return InventoryResult.capped(matching);
+		InventoryResult result = InventoryResult.capped(matching);
+		local.fillIfMissing();
+		return result;
 	}
 
 	/** The consumables below their reorder level, exactly as the dashboard and the digest see them. */
 	@PreAuthorize("hasAuthority('MANAGE_INVENTORY')")
 	public InventoryResult listLowStock() {
-		Map<String, String> kannada = glossaryService.lookup(KANNADA);
+		Names local = names.forCurrentAgent();
 		List<InventoryRow> low = inventoryItemService.lowStock().stream()
-				.map(view -> toRow(view, kannada))
+				.map(view -> toRow(view, local))
 				.toList();
-		return InventoryResult.capped(low);
+		InventoryResult result = InventoryResult.capped(low);
+		local.fillIfMissing();
+		return result;
 	}
 
 	private static boolean matches(InventoryRow row, String needle) {
 		return row.name().toLowerCase(Locale.ROOT).contains(needle)
 				|| IngredientNames.readable(row.name()).toLowerCase(Locale.ROOT).contains(needle)
-				|| (row.nameKn() != null && row.nameKn().toLowerCase(Locale.ROOT).contains(needle));
+				|| (row.nameLocal() != null && row.nameLocal().toLowerCase(Locale.ROOT).contains(needle));
 	}
 
-	private static InventoryRow toRow(StockItemView view, Map<String, String> kannada) {
+	private static InventoryRow toRow(StockItemView view, Names local) {
 		Unit unit = Unit.valueOf(view.unit());
+		String nameLocal = local.local(view.ingredientName());
 		return new InventoryRow(
 				view.ingredientName(),
-				Translatable.ingredientName(view.ingredientName()).override(kannada),
+				nameLocal,
+				local.english() || nameLocal != null ? null : Boolean.TRUE,
 				view.category(),
 				quantity(view.onHand()),
 				quantity(view.available()),
@@ -174,7 +177,8 @@ public class InventoryTools {
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record InventoryRow(
 			String name,
-			String nameKn,
+			String nameLocal,
+			Boolean namePending,
 			String category,
 			BigDecimal onHand,
 			BigDecimal available,

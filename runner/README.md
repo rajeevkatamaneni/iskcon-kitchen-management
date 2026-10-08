@@ -39,6 +39,22 @@ Refused before a run starts, as a plain JSON body of the same shape:
 
 The prompt, the agent token and the credential are never logged.
 
+## The `name-fill` profile
+
+The api also uses the runner to write a temple's stock-item names in a language, once (E10-NAMES-A,
+used by the assistant since E10-NAMES-B). `POST /run` with `{"profile":"name-fill","prompt":"..."}`
+and **no** `mcpUrl` or `agentToken`; a request that sends either is refused `400 invalid_request`.
+The run gets no tools at all (no `--mcp-config`, no `--allowedTools`, no `mcp.json`, an empty working
+directory), the system prompt `prompts/name-fill.md`, a JSON schema for its answer
+(`{names: [{n, english, name}]}`), model `opus` and a 300 s timeout of its own. The answer is the
+`structured_output` on the final `result` line; the api checks every name (right item, right script)
+before storing it in the glossary, and never overwrites a name already there.
+
+When the api calls it: when a conversation starts in, or switches to, a language other than English,
+and when a tool finds an item with no name in the conversation's language. The api runs at most one
+fill per temple and language (an advisory lock), does not wait for it, and does not retry a failed
+fill for ten minutes. A whole temple (119 items, Telugu) took 65 s.
+
 ## Configuration
 
 | Variable | Default | |

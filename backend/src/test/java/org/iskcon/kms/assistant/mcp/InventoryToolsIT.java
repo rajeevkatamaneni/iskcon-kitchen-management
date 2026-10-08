@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.iskcon.kms.AbstractIntegrationTest;
 import org.iskcon.kms.assistant.mcp.InventoryTools.InventoryResult;
 import org.iskcon.kms.assistant.mcp.InventoryTools.InventoryRow;
+import org.iskcon.kms.assistant.token.AgentPrincipal;
 import org.iskcon.kms.tenancy.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -88,7 +89,7 @@ class InventoryToolsIT extends AbstractIntegrationTest {
 		assertThat(dalA.unit()).isEqualTo("Kg");
 		assertThat(dalA.reorderLevel()).isEqualByComparingTo("5");
 		assertThat(dalA.low()).isTrue();
-		assertThat(dalA.nameKn()).isEqualTo(McpStockFixture.DAL_KN_A);
+		assertThat(dalA.nameLocal()).isEqualTo(McpStockFixture.DAL_KN_A);
 		assertThat(dalA.cover().known()).as("no consumption history, so no estimate").isFalse();
 
 		actAs(fixture.templeB, "MANAGE_INVENTORY");
@@ -97,7 +98,7 @@ class InventoryToolsIT extends AbstractIntegrationTest {
 		assertThat(b.items()).extracting(InventoryRow::name).containsExactly("Toor Dal");
 		assertThat(b.items().get(0).onHand()).isEqualByComparingTo("100");
 		assertThat(b.items().get(0).low()).isFalse();
-		assertThat(b.items().get(0).nameKn()).isEqualTo(McpStockFixture.DAL_KN_B);
+		assertThat(b.items().get(0).nameLocal()).isEqualTo(McpStockFixture.DAL_KN_B);
 	}
 
 	@Test
@@ -119,7 +120,7 @@ class InventoryToolsIT extends AbstractIntegrationTest {
 
 		assertThat(b.items()).extracting(InventoryRow::name).containsExactly("Basmati Rice");
 		assertThat(b.items()).allMatch(InventoryRow::low);
-		assertThat(b.items().get(0).nameKn()).as("temple B has no glossary entry for rice").isNull();
+		assertThat(b.items().get(0).nameLocal()).as("temple B has no glossary entry for rice").isNull();
 	}
 
 	// ---- Matching ---------------------------------------------------------
@@ -192,7 +193,7 @@ class InventoryToolsIT extends AbstractIntegrationTest {
 			assertThat(payload.get("items")).hasSize(1);
 			assertThat(payload.get("items").get(0).get("name").asText()).isEqualTo("Toor Dal");
 			assertThat(payload.get("items").get(0).get("on_hand").decimalValue()).isEqualByComparingTo("2");
-			assertThat(payload.get("items").get(0).get("name_kn").asText()).isEqualTo(McpStockFixture.DAL_KN_A);
+			assertThat(payload.get("items").get(0).get("name_local").asText()).isEqualTo(McpStockFixture.DAL_KN_A);
 			assertThat(payload.get("items").get(0).get("cover").get("known").asBoolean()).isFalse();
 
 			AtomicReference<Optional<UUID>> leftOver = new AtomicReference<>();
@@ -214,10 +215,17 @@ class InventoryToolsIT extends AbstractIntegrationTest {
 
 	// ---------------------------------------------------------------------
 
+	/**
+	 * Acts as the assistant for the temple's admin, in a Kannada conversation: the tools name items in
+	 * the conversation's language (E10-NAMES-B), and these tests were written against the Kannada names.
+	 */
 	private void actAs(UUID tenant, String... authorities) {
+		UUID user = tenant.equals(fixture.templeA) ? fixture.userA : fixture.userB;
+		UUID conversation = fixture.conversation(tenant, user, "kn");
 		TenantContext.set(tenant);
+		AgentPrincipal agent = new AgentPrincipal(user, tenant, conversation, java.util.Set.of("agent:read"));
 		SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-				"agent", null, AuthorityUtils.createAuthorityList(authorities)));
+				agent, null, AuthorityUtils.createAuthorityList(authorities)));
 	}
 
 	/** What the transport's extractor would capture on a request thread the filter had set up. */

@@ -123,12 +123,12 @@ class McpEndToEndIT extends AbstractIntegrationTest {
 		JsonNode dalA = toolPayload(callTool(tokenA, 3, "get_inventory", "{\"item_name\":\"dal\"}"));
 		assertThat(dalA.get("items")).hasSize(1);
 		assertThat(dalA.get("items").get(0).get("on_hand").decimalValue()).isEqualByComparingTo("2");
-		assertThat(dalA.get("items").get(0).get("name_kn").asText()).isEqualTo(McpStockFixture.DAL_KN_A);
+		assertThat(dalA.get("items").get(0).get("name_local").asText()).isEqualTo(McpStockFixture.DAL_KN_A);
 
 		JsonNode dalB = toolPayload(callTool(tokenB, 4, "get_inventory", "{\"item_name\":\"dal\"}"));
 		assertThat(dalB.get("items")).hasSize(1);
 		assertThat(dalB.get("items").get(0).get("on_hand").decimalValue()).isEqualByComparingTo("100");
-		assertThat(dalB.get("items").get(0).get("name_kn").asText()).isEqualTo(McpStockFixture.DAL_KN_B);
+		assertThat(dalB.get("items").get(0).get("name_local").asText()).isEqualTo(McpStockFixture.DAL_KN_B);
 
 		// get_inventory with no name: B's whole stock is its two items, none of A's 55.
 		JsonNode allB = toolPayload(callTool(tokenB, 5, "get_inventory", "{}"));
@@ -223,8 +223,9 @@ class McpEndToEndIT extends AbstractIntegrationTest {
 
 	// ---------------------------------------------------------------------
 
+	/** A read token for a Kannada conversation of the user's: the tools name items in its language. */
 	private String readToken(UUID userId, UUID tenant) {
-		return tokens.mint(userId, tenant, UUID.randomUUID(), Set.of(AgentTokenService.SCOPE_READ));
+		return tokens.mint(userId, tenant, fixture.conversation(tenant, userId, "kn"), Set.of(AgentTokenService.SCOPE_READ));
 	}
 
 	private UUID userId(String firebaseUid) {

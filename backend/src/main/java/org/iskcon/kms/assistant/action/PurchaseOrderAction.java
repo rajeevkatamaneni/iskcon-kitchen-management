@@ -19,6 +19,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.iskcon.kms.assistant.names.ConversationNames;
+import org.iskcon.kms.assistant.names.ConversationNames.Names;
 import org.iskcon.kms.assistant.token.AgentPrincipal;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
@@ -35,8 +37,6 @@ import org.iskcon.kms.shoppinglist.BuyPackView;
 import org.iskcon.kms.shoppinglist.ShoppingListLineView;
 import org.iskcon.kms.shoppinglist.ShoppingListService;
 import org.iskcon.kms.tenancy.TempleClock;
-import org.iskcon.kms.translation.GlossaryService;
-import org.iskcon.kms.translation.Translatable;
 import org.iskcon.kms.vendor.VendorService;
 import org.iskcon.kms.vendor.VendorSupplyView;
 import org.iskcon.kms.vendor.VendorView;
@@ -93,29 +93,27 @@ public class PurchaseOrderAction implements PendingActionHandler {
 	/** What the card says beside Confirm. Under ~45 characters: the card is narrow (api.ts). */
 	static final String CONFIRM_SAYS = "Confirm saves a draft order. Nothing is sent.";
 
-	static final String KANNADA = "kn";
-
 	private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH);
 
 	private final PurchaseOrderService purchaseOrders;
 	private final ShoppingListService shoppingList;
 	private final VendorService vendors;
 	private final IngredientService ingredients;
-	private final GlossaryService glossary;
+	private final ConversationNames names;
 	private final TempleClock clock;
 	private final PendingActionService actions;
 	private final ObjectMapper json;
 	private final Validator validator;
 
 	public PurchaseOrderAction(PurchaseOrderService purchaseOrders, ShoppingListService shoppingList,
-			VendorService vendors, IngredientService ingredients, GlossaryService glossary, TempleClock clock,
+			VendorService vendors, IngredientService ingredients, ConversationNames names, TempleClock clock,
 			@org.springframework.context.annotation.Lazy PendingActionService actions, ObjectMapper json,
 			Validator validator) {
 		this.purchaseOrders = purchaseOrders;
 		this.shoppingList = shoppingList;
 		this.vendors = vendors;
 		this.ingredients = ingredients;
-		this.glossary = glossary;
+		this.names = names;
 		this.clock = clock;
 		this.actions = actions;
 		this.json = json;
@@ -165,8 +163,13 @@ public class PurchaseOrderAction implements PendingActionHandler {
 		}
 	}
 
-	/** The draft and the facts the tool tells the model about it. */
-	public record Drafted(AssistantProposal proposal, VendorView vendor, LocalDate neededBy, String total, String note) {
+	/**
+	 * The draft and the facts the tool tells the model about it. {@code english} is whether the
+	 * conversation was in English when the card was built, which decides whether a line with no local
+	 * name is simply English or is waiting for its name ({@link #lineSummary}).
+	 */
+	public record Drafted(AssistantProposal proposal, VendorView vendor, LocalDate neededBy, String total, String note,
+			boolean english) {
 	}
 
 	/**
@@ -201,7 +204,8 @@ public class PurchaseOrderAction implements PendingActionHandler {
 		VendorView vendor = oneVendor(vendorName);
 		Map<UUID, VendorSupplyView> supplies = vendors.get(vendor.id()).supplies().stream()
 				.collect(Collectors.toMap(VendorSupplyView::ingredientId, Function.identity(), (a, b) -> a));
-		Map<String, String> kannada = glossary.lookup(KANNADA);
+		// The card's second name is the conversation's language, as the tools' are (E10-NAMES-B).
+		Names local = names.forAgent(agent);
 		LocalDate today = clock.today();
 		String note = null;
 
@@ -219,7 +223,7 @@ public class PurchaseOrderAction implements PendingActionHandler {
 						+ " they want, then call propose_purchase_order again with lines.");
 			}
 			for (ShoppingListLineView line : lines) {
-				fromShoppingList(line, supplies.get(line.ingredientId()), kannada, orderLines, cardLines);
+				fromShoppingList(line, supplies.get(line.ingredientId()), local, orderLines, cardLines);
 			}
 			if (date == null) {
 				date = lines.stream().map(ShoppingListLineView::neededBy).filter(Objects::nonNull).min(LocalDate::compareTo)
@@ -233,7 +237,7 @@ public class PurchaseOrderAction implements PendingActionHandler {
 		} else {
 			List<IngredientView> catalogue = ingredients.list();
 			for (RequestedLine line : requested) {
-				named(line, catalogue, supplies, kannada, orderLines, cardLines);
+				named(line, catalogue, supplies, local, orderLines, cardLines);
 			}
 		}
 		if (date != null && date.isBefore(today)) {
@@ -241,13 +245,15 @@ public class PurchaseOrderAction implements PendingActionHandler {
 					+ today + ") or later. Ask the person for a date.");
 		}
 
+		local.fillIfMissing();
 		CreatePurchaseOrderRequest request = new CreatePurchaseOrderRequest(vendor.id(), date, null, null, orderLines);
 		List<AssistantProposal.Fact> facts = facts(vendor, date, cardLines);
 		AssistantProposal.Card card = new AssistantProposal.Card(
 				"Purchase order for " + vendor.name(), facts, cardLines, CONFIRM_SAYS);
 		AssistantProposal.Fact total = facts.get(facts.size() - 1);
 		String totalText = total.value() + (total.hint() == null ? "" : " (" + total.hint() + ")");
-		return new Drafted(actions.propose(agent, KIND, request, card), vendor, date, totalText, note);
+		return new Drafted(actions.propose(agent, KIND, request, card), vendor, date, totalText, note,
+				local.english());
 	}
 
 	private VendorView oneVendor(String name) {
@@ -268,11 +274,11 @@ public class PurchaseOrderAction implements PendingActionHandler {
 	}
 
 	/** One shopping-list line as the vendor tile's panel would put it on the order (see the class comment). */
-	private void fromShoppingList(ShoppingListLineView line, VendorSupplyView supply, Map<String, String> kannada,
+	private void fromShoppingList(ShoppingListLineView line, VendorSupplyView supply, Names local,
 			List<PoLineInput> orderLines, List<AssistantProposal.Line> cardLines) {
 		Unit unit = Unit.valueOf(line.unit());
 		BigDecimal perLineUnit = supply == null ? null : pricePer(supply.lastPrice(), unitOf(supply.unit()), unit);
-		String localName = Translatable.ingredientName(line.ingredientName()).override(kannada);
+		String localName = local.local(line.ingredientName());
 
 		if (line.buyPacks() != null && !line.buyPacks().isEmpty()) {
 			for (BuyPackView pack : line.buyPacks()) {
@@ -298,7 +304,7 @@ public class PurchaseOrderAction implements PendingActionHandler {
 
 	/** A line the person named, matched to the catalogue. */
 	private void named(RequestedLine line, List<IngredientView> catalogue, Map<UUID, VendorSupplyView> supplies,
-			Map<String, String> kannada, List<PoLineInput> orderLines, List<AssistantProposal.Line> cardLines) {
+			Names local, List<PoLineInput> orderLines, List<AssistantProposal.Line> cardLines) {
 		if (line == null || normalise(line.item()).isEmpty()) {
 			throw new CannotDraft("Every line needs an item name.");
 		}
@@ -316,7 +322,7 @@ public class PurchaseOrderAction implements PendingActionHandler {
 		BigDecimal expected = supply == null ? null : pricePer(supply.lastPrice(), unitOf(supply.unit()), unit);
 		BigDecimal quantity = plain(line.quantity());
 		orderLines.add(new PoLineInput(item.id(), null, quantity, unit.name(), expected, null, null));
-		cardLines.add(cardLine(item.name(), Translatable.ingredientName(item.name()).override(kannada), quantity, unit,
+		cardLines.add(cardLine(item.name(), local.local(item.name()), quantity, unit,
 				expected));
 	}
 
@@ -523,11 +529,15 @@ public class PurchaseOrderAction implements PendingActionHandler {
 	}
 
 	/** For the tool's answer: the card's lines as the model should read them back. */
-	public static Map<String, Object> lineSummary(AssistantProposal.Line line) {
+	public static Map<String, Object> lineSummary(AssistantProposal.Line line, boolean english) {
 		Map<String, Object> out = new LinkedHashMap<>();
 		out.put("name", line.name());
+		// localName is the conversation's language, null in English and while the temple has no name
+		// yet. The model is told which: a missing name in a non-English conversation is pending.
 		if (line.localName() != null) {
-			out.put("name_kn", line.localName());
+			out.put("name_local", line.localName());
+		} else if (!english) {
+			out.put("name_pending", true);
 		}
 		out.put("quantity", line.quantity());
 		out.put("unit", line.unit());
