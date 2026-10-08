@@ -122,4 +122,12 @@ public enum AuditEntityType {
 	 * tokens, duration and tool calls.
 	 */
 	ASSISTANT_RUN,
+
+	/**
+	 * A draft the Kitchen Assistant made, confirmed or rejected by the person (E10-S4). The entity of
+	 * {@link AuditAction#ASSISTANT_ACTION_CONFIRMED} and {@link AuditAction#ASSISTANT_ACTION_REJECTED};
+	 * its id is the {@code assistant_pending_actions} row. What a confirmed draft made (a purchase
+	 * order) is recorded again by the service that made it, under its own entity.
+	 */
+	ASSISTANT_ACTION,
 }

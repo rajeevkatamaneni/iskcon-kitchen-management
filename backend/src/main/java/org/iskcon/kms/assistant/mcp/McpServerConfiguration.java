@@ -191,6 +191,116 @@ public class McpServerConfiguration {
 			  "additionalProperties": false
 			}""";
 
+	// ---- Purchase orders (E10-S4) -----------------------------------------
+
+	static final String GET_SHOPPING_LIST = "get_shopping_list";
+
+	static final String GET_SHOPPING_LIST_DESCRIPTION = """
+			The temple's shopping list as it stands now, grouped by the vendor each line would be \
+			ordered from. It is worked out fresh from the meal plans, the reorder levels and what is \
+			already on order, with the temple's own edits on top: the same list the Shopping list \
+			screen shows.
+
+			Use it when the person asks what needs buying or ordering, what is on the shopping list, \
+			or asks for a purchase order without saying what should be on it.
+
+			Takes no arguments. Returns JSON {vendors: [{vendor, lines: [...]}], returned, total_lines, \
+			truncated}. vendor is the vendor's name, or null for lines with no vendor yet (those cannot \
+			be ordered until someone picks a vendor on the screen). At most 60 lines are returned; \
+			truncated says whether there were more. Each line:
+			- name: the English name as the temple files it.
+			- name_kn: the Kannada name from the temple's glossary. Use it exactly as given; absent when \
+			there is none, and then give the English name only and never translate it yourself.
+			- quantity and unit: how much to buy. unit is "Kg", "gm", "L", "ml" or "pieces".
+			- buy: the packs it is bought in, e.g. "4 × Bag (25 Kg)", when it is bought in packs.
+			- needed_by: the date the earliest meal needs it (YYYY-MM-DD). order_by: the last day to \
+			order it and still have it arrive. Either may be absent.
+			- ticked: false when the temple has decided not to buy it now. Only ticked lines go on an \
+			order made from the list.""";
+
+	static final String GET_SHOPPING_LIST_SCHEMA = """
+			{
+			  "type": "object",
+			  "properties": {},
+			  "additionalProperties": false
+			}""";
+
+	static final String FIND_VENDOR = "find_vendor";
+
+	static final String FIND_VENDOR_DESCRIPTION = """
+			The temple's active vendors whose name matches. Use it to check a vendor the person \
+			named before drafting an order, or to list the vendors when they have not said which.
+
+			name matches any part of the vendor's name, ignoring case; an exact name returns only that \
+			vendor. Leave name out to list every active vendor.
+
+			Returns JSON {vendors: [{name, contact}], total_matching}. If more than one matches and the \
+			person has not made clear which, ask them.""";
+
+	static final String FIND_VENDOR_SCHEMA = """
+			{
+			  "type": "object",
+			  "properties": {
+			    "name": {
+			      "type": "string",
+			      "description": "All or part of the vendor's name, e.g. \\"Balaji\\". Leave out to list every active vendor."
+			    }
+			  },
+			  "additionalProperties": false
+			}""";
+
+	static final String PROPOSE_PURCHASE_ORDER = "propose_purchase_order";
+
+	static final String PROPOSE_PURCHASE_ORDER_DESCRIPTION = """
+			Drafts a purchase order for one vendor and shows it to the person as a card with Confirm \
+			and Reject. It does NOT save or send anything: the order is created, as a draft order that \
+			is not sent to the vendor, only if the person presses Confirm. Never say the order is \
+			saved, placed or sent; say a draft is ready for them to check and confirm.
+
+			Call it once per request, when you know the vendor. If the person did not say which items, \
+			leave lines out: the draft then holds that vendor's ticked lines from the shopping list, \
+			in the packs and amounts the list suggests, which is exactly what the Shopping list screen \
+			would put on the order. If they named items and amounts, pass them as lines.
+
+			Arguments:
+			- vendor (required): the vendor's name, as find_vendor or get_shopping_list gives it.
+			- lines (optional): [{item, quantity, unit}], item an ingredient's English name, quantity a \
+			number above zero, unit "Kg", "gm", "L", "ml" or "pieces" in the ingredient's own kind of \
+			unit.
+			- needed_by (optional): YYYY-MM-DD, today or later. Left out, it is the earliest date the \
+			shopping list needs those lines by (or today if that has passed), or none for named lines.
+
+			Returns JSON {draft_id, status, vendor, needed_by, lines: [{name, name_kn, quantity, unit, \
+			rate, amount}], total, note, summary}. rate and amount are rupees at the vendor's list \
+			price, absent when none is known. Tell the person, in a sentence or two, who it is for, how \
+			many lines and the total, and that it is ready to confirm below; do not repeat every line. \
+			If it refuses, the message says why and what to ask the person.""";
+
+	static final String PROPOSE_PURCHASE_ORDER_SCHEMA = """
+			{
+			  "type": "object",
+			  "properties": {
+			    "vendor": {"type": "string", "description": "The vendor's name."},
+			    "lines": {
+			      "type": "array",
+			      "description": "Leave out to use the vendor's lines from the shopping list.",
+			      "items": {
+			        "type": "object",
+			        "properties": {
+			          "item": {"type": "string", "description": "The ingredient's English name, e.g. \\"Toor Dal\\"."},
+			          "quantity": {"type": "number", "description": "How much, above zero."},
+			          "unit": {"type": "string", "description": "Kg, gm, L, ml or pieces."}
+			        },
+			        "required": ["item", "quantity", "unit"],
+			        "additionalProperties": false
+			      }
+			    },
+			    "needed_by": {"type": "string", "description": "YYYY-MM-DD, today or later."}
+			  },
+			  "required": ["vendor"],
+			  "additionalProperties": false
+			}""";
+
 	// ---- What the model is told when a call cannot be answered -----------
 	//
 	// Plain words, because the model will relay them to a cook. Nothing technical: the detail goes
@@ -202,6 +312,9 @@ public class McpServerConfiguration {
 	static final String NOT_ALLOWED_MESSAGE =
 			"This person's role does not include the stock screen, so I cannot read stock for them. "
 					+ "A Temple Admin can say who should see stock.";
+	static final String NOT_ALLOWED_PURCHASE_ORDERS_MESSAGE =
+			"This person's role does not include the shopping list and purchase orders, so I cannot read "
+					+ "or draft them for them. A Temple Admin can say who should order supplies.";
 	static final String FAILED_MESSAGE =
 			"The stock could not be read just now. Try again in a minute; if it keeps failing, "
 					+ "tell the person to quote reference %s to their Temple Admin.";
@@ -220,12 +333,12 @@ public class McpServerConfiguration {
 	@Bean(destroyMethod = "close")
 	McpStatelessSyncServer mcpServer(
 			HttpServletStatelessServerTransport mcpTransport, InventoryTools inventoryTools,
-			ConversationTools conversationTools, ObjectMapper objectMapper) {
+			ConversationTools conversationTools, PurchaseOrderTools purchaseOrderTools, ObjectMapper objectMapper) {
 		return McpServer.sync(mcpTransport)
 				.serverInfo(SERVER_NAME, SERVER_VERSION)
 				.jsonMapper(protocolMapper())
 				.capabilities(McpSchema.ServerCapabilities.builder().tools(false).build())
-				.tools(toolSpecifications(inventoryTools, conversationTools, objectMapper))
+				.tools(toolSpecifications(inventoryTools, conversationTools, purchaseOrderTools, objectMapper))
 				.build();
 	}
 
@@ -234,7 +347,8 @@ public class McpServerConfiguration {
 	 * server registers, rather than a copy of it.
 	 */
 	static List<SyncToolSpecification> toolSpecifications(
-			InventoryTools inventoryTools, ConversationTools conversationTools, ObjectMapper objectMapper) {
+			InventoryTools inventoryTools, ConversationTools conversationTools, PurchaseOrderTools purchaseOrderTools,
+			ObjectMapper objectMapper) {
 		// The application's own mapper, copied so the change below stays here: the JSON the model
 		// reads gets ISO dates from it (Boot turns timestamps off) and plain decimals from this.
 		ObjectMapper payloadMapper = objectMapper.copy().enable(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN);
@@ -249,7 +363,19 @@ public class McpServerConfiguration {
 				tool(protocol, SET_CONVERSATION_LANGUAGE, "Switch language", SET_CONVERSATION_LANGUAGE_DESCRIPTION,
 						SET_CONVERSATION_LANGUAGE_SCHEMA, payloadMapper,
 						request -> () -> conversationTools.setConversationLanguage(
-								stringArgument(request, "language"))));
+								stringArgument(request, "language"))),
+				tool(protocol, GET_SHOPPING_LIST, "Shopping list", GET_SHOPPING_LIST_DESCRIPTION,
+						GET_SHOPPING_LIST_SCHEMA, payloadMapper, NOT_ALLOWED_PURCHASE_ORDERS_MESSAGE,
+						request -> purchaseOrderTools::getShoppingList),
+				tool(protocol, FIND_VENDOR, "Find a vendor", FIND_VENDOR_DESCRIPTION, FIND_VENDOR_SCHEMA,
+						payloadMapper, NOT_ALLOWED_PURCHASE_ORDERS_MESSAGE,
+						request -> () -> purchaseOrderTools.findVendor(stringArgument(request, "name"))),
+				tool(protocol, PROPOSE_PURCHASE_ORDER, "Draft a purchase order", PROPOSE_PURCHASE_ORDER_DESCRIPTION,
+						PROPOSE_PURCHASE_ORDER_SCHEMA, payloadMapper, NOT_ALLOWED_PURCHASE_ORDERS_MESSAGE,
+						request -> () -> purchaseOrderTools.proposePurchaseOrder(
+								stringArgument(request, "vendor"),
+								request.arguments() == null ? null : request.arguments().get("lines"),
+								stringArgument(request, "needed_by"))));
 	}
 
 	/**
@@ -271,6 +397,17 @@ public class McpServerConfiguration {
 	static SyncToolSpecification tool(
 			McpJsonMapper protocol, String name, String title, String description, String inputSchema,
 			ObjectMapper payloadMapper, Function<CallToolRequest, Supplier<Object>> read) {
+		return tool(protocol, name, title, description, inputSchema, payloadMapper, NOT_ALLOWED_MESSAGE, read);
+	}
+
+	/**
+	 * {@link #tool} with the words the model is given when the person's role lacks the tool's
+	 * permission. The stock tools' default names the stock screen; a tool about something else says
+	 * what it is about.
+	 */
+	static SyncToolSpecification tool(
+			McpJsonMapper protocol, String name, String title, String description, String inputSchema,
+			ObjectMapper payloadMapper, String notAllowed, Function<CallToolRequest, Supplier<Object>> read) {
 		McpSchema.Tool tool = McpSchema.Tool.builder()
 				.name(name)
 				.title(title)
@@ -280,12 +417,18 @@ public class McpServerConfiguration {
 		return SyncToolSpecification.builder()
 				.tool(tool)
 				.callHandler((McpTransportContext context, CallToolRequest request) ->
-						call(name, context, read.apply(request), payloadMapper))
+						call(name, context, read.apply(request), payloadMapper, notAllowed))
 				.build();
 	}
 
 	static CallToolResult call(
 			String toolName, McpTransportContext context, Supplier<Object> read, ObjectMapper payloadMapper) {
+		return call(toolName, context, read, payloadMapper, NOT_ALLOWED_MESSAGE);
+	}
+
+	static CallToolResult call(
+			String toolName, McpTransportContext context, Supplier<Object> read, ObjectMapper payloadMapper,
+			String notAllowed) {
 		try {
 			Object payload = AgentCallScope.run(context, read);
 			return CallToolResult.builder()
@@ -303,7 +446,7 @@ public class McpServerConfiguration {
 			return refusal(e.getMessage());
 		} catch (AccessDeniedException | AuthenticationException e) {
 			log.info("MCP tool {} refused: caller lacks the permission", toolName);
-			return refusal(NOT_ALLOWED_MESSAGE);
+			return refusal(notAllowed);
 		} catch (JsonProcessingException | RuntimeException e) {
 			String incidentId = UUID.randomUUID().toString().substring(0, 8);
 			log.error("MCP tool {} failed incident={}", toolName, incidentId, e);

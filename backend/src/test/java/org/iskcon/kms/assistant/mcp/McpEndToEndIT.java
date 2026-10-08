@@ -106,8 +106,13 @@ class McpEndToEndIT extends AbstractIntegrationTest {
 				{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}""");
 		assertThat(list.statusCode()).as(list.body()).isEqualTo(200);
 		JsonNode tools = objectMapper.readTree(list.body()).get("result").get("tools");
-		assertThat(tools.findValuesAsText("name")).containsExactlyInAnyOrder(
-				"get_inventory", "list_low_stock", "set_conversation_language");
+		// The tools' own names, not findValuesAsText("name"), which also finds find_vendor's argument
+		// called "name" inside its input schema.
+		java.util.List<String> names = new java.util.ArrayList<>();
+		tools.forEach(tool -> names.add(tool.get("name").asText()));
+		assertThat(names).containsExactlyInAnyOrder(
+				"get_inventory", "list_low_stock", "set_conversation_language",
+				"get_shopping_list", "find_vendor", "propose_purchase_order");
 		for (JsonNode tool : tools) {
 			assertThat(tool.get("inputSchema").path("properties").has("tenant_id"))
 					.as("no tool takes a tenant").isFalse();

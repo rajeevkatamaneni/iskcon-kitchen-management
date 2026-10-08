@@ -276,6 +276,48 @@ class AssistantApiIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("a draft made during the run is sent as a proposal event after the text and before done (E10-S4)")
+	void proposalEventBeforeDone() throws Exception {
+		UUID conversation = createConversation("uid-asst-admin-a");
+		// What propose_purchase_order stores, done by the fake runner while the run is under way: a
+		// draft under the conversation's RUNNING run, hashed by the database as the service hashes it.
+		runner.duringRun = () -> admin.update("""
+				INSERT INTO assistant_pending_actions (
+					tenant_id, conversation_id, run_id, kind, payload, payload_sha256, idempotency_key, expires_at)
+				SELECT tenant_id, conversation_id, id, 'PURCHASE_ORDER', p.payload,
+					encode(sha256(convert_to(p.payload::text, 'UTF8')), 'hex'), 'test-key', now() + interval '24 hours'
+				FROM assistant_runs,
+					(SELECT '{"request": {}, "card": {"title": "Purchase order for Sri Balaji Traders", "facts": [],
+						"lines": [], "confirmSays": "Confirm saves a draft order. Nothing is sent."}}'::jsonb AS payload) p
+				WHERE conversation_id = ? AND status = 'RUNNING'
+				""", conversation);
+
+		List<Event> events = events(send("uid-asst-admin-a", conversation, "make an order for Balaji").body());
+
+		assertThat(events).extracting(Event::name)
+				.containsExactly("text", "text", "tool_call", "text", "text", "proposal", "done");
+		JsonNode proposal = events.get(5).data();
+		assertThat(proposal.get("kind").asText()).isEqualTo("PURCHASE_ORDER");
+		assertThat(proposal.get("status").asText()).isEqualTo("PROPOSED");
+		assertThat(proposal.get("title").asText()).isEqualTo("Purchase order for Sri Balaji Traders");
+		assertThat(proposal.get("confirmSays").asText()).isEqualTo("Confirm saves a draft order. Nothing is sent.");
+		assertThat(proposal.get("result").isNull()).isTrue();
+		assertThat(proposal.hasNonNull("expiresAt")).isTrue();
+
+		// The same card under the reply when the conversation is read back.
+		JsonNode detail = json.readTree(get("uid-asst-admin-a", "/api/v1/assistant/conversations/" + conversation).body());
+		assertThat(detail.get("messages").get(0).get("proposals")).isEmpty();
+		assertThat(detail.get("messages").get(1).get("proposals")).hasSize(1);
+		assertThat(detail.get("messages").get(1).get("proposals").get(0).get("actionId"))
+				.isEqualTo(proposal.get("actionId"));
+
+		// A run that made no draft sends no proposal.
+		runner.reset(new FakeRunner.Script(200, RunStreamReaderTest.recording("runner-toor-dal.ndjson"), 0));
+		assertThat(events(send("uid-asst-admin-a", conversation, "and rice?").body())).extracting(Event::name)
+				.doesNotContain("proposal");
+	}
+
+	@Test
 	@DisplayName("Volunteers are refused every endpoint, and nothing reaches the runner")
 	void refusedWithoutPermission() throws Exception {
 		UUID conversation = createConversation("uid-asst-admin-a");

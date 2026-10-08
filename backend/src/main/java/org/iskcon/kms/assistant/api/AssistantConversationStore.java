@@ -9,6 +9,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.iskcon.kms.assistant.action.AssistantProposal;
+import org.iskcon.kms.assistant.action.PendingActionService;
 import org.iskcon.kms.assistant.api.AssistantViews.ConversationSummary;
 import org.iskcon.kms.assistant.api.AssistantViews.ConversationView;
 import org.iskcon.kms.assistant.api.AssistantViews.MessageView;
@@ -55,11 +57,14 @@ public class AssistantConversationStore {
 	private final JdbcTemplate jdbc;
 	private final AssistantBudget budget;
 	private final AuditService audit;
+	private final PendingActionService actions;
 
-	public AssistantConversationStore(JdbcTemplate jdbc, AssistantBudget budget, AuditService audit) {
+	public AssistantConversationStore(JdbcTemplate jdbc, AssistantBudget budget, AuditService audit,
+			PendingActionService actions) {
 		this.jdbc = jdbc;
 		this.budget = budget;
 		this.audit = audit;
+		this.actions = actions;
 	}
 
 	/**
@@ -90,13 +95,19 @@ public class AssistantConversationStore {
 	@Transactional(readOnly = true)
 	public ConversationView get(AuthenticatedUser actor, UUID conversationId) {
 		ConversationSummary conversation = owned(actor, conversationId, false);
+		// Each reply carries the drafts its run made (E10-S4), found by the run id both rows hold.
+		Map<UUID, List<AssistantProposal>> drafts = actions.forConversation(conversationId);
 		List<MessageView> messages = jdbc.query("""
-				SELECT id, role, content, created_at FROM assistant_messages
+				SELECT id, role, content, created_at, run_id FROM assistant_messages
 				WHERE conversation_id = ?
 				ORDER BY created_at, id
-				""", (rs, n) -> new MessageView(
-						rs.getObject("id", UUID.class), rs.getString("role"), rs.getString("content"),
-						rs.getTimestamp("created_at").toInstant()),
+				""", (rs, n) -> {
+					UUID runId = rs.getObject("run_id", UUID.class);
+					return new MessageView(
+							rs.getObject("id", UUID.class), rs.getString("role"), rs.getString("content"),
+							rs.getTimestamp("created_at").toInstant(),
+							runId == null ? List.of() : drafts.getOrDefault(runId, List.of()));
+				},
 				conversationId);
 		return new ConversationView(conversation.id(), conversation.title(), conversation.language(),
 				conversation.createdAt(), conversation.updatedAt(), messages);

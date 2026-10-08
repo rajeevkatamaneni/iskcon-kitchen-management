@@ -31,7 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
  * who had it, and an admin who wants to know how the assistant is used has the audit log, which
  * records every run without its words.
  *
- * <p>Confirming and rejecting drafts ({@code CONFIRM_ASSISTANT_ACTION}) are S4's and not here yet.
+ * <p>Confirming and rejecting drafts ({@code CONFIRM_ASSISTANT_ACTION}, E10-S4) are in
+ * {@code assistant.action.AssistantActionController}; a conversation read here carries each reply's
+ * drafts as {@code proposals}.
  */
 @RestController
 @RequestMapping("/api/v1/assistant/conversations")
@@ -79,7 +81,8 @@ public class AssistantController {
 	 *
 	 * <p>The events: {@code text {text}}, {@code tool_call {tool, summary}}, {@code language
 	 * {language, languageName}} (the person asked to switch language during this run, E10-LANG; sent
-	 * just before the last event), and last {@code done {messageId, runId}} or {@code error {code,
+	 * just before the last event), {@code proposal} (one per draft card the run made, E10-S4, before
+	 * {@code language}), and last {@code done {messageId, runId}} or {@code error {code,
 	 * message, action, runId}}. A conversation's current language is also on its summary and detail.
 	 */
 	@PostMapping("/{id}/messages")

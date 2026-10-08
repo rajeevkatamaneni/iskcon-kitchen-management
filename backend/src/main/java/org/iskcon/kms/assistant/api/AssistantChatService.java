@@ -7,9 +7,12 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.iskcon.kms.assistant.action.AssistantProposal;
+import org.iskcon.kms.assistant.action.PendingActionService;
 import org.iskcon.kms.assistant.api.AssistantConversationStore.Finished;
 import org.iskcon.kms.assistant.api.AssistantConversationStore.Started;
 import org.iskcon.kms.assistant.api.RunStreamReader.SseEvent;
@@ -48,8 +51,9 @@ import org.springframework.stereotype.Service;
  * (the reply's message id and the run id) or {@code error}. Just before that last one,
  * {@code language} ({@code {language, languageName}}, e.g. {@code {"kn", "Kannada"}}) is sent if the
  * person asked the assistant to switch language during this run (E10-LANG); the conversation's own
- * {@code language} field says the same thing on the next read. {@code proposal} is reserved for the
- * draft cards of S4 and is not sent yet.
+ * {@code language} field says the same thing on the next read. Before both of those, one
+ * {@code proposal} event per draft card the run made (E10-S4), carrying the card as
+ * {@code AssistantProposal}.
  */
 @Service
 public class AssistantChatService {
@@ -64,9 +68,11 @@ public class AssistantChatService {
 	private final AssistantSettings settings;
 	private final ObjectMapper json;
 	private final MeterRegistry meters;
+	private final PendingActionService actions;
 
 	public AssistantChatService(AssistantConversationStore store, RunnerClient runner, AgentTokenService tokens,
-			AssistantSettings settings, ObjectMapper json, MeterRegistry meters) {
+			AssistantSettings settings, ObjectMapper json, MeterRegistry meters, PendingActionService actions) {
+		this.actions = actions;
 		this.store = store;
 		this.runner = runner;
 		this.tokens = tokens;
@@ -144,6 +150,9 @@ public class AssistantChatService {
 			return;
 		}
 		try {
+			if (how.reply() != null) {
+				proposals(run, out);
+			}
 			languageIfChanged(actor, run, out);
 			if (how.reply() != null) {
 				Map<String, Object> done = new LinkedHashMap<>();
@@ -181,6 +190,29 @@ public class AssistantChatService {
 			data.put("language", now);
 			data.put("languageName", Languages.englishName(now));
 			write(out, new SseEvent("language", data));
+		}
+	}
+
+	/**
+	 * One {@code proposal} event per draft this run made (E10-S4), oldest first, before
+	 * {@code language} and {@code done}. The propose tool stored them on its own MCP request, under
+	 * this run's id; reading them back here, rather than trusting the relayed {@code tool_call}
+	 * event, means a call the tool refused sends no card. Sent only with a reply: a run that failed
+	 * saved no message to hang the card under, and its drafts simply expire unconfirmed.
+	 */
+	private void proposals(Started run, OutputStream out) throws IOException {
+		List<AssistantProposal> drafts;
+		try {
+			drafts = actions.forRun(run.runId());
+		} catch (RuntimeException e) {
+			// The reply is saved; the cards come back with the conversation on its next read.
+			log.warn("assistant run {}: could not read its drafts", run.runId(), e);
+			return;
+		}
+		for (AssistantProposal draft : drafts) {
+			@SuppressWarnings("unchecked")
+			Map<String, Object> data = json.convertValue(draft, Map.class);
+			write(out, new SseEvent("proposal", data));
 		}
 	}
 
