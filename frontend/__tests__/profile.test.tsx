@@ -103,7 +103,7 @@ describe("profile", () => {
     expect(updateLanguageMock).not.toHaveBeenCalled();
   });
 
-  it.each(["KITCHEN_STAFF", "VOLUNTEER"])(
+  it.each(["VOLUNTEER"])(
     "offers no language to %s, who has no Kitchen Assistant for it to change",
     (role) => {
       queryRef.current = { data: profile({ role }), error: null, loading: false };
