@@ -7,13 +7,15 @@ import java.util.Map;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.translation.Languages;
 import org.iskcon.kms.user.User;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * A user's own account: what channel to reach them on, and their communication consent.
+ * A user's own account: what channel to reach them on, their communication consent, and the
+ * language they want the Kitchen Assistant to use with them.
  *
  * <p>Every operation acts on the caller's own row — the id comes from the authenticated principal,
  * never from the request — so there is no way to read or change anyone else's profile, and RLS
@@ -23,7 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProfileService {
 
 	private static final String SELECT_PROFILE = """
-			SELECT full_name, email, phone, preferred_channel, contact_consent_at, consent_version, role
+			SELECT full_name, email, phone, preferred_channel, contact_consent_at, consent_version, role,
+			       preferred_language
 			FROM users WHERE id = ?
 			""";
 
@@ -45,6 +48,29 @@ public class ProfileService {
 		jdbc.update(
 				"UPDATE users SET preferred_channel = ?, updated_at = now() WHERE id = ?",
 				parsed.name(), actor.getUserId());
+		return currentProfile(actor);
+	}
+
+	/**
+	 * Changes the caller's own language and returns the updated profile (E10-LANG).
+	 *
+	 * <p>Checked here against {@link Languages}, not left to the database's CHECK, so an unknown code
+	 * is the ordinary validation refusal with the field named rather than a constraint violation. The
+	 * CHECK in V162 stays as the backstop for anything that writes the column some other way.
+	 *
+	 * <p>It applies to the next conversation the person starts. One already open keeps its language
+	 * until they ask the assistant to switch: that is Rajeev's rule, and the conversation carries its
+	 * own copy of the language for exactly that reason.
+	 */
+	@Transactional
+	public ProfileView changeLanguage(AuthenticatedUser actor, String language) {
+		if (!Languages.isSupported(language)) {
+			throw new ApplicationException(
+					ErrorCode.VALIDATION_FAILED, Map.of("field", "preferredLanguage", "value", language));
+		}
+		jdbc.update(
+				"UPDATE users SET preferred_language = ?, updated_at = now() WHERE id = ?",
+				language, actor.getUserId());
 		return currentProfile(actor);
 	}
 
@@ -80,7 +106,8 @@ public class ProfileService {
 				consentNeeded,
 				CommunicationConsent.CURRENT_VERSION,
 				CommunicationConsent.TEXT,
-				rs.getString("role"));
+				rs.getString("role"),
+				rs.getString("preferred_language"));
 	}
 
 	private User.NotificationChannel parseChannel(String channel) {

@@ -466,6 +466,11 @@ export interface Profile {
   currentConsentVersion: string;
   consentText: string;
   role: string;
+  /**
+   * The language the Kitchen Assistant starts a new conversation in (E10-LANG): a code from
+   * `lib/languages.ts`, "en" until the person chooses.
+   */
+  preferredLanguage: string;
 }
 
 export interface HealthStatus {
@@ -5311,6 +5316,14 @@ export const api = {
     request<Profile>("/api/v1/profile", {
       method: "PATCH",
       body: JSON.stringify({ preferredChannel: channel }),
+      token,
+    }),
+
+  /** The person's own language (E10-LANG). A code from `lib/languages.ts`. */
+  updatePreferredLanguage: (language: string, token?: string) =>
+    request<Profile>("/api/v1/profile/language", {
+      method: "PATCH",
+      body: JSON.stringify({ preferredLanguage: language }),
       token,
     }),
 

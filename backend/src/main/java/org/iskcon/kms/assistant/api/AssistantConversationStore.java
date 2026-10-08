@@ -18,6 +18,7 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.translation.Languages;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,19 +62,26 @@ public class AssistantConversationStore {
 		this.audit = audit;
 	}
 
+	/**
+	 * Starts a conversation in the person's own language (E10-LANG): Rajeev's rule is that the
+	 * assistant starts in English unless the person's account says otherwise. Read from their row in
+	 * the same statement, so there is no window in which a change of preference lands between the
+	 * read and the insert; 'en' if the row cannot be read, which under RLS it always can.
+	 */
 	@Transactional
 	public ConversationSummary create(AuthenticatedUser actor) {
 		return jdbc.queryForObject("""
-				INSERT INTO assistant_conversations (tenant_id, user_id)
-				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?)
-				RETURNING id, title, created_at, updated_at
-				""", AssistantConversationStore::summary, actor.getUserId());
+				INSERT INTO assistant_conversations (tenant_id, user_id, language)
+				VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ?,
+				        COALESCE((SELECT preferred_language FROM users WHERE id = ?), 'en'))
+				RETURNING id, title, language, created_at, updated_at
+				""", AssistantConversationStore::summary, actor.getUserId(), actor.getUserId());
 	}
 
 	@Transactional(readOnly = true)
 	public List<ConversationSummary> list(AuthenticatedUser actor) {
 		return jdbc.query("""
-				SELECT id, title, created_at, updated_at FROM assistant_conversations
+				SELECT id, title, language, created_at, updated_at FROM assistant_conversations
 				WHERE user_id = ?
 				ORDER BY updated_at DESC, id
 				""", AssistantConversationStore::summary, actor.getUserId());
@@ -90,12 +98,15 @@ public class AssistantConversationStore {
 						rs.getObject("id", UUID.class), rs.getString("role"), rs.getString("content"),
 						rs.getTimestamp("created_at").toInstant()),
 				conversationId);
-		return new ConversationView(conversation.id(), conversation.title(), conversation.createdAt(),
-				conversation.updatedAt(), messages);
+		return new ConversationView(conversation.id(), conversation.title(), conversation.language(),
+				conversation.createdAt(), conversation.updatedAt(), messages);
 	}
 
-	/** What {@link #begin} hands to the run: its id, and the prompt to send. */
-	record Started(UUID conversationId, UUID runId, String prompt) {
+	/**
+	 * What {@link #begin} hands to the run: its id, the prompt to send, and the conversation's language
+	 * when the run began, so the chat service can tell the browser if the run switched it.
+	 */
+	record Started(UUID conversationId, UUID runId, String prompt, String language) {
 	}
 
 	/**
@@ -105,12 +116,12 @@ public class AssistantConversationStore {
 	 */
 	@Transactional
 	public Started begin(AuthenticatedUser actor, UUID conversationId, String text, String model) {
-		owned(actor, conversationId, true);
+		ConversationSummary conversation = owned(actor, conversationId, true);
 
 		budget.check(actor.getTenantId(), actor.getUserId());
 
 		// Read before the new question is saved, so it is not in its own history.
-		String prompt = promptWithHistory(history(conversationId), text);
+		String prompt = promptWithHistory(conversation.language(), history(conversationId), text);
 
 		jdbc.update("""
 				INSERT INTO assistant_messages (tenant_id, conversation_id, role, content)
@@ -129,7 +140,7 @@ public class AssistantConversationStore {
 				WHERE id = ?
 				""", title(text), conversationId);
 
-		return new Started(conversationId, runId, prompt);
+		return new Started(conversationId, runId, prompt, conversation.language());
 	}
 
 	/**
@@ -183,7 +194,7 @@ public class AssistantConversationStore {
 	/** The conversation, if it is this person's; otherwise the same 404 as for one that does not exist. */
 	private ConversationSummary owned(AuthenticatedUser actor, UUID conversationId, boolean lock) {
 		List<ConversationSummary> found = jdbc.query("""
-				SELECT id, title, created_at, updated_at FROM assistant_conversations
+				SELECT id, title, language, created_at, updated_at FROM assistant_conversations
 				WHERE id = ? AND user_id = ?
 				""" + (lock ? " FOR UPDATE" : ""),
 				AssistantConversationStore::summary, conversationId, actor.getUserId());
@@ -191,6 +202,16 @@ public class AssistantConversationStore {
 			throw new ApplicationException(ErrorCode.RESOURCE_NOT_FOUND, Map.of("assistantConversation", conversationId));
 		}
 		return found.get(0);
+	}
+
+	/**
+	 * The conversation's language now. Read after a run, because the run may have changed it: the
+	 * model calls {@code set_conversation_language} through the MCP server, on another request, and
+	 * this is how the chat service learns of it to tell the browser.
+	 */
+	@Transactional(readOnly = true)
+	public String language(AuthenticatedUser actor, UUID conversationId) {
+		return owned(actor, conversationId, false).language();
 	}
 
 	/** A question and the reply that followed it. */
@@ -224,14 +245,24 @@ public class AssistantConversationStore {
 	}
 
 	/**
-	 * Exactly the shape {@code chat.py} sends, which T8 and the terminal chat tried against the real
-	 * model: no history, the bare question; otherwise the earlier turns, labelled, then the new one.
+	 * The shape {@code chat.py} sends, which T8 and the terminal chat tried against the real model —
+	 * no history, the bare question; otherwise the earlier turns, labelled, then the new one — with
+	 * the conversation's language stated first (E10-LANG).
+	 *
+	 * <p><strong>Why the language goes in every prompt and not only in the system prompt.</strong> The
+	 * system prompt is the same file for every run and cannot know which language this conversation is
+	 * in. It states the rule; this line states the fact the rule applies to. It is repeated on every
+	 * message, not only the first, because the runner keeps nothing between messages: each run is a
+	 * fresh {@code claude -p} that knows only what this prompt tells it. Named in words and by code
+	 * ("Kannada (kn)"), because the model follows a named language more reliably than a bare code, and
+	 * the tool that changes it takes the code.
 	 */
-	static String promptWithHistory(List<Turn> history, String message) {
+	static String promptWithHistory(String language, List<Turn> history, String message) {
+		String head = languageLine(language);
 		if (history.isEmpty()) {
-			return message;
+			return head + message;
 		}
-		StringBuilder out = new StringBuilder("Conversation so far (oldest first):\n\n");
+		StringBuilder out = new StringBuilder(head).append("Conversation so far (oldest first):\n\n");
 		for (Turn turn : history) {
 			out.append("User: ").append(turn.question()).append('\n')
 					.append("Assistant: ").append(turn.answer()).append("\n\n");
@@ -240,13 +271,21 @@ public class AssistantConversationStore {
 		return out.toString();
 	}
 
+	/** The first lines of every prompt: which language to reply in, and when that may change. */
+	static String languageLine(String language) {
+		String name = Languages.englishName(language);
+		return "Conversation language: " + name + " (" + language + "). Reply only in " + name
+				+ ", whatever language the message is written in. Change language only if the person asks"
+				+ " you to, by calling set_conversation_language.\n\n";
+	}
+
 	static String title(String text) {
 		String oneLine = text.strip().replaceAll("\\s+", " ");
 		return oneLine.length() <= TITLE_LENGTH ? oneLine : oneLine.substring(0, TITLE_LENGTH - 1) + "…";
 	}
 
 	private static ConversationSummary summary(ResultSet rs, int n) throws SQLException {
-		return new ConversationSummary(rs.getObject("id", UUID.class), rs.getString("title"),
+		return new ConversationSummary(rs.getObject("id", UUID.class), rs.getString("title"), rs.getString("language"),
 				rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
 	}
 }

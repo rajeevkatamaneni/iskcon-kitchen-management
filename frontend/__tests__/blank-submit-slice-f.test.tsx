@@ -64,6 +64,7 @@ function profile(): Profile {
     currentConsentVersion: "1",
     consentText: "I agree that my temple may send me reminders.",
     role: "TEMPLE_ADMIN",
+    preferredLanguage: "en",
   };
 }
 

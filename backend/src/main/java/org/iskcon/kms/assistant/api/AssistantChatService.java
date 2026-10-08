@@ -17,6 +17,7 @@ import org.iskcon.kms.assistant.token.AgentTokenService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ErrorCode;
 import org.iskcon.kms.error.ErrorResponse;
+import org.iskcon.kms.translation.Languages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -44,7 +45,10 @@ import org.springframework.stereotype.Service;
  *
  * <p><strong>The events</strong>, in the order they can arrive: {@code text} (a piece of the reply),
  * {@code tool_call} (a lookup, by name and arguments; never its result), and one of {@code done}
- * (the reply's message id and the run id) or {@code error}. {@code proposal} is reserved for the
+ * (the reply's message id and the run id) or {@code error}. Just before that last one,
+ * {@code language} ({@code {language, languageName}}, e.g. {@code {"kn", "Kannada"}}) is sent if the
+ * person asked the assistant to switch language during this run (E10-LANG); the conversation's own
+ * {@code language} field says the same thing on the next read. {@code proposal} is reserved for the
  * draft cards of S4 and is not sent yet.
  */
 @Service
@@ -140,6 +144,7 @@ public class AssistantChatService {
 			return;
 		}
 		try {
+			languageIfChanged(actor, run, out);
 			if (how.reply() != null) {
 				Map<String, Object> done = new LinkedHashMap<>();
 				done.put("messageId", messageId);
@@ -151,6 +156,31 @@ public class AssistantChatService {
 		} catch (IOException e) {
 			// Gone between the last line and the end; the run is already recorded.
 			log.debug("assistant: browser left before the run's last event", e);
+		}
+	}
+
+	/**
+	 * Tells the browser the conversation's language changed during this run (E10-LANG), just before
+	 * the run's last event. The model changes it by calling {@code set_conversation_language}, which
+	 * the MCP server handles on its own request; this re-reads the column rather than trusting the
+	 * relayed {@code tool_call} event, because a call the tool refused (an unknown code) changes
+	 * nothing and must not be announced. Sent whether or not the run then succeeded: a switch that
+	 * happened is true either way, and the next message will be answered in the new language.
+	 */
+	private void languageIfChanged(AuthenticatedUser actor, Started run, OutputStream out) throws IOException {
+		String now;
+		try {
+			now = store.language(actor, run.conversationId());
+		} catch (RuntimeException e) {
+			// Worth a log line, not a failed answer: the reply itself is saved and on its way.
+			log.warn("assistant run {}: could not re-read the conversation's language", run.runId(), e);
+			return;
+		}
+		if (!now.equals(run.language())) {
+			Map<String, Object> data = new LinkedHashMap<>();
+			data.put("language", now);
+			data.put("languageName", Languages.englishName(now));
+			write(out, new SseEvent("language", data));
 		}
 	}
 

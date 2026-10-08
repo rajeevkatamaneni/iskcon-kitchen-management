@@ -153,7 +153,10 @@ class AssistantApiIT extends AbstractIntegrationTest {
 		assertThat(runner.requests).hasSize(1);
 		JsonNode sent = runner.requests.get(0);
 		assertThat(sent.get("profile").asText()).isEqualTo("kitchen-assistant");
-		assertThat(sent.get("prompt").asText()).isEqualTo("how much toor dal do we have?");
+		assertThat(sent.get("prompt").asText()).isEqualTo(
+				"Conversation language: English (en). Reply only in English, whatever language the message is"
+						+ " written in. Change language only if the person asks you to, by calling"
+						+ " set_conversation_language.\n\nhow much toor dal do we have?");
 		assertThat(sent.get("mcpUrl").asText()).endsWith("/mcp");
 		AgentPrincipal agent = tokens.verify(sent.get("agentToken").asText());
 		assertThat(agent.userId()).isEqualTo(adminA);
@@ -214,12 +217,62 @@ class AssistantApiIT extends AbstractIntegrationTest {
 		send("uid-asst-admin-a", conversation, "and rice?");
 
 		String prompt = runner.requests.get(0).get("prompt").asText();
-		assertThat(prompt).startsWith("Conversation so far (oldest first):\n\nUser: question 3\nAssistant: answer 3\n\n");
+		assertThat(prompt).startsWith(AssistantConversationStore.languageLine("en")
+				+ "Conversation so far (oldest first):\n\nUser: question 3\nAssistant: answer 3\n\n");
 		assertThat(prompt).endsWith("User: question 12\nAssistant: answer 12\n\n"
 				+ "New message from the user, to answer now:\nand rice?");
 		assertThat(prompt).doesNotContain("question 2\n").doesNotContain("question 1\n")
 				.doesNotContain("the one that failed");
 		assertThat(prompt.lines().filter(line -> line.startsWith("User: "))).as("ten turns").hasSize(10);
+	}
+
+	@Test
+	@DisplayName("a new conversation starts in the person's preferred language, and every prompt names it (E10-LANG)")
+	void startsInPreferredLanguage() throws Exception {
+		admin.update("UPDATE users SET preferred_language = 'kn' WHERE id = ?", adminA);
+		UUID english = createConversation("uid-asst-manager-a");
+
+		HttpResponse<String> created = post("uid-asst-admin-a", "/api/v1/assistant/conversations", "");
+		assertThat(json.readTree(created.body()).get("language").asText()).isEqualTo("kn");
+		UUID kannada = UUID.fromString(json.readTree(created.body()).get("id").asText());
+		assertThat(admin.queryForObject("SELECT language FROM assistant_conversations WHERE id = ?", String.class, english))
+				.as("a colleague with no preference starts in English").isEqualTo("en");
+
+		send("uid-asst-admin-a", kannada, "how much toor dal do we have?");
+		assertThat(runner.requests.get(0).get("prompt").asText())
+				.startsWith("Conversation language: Kannada (kn). Reply only in Kannada, whatever language the"
+						+ " message is written in. Change language only if the person asks you to, by calling"
+						+ " set_conversation_language.\n\n")
+				.endsWith("how much toor dal do we have?");
+
+		// A preference changed later applies to the next conversation, not to this one.
+		admin.update("UPDATE users SET preferred_language = 'hi' WHERE id = ?", adminA);
+		runner.reset(new FakeRunner.Script(200, RunStreamReaderTest.recording("runner-toor-dal.ndjson"), 0));
+		send("uid-asst-admin-a", kannada, "and rice?");
+		assertThat(runner.requests.get(0).get("prompt").asText()).startsWith(AssistantConversationStore.languageLine("kn"));
+		JsonNode detail = json.readTree(get("uid-asst-admin-a", "/api/v1/assistant/conversations/" + kannada).body());
+		assertThat(detail.get("language").asText()).isEqualTo("kn");
+	}
+
+	@Test
+	@DisplayName("a run that switches the language sends a language event before done; one that does not, sends none")
+	void languageEventWhenSwitched() throws Exception {
+		UUID conversation = createConversation("uid-asst-admin-a");
+		// What set_conversation_language does, done by the fake runner while the run is under way.
+		runner.duringRun = () -> admin.update("UPDATE assistant_conversations SET language = 'kn' WHERE id = ?", conversation);
+
+		List<Event> events = events(send("uid-asst-admin-a", conversation, "please reply in Kannada").body());
+
+		assertThat(events).extracting(Event::name)
+				.containsExactly("text", "text", "tool_call", "text", "text", "language", "done");
+		assertThat(events.get(5).data().get("language").asText()).isEqualTo("kn");
+		assertThat(events.get(5).data().get("languageName").asText()).isEqualTo("Kannada");
+
+		// The next message: no switch, so no event, and the prompt is now in Kannada.
+		runner.reset(new FakeRunner.Script(200, RunStreamReaderTest.recording("runner-toor-dal.ndjson"), 0));
+		List<Event> next = events(send("uid-asst-admin-a", conversation, "how much rice?").body());
+		assertThat(next).extracting(Event::name).doesNotContain("language");
+		assertThat(runner.requests.get(0).get("prompt").asText()).startsWith(AssistantConversationStore.languageLine("kn"));
 	}
 
 	@Test

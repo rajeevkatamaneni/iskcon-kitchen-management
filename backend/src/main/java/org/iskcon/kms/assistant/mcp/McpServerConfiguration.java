@@ -158,6 +158,39 @@ public class McpServerConfiguration {
 			  "additionalProperties": false
 			}""";
 
+	static final String SET_CONVERSATION_LANGUAGE = "set_conversation_language";
+
+	static final String SET_CONVERSATION_LANGUAGE_DESCRIPTION = """
+			Switch the language you reply in, for the rest of this conversation (E10-LANG).
+
+			Call it only when the person asks you to use a different language: "please reply in \
+			English", "answer in Hindi", "ಕನ್ನಡದಲ್ಲಿ ಹೇಳಿ". Never call it because a message is written in \
+			another language: a person who writes in Kannada in an English conversation still gets \
+			English, until they ask to switch. Never call it on your own initiative.
+
+			language is the code of the language asked for: en (English), kn (Kannada), hi (Hindi), \
+			ta (Tamil), te (Telugu), ml (Malayalam), mr (Marathi), gu (Gujarati), bn (Bengali), \
+			or (Odia), pa (Punjabi), as (Assamese), ur (Urdu), sa (Sanskrit), ne (Nepali), \
+			gom (Konkani), mai (Maithili), ks (Kashmiri), sd (Sindhi), doi (Dogri), brx (Bodo), \
+			sat (Santali), mni-Mtei (Manipuri). Exactly as written here.
+
+			Returns JSON {language, language_name, instruction}. Once it succeeds, write the rest of \
+			your reply, and every later reply, only in that language. If it refuses, carry on in the \
+			current language and say why in one sentence.""";
+
+	static final String SET_CONVERSATION_LANGUAGE_SCHEMA = """
+			{
+			  "type": "object",
+			  "properties": {
+			    "language": {
+			      "type": "string",
+			      "description": "The code of the language the person asked for, e.g. \\"en\\" or \\"kn\\"."
+			    }
+			  },
+			  "required": ["language"],
+			  "additionalProperties": false
+			}""";
+
 	// ---- What the model is told when a call cannot be answered -----------
 	//
 	// Plain words, because the model will relay them to a cook. Nothing technical: the detail goes
@@ -187,12 +220,12 @@ public class McpServerConfiguration {
 	@Bean(destroyMethod = "close")
 	McpStatelessSyncServer mcpServer(
 			HttpServletStatelessServerTransport mcpTransport, InventoryTools inventoryTools,
-			ObjectMapper objectMapper) {
+			ConversationTools conversationTools, ObjectMapper objectMapper) {
 		return McpServer.sync(mcpTransport)
 				.serverInfo(SERVER_NAME, SERVER_VERSION)
 				.jsonMapper(protocolMapper())
 				.capabilities(McpSchema.ServerCapabilities.builder().tools(false).build())
-				.tools(toolSpecifications(inventoryTools, objectMapper))
+				.tools(toolSpecifications(inventoryTools, conversationTools, objectMapper))
 				.build();
 	}
 
@@ -200,7 +233,8 @@ public class McpServerConfiguration {
 	 * Every tool the server offers. A method of its own so the handler tests call exactly what the
 	 * server registers, rather than a copy of it.
 	 */
-	static List<SyncToolSpecification> toolSpecifications(InventoryTools inventoryTools, ObjectMapper objectMapper) {
+	static List<SyncToolSpecification> toolSpecifications(
+			InventoryTools inventoryTools, ConversationTools conversationTools, ObjectMapper objectMapper) {
 		// The application's own mapper, copied so the change below stays here: the JSON the model
 		// reads gets ISO dates from it (Boot turns timestamps off) and plain decimals from this.
 		ObjectMapper payloadMapper = objectMapper.copy().enable(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN);
@@ -211,7 +245,11 @@ public class McpServerConfiguration {
 						request -> () -> inventoryTools.getInventory(stringArgument(request, "item_name"))),
 				tool(protocol, LIST_LOW_STOCK, "Low stock", LIST_LOW_STOCK_DESCRIPTION, LIST_LOW_STOCK_SCHEMA,
 						payloadMapper,
-						request -> inventoryTools::listLowStock));
+						request -> inventoryTools::listLowStock),
+				tool(protocol, SET_CONVERSATION_LANGUAGE, "Switch language", SET_CONVERSATION_LANGUAGE_DESCRIPTION,
+						SET_CONVERSATION_LANGUAGE_SCHEMA, payloadMapper,
+						request -> () -> conversationTools.setConversationLanguage(
+								stringArgument(request, "language"))));
 	}
 
 	/**
@@ -259,6 +297,10 @@ public class McpServerConfiguration {
 			// somewhere between the two, and worth a warning rather than a debug line.
 			log.warn("MCP tool {} called with no tenant in context", toolName);
 			return refusal(NO_TEMPLE_MESSAGE);
+		} catch (ToolRefusal e) {
+			// A refusal the tool wrote for the model, in words it can relay; nothing went wrong.
+			log.info("MCP tool {} refused: {}", toolName, e.getMessage());
+			return refusal(e.getMessage());
 		} catch (AccessDeniedException | AuthenticationException e) {
 			log.info("MCP tool {} refused: caller lacks the permission", toolName);
 			return refusal(NOT_ALLOWED_MESSAGE);
@@ -266,6 +308,17 @@ public class McpServerConfiguration {
 			String incidentId = UUID.randomUUID().toString().substring(0, 8);
 			log.error("MCP tool {} failed incident={}", toolName, incidentId, e);
 			return refusal(FAILED_MESSAGE.formatted(incidentId));
+		}
+	}
+
+	/**
+	 * A tool's own refusal: the message is plain words for the model to act on and relay, not an
+	 * incident. Thrown from inside a tool so the refusal comes back as {@code isError: true} with
+	 * that text, rather than as the generic "could not be read" with an incident id.
+	 */
+	static final class ToolRefusal extends RuntimeException {
+		ToolRefusal(String message) {
+			super(message);
 		}
 	}
 

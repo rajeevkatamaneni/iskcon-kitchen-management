@@ -76,6 +76,11 @@ public class AssistantController {
 	 * <p>The caller should send {@code Accept: text/event-stream, application/json}. A refusal is
 	 * written as JSON, and Spring will not write JSON to a request that accepts only an event stream:
 	 * it answers 406 with no body, and the person would lose the code that says what happened.
+	 *
+	 * <p>The events: {@code text {text}}, {@code tool_call {tool, summary}}, {@code language
+	 * {language, languageName}} (the person asked to switch language during this run, E10-LANG; sent
+	 * just before the last event), and last {@code done {messageId, runId}} or {@code error {code,
+	 * message, action, runId}}. A conversation's current language is also on its summary and detail.
 	 */
 	@PostMapping("/{id}/messages")
 	@PreAuthorize("hasAuthority('USE_KITCHEN_ASSISTANT')")

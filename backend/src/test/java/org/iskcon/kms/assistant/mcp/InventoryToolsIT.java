@@ -50,6 +50,9 @@ class InventoryToolsIT extends AbstractIntegrationTest {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@Autowired
+	private ConversationTools conversationTools;
+
 	private JdbcTemplate admin;
 	private McpStockFixture fixture;
 
@@ -224,7 +227,7 @@ class InventoryToolsIT extends AbstractIntegrationTest {
 	}
 
 	private CallToolResult call(McpTransportContext context, String toolName, Map<String, Object> arguments) {
-		List<SyncToolSpecification> specs = McpServerConfiguration.toolSpecifications(tools, objectMapper);
+		List<SyncToolSpecification> specs = McpServerConfiguration.toolSpecifications(tools, conversationTools, objectMapper);
 		SyncToolSpecification spec = specs.stream()
 				.filter(s -> s.tool().name().equals(toolName))
 				.findFirst()

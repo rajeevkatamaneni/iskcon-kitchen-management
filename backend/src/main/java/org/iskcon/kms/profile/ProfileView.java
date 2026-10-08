@@ -7,7 +7,7 @@ import java.time.Instant;
  *
  * <p>Contact details are shown but not editable here (E1-S8): changing a phone needs a fresh OTP
  * and changing an email collides with the sign-in identity, so both are a later increment. What
- * this screen changes is the preferred channel and consent.
+ * this screen changes is the preferred channel, consent, and (since E10-LANG) the person's language.
  */
 public record ProfileView(
 		String fullName,
@@ -26,5 +26,9 @@ public record ProfileView(
 		String currentConsentVersion,
 		String consentText,
 
-		String role) {
+		String role,
+
+		// The language this person wants the Kitchen Assistant to start a conversation in: a code
+		// from translation/Languages, 'en' until they choose (E10-LANG, V162).
+		String preferredLanguage) {
 }

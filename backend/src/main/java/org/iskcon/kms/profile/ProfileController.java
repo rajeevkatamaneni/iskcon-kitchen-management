@@ -38,6 +38,18 @@ public class ProfileController {
 		return profileService.changeChannel(actor, request.preferredChannel());
 	}
 
+	/**
+	 * Change the person's own language (E10-LANG). Its own path rather than a second field on the
+	 * PATCH above, whose body requires a channel: making that optional would change what an existing
+	 * caller is told when it sends an empty body. Returns the updated profile.
+	 */
+	@PatchMapping("/language")
+	public ProfileView updateLanguage(
+			@Valid @RequestBody UpdateLanguageRequest request,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		return profileService.changeLanguage(actor, request.preferredLanguage());
+	}
+
 	/** Record consent to be contacted, against the current wording. Returns the updated profile. */
 	@PostMapping("/consent")
 	public ProfileView consent(@AuthenticationPrincipal AuthenticatedUser actor) {

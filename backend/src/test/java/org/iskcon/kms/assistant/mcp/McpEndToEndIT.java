@@ -106,7 +106,8 @@ class McpEndToEndIT extends AbstractIntegrationTest {
 				{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}""");
 		assertThat(list.statusCode()).as(list.body()).isEqualTo(200);
 		JsonNode tools = objectMapper.readTree(list.body()).get("result").get("tools");
-		assertThat(tools.findValuesAsText("name")).containsExactlyInAnyOrder("get_inventory", "list_low_stock");
+		assertThat(tools.findValuesAsText("name")).containsExactlyInAnyOrder(
+				"get_inventory", "list_low_stock", "set_conversation_language");
 		for (JsonNode tool : tools) {
 			assertThat(tool.get("inputSchema").path("properties").has("tenant_id"))
 					.as("no tool takes a tenant").isFalse();

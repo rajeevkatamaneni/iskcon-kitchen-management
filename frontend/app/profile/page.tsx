@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ds/Button";
 import { DateRange } from "@/components/ds/DateRange";
 import { Form } from "@/components/ds/Form";
-import { InfoHint } from "@/components/ds/InfoHint";
+import { HintedField, InfoHint } from "@/components/ds/InfoHint";
 import { Sidebar } from "@/components/Sidebar";
 import { ErrorNotice } from "@/components/ErrorNotice";
 import { RequireRole } from "@/components/RequireRole";
@@ -19,6 +19,7 @@ import {
   type Profile,
 } from "@/lib/api";
 import { dayRange, templeDay } from "@/lib/format";
+import { ALL_LANGUAGES } from "@/lib/languages";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedQuery } from "@/lib/use-authed-query";
 import { Loading } from "@/components/Loading";
@@ -30,9 +31,19 @@ import { Loading } from "@/components/Loading";
  * <p>Contact details are shown but not editable here — changing a phone needs a fresh OTP and
  * changing an email collides with the sign-in identity, both a later increment. The preferred
  * channel and consent are the two things a user owns, so they are the two things this screen
- * lets them change. A platform operator has no temple and so no profile; this is for temple
+ * lets them change — and, since E10-LANG, the language the Kitchen Assistant uses with them, for the
+ * roles that have the assistant. A platform operator has no temple and so no profile; this is for temple
  * roles only.
  */
+
+/**
+ * The roles that can use the Kitchen Assistant: the ones `RolePermissions` gives
+ * USE_KITCHEN_ASSISTANT (E10-T12). Today the assistant is the only thing that reads a person's
+ * language, so the field is shown only to people it would do something for; a volunteer offered a
+ * setting with no effect would reasonably wonder why nothing changed. When a second thing reads it,
+ * this list goes.
+ */
+const ASSISTANT_ROLES = ["TEMPLE_ADMIN", "KITCHEN_MANAGER"];
 
 const CHANNELS: { value: NotificationChannel; label: string }[] = [
   { value: "WHATSAPP", label: "WhatsApp" },
@@ -112,6 +123,13 @@ function ProfileView() {
     void save((token) => api.updatePreferredChannel(channel, token));
   }
 
+  // Saved the moment it is picked, like the channel above: this screen has no Edit/Save step, and a
+  // second pattern on one card would be the odd one out (E10-LANG).
+  function chooseLanguage(language: string) {
+    if (!profile || language === profile.preferredLanguage) return;
+    void save((token) => api.updatePreferredLanguage(language, token));
+  }
+
   return (
     <Chrome>
       {saveError && (
@@ -162,6 +180,39 @@ function ProfileView() {
           ))}
         </fieldset>
       </section>
+
+      {ASSISTANT_ROLES.includes(profile.role) && (
+        <section className="card mb-6 px-6 py-5" aria-labelledby="language-heading">
+          <h2 id="language-heading" className="text-lg">
+            Language
+          </h2>
+          <p className="mt-1 text-sm text-ink-secondary">
+            The language the Kitchen Assistant uses with you.
+          </p>
+          <div className="mt-4 max-w-md">
+            <HintedField
+              label="Your language"
+              hint="New conversations start in this language. To switch during a conversation, ask the assistant."
+            >
+              {(id) => (
+                <select
+                  id={id}
+                  value={profile.preferredLanguage}
+                  onChange={(e) => chooseLanguage(e.target.value)}
+                  disabled={saving}
+                  className="min-h-touch w-full rounded-control border border-hairline px-3 text-ink"
+                >
+                  {ALL_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </HintedField>
+          </div>
+        </section>
+      )}
 
       <section className="card px-6 py-5" aria-labelledby="consent-heading">
         <h2 id="consent-heading" className="text-lg">

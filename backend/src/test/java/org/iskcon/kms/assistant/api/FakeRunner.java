@@ -28,6 +28,11 @@ final class FakeRunner implements AutoCloseable {
 	private final ObjectMapper json = new ObjectMapper();
 	final List<JsonNode> requests = new CopyOnWriteArrayList<>();
 	volatile Script script = new Script(200, List.of(), 0);
+	/**
+	 * Run once per call, before the first line: stands in for what a tool call would change in the
+	 * database mid-run (E10-LANG: the model switching the conversation's language).
+	 */
+	volatile Runnable duringRun;
 	/** Set when the api went away while lines were still being written. */
 	volatile boolean callerLeft;
 
@@ -45,12 +50,17 @@ final class FakeRunner implements AutoCloseable {
 	void reset(Script next) {
 		requests.clear();
 		callerLeft = false;
+		duringRun = null;
 		script = next;
 	}
 
 	private void run(HttpExchange exchange) throws IOException {
 		requests.add(json.readTree(exchange.getRequestBody().readAllBytes()));
 		Script now = script;
+		Runnable hook = duringRun;
+		if (hook != null) {
+			hook.run();
+		}
 		if (now.status() != 200) {
 			byte[] body = "{\"type\":\"runner_error\",\"code\":\"busy\",\"message\":\"busy\"}".getBytes(StandardCharsets.UTF_8);
 			exchange.getResponseHeaders().add("Content-Type", "application/json");

@@ -107,6 +107,60 @@ class ProfileIT extends AbstractIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("the profile carries the person's language, English until they choose (E10-LANG)")
+	void languageDefaultsToEnglish() throws Exception {
+		mvc.perform(authed(get("/api/v1/profile")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.preferredLanguage").value("en"));
+	}
+
+	@Test
+	@DisplayName("changing the language persists on the caller's own row only, and is returned")
+	void changesLanguage() throws Exception {
+		UUID temple = admin.queryForObject("SELECT tenant_id FROM users WHERE id = ?", UUID.class, self);
+		UUID colleague = insertUser(temple, "uid-colleague", "colleague@govinda.example", "KITCHEN_STAFF");
+
+		mvc.perform(authed(patch("/api/v1/profile/language"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"preferredLanguage\":\"kn\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.preferredLanguage").value("kn"))
+				.andExpect(jsonPath("$.preferredChannel").value("WHATSAPP"));
+
+		assertThat(languageOf(self)).isEqualTo("kn");
+		assertThat(languageOf(colleague)).as("nobody else's row moves").isEqualTo("en");
+
+		// A code with a region subtag and mixed case is accepted as given, exactly as the list has it.
+		mvc.perform(authed(patch("/api/v1/profile/language"))
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"preferredLanguage\":\"mni-Mtei\"}"))
+				.andExpect(status().isOk());
+		assertThat(languageOf(self)).isEqualTo("mni-Mtei");
+	}
+
+	@Test
+	@DisplayName("an unknown or blank language is refused as ordinary validation, and nothing changes")
+	void rejectsUnknownLanguage() throws Exception {
+		for (String body : new String[] {"{\"preferredLanguage\":\"klingon\"}", "{\"preferredLanguage\":\"KN\"}",
+				"{\"preferredLanguage\":\"\"}", "{}"}) {
+			mvc.perform(authed(patch("/api/v1/profile/language"))
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(body))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("KMS-400001"));
+		}
+		assertThat(languageOf(self)).as("nothing changed").isEqualTo("en");
+	}
+
+	@Test
+	@DisplayName("the database refuses a language outside the list, whoever writes it (V162 CHECK)")
+	void databaseRefusesUnknownLanguage() {
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> admin.update(
+						"UPDATE users SET preferred_language = 'xx' WHERE id = ?", self))
+				.hasMessageContaining("users_preferred_language_known");
+	}
+
+	@Test
 	@DisplayName("an unauthenticated caller has no profile")
 	void unauthenticatedRejected() throws Exception {
 		mvc.perform(get("/api/v1/profile")).andExpect(status().isUnauthorized());
@@ -117,6 +171,11 @@ class ProfileIT extends AbstractIntegrationTest {
 	private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder authed(
 			org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder builder) {
 		return builder.header("Authorization", "Bearer valid-token");
+	}
+
+	private String languageOf(UUID userId) {
+		return admin.queryForObject(
+				"SELECT preferred_language FROM users WHERE id = ?", String.class, userId);
 	}
 
 	private String channelOf(UUID userId) {

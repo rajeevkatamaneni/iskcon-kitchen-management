@@ -5,7 +5,7 @@ import type { ApiError, Profile } from "@/lib/api";
 // The profile screen is role-gated and reads/writes live data. Drive the guard and the query
 // from mutable refs, and let the two mutations be spies so interactions can be asserted without
 // touching Firebase or fetch.
-const { authRef, queryRef, giveConsentMock, updateChannelMock } = vi.hoisted(() => ({
+const { authRef, queryRef, giveConsentMock, updateChannelMock, updateLanguageMock } = vi.hoisted(() => ({
   authRef: {
     current: { status: "signed-in", appUser: { role: "TEMPLE_ADMIN", fullName: "Test Person" } } as {
       status: string;
@@ -17,6 +17,7 @@ const { authRef, queryRef, giveConsentMock, updateChannelMock } = vi.hoisted(() 
   },
   giveConsentMock: vi.fn(),
   updateChannelMock: vi.fn(),
+  updateLanguageMock: vi.fn(),
 }));
 
 // T-184: the leave section reads and withdraws through these. Until a test says otherwise its list never
@@ -39,6 +40,7 @@ vi.mock("@/lib/api", async (orig) => {
       ...actual.api,
       giveConsent: giveConsentMock,
       updatePreferredChannel: updateChannelMock,
+      updatePreferredLanguage: updateLanguageMock,
       myLeave: myLeaveMock,
       withdrawLeave: withdrawLeaveMock,
     },
@@ -64,6 +66,7 @@ function profile(overrides: Partial<Profile>): Profile {
     currentConsentVersion: "1",
     consentText: CONSENT_TEXT,
     role: "TEMPLE_ADMIN",
+    preferredLanguage: "en",
     ...overrides,
   };
 }
@@ -74,7 +77,40 @@ describe("profile", () => {
     queryRef.current = { data: profile({}), error: null, loading: false };
     giveConsentMock.mockReset();
     updateChannelMock.mockReset();
+    updateLanguageMock.mockReset();
   });
+
+  // E10-LANG: the person's own language, read by the Kitchen Assistant.
+  it("shows the language the assistant uses, and saves a new one the moment it is picked", async () => {
+    queryRef.current = { data: profile({ preferredLanguage: "kn" }), error: null, loading: false };
+    updateLanguageMock.mockResolvedValue(profile({ preferredLanguage: "hi" }));
+    render(<ProfilePage />);
+
+    const section = screen.getByRole("region", { name: "Language" });
+    const select = within(section).getByLabelText("Your language") as HTMLSelectElement;
+    expect(select.value).toBe("kn");
+    expect(within(select).getAllByRole("option")).toHaveLength(23);
+
+    fireEvent.change(select, { target: { value: "hi" } });
+
+    await waitFor(() => expect(updateLanguageMock).toHaveBeenCalledWith("hi", "test-token"));
+    await waitFor(() => expect(select.value).toBe("hi"));
+  });
+
+  it("does not save when the same language is picked again", () => {
+    render(<ProfilePage />);
+    fireEvent.change(screen.getByLabelText("Your language"), { target: { value: "en" } });
+    expect(updateLanguageMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["KITCHEN_STAFF", "VOLUNTEER"])(
+    "offers no language to %s, who has no Kitchen Assistant for it to change",
+    (role) => {
+      queryRef.current = { data: profile({ role }), error: null, loading: false };
+      render(<ProfilePage />);
+      expect(screen.queryByRole("region", { name: "Language" })).not.toBeInTheDocument();
+    }
+  );
 
   it("shows contact details, the current channel, and the consent ask", () => {
     render(<ProfilePage />);
