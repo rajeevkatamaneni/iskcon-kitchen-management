@@ -172,7 +172,13 @@ public final class RolePermissions {
 					REQUEST_OWN_LEAVE,
 					// Asking, and only asking. A cook who has run out of ghee says so; somebody else
 					// decides whether the store can spare it, or the request would be its own answer.
-					REQUEST_INGREDIENTS),
+					REQUEST_INGREDIENTS,
+					// The Kitchen Assistant. Rajeev, 2026-10-07: "All temple staff should see the
+					// assistant." Confirming is granted with asking because a confirmed draft still
+					// runs under the permission of whatever it does (plan D-a), so a cook can confirm
+					// only what they could already do on the page.
+					USE_KITCHEN_ASSISTANT,
+					CONFIRM_ASSISTANT_ACTION),
 
 			// Devotees offering seva. Their own shifts, and signing up for more.
 			User.Role.VOLUNTEER,

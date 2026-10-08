@@ -37,13 +37,13 @@ import { Loading } from "@/components/Loading";
  */
 
 /**
- * The roles that can use the Kitchen Assistant: the ones `RolePermissions` gives
+ * The roles that can use the Kitchen Assistant (all temple staff, Rajeev 2026-10-07): the ones `RolePermissions` gives
  * USE_KITCHEN_ASSISTANT (E10-T12). Today the assistant is the only thing that reads a person's
  * language, so the field is shown only to people it would do something for; a volunteer offered a
  * setting with no effect would reasonably wonder why nothing changed. When a second thing reads it,
  * this list goes.
  */
-const ASSISTANT_ROLES = ["TEMPLE_ADMIN", "KITCHEN_MANAGER"];
+const ASSISTANT_ROLES = ["TEMPLE_ADMIN", "KITCHEN_MANAGER", "KITCHEN_STAFF"];
 
 const CHANNELS: { value: NotificationChannel; label: string }[] = [
   { value: "WHATSAPP", label: "WhatsApp" },

@@ -276,16 +276,23 @@ class AssistantApiIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("Kitchen Staff and Volunteers are refused every endpoint, and nothing reaches the runner")
+	@DisplayName("Volunteers are refused every endpoint, and nothing reaches the runner")
 	void refusedWithoutPermission() throws Exception {
 		UUID conversation = createConversation("uid-asst-admin-a");
-		for (String uid : List.of("uid-asst-staff-a", "uid-asst-volunteer-a")) {
+		for (String uid : List.of("uid-asst-volunteer-a")) {
 			assertThat(post(uid, "/api/v1/assistant/conversations", "").statusCode()).as(uid).isEqualTo(403);
 			assertThat(get(uid, "/api/v1/assistant/conversations").statusCode()).as(uid).isEqualTo(403);
 			assertThat(get(uid, "/api/v1/assistant/conversations/" + conversation).statusCode()).as(uid).isEqualTo(403);
 			assertThat(send(uid, conversation, "hello").statusCode()).as(uid).isEqualTo(403);
 		}
 		assertThat(runner.requests).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Kitchen Staff can use the assistant: all temple staff see it (Rajeev, 2026-10-07)")
+	void kitchenStaffAllowed() throws Exception {
+		assertThat(post("uid-asst-staff-a", "/api/v1/assistant/conversations", "").statusCode()).isIn(200, 201);
+		assertThat(get("uid-asst-staff-a", "/api/v1/assistant/conversations").statusCode()).isEqualTo(200);
 	}
 
 	@Test
