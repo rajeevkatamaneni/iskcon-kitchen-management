@@ -14,8 +14,9 @@ import type { Profile } from "./profiles.js";
 export interface RunRequest {
   profile: Profile;
   prompt: string;
-  mcpUrl: string;
-  agentToken: string;
+  /** Both null for a profile with no MCP server (name-fill), and only then. */
+  mcpUrl: string | null;
+  agentToken: string | null;
 }
 
 /**
@@ -33,18 +34,22 @@ export function runnerErrorLine(code: RunnerErrorCode, message: string, extra: R
  * rejects, because every failure is reported in the stream itself.
  */
 export function runClaude(config: RunnerConfig, req: RunRequest, res: ServerResponse, runId: string, log: Logger): Promise<void> {
-  const secrets = [req.agentToken, config.credential.kind === "stored-login" ? undefined : config.credential.value];
+  const secrets = [req.agentToken ?? undefined, config.credential.kind === "stored-login" ? undefined : config.credential.value];
   const started = Date.now();
+  const timeoutMs = req.profile.timeoutMs ?? config.timeoutMs;
 
-  // 0700 by mkdtemp. work/ is the child's cwd: empty but for mcp.json, so there is no CLAUDE.md or
-  // .claude/ for it to find. home/ is its HOME when a secret is configured (see buildChildEnv).
+  // 0700 by mkdtemp. work/ is the child's cwd: empty but for mcp.json (and empty outright for a
+  // profile with no MCP server), so there is no CLAUDE.md or .claude/ for it to find. home/ is its HOME when a secret is configured (see buildChildEnv).
   const root = mkdtempSync(join(tmpdir(), "kms-run-"));
   const work = join(root, "work");
   const home = join(root, "home");
   mkdirSync(work, { mode: 0o700 });
   mkdirSync(home, { mode: 0o700 });
-  const mcpPath = join(work, "mcp.json");
-  writeFileSync(mcpPath, buildMcpConfig(req.profile, req.mcpUrl, req.agentToken), { mode: 0o600 });
+  let mcpPath: string | null = null;
+  if (req.profile.mcpServer !== null && req.mcpUrl !== null && req.agentToken !== null) {
+    mcpPath = join(work, "mcp.json");
+    writeFileSync(mcpPath, buildMcpConfig(req.profile, req.mcpUrl, req.agentToken), { mode: 0o600 });
+  }
 
   res.writeHead(200, {
     "Content-Type": "application/x-ndjson; charset=utf-8",
@@ -83,7 +88,7 @@ export function runClaude(config: RunnerConfig, req: RunRequest, res: ServerResp
     const timer = setTimeout(() => {
       timedOut = true;
       killGroup();
-    }, config.timeoutMs);
+    }, timeoutMs);
 
     // The api went away (the user closed the page, or the api's own timeout fired): there is nobody
     // to stream to, so stop spending the subscription on it.
@@ -110,7 +115,7 @@ export function runClaude(config: RunnerConfig, req: RunRequest, res: ServerResp
         res.write(runnerErrorLine("spawn_failed", "The assistant could not be started."));
       } else if (timedOut) {
         result = "timeout";
-        res.write(runnerErrorLine("timeout", `The assistant took longer than ${Math.round(config.timeoutMs / 1000)} seconds and was stopped.`));
+        res.write(runnerErrorLine("timeout", `The assistant took longer than ${Math.round(timeoutMs / 1000)} seconds and was stopped.`));
       } else if (clientGone) {
         result = "client_closed";
       } else if (outcome.code !== 0) {

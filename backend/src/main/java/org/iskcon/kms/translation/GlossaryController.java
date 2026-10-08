@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.iskcon.kms.tenancy.TenantContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -55,6 +56,21 @@ public class GlossaryController {
 	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
 	public StockNameFillService.FillResult fillStockNames() {
 		return stockNameFillService.fillStockNames("kn");
+	}
+
+	/**
+	 * Makes sure the temple's stock items have names in {@code language}, asking Claude in the
+	 * background for any that are missing (E10-NAMES-A). Answers at once with READY, FILLING or
+	 * FAILED and the counts; call it again to see a fill finish. The Kitchen Assistant calls the
+	 * service itself at the start of a conversation; this is the same thing for a person with the
+	 * glossary's permission, and how a fill is started by hand. The temple is the caller's own,
+	 * from the verified token, never a parameter.
+	 */
+	@PostMapping("/ensure-names")
+	@PreAuthorize("hasAuthority('MANAGE_RECIPES')")
+	public StockNameFillService.NamesState ensureNames(@RequestParam("language") String language) {
+		UUID tenant = TenantContext.get().orElseThrow(() -> new IllegalStateException("no tenant in context"));
+		return stockNameFillService.ensureNames(tenant, language);
 	}
 
 	@DeleteMapping("/{id}")

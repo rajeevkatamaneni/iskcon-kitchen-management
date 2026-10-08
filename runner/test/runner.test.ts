@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { buildArgs, buildChildEnv } from "../src/child.js";
 import { loadConfig, pickCredential, type RunnerConfig } from "../src/config.js";
-import { loadProfiles } from "../src/profiles.js";
+import { loadProfiles, NAME_FILL_SCHEMA } from "../src/profiles.js";
 import { createRunnerServer } from "../src/server.js";
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.SECRET-AGENT-TOKEN-SIG";
@@ -29,7 +29,8 @@ process.stdin.on("end", () => {
   const mode = (input.match(/MODE:(\w+)/) || [])[1] || "echo";
   if (mode === "echo") {
     out({ type: "fake_report", argv: process.argv.slice(2), env: process.env, cwd: process.cwd(),
-          files: fs.readdirSync(process.cwd()), mcp: JSON.parse(fs.readFileSync("mcp.json", "utf8")), stdin: input });
+          files: fs.readdirSync(process.cwd()),
+          mcp: fs.existsSync("mcp.json") ? JSON.parse(fs.readFileSync("mcp.json", "utf8")) : null, stdin: input });
     out({ type: "result", subtype: "success", is_error: false });
   } else if (mode === "sleep") {
     out({ type: "fake_pid", pid: process.pid });
@@ -79,8 +80,8 @@ function body(prompt: string, extra: Record<string, unknown> = {}) {
 }
 
 /** Reads the NDJSON response, recording when each line arrived. */
-async function run(url: string, prompt: string): Promise<{ status: number; type: string | null; lines: Array<{ at: number; v: any }> }> {
-  const res = await fetch(`${url}/run`, { method: "POST", headers: { "content-type": "application/json" }, body: body(prompt) });
+async function run(url: string, prompt: string, raw: string = body(prompt)): Promise<{ status: number; type: string | null; lines: Array<{ at: number; v: any }> }> {
+  const res = await fetch(`${url}/run`, { method: "POST", headers: { "content-type": "application/json" }, body: raw });
   const lines: Array<{ at: number; v: any }> = [];
   const reader = res.body!.getReader();
   const dec = new TextDecoder();
@@ -136,6 +137,24 @@ describe("credential and environment", () => {
     assert.equal(flag("--output-format"), "stream-json");
     assert.equal(flag("--mcp-config"), "/w/mcp.json");
     assert.match(flag("--system-prompt")!, /name_kn/);
+  });
+
+  it("gives name-fill no tools at all, the schema, and its own model", () => {
+    const cfg = config();
+    const args = buildArgs(loadProfiles(cfg.promptsDir).get("name-fill")!, null, "sonnet");
+    const flag = (f: string) => args[args.indexOf(f) + 1];
+    for (const f of ["-p", "--restricted", "--disable-slash-commands", "--strict-mcp-config", "--no-session-persistence"]) {
+      assert.ok(args.includes(f), f);
+    }
+    assert.equal(flag("--tools"), "", "no built-in tools");
+    assert.equal(flag("--setting-sources"), "");
+    assert.ok(!args.includes("--mcp-config"), "no MCP server is configured");
+    assert.ok(!args.includes("--allowedTools"), "nothing is allowed because nothing exists");
+    assert.equal(flag("--output-format"), "json");
+    assert.deepEqual(JSON.parse(flag("--json-schema")!), NAME_FILL_SCHEMA);
+    assert.equal(flag("--model"), "opus", "the profile's model wins over the runner's");
+    assert.match(flag("--system-prompt")!, /store items/);
+    assert.ok(!args.includes("--include-partial-messages"));
   });
 });
 
@@ -209,6 +228,29 @@ describe("POST /run against a fake claude", () => {
     assert.deepEqual(await res.json(), { type: "runner_error", code: "busy", message: "The assistant is busy with other requests. Try again in a moment." });
     assert.equal((await first).lines.at(-1)!.v.type, "result");
     assert.equal((await run(s.url, "MODE:echo")).status, 200);
+  });
+
+  it("runs name-fill with no mcpUrl or token: an empty directory, no mcp.json, the items on stdin", async () => {
+    const raw = JSON.stringify({ profile: "name-fill", prompt: `MODE:echo Language: Telugu (te)\n1. Rice ${PROMPT_MARK}` });
+    const r = await run(s.url, "", raw);
+    assert.equal(r.status, 200);
+    const rep = r.lines[0]!.v;
+    assert.deepEqual(rep.files, [], "nothing in the working directory at all");
+    assert.equal(rep.mcp, null);
+    assert.match(rep.stdin, /Language: Telugu/);
+    assert.ok(!rep.argv.includes("--mcp-config"));
+    assert.equal(r.lines.at(-1)!.v.type, "result");
+    assert.equal(existsSync(rep.cwd), false, "run directory deleted");
+  });
+
+  it("refuses name-fill sent an agent token or mcpUrl, and the assistant sent none", async () => {
+    let res = await fetch(`${s.url}/run`, { method: "POST", body: JSON.stringify({ profile: "name-fill", prompt: "x", agentToken: TOKEN }) });
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).message, "This profile takes no mcpUrl or agentToken.");
+    res = await fetch(`${s.url}/run`, { method: "POST", body: JSON.stringify({ profile: "name-fill", prompt: "x", mcpUrl: "http://localhost:8095/mcp" }) });
+    assert.equal(res.status, 400);
+    res = await fetch(`${s.url}/run`, { method: "POST", body: JSON.stringify({ profile: "kitchen-assistant", prompt: "x" }) });
+    assert.equal(res.status, 400, "the assistant still needs both");
   });
 
   it("serves /health", async () => {

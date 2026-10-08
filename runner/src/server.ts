@@ -45,7 +45,7 @@ function readBody(req: IncomingMessage): Promise<string | null> {
   });
 }
 
-type Parsed = { ok: true; profile: Profile; prompt: string; mcpUrl: string; agentToken: string } | { ok: false; status: number; code: string; message: string };
+type Parsed = { ok: true; profile: Profile; prompt: string; mcpUrl: string | null; agentToken: string | null } | { ok: false; status: number; code: string; message: string };
 
 export function parseRunBody(raw: string, profiles: Map<string, Profile>): Parsed {
   let body: unknown;
@@ -60,6 +60,14 @@ export function parseRunBody(raw: string, profiles: Map<string, Profile>): Parse
   if (!profile) return { ok: false, status: 400, code: "unknown_profile", message: "No such profile." };
   if (typeof b.prompt !== "string" || !b.prompt.trim() || b.prompt.length > MAX_PROMPT_CHARS) {
     return { ok: false, status: 400, code: "invalid_request", message: `prompt must be a non-empty string of at most ${MAX_PROMPT_CHARS} characters.` };
+  }
+  // A profile with no MCP server takes neither field. Refused rather than ignored: an api that sends
+  // a token to a run with no use for it has a bug worth hearing about.
+  if (profile.mcpServer === null) {
+    if (b.mcpUrl !== undefined || b.agentToken !== undefined) {
+      return { ok: false, status: 400, code: "invalid_request", message: "This profile takes no mcpUrl or agentToken." };
+    }
+    return { ok: true, profile, prompt: b.prompt, mcpUrl: null, agentToken: null };
   }
   let url: URL | null = null;
   try { url = typeof b.mcpUrl === "string" ? new URL(b.mcpUrl) : null; } catch { url = null; }

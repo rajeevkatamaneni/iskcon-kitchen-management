@@ -19,8 +19,32 @@ import type { Profile } from "./profiles.js";
  *
  * The user's words are NOT an argument: they go in on stdin. An argument would be parsed as a flag
  * if it began with "-", and a long history could pass the OS argument-size limit.
+ *
+ * A profile with no MCP server (name-fill) gets the same lockdown minus the server: no --mcp-config
+ * and no --allowedTools, so with --tools "" and --strict-mcp-config it has no tool of any kind. Its
+ * answer is one JSON object, so it asks for --output-format json with the profile's --json-schema
+ * instead of the event stream; the runner still passes it through as a line, so the response is
+ * NDJSON either way. This is the call E10-T8d proved for Kannada, flag for flag.
  */
-export function buildArgs(profile: Profile, mcpConfigPath: string, model: string): string[] {
+export function buildArgs(profile: Profile, mcpConfigPath: string | null, model: string): string[] {
+  if (profile.mcpServer === null) {
+    if (profile.jsonSchema === null) throw new Error(`runner: profile ${profile.name} has neither tools nor a schema`);
+    return [
+      "-p",
+      "--restricted",
+      "--setting-sources", "",
+      "--disable-slash-commands",
+      "--system-prompt", profile.systemPrompt,
+      "--tools", "",
+      "--strict-mcp-config",
+      "--permission-mode", "dontAsk",
+      "--model", profile.model ?? model,
+      "--no-session-persistence",
+      "--output-format", "json",
+      "--json-schema", profile.jsonSchema,
+    ];
+  }
+  if (mcpConfigPath === null || profile.allowedTools === null) throw new Error(`runner: profile ${profile.name} needs its mcp.json`);
   return [
     "-p",
     "--restricted",
@@ -32,7 +56,7 @@ export function buildArgs(profile: Profile, mcpConfigPath: string, model: string
     "--mcp-config", mcpConfigPath,
     "--allowedTools", profile.allowedTools,
     "--permission-mode", "dontAsk",
-    "--model", model,
+    "--model", profile.model ?? model,
     "--no-session-persistence",
     "--output-format", "stream-json",
     "--verbose",
@@ -68,8 +92,9 @@ export function buildChildEnv(config: RunnerConfig, runHome: string): Record<str
 
 /** mcp.json as T8 proved it: one HTTP server, the agent token as a Bearer header. */
 export function buildMcpConfig(profile: Profile, mcpUrl: string, agentToken: string): string {
+  if (profile.mcpServer === null) throw new Error(`runner: profile ${profile.name} has no MCP server`);
   return JSON.stringify(
-    { mcpServers: { [profile.mcpServer]: { type: "http", url: mcpUrl, headers: { Authorization: `Bearer ${agentToken}` } } } },
+    { mcpServers: { [profile.mcpServer]:{ type: "http", url: mcpUrl, headers: { Authorization: `Bearer ${agentToken}` } } } },
     null,
     2,
   );
