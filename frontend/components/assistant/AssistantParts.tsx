@@ -11,6 +11,7 @@ import { Card } from "@/components/ds/Card";
 import { InlineNotice } from "@/components/ds/InlineNotice";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { CookingLoader } from "@/components/CookingLoader";
+import { AssistantMarkdown } from "./AssistantMarkdown";
 import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
 import {
   DRAFT_ALREADY_HANDLED,
@@ -40,13 +41,16 @@ function UserTurn({ text }: { text: string }) {
   );
 }
 
-/** The assistant's words: plain text, full width of the column, no bubble, so a long answer reads
- *  as a paragraph rather than as a speech balloon. */
+/** The assistant's words: full width of the column, no bubble, so a long answer reads as a paragraph
+ *  rather than as a speech balloon. Read as Markdown (E10-MD), so a table is a table and bold is bold;
+ *  `AssistantMarkdown` says how, and what it refuses to draw. While the answer streams, the cursor
+ *  sits on the line under it: the answer is blocks now (paragraphs, a list, a table), and there is no
+ *  "end of the text" inside a table to put it at. */
 function AssistantTurn({ text, streaming }: { text: string; streaming: boolean }) {
   return (
-    <div className="whitespace-pre-wrap break-words text-ink">
-      {text}
-      {streaming && <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-ink-muted align-middle" aria-hidden="true" />}
+    <div className="min-w-0 text-ink">
+      <AssistantMarkdown text={text} streaming={streaming} />
+      {streaming && <span className="mt-1 block h-4 w-2 animate-pulse bg-ink-muted" aria-hidden="true" />}
     </div>
   );
 }
