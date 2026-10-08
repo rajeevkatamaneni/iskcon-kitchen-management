@@ -8030,3 +8030,215 @@ export interface RecordIssueInput {
   batchOverrides?: { ingredientId: string; batchId: string }[];
   note?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Kitchen Assistant (E10-T13)
+// ---------------------------------------------------------------------------
+//
+// Standalone functions rather than members of `api` above, on purpose: this section was written
+// while other builders were editing that object, and an append at the end of the file is the one
+// change two people can make to it at once without a conflict. They use the same `request` and the
+// same error contract as everything else, except the message itself, which streams.
+
+/** One of your own conversations. `title` is null until the first message gives it one. */
+export interface AssistantConversationSummary {
+  id: string;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A saved message. A question whose run failed has no reply after it. */
+export interface AssistantMessage {
+  id: string;
+  role: "USER" | "ASSISTANT";
+  content: string;
+  createdAt: string;
+}
+
+export interface AssistantConversation extends AssistantConversationSummary {
+  messages: AssistantMessage[];
+}
+
+/**
+ * A draft the assistant made, waiting for the person to confirm or reject it (S4).
+ *
+ * <p><strong>Defined here before the server sends it.</strong> The api reserves a `proposal` event
+ * for S4 and does not emit one yet, so there was no shape to copy. This is the shape the approved
+ * mockup's two draft cards need — a title, a few facts, a table of lines and what Confirm will do —
+ * written so the card can be built now and S4 only has to send it. If S4's payload differs, change
+ * this type and the card together; nothing else reads it.
+ */
+export interface AssistantProposal {
+  /** The pending action's id: what Confirm and Reject will be sent to. */
+  actionId: string;
+  kind: "MEAL_PLAN" | "PURCHASE_ORDER";
+  status: "PROPOSED" | "CONFIRMED" | "REJECTED" | "EXPIRED";
+  /** "Lunch on Sunday 11 October", "Purchase order for Sri Balaji Traders". */
+  title: string;
+  /** Label over value, the card's readout row: Date, Meal, Vendor, Needed by, Total. */
+  facts: { label: string; value: string; hint?: string | null }[];
+  lines: AssistantProposalLine[];
+  /**
+   * One short sentence saying what Confirm does: "Confirm saves a draft order. Nothing is sent." It sits
+   * beside Reject and Confirm in a card about 170px wide at 1280, so keep it under about 45 characters
+   * (two lines); the mock's longer "Confirm saves this as a draft order. It is not sent." took three.
+   */
+  confirmSays: string;
+  expiresAt: string;
+}
+
+export interface AssistantProposalLine {
+  /** A dish (meal plan) or an ingredient (purchase order), in English. */
+  name: string;
+  /** The same name in the temple's language, when it has one. */
+  localName: string | null;
+  quantity: number;
+  unit: string;
+  /** Purchase orders only: price per unit and the line's amount, in rupees. */
+  rate: number | null;
+  amount: number | null;
+}
+
+/**
+ * What a message's answer can carry, one event at a time, in the order the server sends them.
+ * `done` or `error` is always last. `proposal` and `language` are reserved for later stages; the
+ * reader passes them on so that the panel does not need changing here when they arrive.
+ */
+export type AssistantEvent =
+  | { type: "text"; text: string }
+  | { type: "tool_call"; tool: string; summary: string }
+  | { type: "proposal"; proposal: AssistantProposal }
+  | { type: "language"; language: string }
+  | { type: "done"; messageId: string; runId: string }
+  | { type: "error"; code: string; message: string; action: string };
+
+export function createAssistantConversation(token?: string): Promise<AssistantConversationSummary> {
+  return request<AssistantConversationSummary>("/api/v1/assistant/conversations", { method: "POST", token });
+}
+
+export function listAssistantConversations(token?: string): Promise<AssistantConversationSummary[]> {
+  return request<AssistantConversationSummary[]>("/api/v1/assistant/conversations", { method: "GET", token });
+}
+
+export function getAssistantConversation(id: string, token?: string): Promise<AssistantConversation> {
+  return request<AssistantConversation>(`/api/v1/assistant/conversations/${id}`, { method: "GET", token });
+}
+
+/**
+ * Sends one message and hands each event of the answer to `onEvent` as it arrives.
+ *
+ * <p><strong>fetch and a ReadableStream, not EventSource.</strong> EventSource cannot send an
+ * Authorization header, and every request here carries the person's own token. It also cannot POST.
+ *
+ * <p><strong>Two kinds of failure, as the server makes them.</strong> A refusal before anything is
+ * spent — a daily limit, a conversation that is not yours, an empty message — comes back as the
+ * ordinary JSON error with its status, and is thrown here as an {@link ApiError} exactly as
+ * `request` would throw it. That is why `Accept` names JSON as well as the event stream: Spring will
+ * not write a JSON error to a request that accepts only `text/event-stream`, and answers a bare 406
+ * instead, which would lose the code that says what happened. A failure after the answer has
+ * started arrives as an `error` event instead, because the status is already 200 by then.
+ *
+ * <p>Resolves when the stream ends. Aborting `signal` (the Stop button) ends it early; the server
+ * notices on its next write, closes the run and saves no reply.
+ */
+export async function streamAssistantMessage(
+  conversationId: string,
+  text: string,
+  onEvent: (event: AssistantEvent) => void,
+  { token, signal }: { token?: string; signal?: AbortSignal } = {}
+): Promise<void> {
+  const response = await fetch(`${BASE_URL}/api/v1/assistant/conversations/${conversationId}/messages`, {
+    method: "POST",
+    signal,
+    body: JSON.stringify({ text }),
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream, application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(activeTempleId() ? { "X-KMS-Temple": activeTempleId() as string } : {}),
+    },
+  });
+
+  if (!response.ok || !response.body) {
+    let payload: ErrorPayload;
+    try {
+      payload = (await response.json()) as ErrorPayload;
+      if (!payload?.code) throw new Error("unrecognised");
+    } catch {
+      payload = {
+        code: "KMS-0000",
+        message: "We couldn't reach the server.",
+        action: "Check your connection and try again.",
+        fieldErrors: [],
+      };
+    }
+    throw new ApiError(payload, response.status);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (value) buffer += decoder.decode(value, { stream: true });
+    // An event ends at a blank line. Anything after the last one is half an event, kept for the
+    // next chunk: the network splits wherever it likes, including in the middle of a Kannada word.
+    let end: number;
+    while ((end = buffer.search(/\r?\n\r?\n/)) !== -1) {
+      const frame = buffer.slice(0, end);
+      buffer = buffer.slice(end).replace(/^\r?\n\r?\n/, "");
+      const event = parseAssistantFrame(frame);
+      if (event) onEvent(event);
+    }
+    if (done) break;
+  }
+  const last = parseAssistantFrame(buffer);
+  if (last) onEvent(last);
+}
+
+/**
+ * One server-sent event frame into an {@link AssistantEvent}, or null for a frame that is not one:
+ * the `: run <id>` comment the server opens with, a keep-alive, or an event name this build does not
+ * know. Exported for its test.
+ */
+export function parseAssistantFrame(frame: string): AssistantEvent | null {
+  let name = "message";
+  const data: string[] = [];
+  for (const line of frame.split(/\r?\n/)) {
+    if (line === "" || line.startsWith(":")) continue;
+    const colon = line.indexOf(":");
+    const field = colon === -1 ? line : line.slice(0, colon);
+    const value = colon === -1 ? "" : line.slice(colon + 1).replace(/^ /, "");
+    if (field === "event") name = value;
+    else if (field === "data") data.push(value);
+  }
+  if (data.length === 0) return null;
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(data.join("\n")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  switch (name) {
+    case "text":
+      return { type: "text", text: String(body.text ?? "") };
+    case "tool_call":
+      return { type: "tool_call", tool: String(body.tool ?? ""), summary: String(body.summary ?? "") };
+    case "proposal":
+      return { type: "proposal", proposal: body as unknown as AssistantProposal };
+    case "language":
+      return { type: "language", language: String(body.language ?? "") };
+    case "done":
+      return { type: "done", messageId: String(body.messageId ?? ""), runId: String(body.runId ?? "") };
+    case "error":
+      return {
+        type: "error",
+        code: String(body.code ?? "KMS-0000"),
+        message: String(body.message ?? "Something went wrong."),
+        action: String(body.action ?? "Try again."),
+      };
+    default:
+      return null;
+  }
+}

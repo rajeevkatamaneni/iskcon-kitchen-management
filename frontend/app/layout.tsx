@@ -18,6 +18,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import { THEME_PREPAINT_SCRIPT } from "@/lib/theme";
 import { SessionGuard } from "@/components/SessionGuard";
+import { AssistantLauncher } from "@/components/assistant/AssistantPanel";
 import "./globals.css";
 
 /**
@@ -190,6 +191,10 @@ export default function RootLayout({
             {children}
             {/* Above every screen, so an idle shared device signs itself out wherever it was left. */}
             <SessionGuard />
+            {/* The Kitchen Assistant's button and panel (E10-T13). Here, not in a screen, so the
+                conversation outlives moving between pages; it renders nothing for anyone who does not
+                hold USE_KITCHEN_ASSISTANT. */}
+            <AssistantLauncher />
           </ThemeProvider>
         </AuthProvider>
       </body>
