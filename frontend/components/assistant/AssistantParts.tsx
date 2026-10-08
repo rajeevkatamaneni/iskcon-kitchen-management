@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import Link from "next/link";
 import type { AssistantProposal } from "@/lib/api";
 import { money, quantity, unitLabel } from "@/lib/format";
 import { Button } from "@/components/ds/Button";
@@ -11,7 +12,14 @@ import { InlineNotice } from "@/components/ds/InlineNotice";
 import { InfoHint } from "@/components/ds/InfoHint";
 import { CookingLoader } from "@/components/CookingLoader";
 import { RULED_TABLE, THEAD, TR, TH_PRIMARY, TD_PRIMARY, TH_FIXED, TD_FIXED_NUM } from "@/components/ds/table";
-import type { AssistantConversationState, Entry } from "./useAssistantConversation";
+import {
+  DRAFT_ALREADY_HANDLED,
+  DRAFT_CHANGED,
+  DRAFT_EXPIRED,
+  type AssistantConversationState,
+  type DraftRefusal,
+  type Entry,
+} from "./useAssistantConversation";
 
 /*
  * The conversation's parts, built to the approved mockup (docs/work/mocks/dev-assistant.page.tsx,
@@ -190,52 +198,148 @@ function DraftTable({ proposal }: { proposal: AssistantProposal }) {
 }
 
 /**
+ * The longest a browser timer can wait (about 24.8 days). A draft lasts 24 hours, so this only matters
+ * for a clock that is badly wrong; past it the timer fires early, finds the draft still live, and
+ * sets itself again.
+ */
+const LONGEST_TIMER_MS = 2 ** 31 - 1;
+
+/**
+ * The status the card shows: the server's, except that a draft still marked PROPOSED shows Expired
+ * from the moment its `expiresAt` passes. The server would refuse it then anyway (KMS-400194), and a
+ * Confirm button that can only fail is a button somebody presses. Ticks over by itself while the card
+ * is on screen.
+ */
+function useShownStatus(proposal: AssistantProposal): AssistantProposal["status"] {
+  const ends = proposal.status === "PROPOSED" ? Date.parse(proposal.expiresAt) : NaN;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (Number.isNaN(ends) || ends <= now) return;
+    const t = setTimeout(() => setNow(Date.now()), Math.min(ends - now + 50, LONGEST_TIMER_MS));
+    return () => clearTimeout(t);
+  }, [ends, now]);
+  return !Number.isNaN(ends) && ends <= now ? "EXPIRED" : proposal.status;
+}
+
+/**
+ * A refusal of Confirm or Reject, inside the card it belongs to: the server's words, its next step and
+ * its permanent code, laid out like the conversation's own error box.
+ *
+ * <p>The tone follows what the reader has to do (the colour rule of 2026-09-18). A draft that expired
+ * or changed is amber: nothing broke, but they must ask again for a fresh one. A draft already handled
+ * is information, since the card below it now shows what happened to it. Anything else — the server
+ * unreachable, a permission refused — is red, as it is in the conversation.
+ */
+function RefusalNotice({ refusal }: { refusal: DraftRefusal }) {
+  const tone =
+    refusal.code === DRAFT_EXPIRED || refusal.code === DRAFT_CHANGED
+      ? "warning"
+      : refusal.code === DRAFT_ALREADY_HANDLED
+        ? "info"
+        : "danger";
+  return (
+    <InlineNotice tone={tone} title={refusal.message}>
+      <p>{refusal.action}</p>
+      <p className="mt-1 text-xs tabular-nums">{refusal.code}</p>
+    </InlineNotice>
+  );
+}
+
+/** The fact the server labelled "Vendor", for the confirmed line's "Not sent to … yet". */
+function vendorOf(proposal: AssistantProposal): string | null {
+  return proposal.facts.find((f) => f.label === "Vendor")?.value ?? null;
+}
+
+/**
+ * What a confirmed draft became, in the mock's words, with a link to it. The link is an in-app
+ * navigation: the panel is mounted in the root layout, so it stays open with the conversation in it
+ * while the page behind changes to the order.
+ */
+function ConfirmedLine({ proposal }: { proposal: AssistantProposal }) {
+  const result = proposal.result;
+  if (!result) return <p className="text-sm text-ink">Saved.</p>;
+  const link = (
+    <Link href={result.href} className="link">
+      Open {result.label}
+    </Link>
+  );
+  if (proposal.kind === "MEAL_PLAN") {
+    return <p className="text-sm text-ink">Added to the planner. {link}</p>;
+  }
+  const vendor = vendorOf(proposal);
+  return (
+    <p className="text-sm text-ink">
+      Saved as draft {result.label}. {vendor ? `Not sent to ${vendor} yet.` : "Not sent yet."} {link}
+    </p>
+  );
+}
+
+/**
  * A draft the assistant made. Every write is one of these (decision D-a, 2026-10-05): the server
  * runs it only when the person presses Confirm, with their own login.
  *
- * <p><strong>Not wired yet.</strong> Confirming and rejecting are S4's (T17/T18), and the api does not
- * send a `proposal` event yet, so nobody can see this card today. It is built now, to the mock's
- * layout, so that S4 passes `onConfirm` and `onReject` and changes nothing else. Without them the
- * two buttons are disabled rather than doing nothing when pressed.
+ * <p>Pressing Confirm or Reject shows that button busy and disables both until the server answers,
+ * and a second press in the meantime is dropped even before React has re-rendered the disabled
+ * buttons (a double-click lands both clicks in the same frame), so one press is one request. The card
+ * then shows whatever the server sent back. Without `onDecide` the buttons are disabled rather than
+ * doing nothing when pressed.
  */
 export function DraftCard({
   proposal,
-  onConfirm,
-  onReject,
+  refusal,
+  onDecide,
 }: {
   proposal: AssistantProposal;
-  onConfirm?: () => Promise<void>;
-  onReject?: () => void;
+  refusal?: DraftRefusal | null;
+  onDecide?: (choice: "confirm" | "reject") => Promise<void>;
 }) {
-  const [saving, setSaving] = useState(false);
+  const [pressed, setPressed] = useState<"confirm" | "reject" | null>(null);
+  const inFlight = useRef(false);
   const meal = proposal.kind === "MEAL_PLAN";
-  const badge = STATE_BADGE[proposal.status];
+  const status = useShownStatus(proposal);
+  const badge = STATE_BADGE[status];
 
-  async function confirm() {
-    if (!onConfirm) return;
-    setSaving(true);
+  async function decide(choice: "confirm" | "reject") {
+    if (!onDecide || inFlight.current) return;
+    inFlight.current = true;
+    setPressed(choice);
     try {
-      await onConfirm();
+      await onDecide(choice);
     } finally {
-      setSaving(false);
+      inFlight.current = false;
+      setPressed(null);
     }
   }
+
+  // A draft whose source changed since it was drafted would be refused again, so its buttons go and
+  // the notice above says to ask for a fresh one. An expired one says so in its notice, so the plain
+  // "expired" sentence is not said twice.
+  const changed = refusal?.code === DRAFT_CHANGED;
+  const expiredNotice = refusal?.code === DRAFT_EXPIRED;
 
   return (
     <Card
       title={proposal.title}
       meta={meal ? "Meal plan draft" : "Purchase order draft"}
-      action={<Badge tone={badge.tone}>{badge.label}</Badge>}
+      action={
+        // On one line. Found measuring S4: beside a two-line title the Card's action slot squeezed
+        // "Not saved yet" into two lines (97×43 at 1280, 80×43 at 375), a cramped pill. The title
+        // wraps instead; it has the room.
+        <span className="whitespace-nowrap">
+          <Badge tone={badge.tone}>{badge.label}</Badge>
+        </span>
+      }
       // The panel keeps the card's phone padding at every width (the mock's `compact`).
       padding="p-4"
     >
-      <div className={proposal.status === "REJECTED" || proposal.status === "EXPIRED" ? "grid gap-4 opacity-60" : "grid gap-4"}>
+      <div className={status === "REJECTED" || status === "EXPIRED" ? "grid gap-4 opacity-60" : "grid gap-4"}>
         <Facts items={proposal.facts} />
         <DraftTable proposal={proposal} />
       </div>
 
-      <div className="mt-4 border-t border-hairline pt-4">
-        {proposal.status === "PROPOSED" && (
+      <div className="mt-4 grid gap-3 border-t border-hairline pt-4">
+        {refusal && <RefusalNotice refusal={refusal} />}
+        {status === "PROPOSED" && !changed && (
           // The second sanctioned change. In the mock the sentence had a 240px basis, which with the
           // two buttons beside it needed 449px in a card 382px wide inside the panel, so Reject and
           // Confirm dropped to a row of their own under a one-line sentence. Here the basis is 160px:
@@ -246,21 +350,25 @@ export function DraftCard({
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
             <p className="min-w-0 flex-1 basis-40 text-sm text-ink-secondary [text-wrap:pretty]">{proposal.confirmSays}</p>
             <div className="ml-auto flex flex-none gap-2">
-              <Button variant="ghost" onClick={onReject} disabled={!onReject || saving}>
+              <Button
+                variant="ghost"
+                onClick={() => void decide("reject")}
+                busy={pressed === "reject"}
+                disabled={!onDecide || pressed !== null}
+              >
                 Reject
               </Button>
-              <Button onClick={confirm} busy={saving} disabled={!onConfirm}>
+              <Button onClick={() => void decide("confirm")} busy={pressed === "confirm"} disabled={!onDecide || pressed !== null}>
                 Confirm
               </Button>
             </div>
           </div>
         )}
-        {proposal.status === "REJECTED" && <p className="text-sm text-ink-secondary">You rejected this draft. Nothing was saved.</p>}
-        {proposal.status === "EXPIRED" && (
+        {status === "REJECTED" && <p className="text-sm text-ink-secondary">You rejected this draft. Nothing was saved.</p>}
+        {status === "EXPIRED" && !expiredNotice && (
           <p className="text-sm text-ink-secondary">This draft expired after 24 hours. Nothing was saved. Ask again for a fresh one.</p>
         )}
-        {/* CONFIRMED: what was saved and a link to it comes back from S4's confirm call, so S4 adds it. */}
-        {proposal.status === "CONFIRMED" && <p className="text-sm text-ink">Saved.</p>}
+        {status === "CONFIRMED" && <ConfirmedLine proposal={proposal} />}
       </div>
     </Card>
   );
@@ -305,23 +413,25 @@ function ErrorTurn({
 }
 
 /**
- * The questions offered on an empty conversation.
+ * The questions offered on an empty conversation: one about stock and one that drafts an order.
  *
- * <p>Fewer than the mock's four, on purpose. The mock offered "Plan lunch for Sunday" and "Make a
- * purchase order", but today the assistant has two lookups (stock, and what is running low) and no
- * way to draft anything until S4. A suggestion it cannot do is the first thing a person would press.
- * When S4's tools land, add the mock's two back.
+ * <p>Two of the mock's four, on purpose. The mock also offered "Plan lunch for Sunday", but the
+ * assistant cannot draft a meal yet (S4 drafts purchase orders only), and a suggestion it cannot do
+ * is the first thing a person would press. The order is "for toor dal", not the mock's "for Sri Balaji
+ * Traders": a sample vendor's name is not a vendor in any real temple, while every temple stocks toor
+ * dal, and it follows on from the stock question beside it. Add the meal back when meal drafts land.
  */
-const SUGGESTIONS = ["How much ತೊಗರಿ ಬೇಳೆ do we have?", "What is running low?"];
+const SUGGESTIONS = ["How much ತೊಗರಿ ಬೇಳೆ do we have?", "Make a purchase order for toor dal"];
 
 /** The first thing on an empty conversation: one sentence and the questions to start from. */
 function EmptyConversation({ onPick, disabled }: { onPick: (text: string) => void; disabled: boolean }) {
   return (
     <div className="grid gap-4">
       <div className="grid gap-1">
-        <p className="text-lg font-medium text-ink">Ask about stock</p>
+        {/* The mock's heading and sentence, less the meal planning it cannot do yet. */}
+        <p className="text-lg font-medium text-ink">Ask about stock or orders</p>
         <p className="text-ink-secondary">
-          The assistant can check what is in the store and what is running low. It doesn’t change anything.
+          The assistant can check stock and draft a purchase order. It asks before it saves anything.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -350,7 +460,14 @@ export function Messages({ convo }: { convo: AssistantConversationState }) {
           case "tool":
             return <ToolLine key={e.id} tool={e.tool} summary={e.summary} state={e.state} />;
           case "draft":
-            return <DraftCard key={e.id} proposal={e.proposal} />;
+            return (
+              <DraftCard
+                key={e.id}
+                proposal={e.proposal}
+                refusal={e.refusal}
+                onDecide={(choice) => convo.decide(e.id, e.proposal.actionId, choice)}
+              />
+            );
           case "error":
             return (
               <ErrorTurn

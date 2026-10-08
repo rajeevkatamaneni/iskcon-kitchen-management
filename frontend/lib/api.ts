@@ -8054,6 +8054,12 @@ export interface AssistantMessage {
   role: "USER" | "ASSISTANT";
   content: string;
   createdAt: string;
+  /**
+   * The drafts this reply made (S4), each with its status as it stands now, so a reload shows the
+   * cards again and shows a draft confirmed in another tab as confirmed. Absent on a question, and on
+   * a reply from before S4.
+   */
+  proposals?: AssistantProposal[];
 }
 
 export interface AssistantConversation extends AssistantConversationSummary {
@@ -8063,11 +8069,11 @@ export interface AssistantConversation extends AssistantConversationSummary {
 /**
  * A draft the assistant made, waiting for the person to confirm or reject it (S4).
  *
- * <p><strong>Defined here before the server sends it.</strong> The api reserves a `proposal` event
- * for S4 and does not emit one yet, so there was no shape to copy. This is the shape the approved
- * mockup's two draft cards need — a title, a few facts, a table of lines and what Confirm will do —
- * written so the card can be built now and S4 only has to send it. If S4's payload differs, change
- * this type and the card together; nothing else reads it.
+ * <p>The shape the approved mockup's two draft cards need — a title, a few facts, a table of lines and
+ * what Confirm will do — fixed for both sides in `docs/work/E10-S4-CONTRACT.md`. It arrives three
+ * ways: in the stream's `proposal` event, as the answer to Confirm and Reject, and on each reply in
+ * {@link getAssistantConversation}. Each one is the draft as it stands, so the card always re-renders
+ * from what the server last said rather than guessing what a press did.
  */
 export interface AssistantProposal {
   /** The pending action's id: what Confirm and Reject will be sent to. */
@@ -8085,7 +8091,13 @@ export interface AssistantProposal {
    * (two lines); the mock's longer "Confirm saves this as a draft order. It is not sent." took three.
    */
   confirmSays: string;
+  /** When the server stops accepting Confirm (24 hours after drafting). The card turns to Expired then. */
   expiresAt: string;
+  /**
+   * What Confirm made, set once confirmed: `{ label: "PO-0047", href: "/orders/<id>" }`. The card links
+   * to it. Null until then, and on a rejected or expired draft.
+   */
+  result: { label: string; href: string } | null;
 }
 
 export interface AssistantProposalLine {
@@ -8123,6 +8135,23 @@ export function listAssistantConversations(token?: string): Promise<AssistantCon
 
 export function getAssistantConversation(id: string, token?: string): Promise<AssistantConversation> {
   return request<AssistantConversation>(`/api/v1/assistant/conversations/${id}`, { method: "GET", token });
+}
+
+/**
+ * Confirm a draft: the server runs it now, as the person pressing, and answers with the draft as it
+ * stands (CONFIRMED, with `result`). Confirming a draft that is already confirmed answers the same
+ * way rather than refusing, so a second press, or a press in another tab, still shows the link.
+ *
+ * <p>Refusals arrive as the ordinary JSON error, thrown as an {@link ApiError}: KMS-400194 the draft
+ * expired, KMS-400195 what it was drafted from has changed since, KMS-400196 it was already handled.
+ */
+export function confirmAssistantAction(actionId: string, token?: string): Promise<AssistantProposal> {
+  return request<AssistantProposal>(`/api/v1/assistant/actions/${actionId}/confirm`, { method: "POST", token });
+}
+
+/** Reject a draft: nothing is saved. Answers with the draft as it stands (REJECTED). Same refusals as Confirm. */
+export function rejectAssistantAction(actionId: string, token?: string): Promise<AssistantProposal> {
+  return request<AssistantProposal>(`/api/v1/assistant/actions/${actionId}/reject`, { method: "POST", token });
 }
 
 /**
