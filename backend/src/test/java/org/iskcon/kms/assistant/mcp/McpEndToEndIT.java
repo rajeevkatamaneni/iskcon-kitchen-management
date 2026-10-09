@@ -112,7 +112,9 @@ class McpEndToEndIT extends AbstractIntegrationTest {
 		tools.forEach(tool -> names.add(tool.get("name").asText()));
 		assertThat(names).containsExactlyInAnyOrder(
 				"get_inventory", "list_low_stock", "set_conversation_language",
-				"get_shopping_list", "find_vendor", "propose_purchase_order");
+				"get_shopping_list", "find_vendor", "propose_purchase_order",
+				"get_meals", "get_day_context", "check_meal_sufficiency", "get_shortfall",
+				"list_meal_kinds", "search_recipes");
 		for (JsonNode tool : tools) {
 			assertThat(tool.get("inputSchema").path("properties").has("tenant_id"))
 					.as("no tool takes a tenant").isFalse();

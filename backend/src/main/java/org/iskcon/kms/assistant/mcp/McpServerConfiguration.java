@@ -307,6 +307,215 @@ public class McpServerConfiguration {
 			  "additionalProperties": false
 			}""";
 
+	// ---- Meals (E10-MEAL-READ) ---------------------------------------------
+	//
+	// Every date argument and every date returned is YYYY-MM-DD in the temple's own time zone, and
+	// every answer carries today's date, so the model resolves "tomorrow" against the temple's day.
+
+	static final String GET_MEALS = "get_meals";
+
+	static final String GET_MEALS_DESCRIPTION = """
+			The meals planned in the temple kitchen for one day or a range of days: Breakfast, Lunch, \
+			Dinner and named events, with their dishes and head counts, exactly as the Meal planner \
+			screen shows them.
+
+			Use it for "what is planned for lunch tomorrow", "what are we cooking on Sunday", "how many \
+			people is dinner for", "what's on the menu this week". For whether the store has enough \
+			for those meals, call check_meal_sufficiency instead.
+
+			Arguments, both optional, both YYYY-MM-DD:
+			- from: the first day. Left out, it is today.
+			- to: the last day, inclusive. Left out, only the from day is read.
+			Work out the dates yourself from today's date (given in the message, and as today in \
+			every answer from these tools): "tomorrow" is today + 1; "next Sunday" is the first \
+			Sunday after today. At most 14 days are read; a longer range is cut and the answer has \
+			range_shortened: true, so say which days you covered.
+
+			Returns JSON {today, today_weekday, from, to, range_shortened?, meals: [...], returned, \
+			total_meals, truncated}. At most 60 meals, in date order then by ready-by. An empty meals \
+			list means nothing is planned on those days: say so, do not guess a menu. Each meal:
+			- meal_id; date; weekday; meal_kind ("Breakfast", "Lunch", "Dinner" or the temple's own \
+			kinds); event_name for a named event; occasion for a festival meal.
+			- ready_by: when the food must be ready, "HH:MM", 24-hour, temple time.
+			- status: "planned" (still to cook), "cooked", or "cancelled". Mention a cancelled meal \
+			only if asked about it.
+			- adults, children, seniors: the head count, each absent where nobody entered it. \
+			plates: the total the meal is cooked for.
+			- kitchens: the names of the kitchens cooking it. people_needed: staff and volunteers it \
+			takes, absent where nobody said.
+			- recorded: true once the job card has been entered after cooking.
+			- going_outside: true when the food is sent outside the temple.
+			- dishes: [{name, name_local?, amount, unit, status, kitchen?, cooked?}]. amount is how much \
+			is planned, in unit ("Kg", "L", "pieces"...). name is the dish's English name; name_local, \
+			when present, is the temple's own name for it in the conversation's language: use it as \
+			given. When there is no name_local, use name exactly as written: never translate a dish \
+			name. kitchen appears only when the meal has more than one kitchen. cooked is how much was \
+			actually made, once recorded.
+			- volunteer_shift: {volunteers_needed, signed_up}, absent when the meal has no volunteer \
+			shift.""";
+
+	static final String GET_MEALS_SCHEMA = """
+			{
+			  "type": "object",
+			  "properties": {
+			    "from": {"type": "string", "description": "First day, YYYY-MM-DD. Leave out for today."},
+			    "to": {"type": "string", "description": "Last day, inclusive, YYYY-MM-DD. Leave out for just the from day."}
+			  },
+			  "additionalProperties": false
+			}""";
+
+	static final String GET_DAY_CONTEXT = "get_day_context";
+
+	static final String GET_DAY_CONTEXT_DESCRIPTION = """
+			What kind of day a date is in the temple's Vaishnava calendar, and what meals are already \
+			planned on it. Use it for "is tomorrow Ekadashi?", "is there a festival on Sunday?", "what \
+			date is next Sunday?", and before suggesting or planning dishes for a day (on Ekadashi, \
+			grains and beans are not offered).
+
+			date (optional, YYYY-MM-DD) is the day to look at; left out, it is today. Call it with no \
+			date to learn today's date and weekday when you need them.
+
+			Returns JSON {today, today_weekday, date, weekday, is_ekadashi, ekadashi_name?, fast?, \
+			festivals: [...], occasion?, day_type, usual_servings?, meals: [...]}:
+			- is_ekadashi: true on an Ekadashi fast day. ekadashi_name is its name when it has one.
+			- fast: the kind of fast observed that day, when there is one.
+			- festivals: the calendar's festival names for the day, most important first; empty on an \
+			ordinary day.
+			- occasion: the festival the temple itself plans meals for on that day, if any. \
+			usual_servings: how many servings the temple usually plans for it.
+			- day_type: "regular", "weekend" or "festival".
+			- meals: the meals already planned that day, [{meal_id, meal_kind, event_name?, ready_by?, \
+			status, plates, dishes: [{name, name_local?}]}]. Empty when nothing is planned. Call \
+			get_meals for the head counts and amounts.""";
+
+	static final String GET_DAY_CONTEXT_SCHEMA = """
+			{
+			  "type": "object",
+			  "properties": {
+			    "date": {"type": "string", "description": "The day, YYYY-MM-DD. Leave out for today."}
+			  },
+			  "additionalProperties": false
+			}""";
+
+	static final String CHECK_MEAL_SUFFICIENCY = "check_meal_sufficiency";
+
+	static final String CHECK_MEAL_SUFFICIENCY_DESCRIPTION = """
+			Whether the store holds enough for the dishes planned on a day or range of days, dish by \
+			dish: the same check as the badges on the Meal planner. Each dish's ingredients are \
+			counted against stock after earlier meals have taken their share, so two meals are never \
+			both told the same sack is theirs.
+
+			Use it for "do we have enough for Sunday's meals?", "can we cook tomorrow's lunch?", "what \
+			are we short of for the festival?". For the total to buy across all upcoming meals, call \
+			get_shortfall; for stock of one item, get_inventory.
+
+			Arguments from and to work exactly as in get_meals (YYYY-MM-DD, from defaults to today, to \
+			to the from day, at most 14 days).
+
+			Returns JSON {today, today_weekday, from, to, range_shortened?, dishes: [...], dishes_enough, \
+			dishes_short, dishes_not_checked, returned, total_dishes, truncated}. The three counts \
+			cover every dish in the range even when the list is cut at 80. Each dish:
+			- date, weekday, meal_kind, event_name?, ready_by?: which meal it belongs to.
+			- dish: the dish's English name; dish_local: the temple's name for it in the conversation's \
+			language, when it has one (otherwise use dish as written, never translate it).
+			- status: "enough" (every ingredient covered), "short" (at least one is not), or \
+			"not_checked": no claim is made, because the meal is beyond the buying window (more than \
+			14 days ahead, 30 for a festival), is in the past and was never recorded, or the dish has \
+			no ingredients entered. Say it was not checked; never call it enough.
+			- short_of (only when short): [{name, name_local or name_pending, needed, available, \
+			short_by, unit}], ingredient names as in get_inventory. needed is what this dish needs, \
+			available what is left for it after earlier meals, short_by the gap; all three in unit.
+			- order_by (only when short): the last day to order and still have it arrive in time. \
+			order_urgency: "in_time" (order_by is still ahead), "order_today" (today is the last day), \
+			or "too_late": the date has passed and an order placed now arrives after the meal; say so \
+			plainly.
+			An empty dishes list means no dishes are planned in the range.""";
+
+	static final String CHECK_MEAL_SUFFICIENCY_SCHEMA = """
+			{
+			  "type": "object",
+			  "properties": {
+			    "from": {"type": "string", "description": "First day, YYYY-MM-DD. Leave out for today."},
+			    "to": {"type": "string", "description": "Last day, inclusive, YYYY-MM-DD. Leave out for just the from day."}
+			  },
+			  "additionalProperties": false
+			}""";
+
+	static final String GET_SHORTFALL = "get_shortfall";
+
+	static final String GET_SHORTFALL_DESCRIPTION = """
+			Every ingredient the planned meals are short of, added up across all the meals in the \
+			buying window (the next 14 days, or up to 30 when a festival is planned): what the \
+			temple needs to buy for its meal plans. It is the figure the shopping list is worked out \
+			from, before reorder levels and what is already on order.
+
+			Use it for "what are we short of for the coming meals?", "how much more rice do the plans \
+			need?". For one day's meals, call check_meal_sufficiency; for what to order and from whom, \
+			call get_shopping_list.
+
+			Takes no arguments. Returns JSON {today, items: [{name, name_local or name_pending, \
+			short_by, unit}], returned, total_items, truncated}, at most 50 items. Names as in \
+			get_inventory. An empty items list means the planned meals are covered.""";
+
+	static final String GET_SHORTFALL_SCHEMA = """
+			{
+			  "type": "object",
+			  "properties": {},
+			  "additionalProperties": false
+			}""";
+
+	static final String LIST_MEAL_KINDS = "list_meal_kinds";
+
+	static final String LIST_MEAL_KINDS_DESCRIPTION = """
+			The kinds of meal this temple plans, as set in Settings: usually Breakfast, Lunch and \
+			Dinner, plus the temple's own (for example an Event kind for named occasions).
+
+			Use it to match a word the person used ("breakfast", "tiffin", "evening prasadam") to one \
+			of the temple's kinds, or to list them. Takes no arguments.
+
+			Returns JSON {meal_kinds: [{id, name, usual_ready_by?, is_event, needs_occasion?}]} in the \
+			temple's order. usual_ready_by is "HH:MM", absent when the kind has no usual time. \
+			is_event: meals of this kind are named events. needs_occasion: meals of this kind are \
+			planned for a named festival.""";
+
+	static final String LIST_MEAL_KINDS_SCHEMA = """
+			{
+			  "type": "object",
+			  "properties": {},
+			  "additionalProperties": false
+			}""";
+
+	static final String SEARCH_RECIPES = "search_recipes";
+
+	static final String SEARCH_RECIPES_DESCRIPTION = """
+			The temple's own active recipes whose name contains the query, ignoring case: the dishes a \
+			meal can be planned with. Recipes in the shared library that the temple has not added are \
+			not included.
+
+			Use it to find the recipe a person means ("idli", "sambar", "sweet pongal"), or to answer \
+			"what recipes do we have for ...". The match is on the English recipe name, so search with \
+			the English or the usual Indian kitchen word, and if nothing comes back try another common \
+			spelling ("idli" / "idly", "kichadi" / "khichdi") or a shorter part of the name before \
+			saying the temple has no such recipe.
+
+			query (required): part of the recipe's name.
+
+			Returns JSON {recipes: [{id, name, name_local?, category?, ekadashi_ok, per_person?, \
+			per_person_unit?}], returned, total_matching, truncated}, at most 10, sorted by name. \
+			ekadashi_ok: true when none of its ingredients is a grain or bean, so it can be cooked on \
+			Ekadashi. per_person: how much one person usually eats, in per_person_unit, when the \
+			recipe says. If several match, ask which one the person means.""";
+
+	static final String SEARCH_RECIPES_SCHEMA = """
+			{
+			  "type": "object",
+			  "properties": {
+			    "query": {"type": "string", "description": "Part of the recipe's English name, e.g. \\"idli\\"."}
+			  },
+			  "required": ["query"],
+			  "additionalProperties": false
+			}""";
+
 	// ---- What the model is told when a call cannot be answered -----------
 	//
 	// Plain words, because the model will relay them to a cook. Nothing technical: the detail goes
@@ -321,8 +530,15 @@ public class McpServerConfiguration {
 	static final String NOT_ALLOWED_PURCHASE_ORDERS_MESSAGE =
 			"This person's role does not include the shopping list and purchase orders, so I cannot read "
 					+ "or draft them for them. A Temple Admin can say who should order supplies.";
+	static final String NOT_ALLOWED_MEALS_MESSAGE =
+			"This person's role does not include the meal planner, so I cannot read meal plans for them. "
+					+ "A Temple Admin can say who should plan meals.";
+	static final String NOT_ALLOWED_RECIPES_MESSAGE =
+			"This person's role does not include the recipes screen, so I cannot search recipes for them. "
+					+ "A Temple Admin can say who should see recipes.";
+	// Generic since the meal tools (E10-MEAL-READ): it used to say "the stock", and every tool shares it.
 	static final String FAILED_MESSAGE =
-			"The stock could not be read just now. Try again in a minute; if it keeps failing, "
+			"That could not be read just now. Try again in a minute; if it keeps failing, "
 					+ "tell the person to quote reference %s to their Temple Admin.";
 
 	// ---- Beans -----------------------------------------------------------
@@ -339,12 +555,13 @@ public class McpServerConfiguration {
 	@Bean(destroyMethod = "close")
 	McpStatelessSyncServer mcpServer(
 			HttpServletStatelessServerTransport mcpTransport, InventoryTools inventoryTools,
-			ConversationTools conversationTools, PurchaseOrderTools purchaseOrderTools, ObjectMapper objectMapper) {
+			ConversationTools conversationTools, PurchaseOrderTools purchaseOrderTools, MealTools mealTools,
+			ObjectMapper objectMapper) {
 		return McpServer.sync(mcpTransport)
 				.serverInfo(SERVER_NAME, SERVER_VERSION)
 				.jsonMapper(protocolMapper())
 				.capabilities(McpSchema.ServerCapabilities.builder().tools(false).build())
-				.tools(toolSpecifications(inventoryTools, conversationTools, purchaseOrderTools, objectMapper))
+				.tools(toolSpecifications(inventoryTools, conversationTools, purchaseOrderTools, mealTools, objectMapper))
 				.build();
 	}
 
@@ -354,7 +571,7 @@ public class McpServerConfiguration {
 	 */
 	static List<SyncToolSpecification> toolSpecifications(
 			InventoryTools inventoryTools, ConversationTools conversationTools, PurchaseOrderTools purchaseOrderTools,
-			ObjectMapper objectMapper) {
+			MealTools mealTools, ObjectMapper objectMapper) {
 		// The application's own mapper, copied so the change below stays here: the JSON the model
 		// reads gets ISO dates from it (Boot turns timestamps off) and plain decimals from this.
 		ObjectMapper payloadMapper = objectMapper.copy().enable(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN);
@@ -381,7 +598,27 @@ public class McpServerConfiguration {
 						request -> () -> purchaseOrderTools.proposePurchaseOrder(
 								stringArgument(request, "vendor"),
 								request.arguments() == null ? null : request.arguments().get("lines"),
-								stringArgument(request, "needed_by"))));
+								stringArgument(request, "needed_by"))),
+				tool(protocol, GET_MEALS, "Meals planned", GET_MEALS_DESCRIPTION, GET_MEALS_SCHEMA,
+						payloadMapper, NOT_ALLOWED_MEALS_MESSAGE,
+						request -> () -> mealTools.getMeals(
+								stringArgument(request, "from"), stringArgument(request, "to"))),
+				tool(protocol, GET_DAY_CONTEXT, "What kind of day", GET_DAY_CONTEXT_DESCRIPTION,
+						GET_DAY_CONTEXT_SCHEMA, payloadMapper, NOT_ALLOWED_MEALS_MESSAGE,
+						request -> () -> mealTools.getDayContext(stringArgument(request, "date"))),
+				tool(protocol, CHECK_MEAL_SUFFICIENCY, "Enough for the meals?", CHECK_MEAL_SUFFICIENCY_DESCRIPTION,
+						CHECK_MEAL_SUFFICIENCY_SCHEMA, payloadMapper, NOT_ALLOWED_MEALS_MESSAGE,
+						request -> () -> mealTools.checkMealSufficiency(
+								stringArgument(request, "from"), stringArgument(request, "to"))),
+				tool(protocol, GET_SHORTFALL, "Shortfall for the meal plans", GET_SHORTFALL_DESCRIPTION,
+						GET_SHORTFALL_SCHEMA, payloadMapper, NOT_ALLOWED_MEALS_MESSAGE,
+						request -> mealTools::getShortfall),
+				tool(protocol, LIST_MEAL_KINDS, "Meal kinds", LIST_MEAL_KINDS_DESCRIPTION, LIST_MEAL_KINDS_SCHEMA,
+						payloadMapper, NOT_ALLOWED_MEALS_MESSAGE,
+						request -> mealTools::listMealKinds),
+				tool(protocol, SEARCH_RECIPES, "Find a recipe", SEARCH_RECIPES_DESCRIPTION, SEARCH_RECIPES_SCHEMA,
+						payloadMapper, NOT_ALLOWED_RECIPES_MESSAGE,
+						request -> () -> mealTools.searchRecipes(stringArgument(request, "query"))));
 	}
 
 	/**
