@@ -201,7 +201,7 @@ class ConversationLanguageNamesIT extends AbstractIntegrationTest {
 	@Test
 	@DisplayName("a conversation started in Telugu asks for the Telugu names; one started in English does not")
 	void creatingAsksForNames() {
-		AssistantConversationStore store = new AssistantConversationStore(jdbc, budget, audit, pending, names);
+		AssistantConversationStore store = new AssistantConversationStore(jdbc, budget, audit, pending, names, new org.iskcon.kms.tenancy.TempleClock(jdbc));
 		admin.update("UPDATE users SET preferred_language = 'te' WHERE id = ?", fixture.userA);
 		TenantContext.set(fixture.templeA);
 

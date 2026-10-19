@@ -116,8 +116,12 @@ class AgentTokenServiceTest {
 	@DisplayName("a token with its signature altered is refused")
 	void tamperedSignature() {
 		String token = service.mint(USER, TENANT, CONVERSATION, BOTH_SCOPES);
-		char last = token.charAt(token.length() - 1);
-		String tampered = token.substring(0, token.length() - 1) + (last == 'A' ? 'B' : 'A');
+		// Change a character in the middle of the signature, not the last one: the last base64url
+		// character of a 32-byte MAC carries padding bits, so swapping A for B there can leave the
+		// decoded signature unchanged and the "tampered" token still valid.
+		int at = token.lastIndexOf('.') + 10;
+		char c = token.charAt(at);
+		String tampered = token.substring(0, at) + (c == 'A' ? 'B' : 'A') + token.substring(at + 1);
 
 		assertRefused(service, tampered);
 	}

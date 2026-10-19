@@ -156,7 +156,9 @@ class AssistantApiIT extends AbstractIntegrationTest {
 		assertThat(sent.get("prompt").asText()).isEqualTo(
 				"Conversation language: English (en). Reply only in English, whatever language the message is"
 						+ " written in. Change language only if the person asks you to, by calling"
-						+ " set_conversation_language.\n\nhow much toor dal do we have?");
+						+ " set_conversation_language.\n\n"
+						+ AssistantConversationStore.todayLine(java.time.LocalDate.now(org.iskcon.kms.tenancy.TempleClock.PLATFORM_ZONE))
+						+ "how much toor dal do we have?");
 		assertThat(sent.get("mcpUrl").asText()).endsWith("/mcp");
 		AgentPrincipal agent = tokens.verify(sent.get("agentToken").asText());
 		assertThat(agent.userId()).isEqualTo(adminA);
@@ -218,6 +220,7 @@ class AssistantApiIT extends AbstractIntegrationTest {
 
 		String prompt = runner.requests.get(0).get("prompt").asText();
 		assertThat(prompt).startsWith(AssistantConversationStore.languageLine("en")
+				+ AssistantConversationStore.todayLine(java.time.LocalDate.now(org.iskcon.kms.tenancy.TempleClock.PLATFORM_ZONE))
 				+ "Conversation so far (oldest first):\n\nUser: question 3\nAssistant: answer 3\n\n");
 		assertThat(prompt).endsWith("User: question 12\nAssistant: answer 12\n\n"
 				+ "New message from the user, to answer now:\nand rice?");

@@ -3,10 +3,14 @@ package org.iskcon.kms.assistant.api;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.iskcon.kms.assistant.action.AssistantProposal;
@@ -21,6 +25,7 @@ import org.iskcon.kms.audit.AuditService;
 import org.iskcon.kms.auth.AuthenticatedUser;
 import org.iskcon.kms.error.ApplicationException;
 import org.iskcon.kms.error.ErrorCode;
+import org.iskcon.kms.tenancy.TempleClock;
 import org.iskcon.kms.translation.Languages;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -60,14 +65,16 @@ public class AssistantConversationStore {
 	private final AuditService audit;
 	private final PendingActionService actions;
 	private final ConversationNames names;
+	private final TempleClock clock;
 
 	public AssistantConversationStore(JdbcTemplate jdbc, AssistantBudget budget, AuditService audit,
-			PendingActionService actions, ConversationNames names) {
+			PendingActionService actions, ConversationNames names, TempleClock clock) {
 		this.jdbc = jdbc;
 		this.budget = budget;
 		this.audit = audit;
 		this.actions = actions;
 		this.names = names;
+		this.clock = clock;
 	}
 
 	/**
@@ -142,7 +149,7 @@ public class AssistantConversationStore {
 		budget.check(actor.getTenantId(), actor.getUserId());
 
 		// Read before the new question is saved, so it is not in its own history.
-		String prompt = promptWithHistory(conversation.language(), history(conversationId), text);
+		String prompt = promptWithHistory(conversation.language(), clock.today(), history(conversationId), text);
 
 		jdbc.update("""
 				INSERT INTO assistant_messages (tenant_id, conversation_id, role, content)
@@ -278,8 +285,8 @@ public class AssistantConversationStore {
 	 * ("Kannada (kn)"), because the model follows a named language more reliably than a bare code, and
 	 * the tool that changes it takes the code.
 	 */
-	static String promptWithHistory(String language, List<Turn> history, String message) {
-		String head = languageLine(language);
+	static String promptWithHistory(String language, LocalDate today, List<Turn> history, String message) {
+		String head = languageLine(language) + todayLine(today);
 		if (history.isEmpty()) {
 			return head + message;
 		}
@@ -298,6 +305,17 @@ public class AssistantConversationStore {
 		return "Conversation language: " + name + " (" + language + "). Reply only in " + name
 				+ ", whatever language the message is written in. Change language only if the person asks"
 				+ " you to, by calling set_conversation_language.\n\n";
+	}
+
+	/**
+	 * Today's date in the temple's own time zone. Each run is a fresh process on a server whose clock
+	 * may be in another zone, so without this the model guesses the date and "tomorrow" lands on the
+	 * wrong day (found in E10-MEAL-READ's real run).
+	 */
+	static String todayLine(LocalDate today) {
+		return "Today is " + today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " "
+				+ today.format(DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH))
+				+ " (" + today + ") in the temple's time zone.\n\n";
 	}
 
 	static String title(String text) {
