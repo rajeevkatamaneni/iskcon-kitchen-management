@@ -390,6 +390,9 @@ resource "google_cloud_run_v2_service" "api" {
   # -------------------------------------------------------------------------
   scaling {
     min_instance_count = 0
+    # The API has reported AUTOMATIC since the service was flipped to manual-0 and back on
+    # 2026-10-04 to stop a running instance on demand, so the file records it.
+    scaling_mode = "AUTOMATIC"
   }
 
   template {
@@ -423,6 +426,9 @@ resource "google_cloud_run_v2_service" "api" {
           # fit in a gigabyte — the worker was killed mid-render at 1062 MiB.
           memory = "2Gi"
         }
+        # Extra CPU while the instance starts. With the API scaling to zero (2026-10-04), a cold
+        # Spring start on one CPU took 41.8s and the first request 51s.
+        startup_cpu_boost = true
       }
 
       env {
@@ -677,13 +683,17 @@ resource "google_cloud_run_v2_service" "api" {
         value = "true"
       }
 
+      # Checked every second so a cold start is served the moment Tomcat is up: at a 5s period,
+      # a cold login on 2026-10-04 waited 3.6s after Spring was ready. The 120s ceiling is well
+      # clear of a boosted start (~25s) and an unboosted one (~45s).
       startup_probe {
         tcp_socket {
           port = 8080
         }
-        initial_delay_seconds = 10
-        period_seconds        = 5
-        failure_threshold     = 12
+        initial_delay_seconds = 5
+        period_seconds        = 1
+        timeout_seconds       = 1
+        failure_threshold     = 115
       }
     }
   }
