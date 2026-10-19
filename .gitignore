@@ -142,3 +142,8 @@ __pycache__/
 # would have been committed by the first person who ran `git add -A`. The deploy side was already
 # safe — `frontend/.gcloudignore` holds `app/dev-*/` and that line IS committed, on purpose.
 frontend/app/dev-*/
+
+# The Kitchen Assistant try-out (tools/assistant-dev/try.sh) keeps its dev token key, the API's pid
+# and log, and the looked-up Temple Admin ids here. The key is a local dev key, never a deployed one,
+# but a key is a key and does not belong in history.
+tools/assistant-dev/.local/

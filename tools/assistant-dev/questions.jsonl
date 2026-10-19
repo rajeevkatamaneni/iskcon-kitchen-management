@@ -1,0 +1,20 @@
+{"id":"en01","lang":"en","q":"Do we have enough toor dal for tomorrow?","expect":"get_inventory"}
+{"id":"en02","lang":"en","q":"What's running out?","expect":"list_low_stock"}
+{"id":"en03","lang":"en","q":"How much ghee is left in the store?","expect":"get_inventory"}
+{"id":"en04","lang":"en","q":"What do we need to reorder?","expect":"list_low_stock"}
+{"id":"en05","lang":"en","q":"How many coconuts do we have?","expect":"get_inventory"}
+{"id":"en06","lang":"en","q":"Is there any jaggery in stock?","expect":"get_inventory"}
+{"id":"en07","lang":"en","q":"Which items are below their reorder level?","expect":"list_low_stock"}
+{"id":"en08","lang":"en","q":"How much milk and sugar do we have for the payasam?","expect":"get_inventory"}
+{"id":"en09","lang":"en","q":"Anything we should buy before Sunday's feast?","expect":"list_low_stock"}
+{"id":"en10","lang":"en","q":"Check stock of urad dal please","expect":"get_inventory"}
+{"id":"kn01","lang":"kn","q":"ನಾಳೆಗೆ ಸಾಕಷ್ಟು ತೊಗರಿ ಬೇಳೆ ಇದೆಯಾ?","gloss":"Is there enough toor dal for tomorrow?","expect":"get_inventory"}
+{"id":"kn02","lang":"kn","q":"ಯಾವ ವಸ್ತುಗಳು ಮುಗಿಯುತ್ತಿವೆ?","gloss":"Which items are running out?","expect":"list_low_stock"}
+{"id":"kn03","lang":"kn","q":"ಸ್ಟೋರ್‌ನಲ್ಲಿ ಎಷ್ಟು ತುಪ್ಪ ಇದೆ?","gloss":"How much ghee is in the store?","expect":"get_inventory"}
+{"id":"kn04","lang":"kn","q":"ನಾವು ಏನನ್ನು ಮತ್ತೆ ಆರ್ಡರ್ ಮಾಡಬೇಕು?","gloss":"What do we need to order again?","expect":"list_low_stock"}
+{"id":"kn05","lang":"kn","q":"ಬೆಲ್ಲ ಎಷ್ಟು ಉಳಿದಿದೆ?","gloss":"How much jaggery is left?","expect":"get_inventory"}
+{"id":"kn06","lang":"kn","q":"ಮೊಸರು ಎಷ್ಟಿದೆ?","gloss":"How much curd is there?","expect":"get_inventory"}
+{"id":"kn07","lang":"kn","q":"ಕಡಿಮೆ ಇರುವ ಸಾಮಾನುಗಳ ಪಟ್ಟಿ ಕೊಡಿ","gloss":"Give me the list of things that are low","expect":"list_low_stock"}
+{"id":"kn08","lang":"kn","q":"ಅಕ್ಕಿ ಮತ್ತು ಹೆಸರು ಬೇಳೆ ಎಷ್ಟು ಇದೆ?","gloss":"How much rice and moong dal is there?","expect":"get_inventory"}
+{"id":"kn09","lang":"kn","q":"ಭಾನುವಾರದ ಹಬ್ಬಕ್ಕೆ ಮುಂಚೆ ಏನಾದರೂ ಖರೀದಿಸಬೇಕೇ?","gloss":"Do we need to buy anything before Sunday's feast?","expect":"list_low_stock"}
+{"id":"kn10","lang":"kn","q":"ತೆಂಗಿನಕಾಯಿ ಎಷ್ಟು ಇದೆ?","gloss":"How many coconuts are there?","expect":"get_inventory"}

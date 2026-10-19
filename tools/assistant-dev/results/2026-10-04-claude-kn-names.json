@@ -1,0 +1,654 @@
+{
+ "model": "claude-opus-5-5",
+ "cost_usd": 0.2016254,
+ "duration_ms": 78753,
+ "asked": 119,
+ "named": 119,
+ "problems": [],
+ "unanswered": [],
+ "same_name": {
+  "ಅವಲಕ್ಕಿ": [
+   "Avalakki (poha)",
+   "Beaten rice"
+  ],
+  "ನುಚ್ಚಕ್ಕಿ": [
+   "Broken rice",
+   "Rice, broken"
+  ],
+  "ಏಲಕ್ಕಿ": [
+   "Cardamom",
+   "Green cardamom"
+  ],
+  "ಗೋಡಂಬಿ": [
+   "Cashew",
+   "Cashew nuts"
+  ],
+  "ಕೊತ್ತಂಬರಿ ಸೊಪ್ಪು": [
+   "Coriander",
+   "Coriander leaf",
+   "Coriander leaves"
+  ],
+  "ಜೀರಿಗೆ": [
+   "Cumin",
+   "Cumin seeds"
+  ],
+  "ತುಪ್ಪ": [
+   "Ghee",
+   "Ghee, for finishing"
+  ],
+  "ಸಾಸಿವೆ": [
+   "Mustard",
+   "Mustard seed",
+   "Mustard seeds"
+  ],
+  "ಅಕ್ಕಿ": [
+   "Raw rice",
+   "Rice"
+  ],
+  "ಸಬ್ಬಕ್ಕಿ": [
+   "Sabudana (sago)",
+   "Sago"
+  ],
+  "ಅರಿಶಿನ": [
+   "Turmeric",
+   "Turmeric powder"
+  ]
+ },
+ "names": [
+  {
+   "filed": "Ajwain",
+   "spoken": "Ajwain",
+   "kannada": "ಓಮ"
+  },
+  {
+   "filed": "Almond",
+   "spoken": "Almond",
+   "kannada": "ಬಾದಾಮಿ"
+  },
+  {
+   "filed": "Almond, chopped",
+   "spoken": "Chopped almond",
+   "kannada": "ಹೆಚ್ಚಿದ ಬಾದಾಮಿ"
+  },
+  {
+   "filed": "Amla (gooseberry)",
+   "spoken": "Amla (gooseberry)",
+   "kannada": "ನೆಲ್ಲಿಕಾಯಿ"
+  },
+  {
+   "filed": "Asafoetida",
+   "spoken": "Asafoetida",
+   "kannada": "ಇಂಗು"
+  },
+  {
+   "filed": "Ash gourd",
+   "spoken": "Ash gourd",
+   "kannada": "ಬೂದುಕುಂಬಳಕಾಯಿ"
+  },
+  {
+   "filed": "Ash gourd or cucumber, cubed",
+   "spoken": "Cubed ash gourd or cucumber",
+   "kannada": "ಹೆಚ್ಚಿದ ಬೂದುಕುಂಬಳಕಾಯಿ ಅಥವಾ ಸೌತೆಕಾಯಿ"
+  },
+  {
+   "filed": "Avalakki (poha)",
+   "spoken": "Avalakki (poha)",
+   "kannada": "ಅವಲಕ್ಕಿ"
+  },
+  {
+   "filed": "Avalakki (thick poha)",
+   "spoken": "Avalakki (thick poha)",
+   "kannada": "ದಪ್ಪ ಅವಲಕ್ಕಿ"
+  },
+  {
+   "filed": "Axone",
+   "spoken": "Axone",
+   "kannada": "ಹುದುಗಿಸಿದ ಸೋಯಾಬೀನ್"
+  },
+  {
+   "filed": "Banana",
+   "spoken": "Banana",
+   "kannada": "ಬಾಳೆಹಣ್ಣು"
+  },
+  {
+   "filed": "Beans",
+   "spoken": "Beans",
+   "kannada": "ಬೀನ್ಸ್"
+  },
+  {
+   "filed": "Beaten rice",
+   "spoken": "Beaten rice",
+   "kannada": "ಅವಲಕ್ಕಿ"
+  },
+  {
+   "filed": "Bisi bele bath pudi (see Masalas)",
+   "spoken": "Bisi bele bath pudi (see Masalas)",
+   "kannada": "ಬಿಸಿಬೇಳೆಬಾತ್ ಪುಡಿ"
+  },
+  {
+   "filed": "Black pepper",
+   "spoken": "Black pepper",
+   "kannada": "ಕಾಳುಮೆಣಸು"
+  },
+  {
+   "filed": "Black pepper, coarse",
+   "spoken": "Coarse black pepper",
+   "kannada": "ತರಿ ಕಾಳುಮೆಣಸು"
+  },
+  {
+   "filed": "Brinjal",
+   "spoken": "Brinjal",
+   "kannada": "ಬದನೆಕಾಯಿ"
+  },
+  {
+   "filed": "Brinjal, small purple",
+   "spoken": "Small purple brinjal",
+   "kannada": "ಸಣ್ಣ ನೇರಳೆ ಬದನೆಕಾಯಿ"
+  },
+  {
+   "filed": "Broken rice",
+   "spoken": "Broken rice",
+   "kannada": "ನುಚ್ಚಕ್ಕಿ"
+  },
+  {
+   "filed": "Cabbage",
+   "spoken": "Cabbage",
+   "kannada": "ಎಲೆಕೋಸು"
+  },
+  {
+   "filed": "Cabbage, shredded",
+   "spoken": "Shredded cabbage",
+   "kannada": "ಸಣ್ಣಗೆ ಹೆಚ್ಚಿದ ಎಲೆಕೋಸು"
+  },
+  {
+   "filed": "Capsicum",
+   "spoken": "Capsicum",
+   "kannada": "ದೊಣ್ಣೆಮೆಣಸಿನಕಾಯಿ"
+  },
+  {
+   "filed": "Cardamom",
+   "spoken": "Cardamom",
+   "kannada": "ಏಲಕ್ಕಿ"
+  },
+  {
+   "filed": "Cardamom powder",
+   "spoken": "Cardamom powder",
+   "kannada": "ಏಲಕ್ಕಿ ಪುಡಿ"
+  },
+  {
+   "filed": "Carrot",
+   "spoken": "Carrot",
+   "kannada": "ಕ್ಯಾರೆಟ್"
+  },
+  {
+   "filed": "Carrot, grated",
+   "spoken": "Grated carrot",
+   "kannada": "ತುರಿದ ಕ್ಯಾರೆಟ್"
+  },
+  {
+   "filed": "Cashew",
+   "spoken": "Cashew",
+   "kannada": "ಗೋಡಂಬಿ"
+  },
+  {
+   "filed": "Cashew nuts",
+   "spoken": "Cashew nuts",
+   "kannada": "ಗೋಡಂಬಿ"
+  },
+  {
+   "filed": "Cashew, halved",
+   "spoken": "Halved cashew",
+   "kannada": "ಅರ್ಧ ಗೋಡಂಬಿ"
+  },
+  {
+   "filed": "Cauliflower",
+   "spoken": "Cauliflower",
+   "kannada": "ಹೂಕೋಸು"
+  },
+  {
+   "filed": "Chana Dal",
+   "spoken": "Chana Dal",
+   "kannada": "ಕಡಲೆ ಬೇಳೆ"
+  },
+  {
+   "filed": "Cinnamon",
+   "spoken": "Cinnamon",
+   "kannada": "ಚಕ್ಕೆ"
+  },
+  {
+   "filed": "Cloves",
+   "spoken": "Cloves",
+   "kannada": "ಲವಂಗ"
+  },
+  {
+   "filed": "Coconut",
+   "spoken": "Coconut",
+   "kannada": "ತೆಂಗಿನಕಾಯಿ"
+  },
+  {
+   "filed": "Coconut oil",
+   "spoken": "Coconut oil",
+   "kannada": "ತೆಂಗಿನ ಎಣ್ಣೆ"
+  },
+  {
+   "filed": "Coconut, diced small",
+   "spoken": "Diced small coconut",
+   "kannada": "ಸಣ್ಣ ತೆಂಗಿನಕಾಯಿ ಚೂರು"
+  },
+  {
+   "filed": "Coconut, grated",
+   "spoken": "Grated coconut",
+   "kannada": "ತೆಂಗಿನಕಾಯಿ ತುರಿ"
+  },
+  {
+   "filed": "Copra (dry coconut)",
+   "spoken": "Copra (dry coconut)",
+   "kannada": "ಕೊಬ್ಬರಿ"
+  },
+  {
+   "filed": "Coriander",
+   "spoken": "Coriander",
+   "kannada": "ಕೊತ್ತಂಬರಿ ಸೊಪ್ಪು"
+  },
+  {
+   "filed": "Coriander leaf",
+   "spoken": "Coriander leaf",
+   "kannada": "ಕೊತ್ತಂಬರಿ ಸೊಪ್ಪು"
+  },
+  {
+   "filed": "Coriander leaves",
+   "spoken": "Coriander leaves",
+   "kannada": "ಕೊತ್ತಂಬರಿ ಸೊಪ್ಪು"
+  },
+  {
+   "filed": "Coriander seeds",
+   "spoken": "Coriander seeds",
+   "kannada": "ಕೊತ್ತಂಬರಿ ಬೀಜ"
+  },
+  {
+   "filed": "Cowpea",
+   "spoken": "Cowpea",
+   "kannada": "ಅಲಸಂದೆ ಕಾಳು"
+  },
+  {
+   "filed": "Cumin",
+   "spoken": "Cumin",
+   "kannada": "ಜೀರಿಗೆ"
+  },
+  {
+   "filed": "Cumin seeds",
+   "spoken": "Cumin seeds",
+   "kannada": "ಜೀರಿಗೆ"
+  },
+  {
+   "filed": "Curd",
+   "spoken": "Curd",
+   "kannada": "ಮೊಸರು"
+  },
+  {
+   "filed": "Curd, sour",
+   "spoken": "Sour curd",
+   "kannada": "ಹುಳಿ ಮೊಸರು"
+  },
+  {
+   "filed": "Curd, whisked",
+   "spoken": "Whisked curd",
+   "kannada": "ಕಡೆದ ಮೊಸರು"
+  },
+  {
+   "filed": "Curry leaves",
+   "spoken": "Curry leaves",
+   "kannada": "ಕರಿಬೇವು"
+  },
+  {
+   "filed": "Curry leaves, chopped",
+   "spoken": "Chopped curry leaves",
+   "kannada": "ಹೆಚ್ಚಿದ ಕರಿಬೇವು"
+  },
+  {
+   "filed": "Dry ginger powder",
+   "spoken": "Dry ginger powder",
+   "kannada": "ಒಣಶುಂಠಿ ಪುಡಿ"
+  },
+  {
+   "filed": "Dry red chilli",
+   "spoken": "Dry red chilli",
+   "kannada": "ಒಣಮೆಣಸಿನಕಾಯಿ"
+  },
+  {
+   "filed": "Edible camphor",
+   "spoken": "Edible camphor",
+   "kannada": "ಪಚ್ಚ ಕರ್ಪೂರ"
+  },
+  {
+   "filed": "Eno / soda",
+   "spoken": "Eno / soda",
+   "kannada": "ಈನೋ ಅಥವಾ ಸೋಡಾ ಪುಡಿ"
+  },
+  {
+   "filed": "Fenugreek seeds",
+   "spoken": "Fenugreek seeds",
+   "kannada": "ಮೆಂತ್ಯ"
+  },
+  {
+   "filed": "French beans, chopped fine",
+   "spoken": "Chopped fine french beans",
+   "kannada": "ಸಣ್ಣಗೆ ಹೆಚ್ಚಿದ ಬೀನ್ಸ್"
+  },
+  {
+   "filed": "Ghee",
+   "spoken": "Ghee",
+   "kannada": "ತುಪ್ಪ"
+  },
+  {
+   "filed": "Ghee, for finishing",
+   "spoken": "Ghee, for finishing",
+   "kannada": "ತುಪ್ಪ"
+  },
+  {
+   "filed": "Ginger",
+   "spoken": "Ginger",
+   "kannada": "ಶುಂಠಿ"
+  },
+  {
+   "filed": "Ginger, grated",
+   "spoken": "Grated ginger",
+   "kannada": "ತುರಿದ ಶುಂಠಿ"
+  },
+  {
+   "filed": "Green cardamom",
+   "spoken": "Green cardamom",
+   "kannada": "ಏಲಕ್ಕಿ"
+  },
+  {
+   "filed": "Green chilli",
+   "spoken": "Green chilli",
+   "kannada": "ಹಸಿಮೆಣಸಿನಕಾಯಿ"
+  },
+  {
+   "filed": "Green chilli, chopped",
+   "spoken": "Chopped green chilli",
+   "kannada": "ಹೆಚ್ಚಿದ ಹಸಿಮೆಣಸಿನಕಾಯಿ"
+  },
+  {
+   "filed": "Green chilli, slit",
+   "spoken": "Slit green chilli",
+   "kannada": "ಸೀಳಿದ ಹಸಿಮೆಣಸಿನಕಾಯಿ"
+  },
+  {
+   "filed": "Groundnut",
+   "spoken": "Groundnut",
+   "kannada": "ಕಡಲೆಕಾಯಿ ಬೀಜ"
+  },
+  {
+   "filed": "Groundnut oil",
+   "spoken": "Groundnut oil",
+   "kannada": "ಕಡಲೆಕಾಯಿ ಎಣ್ಣೆ"
+  },
+  {
+   "filed": "Idli rice",
+   "spoken": "Idli rice",
+   "kannada": "ಇಡ್ಲಿ ಅಕ್ಕಿ"
+  },
+  {
+   "filed": "Jaggery",
+   "spoken": "Jaggery",
+   "kannada": "ಬೆಲ್ಲ"
+  },
+  {
+   "filed": "Jaggery, grated",
+   "spoken": "Grated jaggery",
+   "kannada": "ತುರಿದ ಬೆಲ್ಲ"
+  },
+  {
+   "filed": "Jowar flour",
+   "spoken": "Jowar flour",
+   "kannada": "ಜೋಳದ ಹಿಟ್ಟು"
+  },
+  {
+   "filed": "Kabuli chana",
+   "spoken": "Kabuli chana",
+   "kannada": "ಕಾಬೂಲಿ ಕಡಲೆ"
+  },
+  {
+   "filed": "Lemon",
+   "spoken": "Lemon",
+   "kannada": "ನಿಂಬೆಹಣ್ಣು"
+  },
+  {
+   "filed": "Lemon juice",
+   "spoken": "Lemon juice",
+   "kannada": "ನಿಂಬೆಹಣ್ಣಿನ ರಸ"
+  },
+  {
+   "filed": "Mace",
+   "spoken": "Mace",
+   "kannada": "ಜಾಪತ್ರೆ"
+  },
+  {
+   "filed": "Milk",
+   "spoken": "Milk",
+   "kannada": "ಹಾಲು"
+  },
+  {
+   "filed": "Mixed vegetables, diced",
+   "spoken": "Diced mixed vegetables",
+   "kannada": "ಹೆಚ್ಚಿದ ತರಕಾರಿ"
+  },
+  {
+   "filed": "Moong Dal",
+   "spoken": "Moong Dal",
+   "kannada": "ಹೆಸರು ಬೇಳೆ"
+  },
+  {
+   "filed": "Moong dal, soaked",
+   "spoken": "Soaked moong dal",
+   "kannada": "ನೆನೆಸಿದ ಹೆಸರು ಬೇಳೆ"
+  },
+  {
+   "filed": "Mustard",
+   "spoken": "Mustard",
+   "kannada": "ಸಾಸಿವೆ"
+  },
+  {
+   "filed": "Mustard oil",
+   "spoken": "Mustard oil",
+   "kannada": "ಸಾಸಿವೆ ಎಣ್ಣೆ"
+  },
+  {
+   "filed": "Mustard seed",
+   "spoken": "Mustard seed",
+   "kannada": "ಸಾಸಿವೆ"
+  },
+  {
+   "filed": "Mustard seeds",
+   "spoken": "Mustard seeds",
+   "kannada": "ಸಾಸಿವೆ"
+  },
+  {
+   "filed": "Oil",
+   "spoken": "Oil",
+   "kannada": "ಎಣ್ಣೆ"
+  },
+  {
+   "filed": "Onion",
+   "spoken": "Onion",
+   "kannada": "ಈರುಳ್ಳಿ"
+  },
+  {
+   "filed": "Paneer",
+   "spoken": "Paneer",
+   "kannada": "ಪನೀರ್"
+  },
+  {
+   "filed": "Perilla seed",
+   "spoken": "Perilla seed",
+   "kannada": "ಪೆರಿಲ್ಲಾ ಬೀಜ"
+  },
+  {
+   "filed": "Pineapple, diced (optional)",
+   "spoken": "Diced (optional) pineapple",
+   "kannada": "ಹೆಚ್ಚಿದ ಅನಾನಸ್"
+  },
+  {
+   "filed": "Potato",
+   "spoken": "Potato",
+   "kannada": "ಆಲೂಗಡ್ಡೆ"
+  },
+  {
+   "filed": "Potato, boiled and cubed",
+   "spoken": "Boiled and cubed potato",
+   "kannada": "ಬೇಯಿಸಿ ಹೆಚ್ಚಿದ ಆಲೂಗಡ್ಡೆ"
+  },
+  {
+   "filed": "Pumpkin",
+   "spoken": "Pumpkin",
+   "kannada": "ಸಿಹಿಕುಂಬಳಕಾಯಿ"
+  },
+  {
+   "filed": "Ragi flour",
+   "spoken": "Ragi flour",
+   "kannada": "ರಾಗಿ ಹಿಟ್ಟು"
+  },
+  {
+   "filed": "Raisins",
+   "spoken": "Raisins",
+   "kannada": "ಒಣದ್ರಾಕ್ಷಿ"
+  },
+  {
+   "filed": "Rasam podi",
+   "spoken": "Rasam podi",
+   "kannada": "ಸಾರಿನ ಪುಡಿ"
+  },
+  {
+   "filed": "Rava (coarse)",
+   "spoken": "Rava (coarse)",
+   "kannada": "ದಪ್ಪ ರವೆ"
+  },
+  {
+   "filed": "Rava (fine)",
+   "spoken": "Rava (fine)",
+   "kannada": "ಸಣ್ಣ ರವೆ"
+  },
+  {
+   "filed": "Raw rice",
+   "spoken": "Raw rice",
+   "kannada": "ಅಕ್ಕಿ"
+  },
+  {
+   "filed": "Rice",
+   "spoken": "Rice",
+   "kannada": "ಅಕ್ಕಿ"
+  },
+  {
+   "filed": "Rice (sona masoori)",
+   "spoken": "Rice (sona masoori)",
+   "kannada": "ಸೋನಾ ಮಸೂರಿ ಅಕ್ಕಿ"
+  },
+  {
+   "filed": "Rice flour",
+   "spoken": "Rice flour",
+   "kannada": "ಅಕ್ಕಿ ಹಿಟ್ಟು"
+  },
+  {
+   "filed": "Rice, broken",
+   "spoken": "Broken rice",
+   "kannada": "ನುಚ್ಚಕ್ಕಿ"
+  },
+  {
+   "filed": "Rice, soaked",
+   "spoken": "Soaked rice",
+   "kannada": "ನೆನೆಸಿದ ಅಕ್ಕಿ"
+  },
+  {
+   "filed": "Rock salt",
+   "spoken": "Rock salt",
+   "kannada": "ಕಲ್ಲುಪ್ಪು"
+  },
+  {
+   "filed": "Sabudana (sago)",
+   "spoken": "Sabudana (sago)",
+   "kannada": "ಸಬ್ಬಕ್ಕಿ"
+  },
+  {
+   "filed": "Saffron or kesari colour",
+   "spoken": "Saffron or kesari colour",
+   "kannada": "ಕೇಸರಿ ಅಥವಾ ಕೇಸರಿ ಬಣ್ಣ"
+  },
+  {
+   "filed": "Sago",
+   "spoken": "Sago",
+   "kannada": "ಸಬ್ಬಕ್ಕಿ"
+  },
+  {
+   "filed": "Salt",
+   "spoken": "Salt",
+   "kannada": "ಉಪ್ಪು"
+  },
+  {
+   "filed": "Sesame oil",
+   "spoken": "Sesame oil",
+   "kannada": "ಎಳ್ಳೆಣ್ಣೆ"
+  },
+  {
+   "filed": "Sesame seeds",
+   "spoken": "Sesame seeds",
+   "kannada": "ಎಳ್ಳು"
+  },
+  {
+   "filed": "Sugar",
+   "spoken": "Sugar",
+   "kannada": "ಸಕ್ಕರೆ"
+  },
+  {
+   "filed": "Tamarind",
+   "spoken": "Tamarind",
+   "kannada": "ಹುಣಸೆಹಣ್ಣು"
+  },
+  {
+   "filed": "Tomato",
+   "spoken": "Tomato",
+   "kannada": "ಟೊಮೆಟೊ"
+  },
+  {
+   "filed": "Toor Dal",
+   "spoken": "Toor Dal",
+   "kannada": "ತೊಗರಿ ಬೇಳೆ"
+  },
+  {
+   "filed": "Turmeric",
+   "spoken": "Turmeric",
+   "kannada": "ಅರಿಶಿನ"
+  },
+  {
+   "filed": "Turmeric powder",
+   "spoken": "Turmeric powder",
+   "kannada": "ಅರಿಶಿನ"
+  },
+  {
+   "filed": "Urad Dal",
+   "spoken": "Urad Dal",
+   "kannada": "ಉದ್ದಿನ ಬೇಳೆ"
+  },
+  {
+   "filed": "Vangi bath pudi",
+   "spoken": "Vangi bath pudi",
+   "kannada": "ವಾಂಗಿಬಾತ್ ಪುಡಿ"
+  },
+  {
+   "filed": "Water",
+   "spoken": "Water",
+   "kannada": "ನೀರು"
+  },
+  {
+   "filed": "Water(Hot)",
+   "spoken": "Water(Hot)",
+   "kannada": "ಬಿಸಿನೀರು"
+  },
+  {
+   "filed": "Wheat flour (atta)",
+   "spoken": "Wheat flour (atta)",
+   "kannada": "ಗೋಧಿ ಹಿಟ್ಟು"
+  }
+ ]
+}
